@@ -1,10 +1,11 @@
 import { Component, OnInit, HostListener, OnChanges, SimpleChanges, ViewChild, ElementRef } from '@angular/core';
 import { FormGroup, FormBuilder, Validators } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { Router, ActivatedRoute } from '@angular/router';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
 import { DomSanitizer } from '@angular/platform-browser';
-import { AuthorizationNew, ExchangeUserInfo, LoginModel, SSOController } from '../../services/SSO.service';
+import { AuthorizationNew, AuthorizationNewCommonResponse, ExchangeUserInfo, LoginModel, SSOController } from '../../services/SSO.service';
 import { DomainAuthController } from '../../services/Domain_Auth.service';
 import { AuthObjectsService, UserOtpEnrollmentDto } from 'src/app/shared/services/helper/auth-objects.service';
 import { Subscription } from 'rxjs';
@@ -24,6 +25,7 @@ import { environment } from 'src/environments/environment';
 export class LoginComponent implements OnInit {
   EgyptPostToolTip: string = 'البريد المصري  '
   loginForm!: FormGroup;
+  readonly localMockMode: boolean = environment.useLocalMockAuth === true;
 
   // New State Machine Definition
   mode: 'initial' | 'windows_checking' | 'windows_success' | 'windows_failed' | 'credentials' = 'initial';
@@ -64,7 +66,7 @@ export class LoginComponent implements OnInit {
     public msg: MsgsService, private chatService: SignalRService, private notificationService: WindowsNotificationService, private sanitizer: DomSanitizer,
     private sso: SSOController, private broadcastService: BroadcastService,
     private DomainAuth: DomainAuthController, private spinner: SpinnerService, public AuthService: AuthObjectsService,
-    private authenticatorService: AuthenticatorService) {
+    private authenticatorService: AuthenticatorService, private http: HttpClient) {
     this.loginForm = this.fb.group({
       username: ['', Validators.required],
       password: ['', Validators.required]
@@ -75,10 +77,16 @@ export class LoginComponent implements OnInit {
     // Initial state is set to 'initial' by default. 
     // We do NOT run auto verification automatically anymore.
     localStorage.removeItem('Picture');
+    this.mode = this.localMockMode ? 'credentials' : 'initial';
     this.getCallerInfo();
   }
 
   getCallerInfo() {
+    if (this.localMockMode) {
+      this.myIp = '127.0.0.1';
+      return;
+    }
+
     this.DomainAuth.callerInfo().subscribe({
       next: (resp) => {
         if (resp) {
@@ -171,6 +179,11 @@ export class LoginComponent implements OnInit {
     if (this.loginForm.valid) {
       this.isFlipped = true;
       this.spinner.show('جاري تسجيل الدخول');
+      if (this.localMockMode) {
+        this.loginWithLocalMock();
+        return;
+      }
+
       this.DomainAuth.authorizeWithPassword(environment.OTPApplicationName, this.loginModel, false)
         .subscribe({
           next: (resp) => {
@@ -204,6 +217,36 @@ export class LoginComponent implements OnInit {
         );
     }
   }
+
+  private loginWithLocalMock() {
+    const localAuthUrl = `${environment.ConnectApiURL}${environment.localMockAuthPath}`;
+    const payload: LoginModel = {
+      userId: this.loginModel.userId,
+      password: this.loginModel.password
+    };
+    this.http.post<AuthorizationNewCommonResponse>(localAuthUrl, payload).subscribe({
+      next: (resp) => {
+        if (resp?.isSuccess && resp.data) {
+          this.handleCredentialLoginSuccess(resp.data, false);
+          return;
+        }
+
+        let err = '';
+        resp?.errors?.forEach(e => err += `${e.message}<br>`);
+        this.msg.msgError(err || 'Mock login failed.', 'Unexpected error', true);
+        this.isFlipped = false;
+      },
+      error: (error) => {
+        console.log(error?.message || error);
+        this.msg.msgError(error, 'Unexpected error', true);
+        this.isFlipped = false;
+      },
+      complete: () => {
+        console.log('local mock login complete');
+      }
+    });
+  }
+
   LoginWithOutPassword() {
     this.spinner.show('جاري التحقق من المستخدم الحالي...');
     this.sso.authanticateMe()
@@ -298,7 +341,7 @@ export class LoginComponent implements OnInit {
     this.spinner.show('جاري الإتصال بالـ HubSync');
     
     this.chatService.hubConnectionState$.pipe(
-      filter(result => result === 'Online' || result === 'Ashraf'),
+      filter(result => result === 'Online'),
       take(1)
     ).subscribe(() => {
       if (fromAuto) {

@@ -26,6 +26,7 @@ export class BasicInterceptorService implements HttpInterceptor {
     'publications/getfilecontent', 'isemailexistinexchange', 'registeruser',
     'assets/component-configs.json', 'admin/applicationconfiguration', 'localhost:3001',
     'localhost:3002/nswag', 'admin/nswagconfiguration', 'publications/getdocumentslist_user',
+    'api/localauth/devlogin',
     'publications/getmenuitems', 'publications/getcriteria'
   ];
 

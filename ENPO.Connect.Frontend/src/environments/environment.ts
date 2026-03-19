@@ -16,6 +16,11 @@ export const environment = {
   favicon: 'assets/brand/favicon-dev.ico',
   
   OTPApplicationName: 'CONNECT - TEST',
+  useLocalMockAuth: true,
+  disableSignalRInLocalMock: false,
+  localMockAuthPath: '/api/LocalAuth/DevLogin',
+  localMockUserId: 'test',
+  localMockPassword: 'test123',
 
   // ConnectApiURL: BaseUrl + "/Connect_API",
   // LandTransportationApiURL: BaseUrl + "/Connect_API",
@@ -31,10 +36,11 @@ export const environment = {
   LandTransportationApiURL: `${MainDomain}/Applications/Connect_API`,
   DomainAuthURL: `${MainDomain}/Applications/Domain_Authorization`,
   SSoURL: `${MainDomain}/Applications/SSO`,
-  PowerBi: `${MainDomain}/Applications/PowerBi`,
-  SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
+  // PowerBi: `${MainDomain}/Applications/PowerBi`,
+  // SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
 
-  // SignalRHubServer: `http://localhost:5005`,
+  SignalRHubServer: `http://localhost/GlobalHubSync`,
+  PowerBi: `http://localhost/PowerBi`,
   // LandTransportationApiURL: `http://localhost:8888`,
   ConnectApiURL: `http://localhost:8888`,
   // DomainAuthURL:  "https://localhost:8998",

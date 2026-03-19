@@ -19,6 +19,13 @@ using SignalR.Notification;
 using System.Reflection;
 using System.Text;
 
+// Ensure Oracle client sessions use UTF-8 on hosts that do not have NLS_LANG configured.
+const string oracleNlsLang = "AMERICAN_AMERICA.AL32UTF8";
+if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("NLS_LANG")))
+{
+    Environment.SetEnvironmentVariable("NLS_LANG", oracleNlsLang);
+}
+
 string AllowAllCors = "AllowAll";
 var builder = WebApplication.CreateBuilder(args);
 
@@ -208,19 +215,27 @@ app.UseAuthentication();
 
 app.UseAuthorization();
 
-// Start the SignalR connection
-var signalRConnectionManager = app.Services.GetRequiredService<SignalRConnectionManager>();
-
-// Register events for starting and stopping the SignalR connection
-app.Lifetime.ApplicationStarted.Register(async () =>
+var disableSignalRStartup = app.Configuration.GetValue<bool>("LocalDevelopment:DisableSignalRStartup");
+if (!disableSignalRStartup)
 {
-    await signalRConnectionManager.StartConnectionAsync();
-});
+    // Start the SignalR connection
+    var signalRConnectionManager = app.Services.GetRequiredService<SignalRConnectionManager>();
 
-app.Lifetime.ApplicationStopping.Register(async () =>
+    // Register events for starting and stopping the SignalR connection
+    app.Lifetime.ApplicationStarted.Register(async () =>
+    {
+        await signalRConnectionManager.StartConnectionAsync();
+    });
+
+    app.Lifetime.ApplicationStopping.Register(async () =>
+    {
+        await signalRConnectionManager.StopConnectionAsync();
+    });
+}
+else
 {
-    await signalRConnectionManager.StopConnectionAsync();
-});
+    Console.WriteLine("[Startup] SignalR startup connection is disabled by LocalDevelopment:DisableSignalRStartup.");
+}
 
 
 app.UseEndpoints(endpoints =>
