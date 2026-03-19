@@ -1,0 +1,14 @@
+<div class="seasonal-banner-wrapper" *ngIf="isVisible && activeOccasion">
+    <div class="seasonal-banner-content" [ngClass]="activeOccasion.themeClass">
+        <div class="banner-icon" *ngIf="activeOccasion.icon">
+            <i [class]="activeOccasion.icon"></i>
+        </div>
+        <div class="banner-text">
+            <span class="banner-title">{{ activeOccasion.message }}</span>
+            <span class="banner-subtitle" *ngIf="activeOccasion.subMessage">{{ activeOccasion.subMessage }}</span>
+        </div>
+        <button class="banner-close" (click)="closeBanner()" aria-label="Close">
+            <i class="pi pi-times"></i>
+        </button>
+    </div>
+</div>

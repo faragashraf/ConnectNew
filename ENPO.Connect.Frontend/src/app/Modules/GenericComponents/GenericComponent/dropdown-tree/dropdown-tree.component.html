@@ -1,0 +1,41 @@
+<!-- Unified layout for Dropdown + Optional Tree Button -->
+<div [class.dropdown-with-button]="tree.length > 0" style="width: 100%;">
+    
+    <!-- Wrapper for the dropdown to allow it to flex-grow properly -->
+    <div style="flex: 1; min-width: 0; position: relative;">
+        <p-dropdown [options]="genericFormService.implementControlSelection(controlFullName)"
+            [style]="{'width':'100%'}"
+            [disabled]="isDivDisabled || tree.length>0 || (genericFormService.GetPropertyValue(controlFullName,'isDisabledInit')=='true' && !isCurrentUser)"
+            emptyMessage [filter]="true" filterBy="name" optionValue="key" optionLabel="name"
+            [showClear]="isDivDisabled?false:true"
+            [panelStyle]="{ 'direction': 'rtl', 'text-align': 'right','width':'100%'}"
+            panelStyleClass="rtl-dropdown" appendTo="body"
+            [placeholder]="genericFormService.GetPropertyValue(controlFullName,'placeholder') || 'اختر  '" 
+            [formControl]="control"
+            (onChange)="onChange($event)">
+            <ng-template let-category pTemplate="name">
+                <div>{{ category.name }}</div>
+            </ng-template>
+        </p-dropdown>
+    </div>
+
+    <!-- Tree Button: Only rendered if tree data exists AND button toggle is enabled -->
+    <button type="button" pButton icon="pi pi-sitemap" 
+        class="p-button-outlined tree-button"
+        (click)="op.toggle($event)" 
+        *ngIf="tree.length > 0" 
+        [disabled]="isDivDisabled"
+        [class.open]="op.overlayVisible" 
+        title="فتح الشجرة" 
+        aria-label="Open tree">
+    </button>
+</div>
+
+<!-- tree shown in a overlay -->
+<p-overlayPanel #op [appendTo]="'body'" [baseZIndex]="10000" id="overlayDropDownTree"
+    [style]="{'width':'820px', 'direction':'rtl', 'text-align':'right'}">
+    <app-tree-sidebar [tree]="tree" [showTreeContextMenu]="false" [allExpanded]="true" [expandedWidth]="100" [selectedNode]="selectedNode"
+        [title]="treeTitle" [isDivDisabled]="isDivDisabled" [scrollHeight]="30" (onNodeSelect)="nodeSelection($event)"
+        (onNodeUnselect)="nodeUnselection($event)">
+    </app-tree-sidebar>
+</p-overlayPanel>

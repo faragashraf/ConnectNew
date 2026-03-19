@@ -1,0 +1,154 @@
+     .p-tree {
+         margin: 0 !important;
+         padding: 0rem 0rem 1rem 0rem !important;
+
+         width: 100% !important;
+         min-width: 0 !important;
+         max-width: 100% !important;
+         direction: rtl !important;
+         height: 100% !important;
+
+         .p-treenode {
+             list-style: none !important;
+
+             .p-treenode-content {
+                 display: flex !important;
+                 align-items: center !important;
+                 gap: 0.5rem !important;
+                 width: 100% !important;
+                 text-decoration: none !important;
+                 cursor: pointer !important;
+                 //  transition: background 0.22s ease, color 0.22s ease, transform 0.12s ease !important;
+                 //  background: linear-gradient(90deg, rgba(234, 250, 243, 1) 0%, rgba(245, 255, 250, 1) 100%) !important;
+                 border-radius: 8px 0 0 8px !important;
+                 padding: 0.10rem 0.9rem 0.45rem 0.4rem !important;
+                 box-shadow: 0 6px 14px rgba(4, 37, 22, 0.04) !important;
+                 color: var(--app-primary, #4f46e5) !important;
+                 font-weight: 600 !important;
+             }
+
+             .p-treenode-icon,
+             .p-treenode-toggler,
+             .p-treenode-leaf-icon {
+                 margin-left: 0.5rem !important;
+                 color: var(--app-primary, #4f46e5) !important;
+                 font-size: 1.2em !important;
+                 vertical-align: middle !important;
+                 transition: transform 0.18s ease, color 0.18s ease !important;
+             }
+
+             .p-treenode-label {
+                 flex: 1 1 auto !important;
+                 text-align: right !important;
+                 font-size: 1.05rem !important;
+             }
+
+             &:hover {
+                 position: relative !important;
+                 border-right: 4px solid var(--app-accent-warning, rgba(217, 119, 6, 0.5)) !important;
+                 border-radius: 8px !important;
+                 padding-right: 0.15rem !important;
+                 //  background: transparent !important;
+             }
+
+             &:hover .p-treenode-content {
+                 //  background: transparent !important;
+                 color: var(--app-primary-hover, #4338ca) !important;
+                 box-shadow: none !important;
+                 transform: none !important;
+             }
+
+             &:hover>.p-treenode-children,
+             &:hover .p-treenode-children {
+                 border-right-color: var(--app-primary-border, rgba(79, 70, 229, 0.18)) !important;
+             }
+
+             &.p-highlight .p-treenode-content,
+             .p-treenode .p-treenode-content.p-highlight {
+                 background: linear-gradient(90deg, var(--app-primary, #4f46e5) 0%, #a78bfa 100%) !important;
+                 color: #ffffff !important;
+                 box-shadow: 0 8px 24px rgba(4, 37, 22, 0.06) !important;
+             }
+         }
+
+         .p-treenode-children {
+             padding-right: 0.6rem !important;
+             border-right: 5px solid var(--app-primary-border, rgba(79, 70, 229, 0.18)) !important;
+             //  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%) !important;
+             border-radius: 0 8px 8px 0 !important;
+
+             .p-treenode {
+                 .p-treenode-content {
+                     //  background: transparent !important;
+                     box-shadow: none !important;
+                     padding: 0 1.25rem 0 0 !important;
+                     font-size: 0.98rem !important;
+                     color: var(--app-primary, #4f46e5) !important;
+                     font-weight: 500 !important;
+                 }
+
+                 &:hover .p-treenode-content {
+                     //  background: transparent !important;
+                     color: var(--app-primary-hover, #4338ca) !important;
+                     transform: none !important;
+                 }
+             }
+         }
+
+         .sidebar-container.collapsed &,
+         &.collapsed {
+             width: 274px !important;
+             min-width: 274px !important;
+             max-width: 274px !important;
+
+             .p-treenode .p-treenode-label {
+                 position: static !important;
+                 width: auto !important;
+                 height: auto !important;
+                 padding: 0 !important;
+                 margin: 0 !important;
+                 overflow: visible !important;
+                 clip: auto !important;
+                 white-space: nowrap !important;
+                 border: 0 !important;
+             }
+
+             .p-treenode .node-label {
+                 display: none !important;
+             }
+
+             .p-treenode .p-treenode-content {
+                 padding: 0.4rem !important;
+                 border-radius: 6px !important;
+             }
+
+             .node-content,
+             .node-icon {
+                 display: inline-block !important;
+                 pointer-events: auto !important;
+                 overflow: visible !important;
+             }
+         }
+
+         .p-treenode .pi-chevron-down {
+             transition: transform 0.18s ease !important;
+         }
+
+         .p-treenode.expanded .pi-chevron-down {
+             transform: rotate(360deg) !important;
+         }
+
+         .p-treenode .p-icon {
+             display: inline-block !important;
+             transform: rotate(180deg) !important;
+             transition: transform 0.18s ease !important;
+         }
+
+     }
+
+     /* User-provided override for highlighted tree nodes — placed last to ensure it wins */
+     .p-tree .p-tree-container .p-treenode .p-treenode-content.p-highlight {
+         background: linear-gradient(90deg, var(--app-primary, #4f46e5) 0%, #a78bfa 100%) !important;
+         color: #ffffff !important;
+         box-shadow: 0 8px 24px rgba(4, 37, 22, 0.06) !important;
+     }

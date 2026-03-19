@@ -1,0 +1,48 @@
+.editor-root{
+	// max-width:980px;
+	margin:20px auto;
+	padding:20px;
+	border-radius:12px;
+	background:linear-gradient(135deg,#ffffff,#f3f6ff);
+	box-shadow:0 8px 24px rgba(20,30,100,0.08);
+	font-family:Inter,Segoe UI,Roboto,Helvetica,Arial;
+}
+.title{margin:0 0 12px 0;font-size:20px;color:#0b3b8c}
+.loader{padding:18px;text-align:center}
+.editor-form .items{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:12px}
+.card{background:#fff;padding:14px;border-radius:10px;transition:transform .22s ease,box-shadow .22s ease;box-shadow:0 4px 14px rgba(12,36,80,0.06)}
+.card:hover{transform:translateY(-6px);box-shadow:0 18px 38px rgba(8,30,80,0.09)}
+.card-content{display:flex;flex-direction:column;gap:10px}
+
+/* Field & label styles */
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:13px;color:#334155;font-weight:600}
+.field input{padding:9px 10px;border-radius:8px;border:1px solid #e2e8f0;outline:none;transition:box-shadow .15s ease,border-color .15s ease}
+.field input:focus{box-shadow:0 6px 18px rgba(11,59,140,0.06);border-color:#1f4db7}
+
+.field.inline{flex-direction:row;align-items:center;gap:12px}
+.field.inline label{min-width:96px}
+.field.inline input{flex:1}
+
+.card-actions{display:flex;justify-content:flex-end;margin-top:8px}
+.actions{display:flex;justify-content:space-between;margin-top:16px}
+.btn{padding:8px 12px;border-radius:8px;border:none;background:#e6eefb;color:#07306b;cursor:pointer}
+.btn.primary{background:linear-gradient(90deg,#0b3b8c,#2b6bbe);color:#fff}
+.btn.danger{background:#ffecec;color:#b22}
+
+/* Switch styling aligned with label */
+.switch{display:inline-block;position:relative;width:26px;height:26px}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#d1d5db;transition:.25s;border-radius:26px}
+.slider:before{position:absolute;content:"";height:18px;width:18px;left:4px;top:4px;background:white;border-radius:50%;transition:.25s;box-shadow:0 2px 6px rgba(12,36,80,0.08)}
+.field.inline input[type=checkbox]:checked ~ .slider,
+.card input[type=checkbox]:checked ~ .slider{background:#2b6bbe}
+.switch input:checked + .slider{background:#2b6bbe}
+.switch input:checked + .slider:before{transform:translateX(70px)}
+
+/* Responsive tweaks */
+@media (max-width:480px){
+	.editor-form .items{grid-template-columns:1fr}
+	.field.inline{flex-direction:column;align-items:stretch}
+	.field.inline label{min-width:auto}
+}

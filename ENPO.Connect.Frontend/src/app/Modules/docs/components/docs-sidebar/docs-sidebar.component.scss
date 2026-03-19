@@ -1,0 +1,105 @@
+.sidebar-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  color: var(--doc-text, #0f172a);
+}
+
+.sidebar-section {
+  background: var(--doc-card-alt, #f1f5f9);
+  border: 1px solid var(--doc-border, rgba(15, 23, 42, 0.08));
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--doc-muted, #64748b);
+  margin-bottom: 12px;
+}
+
+.lang-toggle {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.lang-btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--doc-border, rgba(15, 23, 42, 0.08));
+  background: var(--doc-bg, #ffffff);
+  color: var(--doc-muted, #64748b);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  &:hover {
+    border-color: var(--doc-brand, #0ea5e9);
+    color: var(--doc-text);
+  }
+}
+
+.lang-btn.active {
+  background: var(--doc-brand, #0ea5e9);
+  color: #ffffff;
+  border-color: var(--doc-brand, #0ea5e9);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+}
+
+.page-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--doc-text, #334155);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: start;
+  font-size: 0.95rem;
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--doc-muted, #cbd5f5);
+    transition: background 0.2s ease;
+  }
+
+  &:hover {
+    background: var(--doc-card, #ffffff);
+    color: var(--doc-brand, #0ea5e9);
+    
+    .dot {
+      background: var(--doc-brand, #0ea5e9);
+    }
+  }
+
+  &.active {
+    background: var(--doc-card, #ffffff);
+    border-color: var(--doc-border);
+    color: var(--doc-brand, #0ea5e9);
+    font-weight: 600;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+
+    .dot {
+      background: var(--doc-brand, #0ea5e9);
+      transform: scale(1.2);
+    }
+  }
+}
+

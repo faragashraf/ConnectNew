@@ -1,0 +1,45 @@
+<div class="sidebar-container" [class.collapsed]="collapsed">
+    <div class="sidebar-title-wrap">
+        <h3 class="sidebar-title">{{ title }}</h3>
+        <button type="button" class="collapse-pane-btn" (click)="toggleCollapse()" [attr.aria-expanded]="!collapsed"
+            [title]="collapsed ? 'Expand' : 'Collapse'">
+            <i class="pi" [ngClass]="collapsed ?  'pi-chevron-left':  'pi-chevron-right'"></i>
+        </button>
+    </div>
+
+    <div>
+        <!-- Render the tree built in the component (TreeNode[]). -->
+        <ul class="sidebar-menu-list">
+            <ng-container *ngFor="let node of tree">
+                <ng-template [ngTemplateOutlet]="recursiveNode"
+                    [ngTemplateOutletContext]="{ $implicit: node }"></ng-template>
+            </ng-container>
+        </ul>
+    </div>
+
+    <ng-template #recursiveNode let-node>
+        <li class="sidebar-menu-item" [class.collapsed]="collapsed">
+            <!-- Leaf node -->
+            <a *ngIf="!node.children || node.children.length === 0" class="menu-link final-item"
+                (click)="selectNode(node)" [class.selected]="isSelected(node)" [pTooltip]="collapsed ? node.label : null" tooltipPosition="right"
+                [tooltipDisabled]="!collapsed" appendTo="body">
+                <i class="pi pi-file sidebar-icon"></i>
+                <span class="item-name itemNameLink" [class.visually-hidden]="collapsed">{{ node.label }}</span>
+            </a>
+            <!-- Parent node -->
+            <div *ngIf="node.children && node.children.length > 0">
+                <span class="item-name" (click)="selectNode(node)" [class.selected]="isSelected(node)" [pTooltip]="collapsed ? node.label : null" tooltipPosition="right"
+                    [tooltipDisabled]="!collapsed" appendTo="body">
+                    <i class="pi pi-chevron-down sidebar-icon"></i>
+                    <span [class.visually-hidden]="collapsed">{{ node.label }}</span>
+                </span>
+                <ul class="sidebar-submenu-list">
+                    <ng-container *ngFor="let child of node.children">
+                        <ng-template [ngTemplateOutlet]="recursiveNode"
+                            [ngTemplateOutletContext]="{ $implicit: child }"></ng-template>
+                    </ng-container>
+                </ul>
+            </div>
+        </li>
+    </ng-template>
+</div>

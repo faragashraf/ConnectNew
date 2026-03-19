@@ -1,0 +1,62 @@
+<div class="container-main">
+    <div class="widget-tools" style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <button type="button" class="btn btn-primary btn-sm" (click)="onAddNew()">إضافة {{itemName}}</button>
+    </div>
+    <div class="widget">
+        <generic-table *ngIf="targetArray.length>0" tableId="itemTable" [tableGenericData]="targetArray"
+            [rowsPerPage]="pageSize" [rowsPerPageOptions]="rowsPerPageOptions" [_columns]="item_columns"
+            [showExportButton]="showExportButton" [showTableContextMenu]="false" [tableContextMenu]="null"
+            [showViewButton]="showViewButton" [showGlobalSearch]="false" [showRemoveColumn]="showRemoveColumn"
+            [showDeleteButton]="showDeleteButton" [showFieldSort]="showFieldSort" [showColumnFilter]="showColumnFilter"
+            [isLazyLoading]="true" [showTableDetails]="showTableDetails" [dataKey]="item_columns[0]"
+            (rowSelect)="onselectItemEvent($event)" [showEditButton]="showEditButton" (rowEdit)="edit($event)"
+            (rowView)="viewRow($event)" (rowDelete)="deleteRow($event)" [totalRecords]="totalItems"
+            (pageChange)="onPageChange($event)">
+        </generic-table>
+    </div>
+
+    <!-- Dialog to show full row details -->
+    <p-dialog header="عرض التفاصيل" [(visible)]="displayDialog" [modal]="true"
+        [style]="{width: '35vw', direction: 'rtl'}" [baseZIndex]="10000"
+        [showTransitionOptions]="'400ms cubic-bezier(0.25, 0.8, 0.25, 1)'"
+        [hideTransitionOptions]="'200ms cubic-bezier(0.25, 0.8, 0.25, 1)'" (onHide)="closeDialog()">
+        <div class="container-main widget">
+            <div *ngIf="selectedRow">
+                <div class="row" *ngFor="let key of getRowKeys(selectedRow)">
+                    <div class="col-4" style="font-weight:600;">{{formatHeader(key)}}</div>
+                    <div class="col-8">{{ selectedRow[key] }}</div>
+                </div>
+            </div>
+            <div class="widget" *ngIf="fileParameters.length>0">
+            <app-add-attachments [fileParameters]="fileParameters"  [config]="config"
+                (AttachIDemit)="downloadAttachment($event)"></app-add-attachments>
+            </div>
+        </div>
+        <ng-template pTemplate="footer">
+            <button type="button" class="btn btn-secondary btn-sm" (click)="closeDialog()">اغلاق</button>
+        </ng-template>
+    </p-dialog>
+
+    <!-- Dialog for editing data -->
+    <p-dialog  [(visible)]="editDialogVisible" [modal]="true" [showHeader]="false"
+        [style]="{width: '85vw',height: '100vh', direction: 'rtl'}" [baseZIndex]="10000"
+        [showTransitionOptions]="'400ms cubic-bezier(0.25, 0.8, 0.25, 1)'"
+        [hideTransitionOptions]="'200ms cubic-bezier(0.25, 0.8, 0.25, 1)'" (onHide)="closeEditDialog()"
+        *ngIf="editDialogVisible">
+        <div style="padding: 3rem;">
+            <app-add-edit-publication 
+            [config]="config"
+            [messageDto]="messageDto"
+            [row]="editRow" 
+            (rowChange)="updateRow($event)"
+            [fileParameters]="fileParameters" 
+            (addNew)="editDialogVisible=false" 
+            ></app-add-edit-publication>
+            </div>
+        <ng-template pTemplate="footer">
+            <button type="submit" class="btn btn-primary btn-sm" (click)="AcivateDocuments()">{{ getActivateLabel() }} المنشور</button>
+            <button type="button" class="btn btn-secondary btn-sm" (click)="closeEditDialog()">إلغاء</button>
+        </ng-template>
+    </p-dialog>
+
+</div>

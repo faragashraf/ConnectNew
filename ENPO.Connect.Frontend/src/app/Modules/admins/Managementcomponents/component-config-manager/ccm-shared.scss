@@ -1,0 +1,249 @@
+/* Consolidated styles for component-config-manager (visual tweaks)
+   - improved contrast for accents
+   - tightened spacing rhythm
+   - reduced shadow intensity
+   - inputs full-width for responsiveness
+*/
+:root{
+  --bg: #0f172a;
+  --card-grad-from: #ffffff;
+  --card-grad-to: #f7fbff;
+  --accent: #0ea5a4;
+  --accent-2: #6d28d9;
+  --muted: #6b7280;
+  --glass: rgba(255,255,255,0.6);
+  --card-shadow: 0 12px 30px rgba(12,15,30,0.08);
+  --anim-fast: 120ms;
+  --anim-medium: 220ms;
+}
+
+.ccm-root{
+  font-family: var(--font-family, 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial);
+  color: #0b1220;
+  background: linear-gradient(180deg,#fbfcff,#f7fbff);
+  padding:12px;
+}
+
+.ccm-header{ display:flex; justify-content:space-between; align-items:center; padding:16px 14px }
+.ccm-header h2{ margin:0; font-size:1.25rem; color:var(--accent-2); letter-spacing:0.2px }
+.ccm-header .actions{ display:flex; align-items:center; gap:8px }
+.actions .btn{ margin-left:8px }
+.ccm-body{ display:flex; gap:16px; padding:12px }
+
+/* Cards / Lists */
+.list{
+  flex:1;
+  background: linear-gradient(180deg,var(--card-grad-from),var(--card-grad-to));
+  border-radius:12px;
+  padding:16px;
+  box-shadow: var(--card-shadow);
+}
+.list table{ width:100%; border-collapse:collapse; table-layout:auto }
+.list thead th{ text-transform:uppercase; font-size:0.75rem; color:var(--muted); letter-spacing:0.6px; padding:10px }
+.list th,.list td{ text-align:left; padding:10px; border-bottom:1px solid rgba(15,23,42,0.04) }
+.list tbody tr:hover{ background: linear-gradient(90deg,#f8fbff,#ffffff); transform: translateY(-2px); transition: all .14s cubic-bezier(.2,.9,.25,1) }
+
+.row-actions{ display:flex; gap:8px; justify-content:flex-end }
+
+/* Generic button + variants used inside drawers/dialogs */
+.btn{
+  background: linear-gradient(90deg,#ffffff,#f3f7ff);
+  border: 1px solid rgba(15,23,42,0.04);
+  padding:10px 14px;
+  border-radius:10px;
+  cursor:pointer;
+  color:#0f172a;
+  transition: transform var(--anim-fast) ease, box-shadow var(--anim-fast) ease, opacity var(--anim-fast) ease;
+}
+.btn:hover{ transform: translateY(-2px); box-shadow: 0 10px 24px rgba(12,15,30,0.06) }
+.btn:active{ transform: translateY(0) scale(.99) }
+.btn.primary{ background: linear-gradient(90deg,var(--accent-2),var(--accent)); color:rgb(0, 0, 0); box-shadow: 0 8px 28px rgba(6,182,212,0.08); border:none }
+.btn.primary:hover{ transform: translateY(-3px) scale(1.01) }
+.btn.danger{ background: linear-gradient(90deg,#ff7a7a,#ff4d4d); color:white; border:none }
+
+/* Dialog / Drawer */
+.drawer{ width:100% }
+.drawer-inner{
+  background: linear-gradient(180deg,#ffffff,#fff8ff);
+  padding:16px;
+  box-shadow: 0 18px 36px rgba(124,58,237,0.06), 0 6px 18px rgba(6,182,212,0.04);
+  border-radius:12px;
+  color:#081028;
+  font-size:0.96rem;
+  transform-origin:center top;
+  animation: dialogPop .32s cubic-bezier(.2,.9,.25,1);
+  border:1px solid rgba(124,58,237,0.06);
+  /* Let the drawer-inner handle scrolling instead of the p-dialog container */
+  max-height: calc(98vh - 120px);
+  // overflow:auto;
+}
+.drawer-inner h3{ margin:0 0 10px 0; font-size:1.12rem; color:var(--accent-2) }
+.drawer-inner .section{ margin-top:14px; padding:12px; border-radius:10px; background: linear-gradient(60deg,#4fec55f7,#ffc4008f); box-shadow: 9px 6px 6px rgba(207,143,18,0.48); position:relative }
+.drawer-inner .section h4{ margin:0 0 8px 0; font-size:1.7rem; color:var(--app-primary) }
+.drawer-inner label{ display:block; margin-top:8px; font-size:1rem; color:#475569 }
+
+/* Inputs inside drawer */
+.drawer-inner input[type="text"],
+.drawer-inner input[type="number"],
+.drawer-inner input[type="datetime-local"],
+.drawer-inner select,
+.drawer-inner textarea{
+  width:11%; padding:10px 12px; margin-top:6px; border:1px solid rgba(15,23,42,0.06); border-radius:10px; background:linear-gradient(180deg,#ffffff,#fbfdff); box-shadow: inset 0 2px 6px rgba(16,24,40,0.03); box-sizing:border-box;
+}
+.drawer-inner input[type="checkbox"]{ transform:scale(1.9); margin-left:2px; margin-right:.5rem }
+.drawer-inner input:focus, .drawer-inner select:focus, .drawer-inner textarea:focus{ outline:none; box-shadow: 0 18px 48px rgba(124,58,237,0.12), 0 6px 18px rgba(6,182,212,0.06); border-color: rgba(6,182,212,0.6); transform: translateZ(0) }
+
+.drawer-actions{ display:flex; gap:12px; margin-top:18px; justify-content:flex-end }
+.drawer-actions .btn{ min-width:112px }
+
+/* Badges */
+.badge{ display:inline-block; padding:6px 10px; border-radius:999px; font-size:0.75rem; color:white }
+.badge.primary{ background: linear-gradient(90deg,var(--accent-2),var(--accent)) }
+.badge.muted{ background:#94a3b8 }
+
+/* Pills and page-size checkboxes */
+.page-sizes-checkboxes{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; align-items:center; overflow-x:auto; padding-bottom:6px }
+.pill-checkbox{ display:inline-flex; align-items:center; cursor:pointer; margin-right:8px; position:relative }
+.pill-checkbox input[type="checkbox"]{ position:absolute; opacity:0; width:0; height:0 }
+.pill-checkbox .pill-text{ display:inline-block; padding:8px 14px; border-radius:999px; background:#f1f5f9; color:#0f172a; font-weight:700; font-size:1rem; border:1px solid rgba(15,23,42,0.06); transition: all .14s ease; box-shadow: inset 0 -2px 0 rgba(0,0,0,0.02); white-space:normal; overflow:visible; text-overflow:clip; direction:rtl; text-align:right; word-break:break-word }
+.pill-checkbox input[type="checkbox"]:checked + .pill-text{ background: linear-gradient(90deg,#10b981,#06b6d4); color:#fff; box-shadow: 0 8px 26px rgba(16,185,129,0.16); transform: translateY(-1px) }
+.pill-checkbox input[type="checkbox"]:focus + .pill-text{ box-shadow: 0 10px 28px rgba(124,58,237,0.12) }
+
+/* Allow full label text (wrap/show) for attachments tab pills */
+.attachments-section .pill-text{
+  max-width: none !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  display:inline-block;
+}
+
+/* Args list & populate layout */
+.args-list{ display:flex; flex-direction:column; gap:8px; width:100%; box-sizing:border-box }
+.args-list .arg-item{ display:flex; align-items:center; gap:8px; width:100%; flex-wrap:wrap }
+.args-list .arg-item input{ flex:1 1 160px; min-width:120px; text-transform:capitalize }
+.args-list .arg-item button{ flex:0 0 auto }
+
+.request-col{ background: linear-gradient(180deg,#ffffff,#fff8f2); padding:12px; border-radius:10px; margin-top:10px; border:1px solid rgba(255,126,95,0.06); display:flex; flex-direction:column; gap:1rem; box-sizing:border-box }
+
+.populate-row{ display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:1rem 2rem; align-items:start }
+.populate-method,.populate-args{ padding:1rem; box-sizing:border-box }
+.populate-method{ min-width:200px }
+.populate-args{ min-width:180px }
+.populate-method p-dropdown, .populate-args p-dropdown, .populate-method app-dto-renderer{ width:100% !important; max-width:100% !important }
+
+/* Array items */
+.array-list{ }
+.array-item{ background: linear-gradient(180deg,#ffffff,#fff8f2); padding:12px; border-radius:10px; margin-top:10px; border:1px solid rgba(255,126,95,0.06); display:flex; gap:1rem; position:relative; align-items:flex-start; flex-wrap:wrap }
+.array-item > *{ flex:1 1 320px; min-width:220px }
+.array-item .request-col{ flex:1 1 320px; min-width:220px }
+.array-item .arg-item{ flex:1 1 180px; min-width:140px }
+.array-item .args-list{ width:100% }
+.array-item .row-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end }
+.array-item .btn{ flex:0 0 auto; margin-top:6px }
+.array-item .row-actions{ margin-top:10px }
+
+/* Table Fields specific styling */
+.table-fields-section .section-header{ display:flex; justify-content:space-between; align-items:center; gap:12px }
+.table-fields-grid{ margin-top:12px; display:flex; flex-direction:column; gap:8px }
+.table-fields-grid .grid-head{ display:grid; grid-template-columns: 2fr 2fr 1fr 1fr 1fr 1fr 1fr auto; gap:10px; padding:8px 12px; border-bottom:1px solid rgba(15,23,42,0.04); color:var(--muted); font-weight:700 }
+.table-field-item{ display:grid; grid-template-columns: 2fr 2fr 1fr 1fr 1fr 1fr 1fr auto; gap:10px; align-items:center; padding:10px 12px; background:linear-gradient(180deg,#fff,#fcfcff); border-radius:8px; border:1px solid rgba(15,23,42,0.03) }
+.table-field-item .form-control.small{ width:100%; padding:8px 10px }
+.table-field-item .form-control.tiny{ width:100%; padding:6px 8px; font-size:0.9rem }
+.table-field-item .pill-checkbox.small-toggle{ margin:0; display:flex; justify-content:center }
+.table-field-item .pill-text{ padding:6px 8px; font-size:0.95rem; font-weight:600; direction:rtl; text-align:center }
+.table-field-item .center{ justify-self:center }
+.table-field-item .field-actions{ display:flex; justify-content:flex-end }
+
+/* TK Categories styling */
+.tk-categories-section .section-header{ display:flex; justify-content:space-between; align-items:center; gap:12px }
+.tk-cats-grid{ margin-top:12px; display:flex; flex-direction:column; gap:8px }
+.tk-cats-grid .grid-head{ display:grid; grid-template-columns: 1fr 3fr auto; gap:10px; padding:8px 12px; border-bottom:1px solid rgba(15,23,42,0.04); color:var(--muted); font-weight:700 }
+.tk-cat-item{ display:grid; grid-template-columns: 1fr 3fr auto; gap:10px; align-items:center; padding:10px 12px; background:linear-gradient(180deg,#fff,#fcfcff); border-radius:8px; border:1px solid rgba(15,23,42,0.03) }
+.tk-cat-item .form-control.small{ width:100%; padding:8px 10px }
+.tk-cat-item .actions-col{ display:flex; justify-content:flex-end }
+
+@media (max-width:900px){
+  .tk-cats-grid .grid-head{ display:none }
+  .tk-cat-item{ grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap:8px }
+  .tk-cat-item .actions-col{ grid-column:2 }
+}
+
+@media (max-width:900px){
+  .table-fields-grid .grid-head{ display:none }
+  .table-field-item{ grid-template-columns: 1fr 1fr auto; grid-template-rows: auto auto; gap:8px }
+  .table-field-item input.small{ grid-column:1  ; }
+  .table-field-item input.tiny{ grid-column:2 }
+  .table-field-item .field-actions{ grid-column:3 }
+}
+
+/* Ensure table-fields section flows RTL for Arabic labels */
+.table-fields-section, .table-fields-section *{ direction: rtl }
+
+@media (min-width:1200px){
+  /* Make first request column 40% and let the other two share remaining space; reserve a small column for the action button */
+  .array-item{ display:grid; grid-template-columns: 40% 1fr 1fr auto; gap:20px; align-items:start }
+  .array-item > .request-col:nth-of-type(1){ grid-column:1 }
+  .array-item > .request-col:nth-of-type(2){ grid-column:2 }
+  .array-item > .request-col:nth-of-type(3){ grid-column:3 }
+  .array-item > button[type="button"]{ grid-column:4; justify-self:end; align-self:start; margin:0 }
+}
+
+/* Animations + tabs */
+@keyframes dialogPop{ from{ opacity:0; transform: translateY(12px) scale(.995); filter: blur(2px) } to{ opacity:1; transform: translateY(0) scale(1); filter: none } }
+@keyframes itemIn{ from{ opacity:0; transform: translateY(10px) scale(.995); filter: blur(1px) } to{ opacity:1; transform: translateY(0) scale(1); filter: none } }
+.array-item{ animation: itemIn var(--anim-medium) cubic-bezier(.2,.9,.25,1) }
+.array-list .array-item:nth-child(1){ animation-delay:0ms }
+.array-list .array-item:nth-child(2){ animation-delay:40ms }
+.array-list .array-item:nth-child(3){ animation-delay:80ms }
+.array-list .array-item:nth-child(4){ animation-delay:120ms }
+
+.dialog-tab-nav{ display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.dialog-tab-nav .tab-btn{ background:transparent; border:none; padding:8px 12px; border-radius:999px; color:rgba(15,23,42,0.7); font-weight:600; transition: all var(--anim-fast) ease }
+.dialog-tab-nav .tab-btn:hover{ transform: translateY(-3px); color: var(--accent-2) }
+.dialog-tab-nav .tab-btn.active{ color:#1900ff; background: linear-gradient(90deg,var(--accent-2),var(--accent)); box-shadow: 0 12px 32px rgba(124,58,237,0.12) }
+.dialog-tab-nav::after{ content:''; position:absolute; left:0; right:0; bottom:-8px; height:3px; background: linear-gradient(90deg,var(--accent-2),var(--accent)); border-radius:99px; opacity:0.06 }
+.dialog-header-with-tabs{ display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    flex-direction: column-reverse; }
+.dialog-title{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40% }
+
+/* PrimeNG p-dialog responsive tweaks */
+.p-dialog{ width: min(98vw,1200px) !important; max-width:98vw !important; margin:18px auto !important; box-sizing:border-box; overflow:visible !important }
+.p-dialog .p-dialog-content{ /* disable dialog scrolling so internal drawer controls scrolling */
+  max-height: none !important;
+  overflow: visible !important;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 0 18px 0;
+}
+
+@media (max-width:900px){
+  .ccm-body{ flex-direction:column }
+  .p-dialog{ width:96% !important }
+  .drawer-inner{ padding:12px }
+  .dialog-tab-nav{ max-width:100%; gap:6px }
+  .dialog-title{ max-width:100%; font-size:0.98rem }
+  .array-item{ flex-direction:column; gap:10px }
+  .array-item > *{ width:100%; min-width:auto; flex:1 1 auto }
+  .populate-row{ grid-template-columns: 1fr }
+  .args-list .arg-item{ flex-direction:column; align-items:stretch }
+  .args-list .arg-item button{ align-self:flex-end }
+}
+
+@media (max-width:600px){
+  .p-dialog{ width:100% !important; margin:0; border-radius:8px }
+  .p-dialog .p-dialog-content{ max-height: calc(100vh - 120px) }
+  .drawer-inner{ padding:10px; border-radius:0 }
+}
+
+@media (max-width:480px){
+  .pill-checkbox .pill-text{ font-size:0.92rem }
+  .populate-method{ padding:8px }
+  .populate-args{ padding:8px }
+  .args-list .arg-item input{ font-size:0.95rem }
+  .page-sizes-checkboxes{ gap:6px; padding-bottom:8px }
+  .array-item{ padding:10px }
+  .array-item .btn{ width:100%; margin-top:8px }
+}

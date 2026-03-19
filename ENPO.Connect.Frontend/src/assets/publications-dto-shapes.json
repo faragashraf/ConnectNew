@@ -1,0 +1,4340 @@
+{
+  "__methodParamMap": {
+    "getAllRequests": [
+      {
+        "raw": "body: ListRequestModel | undefined",
+        "name": "body",
+        "type": "ListRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "getCommingRequests": [
+      {
+        "raw": "body: ListRequestModel | undefined",
+        "name": "body",
+        "type": "ListRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "getOutBoxRequests": [
+      {
+        "raw": "body: ListRequestModel | undefined",
+        "name": "body",
+        "type": "ListRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "searsh": [
+      {
+        "raw": "body: ListRequestModel | undefined",
+        "name": "body",
+        "type": "ListRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "retriveNewRequests": [],
+    "createNewFileds": [
+      {
+        "raw": "body: TkmendField[] | undefined",
+        "name": "body",
+        "type": "TkmendField[]",
+        "isBody": true,
+        "isArray": true
+      }
+    ],
+    "editFieldsAsync": [
+      {
+        "raw": "body: TkmendField[] | undefined",
+        "name": "body",
+        "type": "TkmendField[]",
+        "isBody": true,
+        "isArray": true
+      }
+    ],
+    "updateStatus": [
+      {
+        "raw": "messageId: number | undefined",
+        "name": "messageId",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "msgStatus: MessageStatus | undefined",
+        "name": "msgStatus",
+        "type": "MessageStatus",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "getAreaDepartments": [
+      {
+        "raw": "areaName: string | undefined",
+        "name": "areaName",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "getMandatoryMetaDate": [
+      {
+        "raw": "appId?: string | undefined",
+        "name": "appId?",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "getMandatoryAll": [
+      {
+        "raw": "appId?: string | undefined",
+        "name": "appId?",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "getAllCategories": [
+      {
+        "raw": "appId?: string | undefined",
+        "name": "appId?",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "createRequest": [
+      {
+        "raw": "messageId: number | undefined",
+        "name": "messageId",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "requestRef:string|undefined",
+        "name": "requestRef",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "subject: string | undefined",
+        "name": "subject",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "description: string | undefined",
+        "name": "description",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "createdBy: string | undefined",
+        "name": "createdBy",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "assignedSectorId: string | undefined",
+        "name": "assignedSectorId",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "currentResponsibleSectorId: string | undefined",
+        "name": "currentResponsibleSectorId",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "type: number | undefined",
+        "name": "type",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "categoryCd: number | undefined",
+        "name": "categoryCd",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "fields: TkmendField[] | undefined",
+        "name": "fields",
+        "type": "TkmendField[]",
+        "isBody": false,
+        "isArray": true
+      },
+      {
+        "raw": "files: FileParameter[] | undefined",
+        "name": "files",
+        "type": "FileParameter[]",
+        "isBody": false,
+        "isArray": true
+      }
+    ],
+    "getCorrInbox": [
+      {
+        "raw": "body: ListRequestModel | undefined",
+        "name": "body",
+        "type": "ListRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "getCorrOutBox": [
+      {
+        "raw": "body: ListRequestModel | undefined",
+        "name": "body",
+        "type": "ListRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "getCorrMyRequest": [
+      {
+        "raw": "body: ListRequestModel | undefined",
+        "name": "body",
+        "type": "ListRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "getLogCase": [
+      {
+        "raw": "body: LogRequestModel | undefined",
+        "name": "body",
+        "type": "LogRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "getLog": [
+      {
+        "raw": "body: LogRequestModel | undefined",
+        "name": "body",
+        "type": "LogRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "getDocumentsList_admin": [
+      {
+        "raw": "pageNumber: number | undefined",
+        "name": "pageNumber",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "pageSize: number | undefined",
+        "name": "pageSize",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "body: ExpressionDto[] | undefined",
+        "name": "body",
+        "type": "ExpressionDto[]",
+        "isBody": true,
+        "isArray": true
+      }
+    ],
+    "getDocumentsList_user": [
+      {
+        "raw": "pageNumber: number | undefined",
+        "name": "pageNumber",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "pageSize: number | undefined",
+        "name": "pageSize",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "body: ExpressionDto[] | undefined",
+        "name": "body",
+        "type": "ExpressionDto[]",
+        "isBody": true,
+        "isArray": true
+      }
+    ],
+    "getCriteria": [
+      {
+        "raw": "funName: string | undefined",
+        "name": "funName",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "saveDocument": [
+      {
+        "raw": "wORKING_START_DATE: Date | undefined",
+        "name": "wORKING_START_DATE",
+        "type": "Date",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "mINI_DOC: string | undefined",
+        "name": "mINI_DOC",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "dISTRICT_ID: number | undefined",
+        "name": "dISTRICT_ID",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "pUBLICATION_TYPE_ID: number | undefined",
+        "name": "pUBLICATION_TYPE_ID",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "aLL_TEXT_DOC: string | undefined",
+        "name": "aLL_TEXT_DOC",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "mENUITEMID: number | undefined",
+        "name": "mENUITEMID",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "dOCUMENT_PARENT_ID: string | undefined",
+        "name": "dOCUMENT_PARENT_ID",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "files: FileParameter[] | undefined",
+        "name": "files",
+        "type": "FileParameter[]",
+        "isBody": false,
+        "isArray": true
+      }
+    ],
+    "getFileContent": [
+      {
+        "raw": "attchmentId: number | undefined",
+        "name": "attchmentId",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "getFile": [
+      {
+        "raw": "fileName: string | undefined",
+        "name": "fileName",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "editDocument": [
+      {
+        "raw": "dOCUMENT_ID: number | undefined",
+        "name": "dOCUMENT_ID",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "wORKING_START_DATE: Date | undefined",
+        "name": "wORKING_START_DATE",
+        "type": "Date",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "mINI_DOC: string | undefined",
+        "name": "mINI_DOC",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "dISTRICT_ID: number | undefined",
+        "name": "dISTRICT_ID",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "pUBLICATION_TYPE_ID: number | undefined",
+        "name": "pUBLICATION_TYPE_ID",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "aLL_TEXT_DOC: string | undefined",
+        "name": "aLL_TEXT_DOC",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "mENUITEMID: number | undefined",
+        "name": "mENUITEMID",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "dOCUMENT_PARENT_ID: string | undefined",
+        "name": "dOCUMENT_PARENT_ID",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "rEJECTREASON: string | undefined",
+        "name": "rEJECTREASON",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "attachmentLists: AttachmentList[] | undefined",
+        "name": "attachmentLists",
+        "type": "AttachmentList[]",
+        "isBody": false,
+        "isArray": true
+      },
+      {
+        "raw": "files: FileParameter[] | undefined",
+        "name": "files",
+        "type": "FileParameter[]",
+        "isBody": false,
+        "isArray": true
+      }
+    ],
+    "editActivation": [
+      {
+        "raw": "body: EditActiveRequestDto | undefined",
+        "name": "body",
+        "type": "EditActiveRequestDto",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "updateAttachmentStatus": [
+      {
+        "raw": "body: AttachmentStatusDto | undefined",
+        "name": "body",
+        "type": "AttachmentStatusDto",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "uploadAttachmentPDF": [
+      {
+        "raw": "dOC_ID: number | undefined",
+        "name": "dOC_ID",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "description: string | undefined",
+        "name": "description",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "files: FileParameter[] | undefined",
+        "name": "files",
+        "type": "FileParameter[]",
+        "isBody": false,
+        "isArray": true
+      }
+    ],
+    "getDistrictsList": [
+      {
+        "raw": "pageNumber: number | undefined",
+        "name": "pageNumber",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "pageSize: number | undefined",
+        "name": "pageSize",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "saveDistrict": [
+      {
+        "raw": "body: DistrictRequestDto | undefined",
+        "name": "body",
+        "type": "DistrictRequestDto",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "savePublicationType": [
+      {
+        "raw": "body: PublicationTypeRequestDto | undefined",
+        "name": "body",
+        "type": "PublicationTypeRequestDto",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "getPublicationTypeList": [
+      {
+        "raw": "pageNumber: number | undefined",
+        "name": "pageNumber",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "pageSize: number | undefined",
+        "name": "pageSize",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "getMenuItems": [],
+    "getAdminMenuItems": [
+      {
+        "raw": "body: number[] | undefined",
+        "name": "body",
+        "type": "number[]",
+        "isBody": true,
+        "isArray": true
+      }
+    ],
+    "addMenuItem": [
+      {
+        "raw": "body: MenuItemReq | undefined",
+        "name": "body",
+        "type": "MenuItemReq",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "removeMenuItem": [
+      {
+        "raw": "menuItemId: number | undefined",
+        "name": "menuItemId",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "schemaList": [],
+    "selectStatment": [
+      {
+        "raw": "body: SelectRequestModel | undefined",
+        "name": "body",
+        "type": "SelectRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "updateStatement": [
+      {
+        "raw": "body: SelectRequestModel | undefined",
+        "name": "body",
+        "type": "SelectRequestModel",
+        "isBody": true,
+        "isArray": false
+      }
+    ],
+    "getGenericDataById": [
+      {
+        "raw": "id: number | undefined",
+        "name": "id",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "parameters: string | undefined",
+        "name": "parameters",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      }
+    ],
+    "excuteGenericStatmentById": [
+      {
+        "raw": "id: number | undefined",
+        "name": "id",
+        "type": "number",
+        "isBody": false,
+        "isArray": false
+      },
+      {
+        "raw": "parameters: string | undefined",
+        "name": "parameters",
+        "type": "string",
+        "isBody": false,
+        "isArray": false
+      }
+    ]
+  },
+  "ListRequestModel": {
+    "pageNumber": 0,
+    "pageSize": 0,
+    "status": {},
+    "categoryCd": 0,
+    "type": 0,
+    "requestedData": {},
+    "search": {
+      "isSearch": false,
+      "searchKind": {},
+      "searchField": "",
+      "searchText": "",
+      "searchType": ""
+    }
+  },
+  "Search": {
+    "isSearch": false,
+    "searchKind": {},
+    "searchField": "",
+    "searchText": "",
+    "searchType": ""
+  },
+  "AdmCertDeptDto": {
+    "departmentId": 0,
+    "departmentName": "",
+    "areaName": "",
+    "userId": "",
+    "departmentType": 0
+  },
+  "AdmCertDeptDtoIEnumerableCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": [
+      {
+        "departmentId": 0,
+        "departmentName": "",
+        "areaName": "",
+        "userId": "",
+        "departmentType": 0
+      }
+    ],
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "TkmendFieldIEnumerableCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": [
+      {
+        "fildSql": "",
+        "fildRelted": "",
+        "fildKind": "",
+        "fildTxt": "",
+        "mendSql": 0,
+        "mendCategory": 0,
+        "mendStat": false,
+        "mendGroup": 0,
+        "applicationId": "",
+        "groupName": "",
+        "isExtendable": false,
+        "groupWithInRow": 0,
+        "instanceGroupId": ""
+      }
+    ],
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "AttchShipment": {
+    "id": 0,
+    "attchId": 0,
+    "attchImg": "",
+    "attchNm": "",
+    "applicationName": "",
+    "attcExt": "",
+    "attchSize": 0
+  },
+  "AttchShipmentDto": {
+    "id": 0,
+    "attchId": 0,
+    "attchNm": "",
+    "applicationName": "",
+    "attcExt": "",
+    "attchSize": 0
+  },
+  "AttchShipmentDtoIEnumerableCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": [
+      {
+        "id": 0,
+        "attchId": 0,
+        "attchNm": "",
+        "applicationName": "",
+        "attcExt": "",
+        "attchSize": 0
+      }
+    ],
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "ByteArrayCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": "",
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "ErrorDto": {
+    "code": "",
+    "message": ""
+  },
+  "MessageDto": {
+    "arg0": {},
+    "messageId": 0,
+    "subject": "",
+    "description": "",
+    "status": {},
+    "priority": {},
+    "createdBy": "",
+    "assignedSectorId": "",
+    "currentResponsibleSectorId": "",
+    "createdDate": "",
+    "dueDate": "",
+    "closedDate": "",
+    "requestRef": "",
+    "type": 0,
+    "categoryCd": "",
+    "fields": [
+      {
+        "fildSql": "",
+        "fildRelted": "",
+        "fildKind": "",
+        "fildTxt": "",
+        "mendSql": 0,
+        "mendCategory": 0,
+        "mendStat": false,
+        "mendGroup": 0,
+        "applicationId": "",
+        "groupName": "",
+        "isExtendable": false,
+        "groupWithInRow": 0,
+        "instanceGroupId": ""
+      }
+    ],
+    "replies": [
+      {}
+    ],
+    "attachments": [
+      {
+        "id": 0,
+        "attchId": 0,
+        "attchImg": "",
+        "attchNm": "",
+        "applicationName": "",
+        "attcExt": "",
+        "attchSize": 0
+      }
+    ],
+    "inquiryType": "",
+    "ServiceType": "",
+    "isReading": false,
+    "userRead": ""
+  },
+  "MessageDtoIEnumerableCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": [
+      {
+        "arg0": {},
+        "messageId": 0,
+        "subject": "",
+        "description": "",
+        "status": {},
+        "priority": {},
+        "createdBy": "",
+        "assignedSectorId": "",
+        "currentResponsibleSectorId": "",
+        "createdDate": "",
+        "dueDate": "",
+        "closedDate": "",
+        "requestRef": "",
+        "type": 0,
+        "categoryCd": "",
+        "fields": [
+          {
+            "fildSql": "",
+            "fildRelted": "",
+            "fildKind": "",
+            "fildTxt": "",
+            "mendSql": 0,
+            "mendCategory": 0,
+            "mendStat": false,
+            "mendGroup": 0,
+            "applicationId": "",
+            "groupName": "",
+            "isExtendable": false,
+            "groupWithInRow": 0,
+            "instanceGroupId": ""
+          }
+        ],
+        "replies": [
+          {}
+        ],
+        "attachments": [
+          {
+            "id": 0,
+            "attchId": 0,
+            "attchImg": "",
+            "attchNm": "",
+            "applicationName": "",
+            "attcExt": "",
+            "attchSize": 0
+          }
+        ],
+        "inquiryType": "",
+        "ServiceType": "",
+        "isReading": false,
+        "userRead": ""
+      }
+    ],
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "StringCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": "",
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "TkmendField": {
+    "fildSql": "",
+    "fildRelted": "",
+    "fildKind": "",
+    "fildTxt": "",
+    "mendSql": 0,
+    "mendCategory": 0,
+    "mendStat": false,
+    "mendGroup": 0,
+    "applicationId": "",
+    "groupName": "",
+    "isExtendable": false,
+    "groupWithInRow": 0,
+    "instanceGroupId": ""
+  },
+  "VwLtraTransTraficPrint": {
+    "transId": "",
+    "barcode": "",
+    "rlttBarcode": "",
+    "plateNumber": "",
+    "transDate": "",
+    "companyName": "",
+    "plateNumberPrint": "",
+    "licenseDuration": 0,
+    "replyLicenseFrom": "",
+    "vehicleBrand": "",
+    "yearOfManufacture": "",
+    "chassisNumber": "",
+    "engineNumber": "",
+    "modelBody": "",
+    "numberOfSeats": "",
+    "licensesNum": "",
+    "trafficUnitId": "",
+    "governorateId": "",
+    "carActivity": "",
+    "isPrint": false
+  },
+  "VwLtraTransTraficPrintCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": {
+      "transId": "",
+      "barcode": "",
+      "rlttBarcode": "",
+      "plateNumber": "",
+      "transDate": "",
+      "companyName": "",
+      "plateNumberPrint": "",
+      "licenseDuration": 0,
+      "replyLicenseFrom": "",
+      "vehicleBrand": "",
+      "yearOfManufacture": "",
+      "chassisNumber": "",
+      "engineNumber": "",
+      "modelBody": "",
+      "numberOfSeats": "",
+      "licensesNum": "",
+      "trafficUnitId": "",
+      "governorateId": "",
+      "carActivity": "",
+      "isPrint": false
+    },
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "VwLtraTransTraficPrintIEnumerableCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": [
+      {
+        "transId": "",
+        "barcode": "",
+        "rlttBarcode": "",
+        "plateNumber": "",
+        "transDate": "",
+        "companyName": "",
+        "plateNumberPrint": "",
+        "licenseDuration": 0,
+        "replyLicenseFrom": "",
+        "vehicleBrand": "",
+        "yearOfManufacture": "",
+        "chassisNumber": "",
+        "engineNumber": "",
+        "modelBody": "",
+        "numberOfSeats": "",
+        "licensesNum": "",
+        "trafficUnitId": "",
+        "governorateId": "",
+        "carActivity": "",
+        "isPrint": false
+      }
+    ],
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "LogRequestModel": {
+    "redisSubCategory": {},
+    "propertyName": "",
+    "expectedValue": "",
+    "days": 0
+  },
+  "RedisLogEntry": {
+    "timestamp": "",
+    "logType": "",
+    "message": "",
+    "ip": ""
+  },
+  "MessageRequest": {
+    "messageId": 0,
+    "requestRef": "",
+    "subject": "",
+    "description": "",
+    "createdBy": "",
+    "assignedSectorId": "",
+    "currentResponsibleSectorId": "",
+    "type": 0,
+    "categoryCd": 0,
+    "fields": [
+      {}
+    ],
+    "files": [
+      {}
+    ]
+  },
+  "MessageDtoCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": {},
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "CdCategoryMandDto": {
+    "mendSql": 0,
+    "mendCategory": 0,
+    "mendField": "",
+    "mendStat": false,
+    "mendGroup": 0,
+    "groupName": "",
+    "isExtendable": false,
+    "groupWithInRow": 0,
+    "applicationId": ""
+  },
+  "CdCategoryMandDtoIEnumerableCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": [
+      {
+        "mendSql": 0,
+        "mendCategory": 0,
+        "mendField": "",
+        "mendStat": false,
+        "mendGroup": 0,
+        "groupName": "",
+        "isExtendable": false,
+        "groupWithInRow": 0,
+        "applicationId": ""
+      }
+    ],
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "CdcategoryDto": {
+    "catId": 0,
+    "catParent": 0,
+    "catName": "",
+    "catMend": "",
+    "catWorkFlow": 0,
+    "catSms": false,
+    "catMailNotification": false,
+    "to": "",
+    "cc": "",
+    "applicationId": ""
+  },
+  "CdcategoryDtoIEnumerableCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": [
+      {
+        "catId": 0,
+        "catParent": 0,
+        "catName": "",
+        "catMend": "",
+        "catWorkFlow": 0,
+        "catSms": false,
+        "catMailNotification": false,
+        "to": "",
+        "cc": "",
+        "applicationId": ""
+      }
+    ],
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "CdmendDto": {
+    "cdmendSql": 0,
+    "cdmendType": "",
+    "cdmendTxt": "",
+    "cdMendLbl": "",
+    "placeholder": "",
+    "defaultValue": "",
+    "cdmendTbl": "",
+    "cdmendDatatype": "",
+    "required": false,
+    "requiredTrue": false,
+    "email": false,
+    "pattern": false,
+    "min": 0,
+    "max": 0,
+    "minxLenght": 0,
+    "maxLenght": 0,
+    "cdmendmask": "",
+    "cdmendStat": false,
+    "width": 0,
+    "height": 0,
+    "isDisabledInit": false,
+    "isSearchable": false,
+    "applicationId": ""
+  },
+  "CdmendDtoIEnumerableCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": [
+      {
+        "cdmendSql": 0,
+        "cdmendType": "",
+        "cdmendTxt": "",
+        "cdMendLbl": "",
+        "placeholder": "",
+        "defaultValue": "",
+        "cdmendTbl": "",
+        "cdmendDatatype": "",
+        "required": false,
+        "requiredTrue": false,
+        "email": false,
+        "pattern": false,
+        "min": 0,
+        "max": 0,
+        "minxLenght": 0,
+        "maxLenght": 0,
+        "cdmendmask": "",
+        "cdmendStat": false,
+        "width": 0,
+        "height": 0,
+        "isDisabledInit": false,
+        "isSearchable": false,
+        "applicationId": ""
+      }
+    ],
+    "totalCount": 0,
+    "pageNumber": 0,
+    "pageSize": 0,
+    "totalPages": 0
+  },
+  "ObjectResponse": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": ""
+  },
+  "MenuItemReq": {
+    "MENU_ITEM_NAME": "",
+    "PARENT_MENU_ITEM_ID": 0,
+    "APPLICATION": "",
+    "UNIT_ID": 0
+  },
+  "MenuItemResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ]
+  },
+  "AssignRoleReq": {
+    "UserId": "",
+    "RoleIds": [
+      0
+    ]
+  },
+  "AttachmentList": {
+    "ATTACHMENT_ID": 0,
+    "FILE_NAME": "",
+    "FILE_SIZE_BYTES": 0
+  },
+  "AttachmentStatusDto": {
+    "ATTACHMENT_ID": 0
+  },
+  "Category": {
+    "CategoryId": 0,
+    "CategoryNameAr": "",
+    "LastModifiedDate": "",
+    "CategoryNameEng": "",
+    "Isactive": ""
+  },
+  "CategoryRequestDto": {
+    "NameAr": "",
+    "NameEng": ""
+  },
+  "CategoryResp": {
+    "CategoryId": 0,
+    "CategoryNameAr": ""
+  },
+  "DOC_ATTACHMENT": {
+    "ATTACHMENT_ID": 0,
+    "DOC_ID": 0,
+    "FILE_CONTENT": "",
+    "FILE_NAME": "",
+    "FILE_SIZE_BYTES": 0,
+    "UPLOAD_DATE": "",
+    "DESCRIPTION": "",
+    "ISACTIVE": false,
+    "Document": {
+      "DOCUMENT_ID": 0,
+      "DOCUMENT_NUMBER": "",
+      "LAST_MODIFIED_DATE": "",
+      "ACTIVATION_DATE": "",
+      "WORKING_START_DATE": "",
+      "MINI_DOC": "",
+      "SECTOR_ID": 0,
+      "DISTRICT_ID": 0,
+      "DOCUMENT_TYPE_ID": 0,
+      "VAL": "",
+      "FLAG": "",
+      "ALL_TEXT_DOC": "",
+      "REJECTREASON": "",
+      "MAIN_SERVICE_ID": 0,
+      "SUB_SERVICE_ID": 0,
+      "SERVICE_TYPE_ID": 0,
+      "PUBLICATION_TYPE_ID": 0,
+      "MODIFIED_USER_ID": "",
+      "CREATED_USER_ID": "",
+      "MENUITEMID": 0,
+      "DOCUMENT_PARENT_ID": "",
+      "CATEGORY_ID": 0,
+      "Category": {
+        "CategoryId": 0,
+        "CategoryNameAr": "",
+        "LastModifiedDate": "",
+        "CategoryNameEng": "",
+        "Isactive": ""
+      },
+      "District": {
+        "DistrictId": 0,
+        "DistrictNameAr": "",
+        "LastModifiedDate": "",
+        "DistrictEng": "",
+        "Isactive": "",
+        "SECTOR_ID": 0,
+        "Sector": {
+          "SectorId": 0,
+          "SectorNameAr": "",
+          "LastModifiedDate": "",
+          "SectorNameEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ],
+          "Districts": [
+            {}
+          ]
+        },
+        "Documents": [
+          {}
+        ]
+      },
+      "DocumentType": {
+        "DocumentTypeId": 0,
+        "DocumentTypeNameAr": "",
+        "LastModifiedDate": "",
+        "DocumentTypeEng": "",
+        "Isactive": "",
+        "Documents": [
+          {}
+        ]
+      },
+      "MainService": {
+        "MainServiceId": 0,
+        "MainServiceNameAr": "",
+        "LastModifiedDate": "",
+        "MainServiceEng": "",
+        "Isactive": "",
+        "Documents": [
+          {}
+        ],
+        "SubServices": [
+          {
+            "SUB_SERVICE_ID": 0,
+            "SubServiceNameAr": "",
+            "LastModifiedDate": "",
+            "SubServiceEng": "",
+            "Isactive": "",
+            "MainServiceId": 0,
+            "Documents": [
+              {}
+            ],
+            "MainService": {}
+          }
+        ]
+      },
+      "PublicationType": {
+        "PublicationTypeId": 0,
+        "PublicationTypeNameAr": "",
+        "LastModifiedDate": "",
+        "PublicationTypeEng": "",
+        "Isactive": "",
+        "Documents": [
+          {}
+        ]
+      },
+      "Sector": {},
+      "ServiceType": {
+        "ServiceTypeId": 0,
+        "ServiceTypeNameAr": "",
+        "LastModifiedDate": "",
+        "ServiceTypeEng": "",
+        "Isactive": "",
+        "Documents": [
+          {}
+        ]
+      },
+      "SubService": {},
+      "PUB_MENU_ITEMS": {
+        "MENU_ITEM_ID": 0,
+        "MENU_ITEM_NAME": "",
+        "PARENT_MENU_ITEM_ID": 0,
+        "ParentMenuItem": {},
+        "ISACTIVE": false,
+        "CREATED_DATE": "",
+        "APPLICATION": "",
+        "Children": [
+          {}
+        ],
+        "Documents": [
+          {}
+        ]
+      },
+      "DOC_ATTACHMENTS": [
+        {}
+      ]
+    }
+  },
+  "District": {
+    "DistrictId": 0,
+    "DistrictNameAr": "",
+    "LastModifiedDate": "",
+    "DistrictEng": "",
+    "Isactive": "",
+    "SECTOR_ID": 0,
+    "Sector": {
+      "SectorId": 0,
+      "SectorNameAr": "",
+      "LastModifiedDate": "",
+      "SectorNameEng": "",
+      "Isactive": "",
+      "Documents": [
+        {
+          "DOCUMENT_ID": 0,
+          "DOCUMENT_NUMBER": "",
+          "LAST_MODIFIED_DATE": "",
+          "ACTIVATION_DATE": "",
+          "WORKING_START_DATE": "",
+          "MINI_DOC": "",
+          "SECTOR_ID": 0,
+          "DISTRICT_ID": 0,
+          "DOCUMENT_TYPE_ID": 0,
+          "VAL": "",
+          "FLAG": "",
+          "ALL_TEXT_DOC": "",
+          "REJECTREASON": "",
+          "MAIN_SERVICE_ID": 0,
+          "SUB_SERVICE_ID": 0,
+          "SERVICE_TYPE_ID": 0,
+          "PUBLICATION_TYPE_ID": 0,
+          "MODIFIED_USER_ID": "",
+          "CREATED_USER_ID": "",
+          "MENUITEMID": 0,
+          "DOCUMENT_PARENT_ID": "",
+          "CATEGORY_ID": 0,
+          "Category": {
+            "CategoryId": 0,
+            "CategoryNameAr": "",
+            "LastModifiedDate": "",
+            "CategoryNameEng": "",
+            "Isactive": ""
+          },
+          "District": {},
+          "DocumentType": {
+            "DocumentTypeId": 0,
+            "DocumentTypeNameAr": "",
+            "LastModifiedDate": "",
+            "DocumentTypeEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ]
+          },
+          "MainService": {
+            "MainServiceId": 0,
+            "MainServiceNameAr": "",
+            "LastModifiedDate": "",
+            "MainServiceEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ],
+            "SubServices": [
+              {
+                "SUB_SERVICE_ID": 0,
+                "SubServiceNameAr": "",
+                "LastModifiedDate": "",
+                "SubServiceEng": "",
+                "Isactive": "",
+                "MainServiceId": 0,
+                "Documents": [
+                  {}
+                ],
+                "MainService": {}
+              }
+            ]
+          },
+          "PublicationType": {
+            "PublicationTypeId": 0,
+            "PublicationTypeNameAr": "",
+            "LastModifiedDate": "",
+            "PublicationTypeEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ]
+          },
+          "Sector": {},
+          "ServiceType": {
+            "ServiceTypeId": 0,
+            "ServiceTypeNameAr": "",
+            "LastModifiedDate": "",
+            "ServiceTypeEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ]
+          },
+          "SubService": {},
+          "PUB_MENU_ITEMS": {
+            "MENU_ITEM_ID": 0,
+            "MENU_ITEM_NAME": "",
+            "PARENT_MENU_ITEM_ID": 0,
+            "ParentMenuItem": {},
+            "ISACTIVE": false,
+            "CREATED_DATE": "",
+            "APPLICATION": "",
+            "Children": [
+              {}
+            ],
+            "Documents": [
+              {}
+            ]
+          },
+          "DOC_ATTACHMENTS": [
+            {
+              "ATTACHMENT_ID": 0,
+              "DOC_ID": 0,
+              "FILE_CONTENT": "",
+              "FILE_NAME": "",
+              "FILE_SIZE_BYTES": 0,
+              "UPLOAD_DATE": "",
+              "DESCRIPTION": "",
+              "ISACTIVE": false,
+              "Document": {}
+            }
+          ]
+        }
+      ],
+      "Districts": [
+        {}
+      ]
+    },
+    "Documents": [
+      {}
+    ]
+  },
+  "DistrictRequestDto": {
+    "NameAr": "",
+    "NameEng": "",
+    "SECTOR_ID": 0
+  },
+  "DistrictResp": {
+    "DistrictId": 0,
+    "DistrictNameAr": ""
+  },
+  "DistrictsResp": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": [
+      {
+        "DistrictId": 0,
+        "DistrictNameAr": "",
+        "LastModifiedDate": "",
+        "DistrictEng": "",
+        "Isactive": "",
+        "SECTOR_ID": 0,
+        "Sector": {
+          "SectorId": 0,
+          "SectorNameAr": "",
+          "LastModifiedDate": "",
+          "SectorNameEng": "",
+          "Isactive": "",
+          "Documents": [
+            {
+              "DOCUMENT_ID": 0,
+              "DOCUMENT_NUMBER": "",
+              "LAST_MODIFIED_DATE": "",
+              "ACTIVATION_DATE": "",
+              "WORKING_START_DATE": "",
+              "MINI_DOC": "",
+              "SECTOR_ID": 0,
+              "DISTRICT_ID": 0,
+              "DOCUMENT_TYPE_ID": 0,
+              "VAL": "",
+              "FLAG": "",
+              "ALL_TEXT_DOC": "",
+              "REJECTREASON": "",
+              "MAIN_SERVICE_ID": 0,
+              "SUB_SERVICE_ID": 0,
+              "SERVICE_TYPE_ID": 0,
+              "PUBLICATION_TYPE_ID": 0,
+              "MODIFIED_USER_ID": "",
+              "CREATED_USER_ID": "",
+              "MENUITEMID": 0,
+              "DOCUMENT_PARENT_ID": "",
+              "CATEGORY_ID": 0,
+              "Category": {
+                "CategoryId": 0,
+                "CategoryNameAr": "",
+                "LastModifiedDate": "",
+                "CategoryNameEng": "",
+                "Isactive": ""
+              },
+              "District": {},
+              "DocumentType": {
+                "DocumentTypeId": 0,
+                "DocumentTypeNameAr": "",
+                "LastModifiedDate": "",
+                "DocumentTypeEng": "",
+                "Isactive": "",
+                "Documents": [
+                  {}
+                ]
+              },
+              "MainService": {
+                "MainServiceId": 0,
+                "MainServiceNameAr": "",
+                "LastModifiedDate": "",
+                "MainServiceEng": "",
+                "Isactive": "",
+                "Documents": [
+                  {}
+                ],
+                "SubServices": [
+                  {
+                    "SUB_SERVICE_ID": 0,
+                    "SubServiceNameAr": "",
+                    "LastModifiedDate": "",
+                    "SubServiceEng": "",
+                    "Isactive": "",
+                    "MainServiceId": 0,
+                    "Documents": [
+                      {}
+                    ],
+                    "MainService": {}
+                  }
+                ]
+              },
+              "PublicationType": {
+                "PublicationTypeId": 0,
+                "PublicationTypeNameAr": "",
+                "LastModifiedDate": "",
+                "PublicationTypeEng": "",
+                "Isactive": "",
+                "Documents": [
+                  {}
+                ]
+              },
+              "Sector": {},
+              "ServiceType": {
+                "ServiceTypeId": 0,
+                "ServiceTypeNameAr": "",
+                "LastModifiedDate": "",
+                "ServiceTypeEng": "",
+                "Isactive": "",
+                "Documents": [
+                  {}
+                ]
+              },
+              "SubService": {},
+              "PUB_MENU_ITEMS": {
+                "MENU_ITEM_ID": 0,
+                "MENU_ITEM_NAME": "",
+                "PARENT_MENU_ITEM_ID": 0,
+                "ParentMenuItem": {},
+                "ISACTIVE": false,
+                "CREATED_DATE": "",
+                "APPLICATION": "",
+                "Children": [
+                  {}
+                ],
+                "Documents": [
+                  {}
+                ]
+              },
+              "DOC_ATTACHMENTS": [
+                {
+                  "ATTACHMENT_ID": 0,
+                  "DOC_ID": 0,
+                  "FILE_CONTENT": "",
+                  "FILE_NAME": "",
+                  "FILE_SIZE_BYTES": 0,
+                  "UPLOAD_DATE": "",
+                  "DESCRIPTION": "",
+                  "ISACTIVE": false,
+                  "Document": {}
+                }
+              ]
+            }
+          ],
+          "Districts": [
+            {}
+          ]
+        },
+        "Documents": [
+          {}
+        ]
+      }
+    ]
+  },
+  "Document": {
+    "DOCUMENT_ID": 0,
+    "DOCUMENT_NUMBER": "",
+    "LAST_MODIFIED_DATE": "",
+    "ACTIVATION_DATE": "",
+    "WORKING_START_DATE": "",
+    "MINI_DOC": "",
+    "SECTOR_ID": 0,
+    "DISTRICT_ID": 0,
+    "DOCUMENT_TYPE_ID": 0,
+    "VAL": "",
+    "FLAG": "",
+    "ALL_TEXT_DOC": "",
+    "REJECTREASON": "",
+    "MAIN_SERVICE_ID": 0,
+    "SUB_SERVICE_ID": 0,
+    "SERVICE_TYPE_ID": 0,
+    "PUBLICATION_TYPE_ID": 0,
+    "MODIFIED_USER_ID": "",
+    "CREATED_USER_ID": "",
+    "MENUITEMID": 0,
+    "DOCUMENT_PARENT_ID": "",
+    "CATEGORY_ID": 0,
+    "Category": {
+      "CategoryId": 0,
+      "CategoryNameAr": "",
+      "LastModifiedDate": "",
+      "CategoryNameEng": "",
+      "Isactive": ""
+    },
+    "District": {
+      "DistrictId": 0,
+      "DistrictNameAr": "",
+      "LastModifiedDate": "",
+      "DistrictEng": "",
+      "Isactive": "",
+      "SECTOR_ID": 0,
+      "Sector": {
+        "SectorId": 0,
+        "SectorNameAr": "",
+        "LastModifiedDate": "",
+        "SectorNameEng": "",
+        "Isactive": "",
+        "Documents": [
+          {}
+        ],
+        "Districts": [
+          {}
+        ]
+      },
+      "Documents": [
+        {}
+      ]
+    },
+    "DocumentType": {
+      "DocumentTypeId": 0,
+      "DocumentTypeNameAr": "",
+      "LastModifiedDate": "",
+      "DocumentTypeEng": "",
+      "Isactive": "",
+      "Documents": [
+        {}
+      ]
+    },
+    "MainService": {
+      "MainServiceId": 0,
+      "MainServiceNameAr": "",
+      "LastModifiedDate": "",
+      "MainServiceEng": "",
+      "Isactive": "",
+      "Documents": [
+        {}
+      ],
+      "SubServices": [
+        {
+          "SUB_SERVICE_ID": 0,
+          "SubServiceNameAr": "",
+          "LastModifiedDate": "",
+          "SubServiceEng": "",
+          "Isactive": "",
+          "MainServiceId": 0,
+          "Documents": [
+            {}
+          ],
+          "MainService": {}
+        }
+      ]
+    },
+    "PublicationType": {
+      "PublicationTypeId": 0,
+      "PublicationTypeNameAr": "",
+      "LastModifiedDate": "",
+      "PublicationTypeEng": "",
+      "Isactive": "",
+      "Documents": [
+        {}
+      ]
+    },
+    "Sector": {},
+    "ServiceType": {
+      "ServiceTypeId": 0,
+      "ServiceTypeNameAr": "",
+      "LastModifiedDate": "",
+      "ServiceTypeEng": "",
+      "Isactive": "",
+      "Documents": [
+        {}
+      ]
+    },
+    "SubService": {},
+    "PUB_MENU_ITEMS": {
+      "MENU_ITEM_ID": 0,
+      "MENU_ITEM_NAME": "",
+      "PARENT_MENU_ITEM_ID": 0,
+      "ParentMenuItem": {},
+      "ISACTIVE": false,
+      "CREATED_DATE": "",
+      "APPLICATION": "",
+      "Children": [
+        {}
+      ],
+      "Documents": [
+        {}
+      ]
+    },
+    "DOC_ATTACHMENTS": [
+      {
+        "ATTACHMENT_ID": 0,
+        "DOC_ID": 0,
+        "FILE_CONTENT": "",
+        "FILE_NAME": "",
+        "FILE_SIZE_BYTES": 0,
+        "UPLOAD_DATE": "",
+        "DESCRIPTION": "",
+        "ISACTIVE": false,
+        "Document": {}
+      }
+    ]
+  },
+  "DocumentCriteria": {
+    "DocumentTypes": [
+      {
+        "DocumentTypeId": 0,
+        "DocumentTypeNameAr": ""
+      }
+    ],
+    "Districts": [
+      {
+        "DistrictId": 0,
+        "DistrictNameAr": ""
+      }
+    ],
+    "Categories": [
+      {
+        "CategoryId": 0,
+        "CategoryNameAr": ""
+      }
+    ],
+    "MainServices": [
+      {
+        "MainServiceId": 0,
+        "MainServiceNameAr": ""
+      }
+    ],
+    "PublicationTypes": [
+      {
+        "PublicationTypeId": 0,
+        "PublicationTypeNameAr": ""
+      }
+    ],
+    "Sectors": [
+      {
+        "SectorId": 0,
+        "SectorNameAr": ""
+      }
+    ],
+    "ServiceTypes": [
+      {
+        "ServiceTypeId": 0,
+        "ServiceTypeNameAr": ""
+      }
+    ],
+    "SubServices": [
+      {
+        "SUB_SERVICE_ID": 0,
+        "SubServiceNameAr": ""
+      }
+    ]
+  },
+  "DocumentCriteriaResponse": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": {
+      "DocumentTypes": [
+        {
+          "DocumentTypeId": 0,
+          "DocumentTypeNameAr": ""
+        }
+      ],
+      "Districts": [
+        {
+          "DistrictId": 0,
+          "DistrictNameAr": ""
+        }
+      ],
+      "Categories": [
+        {
+          "CategoryId": 0,
+          "CategoryNameAr": ""
+        }
+      ],
+      "MainServices": [
+        {
+          "MainServiceId": 0,
+          "MainServiceNameAr": ""
+        }
+      ],
+      "PublicationTypes": [
+        {
+          "PublicationTypeId": 0,
+          "PublicationTypeNameAr": ""
+        }
+      ],
+      "Sectors": [
+        {
+          "SectorId": 0,
+          "SectorNameAr": ""
+        }
+      ],
+      "ServiceTypes": [
+        {
+          "ServiceTypeId": 0,
+          "ServiceTypeNameAr": ""
+        }
+      ],
+      "SubServices": [
+        {
+          "SUB_SERVICE_ID": 0,
+          "SubServiceNameAr": ""
+        }
+      ]
+    }
+  },
+  "DocumentDeleteFileRequestDto": {
+    "DOCUMENT_ID": 0,
+    "PATHLINKDOC": ""
+  },
+  "DocumentEditRequestDto": {
+    "DOCUMENT_NUMBER": "",
+    "DOCUMENT_ID": 0,
+    "LAST_MODIFIED_DATE": "",
+    "MINI_DOC": "",
+    "NO_DOC": "",
+    "SECTOR_ID": 0,
+    "DISTRICT_ID": 0,
+    "DOCUMENT_TYPE_ID": 0,
+    "ALL_TEXT_DOC": "",
+    "REJECTREASON": "",
+    "MAIN_SERVICE_ID": 0,
+    "PUBLICATION_TYPE_ID": 0,
+    "SUB_SERVICE_ID": 0,
+    "SERVICE_TYPE_ID": 0
+  },
+  "DocumentResp": {
+    "DocumentId": 0,
+    "DOCUMENT_NUMBER": "",
+    "MINI_DOC": "",
+    "ALL_TEXT_DOC": "",
+    "SectorName": "",
+    "DistrictName": "",
+    "DocumentType": "",
+    "VAL": "",
+    "Application": "",
+    "WORKING_START_DATE": "",
+    "District_Id": 0,
+    "PublicationType_Id": 0,
+    "Document_Parent_Id": "",
+    "PublicationTypeName": "",
+    "AttachmentList": [
+      {
+        "ATTACHMENT_ID": 0,
+        "FILE_NAME": "",
+        "FILE_SIZE_BYTES": 0
+      }
+    ]
+  },
+  "DocumentRespPagedResult": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ],
+    "TotalCount": 0,
+    "Data": [
+      {
+        "DocumentId": 0,
+        "DOCUMENT_NUMBER": "",
+        "MINI_DOC": "",
+        "ALL_TEXT_DOC": "",
+        "SectorName": "",
+        "DistrictName": "",
+        "DocumentType": "",
+        "VAL": "",
+        "Application": "",
+        "WORKING_START_DATE": "",
+        "District_Id": 0,
+        "PublicationType_Id": 0,
+        "Document_Parent_Id": "",
+        "PublicationTypeName": "",
+        "AttachmentList": [
+          {
+            "ATTACHMENT_ID": 0,
+            "FILE_NAME": "",
+            "FILE_SIZE_BYTES": 0
+          }
+        ]
+      }
+    ]
+  },
+  "DocumentRespResponse": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": {
+      "DocumentId": 0,
+      "DOCUMENT_NUMBER": "",
+      "MINI_DOC": "",
+      "ALL_TEXT_DOC": "",
+      "SectorName": "",
+      "DistrictName": "",
+      "DocumentType": "",
+      "VAL": "",
+      "Application": "",
+      "WORKING_START_DATE": "",
+      "District_Id": 0,
+      "PublicationType_Id": 0,
+      "Document_Parent_Id": "",
+      "PublicationTypeName": "",
+      "AttachmentList": [
+        {
+          "ATTACHMENT_ID": 0,
+          "FILE_NAME": "",
+          "FILE_SIZE_BYTES": 0
+        }
+      ]
+    }
+  },
+  "DocumentType": {
+    "DocumentTypeId": 0,
+    "DocumentTypeNameAr": "",
+    "LastModifiedDate": "",
+    "DocumentTypeEng": "",
+    "Isactive": "",
+    "Documents": [
+      {
+        "DOCUMENT_ID": 0,
+        "DOCUMENT_NUMBER": "",
+        "LAST_MODIFIED_DATE": "",
+        "ACTIVATION_DATE": "",
+        "WORKING_START_DATE": "",
+        "MINI_DOC": "",
+        "SECTOR_ID": 0,
+        "DISTRICT_ID": 0,
+        "DOCUMENT_TYPE_ID": 0,
+        "VAL": "",
+        "FLAG": "",
+        "ALL_TEXT_DOC": "",
+        "REJECTREASON": "",
+        "MAIN_SERVICE_ID": 0,
+        "SUB_SERVICE_ID": 0,
+        "SERVICE_TYPE_ID": 0,
+        "PUBLICATION_TYPE_ID": 0,
+        "MODIFIED_USER_ID": "",
+        "CREATED_USER_ID": "",
+        "MENUITEMID": 0,
+        "DOCUMENT_PARENT_ID": "",
+        "CATEGORY_ID": 0,
+        "Category": {
+          "CategoryId": 0,
+          "CategoryNameAr": "",
+          "LastModifiedDate": "",
+          "CategoryNameEng": "",
+          "Isactive": ""
+        },
+        "District": {
+          "DistrictId": 0,
+          "DistrictNameAr": "",
+          "LastModifiedDate": "",
+          "DistrictEng": "",
+          "Isactive": "",
+          "SECTOR_ID": 0,
+          "Sector": {
+            "SectorId": 0,
+            "SectorNameAr": "",
+            "LastModifiedDate": "",
+            "SectorNameEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ],
+            "Districts": [
+              {}
+            ]
+          },
+          "Documents": [
+            {}
+          ]
+        },
+        "DocumentType": {},
+        "MainService": {
+          "MainServiceId": 0,
+          "MainServiceNameAr": "",
+          "LastModifiedDate": "",
+          "MainServiceEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ],
+          "SubServices": [
+            {
+              "SUB_SERVICE_ID": 0,
+              "SubServiceNameAr": "",
+              "LastModifiedDate": "",
+              "SubServiceEng": "",
+              "Isactive": "",
+              "MainServiceId": 0,
+              "Documents": [
+                {}
+              ],
+              "MainService": {}
+            }
+          ]
+        },
+        "PublicationType": {
+          "PublicationTypeId": 0,
+          "PublicationTypeNameAr": "",
+          "LastModifiedDate": "",
+          "PublicationTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "Sector": {},
+        "ServiceType": {
+          "ServiceTypeId": 0,
+          "ServiceTypeNameAr": "",
+          "LastModifiedDate": "",
+          "ServiceTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "SubService": {},
+        "PUB_MENU_ITEMS": {
+          "MENU_ITEM_ID": 0,
+          "MENU_ITEM_NAME": "",
+          "PARENT_MENU_ITEM_ID": 0,
+          "ParentMenuItem": {},
+          "ISACTIVE": false,
+          "CREATED_DATE": "",
+          "APPLICATION": "",
+          "Children": [
+            {}
+          ],
+          "Documents": [
+            {}
+          ]
+        },
+        "DOC_ATTACHMENTS": [
+          {
+            "ATTACHMENT_ID": 0,
+            "DOC_ID": 0,
+            "FILE_CONTENT": "",
+            "FILE_NAME": "",
+            "FILE_SIZE_BYTES": 0,
+            "UPLOAD_DATE": "",
+            "DESCRIPTION": "",
+            "ISACTIVE": false,
+            "Document": {}
+          }
+        ]
+      }
+    ]
+  },
+  "DocumentTypeRequestDto": {
+    "NameAr": "",
+    "NameEng": ""
+  },
+  "DocumentTypeResp": {
+    "DocumentTypeId": 0,
+    "DocumentTypeNameAr": ""
+  },
+  "DocumentsTypeResp": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": [
+      {
+        "DocumentTypeId": 0,
+        "DocumentTypeNameAr": "",
+        "LastModifiedDate": "",
+        "DocumentTypeEng": "",
+        "Isactive": "",
+        "Documents": [
+          {
+            "DOCUMENT_ID": 0,
+            "DOCUMENT_NUMBER": "",
+            "LAST_MODIFIED_DATE": "",
+            "ACTIVATION_DATE": "",
+            "WORKING_START_DATE": "",
+            "MINI_DOC": "",
+            "SECTOR_ID": 0,
+            "DISTRICT_ID": 0,
+            "DOCUMENT_TYPE_ID": 0,
+            "VAL": "",
+            "FLAG": "",
+            "ALL_TEXT_DOC": "",
+            "REJECTREASON": "",
+            "MAIN_SERVICE_ID": 0,
+            "SUB_SERVICE_ID": 0,
+            "SERVICE_TYPE_ID": 0,
+            "PUBLICATION_TYPE_ID": 0,
+            "MODIFIED_USER_ID": "",
+            "CREATED_USER_ID": "",
+            "MENUITEMID": 0,
+            "DOCUMENT_PARENT_ID": "",
+            "CATEGORY_ID": 0,
+            "Category": {
+              "CategoryId": 0,
+              "CategoryNameAr": "",
+              "LastModifiedDate": "",
+              "CategoryNameEng": "",
+              "Isactive": ""
+            },
+            "District": {
+              "DistrictId": 0,
+              "DistrictNameAr": "",
+              "LastModifiedDate": "",
+              "DistrictEng": "",
+              "Isactive": "",
+              "SECTOR_ID": 0,
+              "Sector": {
+                "SectorId": 0,
+                "SectorNameAr": "",
+                "LastModifiedDate": "",
+                "SectorNameEng": "",
+                "Isactive": "",
+                "Documents": [
+                  {}
+                ],
+                "Districts": [
+                  {}
+                ]
+              },
+              "Documents": [
+                {}
+              ]
+            },
+            "DocumentType": {},
+            "MainService": {
+              "MainServiceId": 0,
+              "MainServiceNameAr": "",
+              "LastModifiedDate": "",
+              "MainServiceEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ],
+              "SubServices": [
+                {
+                  "SUB_SERVICE_ID": 0,
+                  "SubServiceNameAr": "",
+                  "LastModifiedDate": "",
+                  "SubServiceEng": "",
+                  "Isactive": "",
+                  "MainServiceId": 0,
+                  "Documents": [
+                    {}
+                  ],
+                  "MainService": {}
+                }
+              ]
+            },
+            "PublicationType": {
+              "PublicationTypeId": 0,
+              "PublicationTypeNameAr": "",
+              "LastModifiedDate": "",
+              "PublicationTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "Sector": {},
+            "ServiceType": {
+              "ServiceTypeId": 0,
+              "ServiceTypeNameAr": "",
+              "LastModifiedDate": "",
+              "ServiceTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "SubService": {},
+            "PUB_MENU_ITEMS": {
+              "MENU_ITEM_ID": 0,
+              "MENU_ITEM_NAME": "",
+              "PARENT_MENU_ITEM_ID": 0,
+              "ParentMenuItem": {},
+              "ISACTIVE": false,
+              "CREATED_DATE": "",
+              "APPLICATION": "",
+              "Children": [
+                {}
+              ],
+              "Documents": [
+                {}
+              ]
+            },
+            "DOC_ATTACHMENTS": [
+              {
+                "ATTACHMENT_ID": 0,
+                "DOC_ID": 0,
+                "FILE_CONTENT": "",
+                "FILE_NAME": "",
+                "FILE_SIZE_BYTES": 0,
+                "UPLOAD_DATE": "",
+                "DESCRIPTION": "",
+                "ISACTIVE": false,
+                "Document": {}
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "EditActiveRequestDto": {
+    "DOCUMENT_ID": 0,
+    "Val": ""
+  },
+  "ExpressionDto": {
+    "PropertyName": "",
+    "PropertyStringValue": "",
+    "PropertyIntValue": 0,
+    "PropertyDateValue": ""
+  },
+  "FileContentResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ],
+    "FILE_CONTENT": ""
+  },
+  "MainService": {
+    "MainServiceId": 0,
+    "MainServiceNameAr": "",
+    "LastModifiedDate": "",
+    "MainServiceEng": "",
+    "Isactive": "",
+    "Documents": [
+      {
+        "DOCUMENT_ID": 0,
+        "DOCUMENT_NUMBER": "",
+        "LAST_MODIFIED_DATE": "",
+        "ACTIVATION_DATE": "",
+        "WORKING_START_DATE": "",
+        "MINI_DOC": "",
+        "SECTOR_ID": 0,
+        "DISTRICT_ID": 0,
+        "DOCUMENT_TYPE_ID": 0,
+        "VAL": "",
+        "FLAG": "",
+        "ALL_TEXT_DOC": "",
+        "REJECTREASON": "",
+        "MAIN_SERVICE_ID": 0,
+        "SUB_SERVICE_ID": 0,
+        "SERVICE_TYPE_ID": 0,
+        "PUBLICATION_TYPE_ID": 0,
+        "MODIFIED_USER_ID": "",
+        "CREATED_USER_ID": "",
+        "MENUITEMID": 0,
+        "DOCUMENT_PARENT_ID": "",
+        "CATEGORY_ID": 0,
+        "Category": {
+          "CategoryId": 0,
+          "CategoryNameAr": "",
+          "LastModifiedDate": "",
+          "CategoryNameEng": "",
+          "Isactive": ""
+        },
+        "District": {
+          "DistrictId": 0,
+          "DistrictNameAr": "",
+          "LastModifiedDate": "",
+          "DistrictEng": "",
+          "Isactive": "",
+          "SECTOR_ID": 0,
+          "Sector": {
+            "SectorId": 0,
+            "SectorNameAr": "",
+            "LastModifiedDate": "",
+            "SectorNameEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ],
+            "Districts": [
+              {}
+            ]
+          },
+          "Documents": [
+            {}
+          ]
+        },
+        "DocumentType": {
+          "DocumentTypeId": 0,
+          "DocumentTypeNameAr": "",
+          "LastModifiedDate": "",
+          "DocumentTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "MainService": {},
+        "PublicationType": {
+          "PublicationTypeId": 0,
+          "PublicationTypeNameAr": "",
+          "LastModifiedDate": "",
+          "PublicationTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "Sector": {},
+        "ServiceType": {
+          "ServiceTypeId": 0,
+          "ServiceTypeNameAr": "",
+          "LastModifiedDate": "",
+          "ServiceTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "SubService": {
+          "SUB_SERVICE_ID": 0,
+          "SubServiceNameAr": "",
+          "LastModifiedDate": "",
+          "SubServiceEng": "",
+          "Isactive": "",
+          "MainServiceId": 0,
+          "Documents": [
+            {}
+          ],
+          "MainService": {}
+        },
+        "PUB_MENU_ITEMS": {
+          "MENU_ITEM_ID": 0,
+          "MENU_ITEM_NAME": "",
+          "PARENT_MENU_ITEM_ID": 0,
+          "ParentMenuItem": {},
+          "ISACTIVE": false,
+          "CREATED_DATE": "",
+          "APPLICATION": "",
+          "Children": [
+            {}
+          ],
+          "Documents": [
+            {}
+          ]
+        },
+        "DOC_ATTACHMENTS": [
+          {
+            "ATTACHMENT_ID": 0,
+            "DOC_ID": 0,
+            "FILE_CONTENT": "",
+            "FILE_NAME": "",
+            "FILE_SIZE_BYTES": 0,
+            "UPLOAD_DATE": "",
+            "DESCRIPTION": "",
+            "ISACTIVE": false,
+            "Document": {}
+          }
+        ]
+      }
+    ],
+    "SubServices": [
+      {}
+    ]
+  },
+  "MainServiceRequestDto": {
+    "NameAr": "",
+    "NameEng": ""
+  },
+  "MainServiceResp": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": [
+      {
+        "MainServiceId": 0,
+        "MainServiceNameAr": "",
+        "LastModifiedDate": "",
+        "MainServiceEng": "",
+        "Isactive": "",
+        "Documents": [
+          {
+            "DOCUMENT_ID": 0,
+            "DOCUMENT_NUMBER": "",
+            "LAST_MODIFIED_DATE": "",
+            "ACTIVATION_DATE": "",
+            "WORKING_START_DATE": "",
+            "MINI_DOC": "",
+            "SECTOR_ID": 0,
+            "DISTRICT_ID": 0,
+            "DOCUMENT_TYPE_ID": 0,
+            "VAL": "",
+            "FLAG": "",
+            "ALL_TEXT_DOC": "",
+            "REJECTREASON": "",
+            "MAIN_SERVICE_ID": 0,
+            "SUB_SERVICE_ID": 0,
+            "SERVICE_TYPE_ID": 0,
+            "PUBLICATION_TYPE_ID": 0,
+            "MODIFIED_USER_ID": "",
+            "CREATED_USER_ID": "",
+            "MENUITEMID": 0,
+            "DOCUMENT_PARENT_ID": "",
+            "CATEGORY_ID": 0,
+            "Category": {
+              "CategoryId": 0,
+              "CategoryNameAr": "",
+              "LastModifiedDate": "",
+              "CategoryNameEng": "",
+              "Isactive": ""
+            },
+            "District": {
+              "DistrictId": 0,
+              "DistrictNameAr": "",
+              "LastModifiedDate": "",
+              "DistrictEng": "",
+              "Isactive": "",
+              "SECTOR_ID": 0,
+              "Sector": {
+                "SectorId": 0,
+                "SectorNameAr": "",
+                "LastModifiedDate": "",
+                "SectorNameEng": "",
+                "Isactive": "",
+                "Documents": [
+                  {}
+                ],
+                "Districts": [
+                  {}
+                ]
+              },
+              "Documents": [
+                {}
+              ]
+            },
+            "DocumentType": {
+              "DocumentTypeId": 0,
+              "DocumentTypeNameAr": "",
+              "LastModifiedDate": "",
+              "DocumentTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "MainService": {},
+            "PublicationType": {
+              "PublicationTypeId": 0,
+              "PublicationTypeNameAr": "",
+              "LastModifiedDate": "",
+              "PublicationTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "Sector": {},
+            "ServiceType": {
+              "ServiceTypeId": 0,
+              "ServiceTypeNameAr": "",
+              "LastModifiedDate": "",
+              "ServiceTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "SubService": {
+              "SUB_SERVICE_ID": 0,
+              "SubServiceNameAr": "",
+              "LastModifiedDate": "",
+              "SubServiceEng": "",
+              "Isactive": "",
+              "MainServiceId": 0,
+              "Documents": [
+                {}
+              ],
+              "MainService": {}
+            },
+            "PUB_MENU_ITEMS": {
+              "MENU_ITEM_ID": 0,
+              "MENU_ITEM_NAME": "",
+              "PARENT_MENU_ITEM_ID": 0,
+              "ParentMenuItem": {},
+              "ISACTIVE": false,
+              "CREATED_DATE": "",
+              "APPLICATION": "",
+              "Children": [
+                {}
+              ],
+              "Documents": [
+                {}
+              ]
+            },
+            "DOC_ATTACHMENTS": [
+              {
+                "ATTACHMENT_ID": 0,
+                "DOC_ID": 0,
+                "FILE_CONTENT": "",
+                "FILE_NAME": "",
+                "FILE_SIZE_BYTES": 0,
+                "UPLOAD_DATE": "",
+                "DESCRIPTION": "",
+                "ISACTIVE": false,
+                "Document": {}
+              }
+            ]
+          }
+        ],
+        "SubServices": [
+          {}
+        ]
+      }
+    ]
+  },
+  "MainServicesResp": {
+    "MainServiceId": 0,
+    "MainServiceNameAr": ""
+  },
+  "MenuCriteria": {
+    "MenuCategories": [
+      {
+        "CategoryId": 0,
+        "CategoryName": "",
+        "MenuItems": [
+          {
+            "MenuItemId": 0,
+            "Name": "",
+            "ParentMenuItemId": 0,
+            "SubItems": [
+              {}
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "MenuCriteriaResponse": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": {
+      "MenuCategories": [
+        {
+          "CategoryId": 0,
+          "CategoryName": "",
+          "MenuItems": [
+            {
+              "MenuItemId": 0,
+              "Name": "",
+              "ParentMenuItemId": 0,
+              "SubItems": [
+                {}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "MenuItemDto": {
+    "MenuItemId": 0,
+    "Name": "",
+    "ParentMenuItemId": 0,
+    "SubItems": [
+      {}
+    ]
+  },
+  "MenuResp": {
+    "CategoryId": 0,
+    "CategoryName": "",
+    "MenuItems": [
+      {
+        "MenuItemId": 0,
+        "Name": "",
+        "ParentMenuItemId": 0,
+        "SubItems": [
+          {}
+        ]
+      }
+    ]
+  },
+  "Menu_ItemResp": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": [
+      {
+        "MENU_ITEM_ID": 0,
+        "MENU_ITEM_NAME": "",
+        "PARENT_MENU_ITEM_ID": 0,
+        "ParentMenuItem": {},
+        "ISACTIVE": false,
+        "CREATED_DATE": "",
+        "APPLICATION": "",
+        "Children": [
+          {}
+        ],
+        "Documents": [
+          {
+            "DOCUMENT_ID": 0,
+            "DOCUMENT_NUMBER": "",
+            "LAST_MODIFIED_DATE": "",
+            "ACTIVATION_DATE": "",
+            "WORKING_START_DATE": "",
+            "MINI_DOC": "",
+            "SECTOR_ID": 0,
+            "DISTRICT_ID": 0,
+            "DOCUMENT_TYPE_ID": 0,
+            "VAL": "",
+            "FLAG": "",
+            "ALL_TEXT_DOC": "",
+            "REJECTREASON": "",
+            "MAIN_SERVICE_ID": 0,
+            "SUB_SERVICE_ID": 0,
+            "SERVICE_TYPE_ID": 0,
+            "PUBLICATION_TYPE_ID": 0,
+            "MODIFIED_USER_ID": "",
+            "CREATED_USER_ID": "",
+            "MENUITEMID": 0,
+            "DOCUMENT_PARENT_ID": "",
+            "CATEGORY_ID": 0,
+            "Category": {
+              "CategoryId": 0,
+              "CategoryNameAr": "",
+              "LastModifiedDate": "",
+              "CategoryNameEng": "",
+              "Isactive": ""
+            },
+            "District": {
+              "DistrictId": 0,
+              "DistrictNameAr": "",
+              "LastModifiedDate": "",
+              "DistrictEng": "",
+              "Isactive": "",
+              "SECTOR_ID": 0,
+              "Sector": {
+                "SectorId": 0,
+                "SectorNameAr": "",
+                "LastModifiedDate": "",
+                "SectorNameEng": "",
+                "Isactive": "",
+                "Documents": [
+                  {}
+                ],
+                "Districts": [
+                  {}
+                ]
+              },
+              "Documents": [
+                {}
+              ]
+            },
+            "DocumentType": {
+              "DocumentTypeId": 0,
+              "DocumentTypeNameAr": "",
+              "LastModifiedDate": "",
+              "DocumentTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "MainService": {
+              "MainServiceId": 0,
+              "MainServiceNameAr": "",
+              "LastModifiedDate": "",
+              "MainServiceEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ],
+              "SubServices": [
+                {
+                  "SUB_SERVICE_ID": 0,
+                  "SubServiceNameAr": "",
+                  "LastModifiedDate": "",
+                  "SubServiceEng": "",
+                  "Isactive": "",
+                  "MainServiceId": 0,
+                  "Documents": [
+                    {}
+                  ],
+                  "MainService": {}
+                }
+              ]
+            },
+            "PublicationType": {
+              "PublicationTypeId": 0,
+              "PublicationTypeNameAr": "",
+              "LastModifiedDate": "",
+              "PublicationTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "Sector": {},
+            "ServiceType": {
+              "ServiceTypeId": 0,
+              "ServiceTypeNameAr": "",
+              "LastModifiedDate": "",
+              "ServiceTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "SubService": {},
+            "PUB_MENU_ITEMS": {},
+            "DOC_ATTACHMENTS": [
+              {
+                "ATTACHMENT_ID": 0,
+                "DOC_ID": 0,
+                "FILE_CONTENT": "",
+                "FILE_NAME": "",
+                "FILE_SIZE_BYTES": 0,
+                "UPLOAD_DATE": "",
+                "DESCRIPTION": "",
+                "ISACTIVE": false,
+                "Document": {}
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "POS_USER": {
+    "USER_ID": "",
+    "EFFECTIVE_DATE_FROM": "",
+    "EFFECTIVE_DATE_TO": "",
+    "LAST_NAME": "",
+    "FIRST_NAME": "",
+    "PREFERED_LANGUAGE": "",
+    "PASSWORD": "",
+    "STATUS": "",
+    "CREATED_ON": "",
+    "CREATED_BY": "",
+    "LAST_UPDATED": "",
+    "LAST_UPDATED_BY": "",
+    "RESET_PASSWORD": "",
+    "LAST_PASSWORD_DATE": "",
+    "NEXT_PASSWORD_DATE": "",
+    "NATIONAL_ID": "",
+    "MOBILE_NUMBER": "",
+    "EMAIL_ADDRESS": "",
+    "PUBUSERROLES": [
+      {
+        "USER_ID": "",
+        "POS_USER": {},
+        "ROLE_ID": 0,
+        "PUBROLE": {
+          "ROLE_ID": 0,
+          "ROLE_NAME": "",
+          "PUBUSERROLES": [
+            {}
+          ],
+          "PUB_PERMISSIONS": [
+            {
+              "PERMISSION_ID": 0,
+              "PERMISSION": "",
+              "ROLE_ID": 0,
+              "PUBROLE": {}
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "PUBROLE": {
+    "ROLE_ID": 0,
+    "ROLE_NAME": "",
+    "PUBUSERROLES": [
+      {
+        "USER_ID": "",
+        "POS_USER": {
+          "USER_ID": "",
+          "EFFECTIVE_DATE_FROM": "",
+          "EFFECTIVE_DATE_TO": "",
+          "LAST_NAME": "",
+          "FIRST_NAME": "",
+          "PREFERED_LANGUAGE": "",
+          "PASSWORD": "",
+          "STATUS": "",
+          "CREATED_ON": "",
+          "CREATED_BY": "",
+          "LAST_UPDATED": "",
+          "LAST_UPDATED_BY": "",
+          "RESET_PASSWORD": "",
+          "LAST_PASSWORD_DATE": "",
+          "NEXT_PASSWORD_DATE": "",
+          "NATIONAL_ID": "",
+          "MOBILE_NUMBER": "",
+          "EMAIL_ADDRESS": "",
+          "PUBUSERROLES": [
+            {}
+          ]
+        },
+        "ROLE_ID": 0,
+        "PUBROLE": {}
+      }
+    ],
+    "PUB_PERMISSIONS": [
+      {
+        "PERMISSION_ID": 0,
+        "PERMISSION": "",
+        "ROLE_ID": 0,
+        "PUBROLE": {}
+      }
+    ]
+  },
+  "PUBROLEDTO": {
+    "ROLE_ID": 0,
+    "ROLE_NAME": ""
+  },
+  "PUBUSERROLE": {
+    "USER_ID": "",
+    "POS_USER": {
+      "USER_ID": "",
+      "EFFECTIVE_DATE_FROM": "",
+      "EFFECTIVE_DATE_TO": "",
+      "LAST_NAME": "",
+      "FIRST_NAME": "",
+      "PREFERED_LANGUAGE": "",
+      "PASSWORD": "",
+      "STATUS": "",
+      "CREATED_ON": "",
+      "CREATED_BY": "",
+      "LAST_UPDATED": "",
+      "LAST_UPDATED_BY": "",
+      "RESET_PASSWORD": "",
+      "LAST_PASSWORD_DATE": "",
+      "NEXT_PASSWORD_DATE": "",
+      "NATIONAL_ID": "",
+      "MOBILE_NUMBER": "",
+      "EMAIL_ADDRESS": "",
+      "PUBUSERROLES": [
+        {}
+      ]
+    },
+    "ROLE_ID": 0,
+    "PUBROLE": {
+      "ROLE_ID": 0,
+      "ROLE_NAME": "",
+      "PUBUSERROLES": [
+        {}
+      ],
+      "PUB_PERMISSIONS": [
+        {
+          "PERMISSION_ID": 0,
+          "PERMISSION": "",
+          "ROLE_ID": 0,
+          "PUBROLE": {}
+        }
+      ]
+    }
+  },
+  "PUBUSERROLEDTO": {
+    "PUBROLE": {
+      "ROLE_ID": 0,
+      "ROLE_NAME": ""
+    }
+  },
+  "PUBUSERROLEIEnumerableResponse": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": [
+      {
+        "USER_ID": "",
+        "POS_USER": {
+          "USER_ID": "",
+          "EFFECTIVE_DATE_FROM": "",
+          "EFFECTIVE_DATE_TO": "",
+          "LAST_NAME": "",
+          "FIRST_NAME": "",
+          "PREFERED_LANGUAGE": "",
+          "PASSWORD": "",
+          "STATUS": "",
+          "CREATED_ON": "",
+          "CREATED_BY": "",
+          "LAST_UPDATED": "",
+          "LAST_UPDATED_BY": "",
+          "RESET_PASSWORD": "",
+          "LAST_PASSWORD_DATE": "",
+          "NEXT_PASSWORD_DATE": "",
+          "NATIONAL_ID": "",
+          "MOBILE_NUMBER": "",
+          "EMAIL_ADDRESS": "",
+          "PUBUSERROLES": [
+            {}
+          ]
+        },
+        "ROLE_ID": 0,
+        "PUBROLE": {
+          "ROLE_ID": 0,
+          "ROLE_NAME": "",
+          "PUBUSERROLES": [
+            {}
+          ],
+          "PUB_PERMISSIONS": [
+            {
+              "PERMISSION_ID": 0,
+              "PERMISSION": "",
+              "ROLE_ID": 0,
+              "PUBROLE": {}
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "PUB_MENU_ITEMS": {
+    "MENU_ITEM_ID": 0,
+    "MENU_ITEM_NAME": "",
+    "PARENT_MENU_ITEM_ID": 0,
+    "ParentMenuItem": {},
+    "ISACTIVE": false,
+    "CREATED_DATE": "",
+    "APPLICATION": "",
+    "Children": [
+      {}
+    ],
+    "Documents": [
+      {
+        "DOCUMENT_ID": 0,
+        "DOCUMENT_NUMBER": "",
+        "LAST_MODIFIED_DATE": "",
+        "ACTIVATION_DATE": "",
+        "WORKING_START_DATE": "",
+        "MINI_DOC": "",
+        "SECTOR_ID": 0,
+        "DISTRICT_ID": 0,
+        "DOCUMENT_TYPE_ID": 0,
+        "VAL": "",
+        "FLAG": "",
+        "ALL_TEXT_DOC": "",
+        "REJECTREASON": "",
+        "MAIN_SERVICE_ID": 0,
+        "SUB_SERVICE_ID": 0,
+        "SERVICE_TYPE_ID": 0,
+        "PUBLICATION_TYPE_ID": 0,
+        "MODIFIED_USER_ID": "",
+        "CREATED_USER_ID": "",
+        "MENUITEMID": 0,
+        "DOCUMENT_PARENT_ID": "",
+        "CATEGORY_ID": 0,
+        "Category": {
+          "CategoryId": 0,
+          "CategoryNameAr": "",
+          "LastModifiedDate": "",
+          "CategoryNameEng": "",
+          "Isactive": ""
+        },
+        "District": {
+          "DistrictId": 0,
+          "DistrictNameAr": "",
+          "LastModifiedDate": "",
+          "DistrictEng": "",
+          "Isactive": "",
+          "SECTOR_ID": 0,
+          "Sector": {
+            "SectorId": 0,
+            "SectorNameAr": "",
+            "LastModifiedDate": "",
+            "SectorNameEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ],
+            "Districts": [
+              {}
+            ]
+          },
+          "Documents": [
+            {}
+          ]
+        },
+        "DocumentType": {
+          "DocumentTypeId": 0,
+          "DocumentTypeNameAr": "",
+          "LastModifiedDate": "",
+          "DocumentTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "MainService": {
+          "MainServiceId": 0,
+          "MainServiceNameAr": "",
+          "LastModifiedDate": "",
+          "MainServiceEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ],
+          "SubServices": [
+            {
+              "SUB_SERVICE_ID": 0,
+              "SubServiceNameAr": "",
+              "LastModifiedDate": "",
+              "SubServiceEng": "",
+              "Isactive": "",
+              "MainServiceId": 0,
+              "Documents": [
+                {}
+              ],
+              "MainService": {}
+            }
+          ]
+        },
+        "PublicationType": {
+          "PublicationTypeId": 0,
+          "PublicationTypeNameAr": "",
+          "LastModifiedDate": "",
+          "PublicationTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "Sector": {},
+        "ServiceType": {
+          "ServiceTypeId": 0,
+          "ServiceTypeNameAr": "",
+          "LastModifiedDate": "",
+          "ServiceTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "SubService": {},
+        "PUB_MENU_ITEMS": {},
+        "DOC_ATTACHMENTS": [
+          {
+            "ATTACHMENT_ID": 0,
+            "DOC_ID": 0,
+            "FILE_CONTENT": "",
+            "FILE_NAME": "",
+            "FILE_SIZE_BYTES": 0,
+            "UPLOAD_DATE": "",
+            "DESCRIPTION": "",
+            "ISACTIVE": false,
+            "Document": {}
+          }
+        ]
+      }
+    ]
+  },
+  "PUB_PERMISSION": {
+    "PERMISSION_ID": 0,
+    "PERMISSION": "",
+    "ROLE_ID": 0,
+    "PUBROLE": {
+      "ROLE_ID": 0,
+      "ROLE_NAME": "",
+      "PUBUSERROLES": [
+        {
+          "USER_ID": "",
+          "POS_USER": {
+            "USER_ID": "",
+            "EFFECTIVE_DATE_FROM": "",
+            "EFFECTIVE_DATE_TO": "",
+            "LAST_NAME": "",
+            "FIRST_NAME": "",
+            "PREFERED_LANGUAGE": "",
+            "PASSWORD": "",
+            "STATUS": "",
+            "CREATED_ON": "",
+            "CREATED_BY": "",
+            "LAST_UPDATED": "",
+            "LAST_UPDATED_BY": "",
+            "RESET_PASSWORD": "",
+            "LAST_PASSWORD_DATE": "",
+            "NEXT_PASSWORD_DATE": "",
+            "NATIONAL_ID": "",
+            "MOBILE_NUMBER": "",
+            "EMAIL_ADDRESS": "",
+            "PUBUSERROLES": [
+              {}
+            ]
+          },
+          "ROLE_ID": 0,
+          "PUBROLE": {}
+        }
+      ],
+      "PUB_PERMISSIONS": [
+        {}
+      ]
+    }
+  },
+  "PubUserRoleRequestDto": {
+    "UserId": "",
+    "RoleId": 0
+  },
+  "PublicationType": {
+    "PublicationTypeId": 0,
+    "PublicationTypeNameAr": "",
+    "LastModifiedDate": "",
+    "PublicationTypeEng": "",
+    "Isactive": "",
+    "Documents": [
+      {
+        "DOCUMENT_ID": 0,
+        "DOCUMENT_NUMBER": "",
+        "LAST_MODIFIED_DATE": "",
+        "ACTIVATION_DATE": "",
+        "WORKING_START_DATE": "",
+        "MINI_DOC": "",
+        "SECTOR_ID": 0,
+        "DISTRICT_ID": 0,
+        "DOCUMENT_TYPE_ID": 0,
+        "VAL": "",
+        "FLAG": "",
+        "ALL_TEXT_DOC": "",
+        "REJECTREASON": "",
+        "MAIN_SERVICE_ID": 0,
+        "SUB_SERVICE_ID": 0,
+        "SERVICE_TYPE_ID": 0,
+        "PUBLICATION_TYPE_ID": 0,
+        "MODIFIED_USER_ID": "",
+        "CREATED_USER_ID": "",
+        "MENUITEMID": 0,
+        "DOCUMENT_PARENT_ID": "",
+        "CATEGORY_ID": 0,
+        "Category": {
+          "CategoryId": 0,
+          "CategoryNameAr": "",
+          "LastModifiedDate": "",
+          "CategoryNameEng": "",
+          "Isactive": ""
+        },
+        "District": {
+          "DistrictId": 0,
+          "DistrictNameAr": "",
+          "LastModifiedDate": "",
+          "DistrictEng": "",
+          "Isactive": "",
+          "SECTOR_ID": 0,
+          "Sector": {
+            "SectorId": 0,
+            "SectorNameAr": "",
+            "LastModifiedDate": "",
+            "SectorNameEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ],
+            "Districts": [
+              {}
+            ]
+          },
+          "Documents": [
+            {}
+          ]
+        },
+        "DocumentType": {
+          "DocumentTypeId": 0,
+          "DocumentTypeNameAr": "",
+          "LastModifiedDate": "",
+          "DocumentTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "MainService": {
+          "MainServiceId": 0,
+          "MainServiceNameAr": "",
+          "LastModifiedDate": "",
+          "MainServiceEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ],
+          "SubServices": [
+            {
+              "SUB_SERVICE_ID": 0,
+              "SubServiceNameAr": "",
+              "LastModifiedDate": "",
+              "SubServiceEng": "",
+              "Isactive": "",
+              "MainServiceId": 0,
+              "Documents": [
+                {}
+              ],
+              "MainService": {}
+            }
+          ]
+        },
+        "PublicationType": {},
+        "Sector": {},
+        "ServiceType": {
+          "ServiceTypeId": 0,
+          "ServiceTypeNameAr": "",
+          "LastModifiedDate": "",
+          "ServiceTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "SubService": {},
+        "PUB_MENU_ITEMS": {
+          "MENU_ITEM_ID": 0,
+          "MENU_ITEM_NAME": "",
+          "PARENT_MENU_ITEM_ID": 0,
+          "ParentMenuItem": {},
+          "ISACTIVE": false,
+          "CREATED_DATE": "",
+          "APPLICATION": "",
+          "Children": [
+            {}
+          ],
+          "Documents": [
+            {}
+          ]
+        },
+        "DOC_ATTACHMENTS": [
+          {
+            "ATTACHMENT_ID": 0,
+            "DOC_ID": 0,
+            "FILE_CONTENT": "",
+            "FILE_NAME": "",
+            "FILE_SIZE_BYTES": 0,
+            "UPLOAD_DATE": "",
+            "DESCRIPTION": "",
+            "ISACTIVE": false,
+            "Document": {}
+          }
+        ]
+      }
+    ]
+  },
+  "PublicationTypeRequestDto": {
+    "NameAr": "",
+    "NameEng": ""
+  },
+  "PublicationTypeResp": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": [
+      {
+        "PublicationTypeId": 0,
+        "PublicationTypeNameAr": "",
+        "LastModifiedDate": "",
+        "PublicationTypeEng": "",
+        "Isactive": "",
+        "Documents": [
+          {
+            "DOCUMENT_ID": 0,
+            "DOCUMENT_NUMBER": "",
+            "LAST_MODIFIED_DATE": "",
+            "ACTIVATION_DATE": "",
+            "WORKING_START_DATE": "",
+            "MINI_DOC": "",
+            "SECTOR_ID": 0,
+            "DISTRICT_ID": 0,
+            "DOCUMENT_TYPE_ID": 0,
+            "VAL": "",
+            "FLAG": "",
+            "ALL_TEXT_DOC": "",
+            "REJECTREASON": "",
+            "MAIN_SERVICE_ID": 0,
+            "SUB_SERVICE_ID": 0,
+            "SERVICE_TYPE_ID": 0,
+            "PUBLICATION_TYPE_ID": 0,
+            "MODIFIED_USER_ID": "",
+            "CREATED_USER_ID": "",
+            "MENUITEMID": 0,
+            "DOCUMENT_PARENT_ID": "",
+            "CATEGORY_ID": 0,
+            "Category": {
+              "CategoryId": 0,
+              "CategoryNameAr": "",
+              "LastModifiedDate": "",
+              "CategoryNameEng": "",
+              "Isactive": ""
+            },
+            "District": {
+              "DistrictId": 0,
+              "DistrictNameAr": "",
+              "LastModifiedDate": "",
+              "DistrictEng": "",
+              "Isactive": "",
+              "SECTOR_ID": 0,
+              "Sector": {
+                "SectorId": 0,
+                "SectorNameAr": "",
+                "LastModifiedDate": "",
+                "SectorNameEng": "",
+                "Isactive": "",
+                "Documents": [
+                  {}
+                ],
+                "Districts": [
+                  {}
+                ]
+              },
+              "Documents": [
+                {}
+              ]
+            },
+            "DocumentType": {
+              "DocumentTypeId": 0,
+              "DocumentTypeNameAr": "",
+              "LastModifiedDate": "",
+              "DocumentTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "MainService": {
+              "MainServiceId": 0,
+              "MainServiceNameAr": "",
+              "LastModifiedDate": "",
+              "MainServiceEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ],
+              "SubServices": [
+                {
+                  "SUB_SERVICE_ID": 0,
+                  "SubServiceNameAr": "",
+                  "LastModifiedDate": "",
+                  "SubServiceEng": "",
+                  "Isactive": "",
+                  "MainServiceId": 0,
+                  "Documents": [
+                    {}
+                  ],
+                  "MainService": {}
+                }
+              ]
+            },
+            "PublicationType": {},
+            "Sector": {},
+            "ServiceType": {
+              "ServiceTypeId": 0,
+              "ServiceTypeNameAr": "",
+              "LastModifiedDate": "",
+              "ServiceTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "SubService": {},
+            "PUB_MENU_ITEMS": {
+              "MENU_ITEM_ID": 0,
+              "MENU_ITEM_NAME": "",
+              "PARENT_MENU_ITEM_ID": 0,
+              "ParentMenuItem": {},
+              "ISACTIVE": false,
+              "CREATED_DATE": "",
+              "APPLICATION": "",
+              "Children": [
+                {}
+              ],
+              "Documents": [
+                {}
+              ]
+            },
+            "DOC_ATTACHMENTS": [
+              {
+                "ATTACHMENT_ID": 0,
+                "DOC_ID": 0,
+                "FILE_CONTENT": "",
+                "FILE_NAME": "",
+                "FILE_SIZE_BYTES": 0,
+                "UPLOAD_DATE": "",
+                "DESCRIPTION": "",
+                "ISACTIVE": false,
+                "Document": {}
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "PublicationTypesResp": {
+    "PublicationTypeId": 0,
+    "PublicationTypeNameAr": ""
+  },
+  "RemoveRoleReq": {
+    "UserId": "",
+    "RoleIds": [
+      0
+    ]
+  },
+  "ResponseDetail": {
+    "responseCode": 0,
+    "responseMessage": ""
+  },
+  "RoleAssignmentResp": {
+    "IsSuccess": false,
+    "Message": "",
+    "Errors": [
+      ""
+    ]
+  },
+  "RoleReqDto": {
+    "ROLE_NAME": ""
+  },
+  "SaveAttachmentResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ],
+    "ATTACHMENT_ID": 0
+  },
+  "SaveCategoryResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ]
+  },
+  "SaveDistrictResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ]
+  },
+  "SaveDocumentResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ],
+    "Document_Number": ""
+  },
+  "SaveDocumentTypeResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ]
+  },
+  "SaveMainServiceServicesResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ]
+  },
+  "SavePublicationTypeResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ]
+  },
+  "SaveRoleResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ]
+  },
+  "SaveSectorResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ]
+  },
+  "Sector": {
+    "SectorId": 0,
+    "SectorNameAr": "",
+    "LastModifiedDate": "",
+    "SectorNameEng": "",
+    "Isactive": "",
+    "Documents": [
+      {
+        "DOCUMENT_ID": 0,
+        "DOCUMENT_NUMBER": "",
+        "LAST_MODIFIED_DATE": "",
+        "ACTIVATION_DATE": "",
+        "WORKING_START_DATE": "",
+        "MINI_DOC": "",
+        "SECTOR_ID": 0,
+        "DISTRICT_ID": 0,
+        "DOCUMENT_TYPE_ID": 0,
+        "VAL": "",
+        "FLAG": "",
+        "ALL_TEXT_DOC": "",
+        "REJECTREASON": "",
+        "MAIN_SERVICE_ID": 0,
+        "SUB_SERVICE_ID": 0,
+        "SERVICE_TYPE_ID": 0,
+        "PUBLICATION_TYPE_ID": 0,
+        "MODIFIED_USER_ID": "",
+        "CREATED_USER_ID": "",
+        "MENUITEMID": 0,
+        "DOCUMENT_PARENT_ID": "",
+        "CATEGORY_ID": 0,
+        "Category": {
+          "CategoryId": 0,
+          "CategoryNameAr": "",
+          "LastModifiedDate": "",
+          "CategoryNameEng": "",
+          "Isactive": ""
+        },
+        "District": {
+          "DistrictId": 0,
+          "DistrictNameAr": "",
+          "LastModifiedDate": "",
+          "DistrictEng": "",
+          "Isactive": "",
+          "SECTOR_ID": 0,
+          "Sector": {},
+          "Documents": [
+            {}
+          ]
+        },
+        "DocumentType": {
+          "DocumentTypeId": 0,
+          "DocumentTypeNameAr": "",
+          "LastModifiedDate": "",
+          "DocumentTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "MainService": {
+          "MainServiceId": 0,
+          "MainServiceNameAr": "",
+          "LastModifiedDate": "",
+          "MainServiceEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ],
+          "SubServices": [
+            {
+              "SUB_SERVICE_ID": 0,
+              "SubServiceNameAr": "",
+              "LastModifiedDate": "",
+              "SubServiceEng": "",
+              "Isactive": "",
+              "MainServiceId": 0,
+              "Documents": [
+                {}
+              ],
+              "MainService": {}
+            }
+          ]
+        },
+        "PublicationType": {
+          "PublicationTypeId": 0,
+          "PublicationTypeNameAr": "",
+          "LastModifiedDate": "",
+          "PublicationTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "Sector": {},
+        "ServiceType": {
+          "ServiceTypeId": 0,
+          "ServiceTypeNameAr": "",
+          "LastModifiedDate": "",
+          "ServiceTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "SubService": {},
+        "PUB_MENU_ITEMS": {
+          "MENU_ITEM_ID": 0,
+          "MENU_ITEM_NAME": "",
+          "PARENT_MENU_ITEM_ID": 0,
+          "ParentMenuItem": {},
+          "ISACTIVE": false,
+          "CREATED_DATE": "",
+          "APPLICATION": "",
+          "Children": [
+            {}
+          ],
+          "Documents": [
+            {}
+          ]
+        },
+        "DOC_ATTACHMENTS": [
+          {
+            "ATTACHMENT_ID": 0,
+            "DOC_ID": 0,
+            "FILE_CONTENT": "",
+            "FILE_NAME": "",
+            "FILE_SIZE_BYTES": 0,
+            "UPLOAD_DATE": "",
+            "DESCRIPTION": "",
+            "ISACTIVE": false,
+            "Document": {}
+          }
+        ]
+      }
+    ],
+    "Districts": [
+      {}
+    ]
+  },
+  "SectorRequestDto": {
+    "NameAr": "",
+    "NameEng": ""
+  },
+  "SectorResp": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": [
+      {
+        "SectorId": 0,
+        "SectorNameAr": "",
+        "LastModifiedDate": "",
+        "SectorNameEng": "",
+        "Isactive": "",
+        "Documents": [
+          {
+            "DOCUMENT_ID": 0,
+            "DOCUMENT_NUMBER": "",
+            "LAST_MODIFIED_DATE": "",
+            "ACTIVATION_DATE": "",
+            "WORKING_START_DATE": "",
+            "MINI_DOC": "",
+            "SECTOR_ID": 0,
+            "DISTRICT_ID": 0,
+            "DOCUMENT_TYPE_ID": 0,
+            "VAL": "",
+            "FLAG": "",
+            "ALL_TEXT_DOC": "",
+            "REJECTREASON": "",
+            "MAIN_SERVICE_ID": 0,
+            "SUB_SERVICE_ID": 0,
+            "SERVICE_TYPE_ID": 0,
+            "PUBLICATION_TYPE_ID": 0,
+            "MODIFIED_USER_ID": "",
+            "CREATED_USER_ID": "",
+            "MENUITEMID": 0,
+            "DOCUMENT_PARENT_ID": "",
+            "CATEGORY_ID": 0,
+            "Category": {
+              "CategoryId": 0,
+              "CategoryNameAr": "",
+              "LastModifiedDate": "",
+              "CategoryNameEng": "",
+              "Isactive": ""
+            },
+            "District": {
+              "DistrictId": 0,
+              "DistrictNameAr": "",
+              "LastModifiedDate": "",
+              "DistrictEng": "",
+              "Isactive": "",
+              "SECTOR_ID": 0,
+              "Sector": {},
+              "Documents": [
+                {}
+              ]
+            },
+            "DocumentType": {
+              "DocumentTypeId": 0,
+              "DocumentTypeNameAr": "",
+              "LastModifiedDate": "",
+              "DocumentTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "MainService": {
+              "MainServiceId": 0,
+              "MainServiceNameAr": "",
+              "LastModifiedDate": "",
+              "MainServiceEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ],
+              "SubServices": [
+                {
+                  "SUB_SERVICE_ID": 0,
+                  "SubServiceNameAr": "",
+                  "LastModifiedDate": "",
+                  "SubServiceEng": "",
+                  "Isactive": "",
+                  "MainServiceId": 0,
+                  "Documents": [
+                    {}
+                  ],
+                  "MainService": {}
+                }
+              ]
+            },
+            "PublicationType": {
+              "PublicationTypeId": 0,
+              "PublicationTypeNameAr": "",
+              "LastModifiedDate": "",
+              "PublicationTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "Sector": {},
+            "ServiceType": {
+              "ServiceTypeId": 0,
+              "ServiceTypeNameAr": "",
+              "LastModifiedDate": "",
+              "ServiceTypeEng": "",
+              "Isactive": "",
+              "Documents": [
+                {}
+              ]
+            },
+            "SubService": {},
+            "PUB_MENU_ITEMS": {
+              "MENU_ITEM_ID": 0,
+              "MENU_ITEM_NAME": "",
+              "PARENT_MENU_ITEM_ID": 0,
+              "ParentMenuItem": {},
+              "ISACTIVE": false,
+              "CREATED_DATE": "",
+              "APPLICATION": "",
+              "Children": [
+                {}
+              ],
+              "Documents": [
+                {}
+              ]
+            },
+            "DOC_ATTACHMENTS": [
+              {
+                "ATTACHMENT_ID": 0,
+                "DOC_ID": 0,
+                "FILE_CONTENT": "",
+                "FILE_NAME": "",
+                "FILE_SIZE_BYTES": 0,
+                "UPLOAD_DATE": "",
+                "DESCRIPTION": "",
+                "ISACTIVE": false,
+                "Document": {}
+              }
+            ]
+          }
+        ],
+        "Districts": [
+          {}
+        ]
+      }
+    ]
+  },
+  "SectorsResp": {
+    "SectorId": 0,
+    "SectorNameAr": ""
+  },
+  "ServiceType": {
+    "ServiceTypeId": 0,
+    "ServiceTypeNameAr": "",
+    "LastModifiedDate": "",
+    "ServiceTypeEng": "",
+    "Isactive": "",
+    "Documents": [
+      {
+        "DOCUMENT_ID": 0,
+        "DOCUMENT_NUMBER": "",
+        "LAST_MODIFIED_DATE": "",
+        "ACTIVATION_DATE": "",
+        "WORKING_START_DATE": "",
+        "MINI_DOC": "",
+        "SECTOR_ID": 0,
+        "DISTRICT_ID": 0,
+        "DOCUMENT_TYPE_ID": 0,
+        "VAL": "",
+        "FLAG": "",
+        "ALL_TEXT_DOC": "",
+        "REJECTREASON": "",
+        "MAIN_SERVICE_ID": 0,
+        "SUB_SERVICE_ID": 0,
+        "SERVICE_TYPE_ID": 0,
+        "PUBLICATION_TYPE_ID": 0,
+        "MODIFIED_USER_ID": "",
+        "CREATED_USER_ID": "",
+        "MENUITEMID": 0,
+        "DOCUMENT_PARENT_ID": "",
+        "CATEGORY_ID": 0,
+        "Category": {
+          "CategoryId": 0,
+          "CategoryNameAr": "",
+          "LastModifiedDate": "",
+          "CategoryNameEng": "",
+          "Isactive": ""
+        },
+        "District": {
+          "DistrictId": 0,
+          "DistrictNameAr": "",
+          "LastModifiedDate": "",
+          "DistrictEng": "",
+          "Isactive": "",
+          "SECTOR_ID": 0,
+          "Sector": {
+            "SectorId": 0,
+            "SectorNameAr": "",
+            "LastModifiedDate": "",
+            "SectorNameEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ],
+            "Districts": [
+              {}
+            ]
+          },
+          "Documents": [
+            {}
+          ]
+        },
+        "DocumentType": {
+          "DocumentTypeId": 0,
+          "DocumentTypeNameAr": "",
+          "LastModifiedDate": "",
+          "DocumentTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "MainService": {
+          "MainServiceId": 0,
+          "MainServiceNameAr": "",
+          "LastModifiedDate": "",
+          "MainServiceEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ],
+          "SubServices": [
+            {
+              "SUB_SERVICE_ID": 0,
+              "SubServiceNameAr": "",
+              "LastModifiedDate": "",
+              "SubServiceEng": "",
+              "Isactive": "",
+              "MainServiceId": 0,
+              "Documents": [
+                {}
+              ],
+              "MainService": {}
+            }
+          ]
+        },
+        "PublicationType": {
+          "PublicationTypeId": 0,
+          "PublicationTypeNameAr": "",
+          "LastModifiedDate": "",
+          "PublicationTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "Sector": {},
+        "ServiceType": {},
+        "SubService": {},
+        "PUB_MENU_ITEMS": {
+          "MENU_ITEM_ID": 0,
+          "MENU_ITEM_NAME": "",
+          "PARENT_MENU_ITEM_ID": 0,
+          "ParentMenuItem": {},
+          "ISACTIVE": false,
+          "CREATED_DATE": "",
+          "APPLICATION": "",
+          "Children": [
+            {}
+          ],
+          "Documents": [
+            {}
+          ]
+        },
+        "DOC_ATTACHMENTS": [
+          {
+            "ATTACHMENT_ID": 0,
+            "DOC_ID": 0,
+            "FILE_CONTENT": "",
+            "FILE_NAME": "",
+            "FILE_SIZE_BYTES": 0,
+            "UPLOAD_DATE": "",
+            "DESCRIPTION": "",
+            "ISACTIVE": false,
+            "Document": {}
+          }
+        ]
+      }
+    ]
+  },
+  "ServiceTypeCriteria": {
+    "ServiceTypes": [
+      {
+        "ServiceTypeId": 0,
+        "ServiceTypeNameAr": ""
+      }
+    ]
+  },
+  "ServiceTypeCriteriaResponse": {
+    "IsSuccess": false,
+    "Errors": [
+      {
+        "Code": "",
+        "Message": ""
+      }
+    ],
+    "Data": {
+      "ServiceTypes": [
+        {
+          "ServiceTypeId": 0,
+          "ServiceTypeNameAr": ""
+        }
+      ]
+    }
+  },
+  "ServiceTypeRequestDto": {
+    "NameAr": "",
+    "NameEng": ""
+  },
+  "ServiceTypeResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ]
+  },
+  "ServiceTypesResp": {
+    "ServiceTypeId": 0,
+    "ServiceTypeNameAr": ""
+  },
+  "SubService": {
+    "SUB_SERVICE_ID": 0,
+    "SubServiceNameAr": "",
+    "LastModifiedDate": "",
+    "SubServiceEng": "",
+    "Isactive": "",
+    "MainServiceId": 0,
+    "Documents": [
+      {
+        "DOCUMENT_ID": 0,
+        "DOCUMENT_NUMBER": "",
+        "LAST_MODIFIED_DATE": "",
+        "ACTIVATION_DATE": "",
+        "WORKING_START_DATE": "",
+        "MINI_DOC": "",
+        "SECTOR_ID": 0,
+        "DISTRICT_ID": 0,
+        "DOCUMENT_TYPE_ID": 0,
+        "VAL": "",
+        "FLAG": "",
+        "ALL_TEXT_DOC": "",
+        "REJECTREASON": "",
+        "MAIN_SERVICE_ID": 0,
+        "SUB_SERVICE_ID": 0,
+        "SERVICE_TYPE_ID": 0,
+        "PUBLICATION_TYPE_ID": 0,
+        "MODIFIED_USER_ID": "",
+        "CREATED_USER_ID": "",
+        "MENUITEMID": 0,
+        "DOCUMENT_PARENT_ID": "",
+        "CATEGORY_ID": 0,
+        "Category": {
+          "CategoryId": 0,
+          "CategoryNameAr": "",
+          "LastModifiedDate": "",
+          "CategoryNameEng": "",
+          "Isactive": ""
+        },
+        "District": {
+          "DistrictId": 0,
+          "DistrictNameAr": "",
+          "LastModifiedDate": "",
+          "DistrictEng": "",
+          "Isactive": "",
+          "SECTOR_ID": 0,
+          "Sector": {
+            "SectorId": 0,
+            "SectorNameAr": "",
+            "LastModifiedDate": "",
+            "SectorNameEng": "",
+            "Isactive": "",
+            "Documents": [
+              {}
+            ],
+            "Districts": [
+              {}
+            ]
+          },
+          "Documents": [
+            {}
+          ]
+        },
+        "DocumentType": {
+          "DocumentTypeId": 0,
+          "DocumentTypeNameAr": "",
+          "LastModifiedDate": "",
+          "DocumentTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "MainService": {
+          "MainServiceId": 0,
+          "MainServiceNameAr": "",
+          "LastModifiedDate": "",
+          "MainServiceEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ],
+          "SubServices": [
+            {}
+          ]
+        },
+        "PublicationType": {
+          "PublicationTypeId": 0,
+          "PublicationTypeNameAr": "",
+          "LastModifiedDate": "",
+          "PublicationTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "Sector": {},
+        "ServiceType": {
+          "ServiceTypeId": 0,
+          "ServiceTypeNameAr": "",
+          "LastModifiedDate": "",
+          "ServiceTypeEng": "",
+          "Isactive": "",
+          "Documents": [
+            {}
+          ]
+        },
+        "SubService": {},
+        "PUB_MENU_ITEMS": {
+          "MENU_ITEM_ID": 0,
+          "MENU_ITEM_NAME": "",
+          "PARENT_MENU_ITEM_ID": 0,
+          "ParentMenuItem": {},
+          "ISACTIVE": false,
+          "CREATED_DATE": "",
+          "APPLICATION": "",
+          "Children": [
+            {}
+          ],
+          "Documents": [
+            {}
+          ]
+        },
+        "DOC_ATTACHMENTS": [
+          {
+            "ATTACHMENT_ID": 0,
+            "DOC_ID": 0,
+            "FILE_CONTENT": "",
+            "FILE_NAME": "",
+            "FILE_SIZE_BYTES": 0,
+            "UPLOAD_DATE": "",
+            "DESCRIPTION": "",
+            "ISACTIVE": false,
+            "Document": {}
+          }
+        ]
+      }
+    ],
+    "MainService": {}
+  },
+  "SubServiceResp": {
+    "SUB_SERVICE_ID": 0,
+    "SubServiceNameAr": ""
+  },
+  "SwitchRoleReq": {
+    "UserId": "",
+    "RoleName": ""
+  },
+  "UserInfoResp": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ],
+    "USER_ID": "",
+    "LAST_NAME": "",
+    "FIRST_NAME": "",
+    "NATIONAL_ID": "",
+    "MOBILE_NUMBER": "",
+    "EMAIL_ADDRESS": "",
+    "PUBUSERROLEDTOs": [
+      {
+        "PUBROLE": {
+          "ROLE_ID": 0,
+          "ROLE_NAME": ""
+        }
+      }
+    ]
+  },
+  "UserRespDto": {
+    "IsSuccess": false,
+    "ResponseDetails": [
+      {
+        "responseCode": 0,
+        "responseMessage": ""
+      }
+    ],
+    "UserId": "",
+    "token": "",
+    "ActiveRole": ""
+  },
+  "WeatherForecast": {
+    "Date": "",
+    "TemperatureC": 0,
+    "TemperatureF": 0,
+    "Summary": ""
+  },
+  "LoginReqDto": {
+    "UserName": "",
+    "Password": ""
+  },
+  "FileParameter": {
+    "data": "",
+    "fileName": ""
+  },
+  "SchemaList": {
+    "schemA_NAME": ""
+  },
+  "SchemaListListCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": [
+      {
+        "schemA_NAME": ""
+      }
+    ]
+  },
+  "SelectRequestModel": {
+    "str": "",
+    "schema": "",
+    "selectedEnvironment": ""
+  },
+  "StringObjectDictionaryListCommonResponse": {
+    "isSuccess": false,
+    "errors": [
+      {
+        "code": "",
+        "message": ""
+      }
+    ],
+    "data": {}
+  }
+}

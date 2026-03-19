@@ -1,0 +1,293 @@
+<p-toast></p-toast>
+<p-confirmDialog [style]="{width: '450px'}"></p-confirmDialog>
+
+<div class="header-section">
+    <h2>Chart Configuration Manager</h2>
+    <div class="controls">
+        <span class="p-float-label">
+            <p-dropdown [options]="modules" [(ngModel)]="selectedModule" (onChange)="onModuleChange($event)"
+             [editable]="true" placeholder="Select Module" inputId="module-dropdown"
+             optionValue="value" optionLabel="label"
+              [style]="{'width':'250px','direction':'rtl','text-align':'right'}"
+             [showClear]="true" ></p-dropdown>
+            <label for="module-dropdown"
+            >Module Name</label>
+        </span>
+        <button pButton label="New Chart" icon="pi pi-plus" class="p-button-success" (click)="openNew()" [disabled]="!selectedModule"></button>
+    </div>
+</div>
+
+<div class="card-container" *ngIf="charts.length || loading" @fadeInOut>
+    <p-table [value]="charts" [loading]="loading" [rowHover]="true" styleClass="p-datatable-sm" responsiveLayout="scroll">
+        <ng-template pTemplate="header">
+            <tr>
+                <th pSortableColumn="key">Key <p-sortIcon field="key"></p-sortIcon></th>
+                <th pSortableColumn="title">Title <p-sortIcon field="title"></p-sortIcon></th>
+                <th pSortableColumn="type">Type <p-sortIcon field="type"></p-sortIcon></th>
+                <th pSortableColumn="order">Order <p-sortIcon field="order"></p-sortIcon></th>
+                <th>Enabled</th>
+                <th style="width: 8rem"></th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-chart>
+            <tr >
+                <td>{{chart.key}}</td>
+                <td>{{chart.title}}</td>
+                <td><span [class]="'chart-badge type-' + chart.type">{{chart.type}}</span></td>
+                <td>{{chart.order}}</td>
+                <td>
+                    <i class="pi" [ngClass]="{'pi-check-circle text-green-500': chart.enabled, 'pi-times-circle text-red-500': !chart.enabled}"></i>
+                </td>
+                <td>
+                    <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-text p-button-info mr-2" (click)="editChart(chart)"></button>
+                    <button pButton pRipple icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="deleteChart(chart)"></button>
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr>
+                <td colspan="6" class="text-center p-4">No charts found for this module.</td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<div *ngIf="!selectedModule" class="text-center p-5 text-gray-500">
+    <i class="pi pi-info-circle text-4xl mb-3"></i>
+    <p>Please select a module to manage charts.</p>
+</div>
+
+<!-- Edit Dialog -->
+<p-dialog [(visible)]="displayDialog" [style]="{width: '60vw'}" header="Chart Configuration" [modal]="true" styleClass="p-fluid" (onHide)="displayDialog=false" [@dialogAnimation]>
+    <ng-template pTemplate="content">
+        <form [formGroup]="chartForm">
+            
+            <p-tabView styleClass="mt-2">
+                <p-tabPanel header="General" leftIcon="pi pi-info-circle">
+                    <!-- Basic Information -->
+                    <div class="form-section">
+                        <h3><i class="pi pi-id-card"></i> Basic Information</h3>
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="moduleName">Module Name</label>
+                                <div class="p-input-icon-left w-full">
+                                    <i class="pi pi-box"></i>
+                                    <input type="text" pInputText id="moduleName" formControlName="moduleName" [readonly]="true" class="w-full"/>
+                                </div>
+                            </div>
+                            
+                            <div class="field">
+                                <label for="key">Key <span class="text-red-500">*</span></label>
+                                <div class="p-input-icon-left w-full">
+                                    <i class="pi pi-key"></i>
+                                    <input type="text" pInputText id="key" formControlName="key" class="w-full" />
+                                </div>
+                                <small class="p-error block" *ngIf="chartForm.get('key')?.invalid && chartForm.get('key')?.touched">Key is required</small>
+                            </div>
+
+                            <div class="field">
+                                <label for="title">Title</label>
+                                 <div class="p-input-icon-left w-full">
+                                    <i class="pi pi-tag"></i>
+                                    <input type="text" pInputText id="title" formControlName="title" class="w-full"/>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                 <label for="type">Chart Type <span class="text-red-500">*</span></label>
+                                 <p-dropdown [options]="chartTypes" formControlName="type" id="type" appendTo="body" [style]="{width: '100%'}">
+                                    <ng-template pTemplate="selectedItem">
+                                        <div class="flex align-items-center" *ngIf="chartForm.get('type')?.value">
+                                             <i class="pi pi-chart-bar mr-2" *ngIf="chartForm.get('type')?.value === 'bar'"></i>
+                                             <i class="pi pi-chart-pie mr-2" *ngIf="chartForm.get('type')?.value === 'pie' || chartForm.get('type')?.value === 'doughnut'"></i>
+                                             <i class="pi pi-chart-line mr-2" *ngIf="chartForm.get('type')?.value === 'line'"></i>
+                                             <span>{{chartForm.get('type')?.value | titlecase}}</span>
+                                        </div>
+                                    </ng-template>
+                                    <ng-template let-type pTemplate="item">
+                                         <div class="flex align-items-center">
+                                            <span>{{type.label}}</span>
+                                        </div>
+                                    </ng-template>
+                                 </p-dropdown>
+                            </div>
+                            
+                            <div class="field">
+                                <label for="order">Display Order</label>
+                                <p-inputNumber formControlName="order" id="order" [showButtons]="true" [min]="0" buttonLayout="horizontal" inputId="order" spinnerMode="horizontal" decrementButtonClass="p-button-secondary" incrementButtonClass="p-button-secondary" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus" [style]="{'width':'100%'}"></p-inputNumber>
+                            </div>
+
+                             <div class="field flex align-items-end mb-3">
+                                 <div class="flex align-items-center h-full">
+                                    <p-checkbox formControlName="enabled" [binary]="true" inputId="enabled" label="Enabled"></p-checkbox>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Definition -->
+                    <div class="form-section">
+                        <h3><i class="pi pi-database"></i> Data Definition</h3>
+                        <div class="surface-card" formGroupName="definition">
+                             <div class="form-grid">
+                                <div class="field">
+                                    <label for="sectorField" pTooltip="Field used for X-Axis categories (Bars) or ignored/used as fallback (Pie). Comma separated for multiple." tooltipPosition="top">Sector Field <i class="pi pi-info-circle text-sm text-gray-500"></i></label>
+                                    <input type="text" pInputText id="sectorField" formControlName="sectorField" placeholder="e.g. sectorName, otherSector" class="w-full"/>
+                                    <small class="text-yellow-600 block mt-1" *ngIf="['pie','doughnut'].includes(chartForm.get('type')?.value) && chartForm.get('definition.sectorField')?.value">
+                                        <i class="pi pi-exclamation-triangle"></i> For Pie charts, categories are usually defined by Series Field. Sector Field is typically ignored.
+                                    </small>
+                                </div>
+                                <div class="field">
+                                    <label for="seriesField">Series Field (Category/Group)</label>
+                                    <input type="text" pInputText id="seriesField" formControlName="seriesField" placeholder="Optional for Bar, Required for Pie Slices" class="w-full"/>
+                                </div>
+                                <div class="field">
+                                    <label for="queryId">Query ID</label>
+                                    <p-inputNumber formControlName="queryId" id="queryId" placeholder="Database Query ID" [style]="{'width':'100%'}"></p-inputNumber>
+                                </div>
+                                
+                                <div class="field full-width">
+                                    <label for="queryParams">Query Params (JSON)</label>
+                                    <textarea pInputTextarea id="queryParams" formControlName="queryParams" rows="2" class="w-full font-mono text-sm" placeholder="{ 'year': 2023 }"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </p-tabPanel>
+
+                <p-tabPanel header="Advanced" leftIcon="pi pi-cog">
+                    <div class="pt-3 px-1">
+                        <p-tabView>
+                            <p-tabPanel header="Appearance" leftIcon="pi pi-palette">
+                                <div formGroupName="appearance" class="grid form-grid">
+                                     <div class="field col-12 md:col-6 flex align-items-center">
+                                        <p-checkbox formControlName="stacked" [binary]="true" label="Stacked Chart" class="mr-3"></p-checkbox>
+                                        <p-checkbox formControlName="showDataLabels" [binary]="true" label="Show Value Labels"></p-checkbox>
+                                    </div>
+                                    <div class="field col-12 md:col-6 flex align-items-center">
+                                        <p-checkbox formControlName="tooltipEnabled" [binary]="true" label="Enable Tooltip"></p-checkbox>
+                                    </div>
+                                    <div class="field col-12 full-width" *ngIf="['pie','doughnut'].includes(chartForm.get('type')?.value)">
+                                        <div class="surface-ground p-3 border-round" formGroupName="pie">
+                                            <h4>Pie Configuration</h4>
+                                            <div class="grid form-grid">
+                                                <div class="field col-6">
+                                                    <label>Label Mode</label>
+                                                    <select pInputText formControlName="labelMode" class="w-full p-inputtext">
+                                                        <option value="percent">Percent Only</option>
+                                                        <option value="value">Value Only</option>
+                                                        <option value="valueAndPercent">Value & Percent</option>
+                                                    </select>
+                                                </div>
+                                                <div class="field col-6">
+                                                    <label>Position</label>
+                                                    <select pInputText formControlName="position" class="w-full p-inputtext">
+                                                        <option value="outside">Outside</option>
+                                                        <option value="inside">Inside</option>
+                                                    </select>
+                                                </div>
+                                                <div class="field col-6">
+                                                    <label>Min % to Show</label>
+                                                    <p-inputNumber formControlName="minPercentToShow" suffix="%"></p-inputNumber>
+                                                </div>
+                                                <div class="field col-6">
+                                                    <label>Offset</label>
+                                                    <p-inputNumber formControlName="offset"></p-inputNumber>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="field col-12 full-width">
+                                        <label>Color Map (JSON)</label>
+                                        <textarea pInputTextarea formControlName="colorMap" rows="3" class="w-full font-mono text-sm" placeholder='{"new": "primary", "closed": "danger"}'></textarea>
+                                         <small>Map Series values to severity (primary, success, info, warning, danger)</small>
+                                    </div>
+                                </div>
+                            </p-tabPanel>
+
+                            <p-tabPanel header="Layout" leftIcon="pi pi-desktop">
+                                <div formGroupName="layout" class="form-grid">
+                                    <div class="field">
+                                        <label>Width</label>
+                                        <input pInputText formControlName="width" placeholder="100% or 400px" class="w-full"/>
+                                    </div>
+                                     <div class="field">
+                                        <label>Height (px)</label>
+                                        <p-inputNumber formControlName="height"></p-inputNumber>
+                                    </div>
+                                 </div>
+                                
+                                 <div formGroupName="appearance" class="mt-3">
+                                     <div formGroupName="legend">
+                                         <h4>Legend</h4>
+                                         <div class="field">
+                                             <label>Position</label>
+                                             <select pInputText formControlName="position" class="w-full p-inputtext">
+                                                 <option value="top">Top</option>
+                                                 <option value="left">Left</option>
+                                                 <option value="bottom">Bottom</option>
+                                                 <option value="right">Right</option>
+                                             </select>
+                                         </div>
+                                     </div>
+                                 </div>
+                            </p-tabPanel>
+
+                            <p-tabPanel header="Axis" leftIcon="pi pi-arrows-h">
+                                 <div formGroupName="axis" class="form-grid">
+                                     <div class="field flex align-items-center">
+                                        <p-checkbox formControlName="forceZeroMin" [binary]="true" label="Starts at Zero"></p-checkbox>
+                                    </div>
+                                    <div class="field">
+                                        <label>Max Ticks Limit</label>
+                                        <p-inputNumber formControlName="desiredTicks"></p-inputNumber>
+                                    </div>
+                                    <div class="field">
+                                        <label>Primary Axis ID</label>
+                                        <input pInputText formControlName="primaryAxisId" placeholder="y (default)" class="w-full" />
+                                        <small class="block mt-1">Set primary axis id (e.g. y). Gridlines will default to this axis.</small>
+                                    </div>
+            <div class="field full-width">
+                <label>Series Axis Map (JSON)</label>
+                <textarea pInputTextarea formControlName="seriesAxisMap" rows="10" class="w-full font-mono text-sm" placeholder='{ "Requests": { "axisId": "y", "position": "left" }, "Compliance": { "axisId": "y1", "position": "right" } }'></textarea>
+                <small>Map Series names to axis configuration.</small>
+            </div>
+            <div class="field full-width">
+                <label>Axes (per-axis JSON)</label>
+                <textarea pInputTextarea formControlName="axes" rows="6" class="w-full font-mono text-sm" placeholder='{"y2": { "unit": "%", "autoScale": true, "position": "right" }}'></textarea>
+                <small>Optional per-axis settings (unit, max, min, autoScale, headroomMultiplier, position, etc.)</small>
+            </div>
+                                 </div>
+                            </p-tabPanel>
+
+                            <p-tabPanel header="Labels" leftIcon="pi pi-tags">
+                                 <div formArrayName="labels">
+                                    <div *ngFor="let label of labelsFormArray.controls; let i=index" [formGroupName]="i" class="grid form-grid align-items-center mb-2">
+                                        <div class="field col-5 mb-0">
+                                            <input pInputText formControlName="key" placeholder="Field Key" class="w-full"/>
+                                        </div>
+                                        <div class="field col-5 mb-0">
+                                            <input pInputText formControlName="value" placeholder="Display Label" class="w-full"/>
+                                        </div>
+                                         <div class="field col-2 mb-0">
+                                            <button pButton icon="pi pi-trash" class="p-button-danger p-button-text" (click)="removeLabel(i)"></button>
+                                        </div>
+                                    </div>
+                                    <button pButton type="button" label="Add Label" icon="pi pi-plus" class="p-button-outlined p-button-sm mt-2" (click)="addLabel()"></button>
+                                </div>
+                                <small class="block mt-2">Map internal field keys (e.g. 'sectorName') to display labels (e.g. 'Region').</small>
+                            </p-tabPanel>
+                        </p-tabView>
+                    </div>
+                </p-tabPanel>
+            </p-tabView>
+
+        </form>
+    </ng-template>
+    
+    <ng-template pTemplate="footer">
+        <button pButton pRipple label="Cancel" icon="pi pi-times" class="p-button-text" (click)="displayDialog=false"></button>
+        <button pButton pRipple label="Save" icon="pi pi-check" class="p-button-text" (click)="saveChart()" [disabled]="chartForm.invalid"></button>
+    </ng-template>
+</p-dialog>

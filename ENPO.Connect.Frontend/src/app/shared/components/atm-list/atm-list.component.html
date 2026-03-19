@@ -1,0 +1,28 @@
+
+<div class="card relative-container">
+    <div *ngIf="loading" class="loading-overlay" style="display: flex; justify-content: center; align-items: center; padding: 2rem;">
+        <p-progressSpinner></p-progressSpinner>
+    </div>
+
+    <h4 class="mb-3" style="direction: rtl;">ماكينات الصراف الآلي</h4>
+
+    <div *ngIf="errorMessage" class="p-message p-message-error mb-3" role="alert">
+        <div class="p-d-flex p-ai-center">
+            <i class="pi pi-times-circle p-mr-2"></i>
+            <span [innerHTML]="errorMessage"></span>
+            <button pButton type="button" label="Retry" icon="pi pi-refresh" (click)="loadData()"
+                class="p-button-danger p-button-text p-ml-auto"></button>
+        </div>
+    </div>
+
+    <!-- Only show table if not loading and no error, or if you want to show empty table while loading -->
+    <generic-table style="direction: rtl;"
+        *ngIf="!loading && !errorMessage"
+        [_columns]="columns" 
+        [tableGenericData]="rows" 
+        [showGlobalSearch]="true"
+        [showColumnFilter]="false"
+        [showExportButton]="false"
+        [rowsPerPage]="10">
+    </generic-table>
+</div>

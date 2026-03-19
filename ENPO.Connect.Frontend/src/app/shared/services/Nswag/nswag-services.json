@@ -1,0 +1,29 @@
+[
+  {
+    "label": "Connect API",
+    "envProperty": "ConnectApiURL",
+    "url": "http://localhost:8888",
+    "urlProduction": "http://10.10.31.52//Connect_API",
+    "isproduction": false,
+    "regenerate": true,
+    "output": "src/app/shared/services/BackendServices/connect.generated.ts"
+  },
+  {
+    "label": "Publications API",
+    "envProperty": "PublicationsUrl",
+    "url": "http://10.10.31.52/publicationsApi",
+    "urlProduction": "http://10.10.31.52/publicationsApi",
+    "isproduction": false,
+    "regenerate": true,
+    "output": "src/app/shared/services/BackendServices/publications.generated.ts"
+  },
+  {
+    "label": "PowerBi API",
+    "envProperty": "PowerBi",
+    "url": "https://swb.egyptpost.gov.eg/PowerBi/swagger/v1/swagger.json",
+    "urlProduction": "https://swb.egyptpost.gov.eg/PowerBi/swagger/v1/swagger.json",
+    "isproduction": false,
+    "regenerate": true,
+    "output": "src/app/shared/services/BackendServices/publications.generated.ts"
+  }
+]

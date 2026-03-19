@@ -1,0 +1,52 @@
+.radio-group {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.radio-option {
+  position: relative;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  padding: 0.5rem;
+  transition: all 0.3s ease;
+  max-height: 5rem;
+
+}
+
+.radio-option.selected {
+  background-color: rgba(182, 233, 140, 0.7333333333) !important;
+  box-shadow: inset -2px -2px 3px 0px rgba(255, 0, 0, 0.35) !important;
+  // border-color: #3f51b5;
+}
+
+.radio-option label {
+  cursor: pointer;
+  color: #333;
+  margin: 0;
+}
+
+.radio-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  height: 0;
+  width: 0;
+}
+
+/* Hover effect */
+.radio-option:hover:not(.selected) {
+  background-color: #f5f5f5ef;
+}
+
+/* Focus state */
+.radio-option:has(input:focus-visible) {
+  box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.3);
+}
+
+h4 {
+  color: var(--app-primary);
+  font-weight: bold;
+  font-family: 'Khaled Art' !important;
+  font-size: xx-large;
+}

@@ -1,0 +1,71 @@
+<div style=" display: flex; align-items: center;justify-content: space-around;gap: 1rem;flex-direction: row-reverse;">
+    <h2>{{config.componentTitle}}</h2>
+    <div class="chart-controls-right">
+        <p-dropdown [options]="autoRefreshOptions" [(ngModel)]="autoRefreshSelection"
+            (onChange)="onAutoRefreshChange($event.value)" placeholder="تحديث تلقائي" [style]="{width: '200px'}"
+            styleClass="compact-dropdown"></p-dropdown>
+        <p-button icon="pi pi-refresh" label="تحديث الكل" (click)="refreshAll()"
+            styleClass="p-button-outlined p-button-help"></p-button>
+    </div>
+    <p-button icon="pi pi-trash" label="حذف كل التفاصيل" styleClass="p-button-danger" (click)="closeDetails()"
+        [disabled]="detailsTabs.length === 0" *ngIf="detailsTabs.length > 0"></p-button>
+</div>
+
+<p-tabView [(activeIndex)]="activeTabIndex" (onClose)="closeTab($event)" style="direction: rtl;">
+    <p-tabPanel header="Dashboard">
+        <div class="module-charts charts-flex-container" *ngIf="!loading && configs.length > 0">
+            <ng-container *ngFor="let config of configs">
+                <div class="chart-item-wrapper" appInViewport (inViewport)="loadChartData(config)">
+                    <div class="chart-item-controls" title="تحديث الرسم" (click)="$event.stopPropagation()">
+                        <p-button icon="pi pi-refresh" styleClass="p-button-rounded p-button-text"
+                            (click)="refreshChart(config)" [disabled]="!!loadingMap.get(chartKey(config))"></p-button>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div *ngIf="loadingMap.get(chartKey(config))" class="flex justify-content-center align-items-center"
+                        style="height: 100%; min-height: 150px;">
+                        <p-progressSpinner [style]="{width: '40px', height: '40px'}"
+                            strokeWidth="4"></p-progressSpinner>
+                    </div>
+
+                    <!-- Error State -->
+                    <div *ngIf="errorMap.get(chartKey(config))"
+                        class="flex flex-column justify-content-center align-items-center text-red-500"
+                        style="height: 100%; min-height: 150px; text-align: center;">
+                        <i class="pi pi-exclamation-circle text-2xl mb-2"></i>
+                        <span class="mb-2">{{errorMap.get(chartKey(config))}}</span>
+                        <p-button label="Retry" styleClass="p-button-sm p-button-outlined p-button-danger"
+                            (click)="handleRetry(config)"></p-button>
+                    </div>
+
+                    <!-- Loaded State -->
+                    <app-generic-chart *ngIf="loadedMap.get(chartKey(config))" [config]="config" [loaded]="true"
+                        [loadingTime]="loadingTimeMap.get(chartKey(config))" (chartClick)="handleChartClick($event, config)">
+                    </app-generic-chart>
+                </div>
+            </ng-container>
+        </div>
+
+        <div *ngIf="loading" class="flex justify-content-center align-items-center p-5" style="min-height: 200px;">
+            <p-progressSpinner [style]="{width: '50px', height: '50px'}" strokeWidth="4"></p-progressSpinner>
+        </div>
+
+        <div *ngIf="!loading && configs.length === 0"
+            class="flex flex-column justify-content-center align-items-center p-5 text-gray-500"
+            style="min-height: 200px;">
+            <i class="pi pi-chart-bar text-5xl mb-3"></i>
+            <span class="text-xl">No charts available for this module.</span>
+        </div>
+    </p-tabPanel>
+
+    <ng-container *ngFor="let t of detailsTabs; let i = index">
+        <p-tabPanel [header]="t.title" [closable]="true">
+            <div class="card mt-2">
+                <generic-table [tableGenericData]="t.data" [_columns]="t.fields" [rowsPerPage]="detailsRows"
+                    [rowsPerPageOptions]="rowsPerPageOptions" [totalRecords]="t.totalRecords" [showGlobalSearch]="true"
+                    [showExportButton]="true" (pageChange)="onDetailsPageChange($event)">
+                </generic-table>
+            </div>
+        </p-tabPanel>
+    </ng-container>
+</p-tabView>

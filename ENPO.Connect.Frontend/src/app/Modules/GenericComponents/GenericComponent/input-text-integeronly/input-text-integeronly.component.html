@@ -1,0 +1,10 @@
+<p-inputNumber *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='InputText-integeronly'"
+    [formControl]="control" [readonly]="isDivDisabled" [inputId]="controlFullName" [showButtons]="true"
+    [useGrouping]="false" [min]="0" buttonLayout="horizontal" spinnerMode="horizontal"
+    incrementButtonClass="p-button-success" decrementButtonClass="p-button-danger" incrementButtonIcon="pi pi-plus"
+    decrementButtonIcon="pi pi-minus" (onBlur)="onBlur($event)" (onInput)="onInput($event)"
+    [disabled]="isDivDisabled||genericFormService.GetPropertyValue(controlFullName,'isDisabledInit')=='true'"
+    [class.disabled-div]="isDivDisabled || genericFormService.GetPropertyValue(controlFullName,'isDisabledInit')=='true'"
+    [placeholder]="genericFormService.GetPropertyValue(controlFullName,'placeholder') || ''" styleClass="w-100"
+    [style]="{'width': '100%','height': '3em','direction':'ltr'}">
+</p-inputNumber>

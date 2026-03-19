@@ -1,0 +1,325 @@
+<div style=" margin-bottom: 1rem;display: flex;align-items: flex-start;justify-content: flex-start;gap: 2rem;flex-direction: row;"
+    *ngIf="!config.fieldsConfiguration.isNotRequired">
+
+    <div style="display: flex; align-items: center; gap: 1rem;" *ngIf="config.showViewToggle !== false">
+        <h4><i class="pi pi-desktop" style="margin-left: 0.5rem; color: #2563eb;"></i>طريقة العرض</h4>
+
+        <div class="view-toggle-container">
+            <label class="view-toggle-option" [class.active]="config.formDisplayOption === 'tabs'">
+                <input type="radio" name="templateMode" [checked]="config.formDisplayOption === 'tabs'"
+                    (change)="config.formDisplayOption='tabs'">
+                أقسام
+            </label>
+            <label class="view-toggle-option" [class.active]="config.formDisplayOption === 'fullscreen'">
+                <input type="radio" name="templateMode" [checked]="config.formDisplayOption === 'fullscreen'"
+                    (change)="config.formDisplayOption='fullscreen'">
+                عرض كامل
+            </label>
+        </div>
+    </div>
+    <button pButton type="button" class="btn btn-warning" [hidden]="!showSelectionEditButton"
+        (click)="clearTreeSelection()" style="margin-bottom:1rem">
+        <i class="pi pi-pencil" style="margin-inline-end:.5rem"></i>
+        تعديل الإختيار من الشجرة </button>
+    <span *ngIf="showSelectedPathLabel"
+        style="align-self:center; margin-inline-start:1rem; font-weight:600;font-size:1.7rem;color: rgb(128, 0, 128)">
+        {{ getSelectedNodePath() }}
+    </span>
+</div>
+<div>
+    <div class="widget col-md-3" *ngIf="showCategoryTreeSidebar">
+        <app-tree-sidebar [tree]="categoryTree" [showTreeContextMenu]="false" [allExpanded]="true" [expandedWidth]="100"
+            [title]="'أنواع الموضوعات'" [isDivDisabled]="config.fieldsConfiguration.isDivDisabled" [scrollHeight]="40"
+            (onNodeSelect)="nodeSelection($event)" (onNodeUnselect)="nodeUnselection($event)">
+        </app-tree-sidebar>
+    </div>
+
+    <!-- <span > {{ticketForm.value | json}}</span>
+    <span > {{genericFormService.dynamicGroups | json}}</span>
+    ----------- <br> {{config.formDisplayOption}} -->
+    <div [ngClass]="formContainerClass">
+        <app-choice-hint [isHidden]="hideChoiceHint || customFilteredCategoryMand.length > 0 "></app-choice-hint>
+
+        <form [formGroup]="ticketForm" (ngSubmit)="submitFormChange.emit(ticketForm)" class="row"
+            *ngIf="showTicketForm || customFilteredCategoryMand.length > 0">
+
+            <div *ngIf="genericFormService.dynamicGroups.length === 0"
+                style="width: 100%; text-align: center; margin-top: 2rem;">
+                <h4 style="color:red">تم تعليق التسجيل مؤقتاً لهذا الطلب ..</h4>
+            </div>
+
+            <!-- Dynamic groups rendered responsively in fullscreen mode -->
+            <div *ngIf="genericFormService.dynamicGroups.length > 0 && config.formDisplayOption === 'fullscreen'"
+                class="row">
+                <div *ngFor="let group of genericFormService.dynamicGroups; let tabIndex = index"
+                    [ngClass]="['widget', 'col-md-'+group.groupWithInRow]">
+                    <div>
+                        <div style="display:flex;align-items:center;justify-content:flex-start;">
+                            <div>
+                                <strong style="font-family: Khaled Art;font-size: 1.5rem;">{{group.groupName}}</strong>
+                                <span *ngIf="genericFormService.getGroupValidity(ticketForm,group)" title="صالح"
+                                    class="valid-symbol">✔</span>
+                                <span *ngIf="!genericFormService.getGroupValidity(ticketForm,group)" title="غير صالح"
+                                    class="invalid-symbol">✖</span>
+                            </div>
+                            <div>
+                                <button *ngIf="group.isExtendable && !config.fieldsConfiguration.isDivDisabled" pButton
+                                    type="button" class="p-button-rounded p-button-success p-button-sm" title="تكرار"
+                                    (click)="duplicateGroup(group.groupId)">
+                                    <i class="pi pi-clone" style="font-size: .7rem;color: rgb(255, 255, 255);"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Extendable groups keep nested tab behaviour (also show if instances exist) -->
+                        <div *ngIf="group.isExtendable || (group.instances && group.instances.length>0)">
+                            <p-tabView>
+                                <p-tabPanel>
+                                    <ng-template pTemplate="header">{{group.groupName}} 1</ng-template>
+                                    <div [formArrayName]="group.formArrayName" class="form-array widget">
+                                        <div *ngFor="let mandFiled of getFormArrayControls(group.formArrayName); let i=index"
+                                            [formGroupName]="i" style="display: contents;">
+                                            <div style="display: contents;"
+                                                *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)">
+                                                <app-generic-form-array [controlFullName]="ctrlName" [index]="i"
+                                                    [filtered_CategoryMand]="group.fields"
+                                                    [isDivDisabled]="config.fieldsConfiguration.isDivDisabled"
+                                                    [isCurrentUser]="isCurrentUser" [ticketForm]="ticketForm"
+                                                    [mandFileds]="getFormArrayInstance(group.formArrayName)!"
+                                                    [useDefaultRadioView]="config.fieldsConfiguration.useDefaultRadioView"
+                                                    [dateFormat]="config.fieldsConfiguration.dateFormat"
+                                                    [showTime]="config.fieldsConfiguration.showTime"
+                                                    [timeOnly]="config.fieldsConfiguration.timeOnly"
+                                                    [maxDate]="config.fieldsConfiguration.maxDate" [tree]="unitTree"
+                                                    [layoutRow]="true"
+                                                    [isNotRequired]="config.fieldsConfiguration.isNotRequired"
+                                                    (genericEvent)="handleEvent($event)">
+                                                </app-generic-form-array>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </p-tabPanel>
+                                <p-tabPanel *ngFor="let inst of group.instances; let i = index">
+                                    <ng-template pTemplate="header">{{group.groupName}} {{i+2}}
+                                        <button pButton type="button" style="margin-right: .25rem;margin-right:1rem"
+                                            class="p-button-rounded p-button-danger p-button-sm" title="حذف"
+                                            *ngIf="inst.isDuplicated" (click)="deleteGroup(inst.groupId)">
+                                            <i class="pi pi-trash" style="font-size: .7rem;"></i>
+                                        </button>
+                                    </ng-template>
+                                    <div [formArrayName]="inst.formArrayName" class="form-array widget">
+                                        <div *ngFor="let mandFiled of getFormArrayControls(inst.formArrayName); let i=index"
+                                            [formGroupName]="i" style="display: contents;">
+                                            <div style="display: contents;"
+                                                *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)">
+                                                <app-generic-form-array [controlFullName]="ctrlName" [index]="i"
+                                                    [filtered_CategoryMand]="inst.fields"
+                                                    [isDivDisabled]="config.fieldsConfiguration.isDivDisabled"
+                                                    [isCurrentUser]="isCurrentUser" [ticketForm]="ticketForm"
+                                                    [mandFileds]="getFormArrayInstance(inst.formArrayName)!"
+                                                    [useDefaultRadioView]="config.fieldsConfiguration.useDefaultRadioView"
+                                                    [dateFormat]="config.fieldsConfiguration.dateFormat"
+                                                    [showTime]="config.fieldsConfiguration.showTime"
+                                                    [timeOnly]="config.fieldsConfiguration.timeOnly"
+                                                    [maxDate]="config.fieldsConfiguration.maxDate" [tree]="unitTree"
+                                                    [layoutRow]="true"
+                                                    [isNotRequired]="config.fieldsConfiguration.isNotRequired"
+                                                    (genericEvent)="handleEvent($event)"></app-generic-form-array>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </p-tabPanel>
+                            </p-tabView>
+                        </div>
+
+                        <!-- Non-extendable: render fields as a standalone widget (only if no instances) -->
+                        <div *ngIf="!group.isExtendable && !(group.instances && group.instances.length>0)" [formArrayName]="group.formArrayName" class="form-array">
+                            <div *ngFor="let mandFiled of getFormArrayControls(group.formArrayName); let i=index"
+                                [formGroupName]="i" style="display: contents;">
+                                <div *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)"
+                                    style="display: contents;">
+                                    <app-generic-form-array [controlFullName]="ctrlName" [index]="i"
+                                        [filtered_CategoryMand]="group.fields"
+                                        [isDivDisabled]="config.fieldsConfiguration.isDivDisabled"
+                                        [isCurrentUser]="isCurrentUser" [ticketForm]="ticketForm"
+                                        [mandFileds]="getFormArrayInstance(group.formArrayName)!"
+                                        [useDefaultRadioView]="config.fieldsConfiguration.useDefaultRadioView"
+                                        [dateFormat]="config.fieldsConfiguration.dateFormat"
+                                        [showTime]="config.fieldsConfiguration.showTime"
+                                        [timeOnly]="config.fieldsConfiguration.timeOnly"
+                                        [maxDate]="config.fieldsConfiguration.maxDate" [tree]="unitTree"
+                                        [layoutRow]="true" [isNotRequired]="config.fieldsConfiguration.isNotRequired"
+                                        (genericEvent)="handleEvent($event)"></app-generic-form-array>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dynamic Tab View for Grouped Fields -->
+            <p-tabView *ngIf="genericFormService.dynamicGroups.length > 0 && config.formDisplayOption === 'tabs'">
+                <p-tabPanel *ngFor="let group of genericFormService.dynamicGroups; let tabIndex = index">
+                    <ng-template pTemplate="header">
+                        {{group.groupName}}
+                        <span *ngIf="genericFormService.getGroupValidity(ticketForm, group)" title="صالح"
+                            class="valid-symbol">✔</span>
+                        <span *ngIf="!genericFormService.getGroupValidity(ticketForm, group)" title="غير صالح"
+                            class="invalid-symbol">✖</span>
+                    </ng-template>
+
+                    <div *ngIf="group.isExtendable || (group.instances && group.instances.length>0)">
+                        <p-tabView>
+                            <!-- Original group as first panel inside nested tabView -->
+                            <p-tabPanel>
+                                <ng-template pTemplate="header">
+                                    {{group.groupName}} 1
+                                    <span *ngIf="genericFormService.isFormArrayValid(ticketForm,group.formArrayName)"
+                                        title="صالح" class="valid-symbol">✔</span>
+                                    <span *ngIf="!genericFormService.isFormArrayValid(ticketForm,group.formArrayName)"
+                                        title="غير صالح" class="invalid-symbol">✖</span>
+
+                                    <button pButton type="button" style="margin-right: .25rem;"
+                                        class="p-button-rounded p-button-success p-button-sm" title="تكرار"
+                                        *ngIf="group.isExtendable && !config.fieldsConfiguration.isDivDisabled"
+                                        (click)="duplicateGroup(group.groupId)">
+                                        <i class="pi pi-clone" style="font-size: .7rem;color: rgb(255, 255, 255);"></i>
+                                    </button>
+                                </ng-template>
+                                <div [formArrayName]="group.formArrayName" class="form-array widget">
+                                    <div *ngFor="let mandFiled of getFormArrayControls(group.formArrayName); let i=index"
+                                        [formGroupName]="i" style="display: contents;">
+                                        <div style="display: contents;"
+                                            *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)">
+                                            <app-generic-form-array [controlFullName]="ctrlName" [index]="i"
+                                                [filtered_CategoryMand]="group.fields"
+                                                [isDivDisabled]="config.fieldsConfiguration.isDivDisabled"
+                                                [isCurrentUser]="isCurrentUser" [ticketForm]="ticketForm"
+                                                [mandFileds]="getFormArrayInstance(group.formArrayName)!"
+                                                [useDefaultRadioView]="config.fieldsConfiguration.useDefaultRadioView"
+                                                [dateFormat]="config.fieldsConfiguration.dateFormat"
+                                                [showTime]="config.fieldsConfiguration.showTime"
+                                                [timeOnly]="config.fieldsConfiguration.timeOnly"
+                                                [maxDate]="config.fieldsConfiguration.maxDate" [tree]="unitTree"
+                                                [layoutRow]="true"
+                                                [isNotRequired]="config.fieldsConfiguration.isNotRequired"
+                                                (genericEvent)="handleEvent($event)"></app-generic-form-array>
+                                        </div>
+                                    </div>
+                                </div>
+                            </p-tabPanel>
+                            <!-- Duplicated instances rendered as additional panels -->
+                            <p-tabPanel *ngFor="let inst of group.instances; let i = index">
+                                <ng-template pTemplate="header">
+                                    {{group.groupName}} {{i+2}}
+                                    <span *ngIf="genericFormService.isFormArrayValid(ticketForm,inst.formArrayName)"
+                                        title="صالح" class="valid-symbol">✔</span>
+                                    <span *ngIf="!genericFormService.isFormArrayValid(ticketForm,inst.formArrayName)"
+                                        title="غير صالح" class="invalid-symbol">✖</span>
+                                    <button pButton type="button" style="margin-right: .25rem;margin-right:1rem"
+                                        class="p-button-rounded p-button-danger p-button-sm" title="حذف"
+                                        *ngIf="inst.isDuplicated && !config.fieldsConfiguration.isDivDisabled"
+                                        (click)="deleteGroup(inst.groupId)">
+                                        <i class="pi pi-trash" style="font-size: .7rem;"></i>
+                                    </button>
+                                </ng-template>
+
+                                <div [formArrayName]="inst.formArrayName" class="form-array widget">
+                                    <div *ngFor="let mandFiled of getFormArrayControls(inst.formArrayName); let i=index"
+                                        [formGroupName]="i" style="display: contents;">
+                                        <div style="display: contents;"
+                                            *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)">
+                                            <app-generic-form-array [controlFullName]="ctrlName" [index]="i"
+                                                [filtered_CategoryMand]="inst.fields"
+                                                [isDivDisabled]="config.fieldsConfiguration.isDivDisabled"
+                                                [isCurrentUser]="isCurrentUser" [ticketForm]="ticketForm"
+                                                [mandFileds]="getFormArrayInstance(inst.formArrayName)!"
+                                                [useDefaultRadioView]="config.fieldsConfiguration.useDefaultRadioView"
+                                                [dateFormat]="config.fieldsConfiguration.dateFormat"
+                                                [showTime]="config.fieldsConfiguration.showTime"
+                                                [timeOnly]="config.fieldsConfiguration.timeOnly"
+                                                [maxDate]="config.fieldsConfiguration.maxDate" [tree]="unitTree"
+                                                [layoutRow]="true"
+                                                [isNotRequired]="config.fieldsConfiguration.isNotRequired"
+                                                (genericEvent)="handleEvent($event)"></app-generic-form-array>
+                                        </div>
+                                    </div>
+                                </div>
+                            </p-tabPanel>
+                        </p-tabView>
+                    </div>
+                    <!-- Non-extendable group: render fields directly as before (only if no instances) -->
+                    <div *ngIf="!group.isExtendable && !(group.instances && group.instances.length>0)" [formArrayName]="group.formArrayName" class="form-array widget">
+                        <ng-container *ngIf="genericFormService.getFormArray(group.formArrayName, ticketForm) as fa">
+                            <div *ngFor="let mandFiled of fa.controls; let i=index" [formGroupName]="i"
+                                style="display: contents;">
+                                <div *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)"
+                                    style="display: contents;">
+                                    <app-generic-form-array [controlFullName]="ctrlName" [index]="i"
+                                        [filtered_CategoryMand]="group.fields"
+                                        [isDivDisabled]="config.fieldsConfiguration.isDivDisabled"
+                                        [isCurrentUser]="isCurrentUser" [ticketForm]="ticketForm" [mandFileds]="fa"
+                                        [useDefaultRadioView]="config.fieldsConfiguration.useDefaultRadioView"
+                                        [dateFormat]="config.fieldsConfiguration.dateFormat"
+                                        [showTime]="config.fieldsConfiguration.showTime"
+                                        [timeOnly]="config.fieldsConfiguration.timeOnly"
+                                        [maxDate]="config.fieldsConfiguration.maxDate" [tree]="unitTree"
+                                        [layoutRow]="true" [isNotRequired]="config.fieldsConfiguration.isNotRequired"
+                                        (genericEvent)="handleEvent($event)"></app-generic-form-array>
+                                </div>
+                            </div>
+                        </ng-container>
+                    </div>
+                </p-tabPanel>
+            </p-tabView>
+
+        </form>
+    </div>
+    <div class="form-actions" style="margin-top:1rem; display:flex; gap:0.75rem; justify-content:flex-end; padding-left: 6rem;
+                    box-shadow: inset 2px 3px 20px 9px rgb(0 28 228 / 8%) !important;
+                    border-radius: 1rem; align-items: center;
+                    min-height: 4rem;"
+        *ngIf="authObjectsService.checkAuthFun('EditSubjectFunc') && !config.fieldsConfiguration.isDivDisabled && !config.isNew">
+        <app-generic-button [type]="'submit'" [kind]="'success'" [icon]="'save'" [size]="'lg'" (clicked)="Save()"
+            [tooltip]="'حفظ'" [tooltipPosition]="'top'"
+            [disabled]="(ticketForm && ticketForm.invalid) || config.fieldsConfiguration.isDivDisabled || !formHasChanges"
+            *ngIf="authObjectsService.checkAuthFun('EditSubjectFunc')"></app-generic-button>
+
+        <app-generic-button [type]="'button'" [kind]="'danger'" [icon]="''" (clicked)="cancelEdit()" [tooltip]="'إلغاء'"
+            [tooltipPosition]="'top'" [disabled]="config.fieldsConfiguration.isDivDisabled"
+            [label]="'إلغاء'"></app-generic-button>
+    </div>
+    <div class="row">
+        <div class="widget" [ngClass]="'col-md-4'" *ngIf="showAttachmentsRow || customFilteredCategoryMand.length > 0">
+            <div
+                style="display: flex; align-items: baseline; gap: .5rem; margin-bottom: .5rem;flex-direction: row;flex-wrap: wrap;">
+                <h3>المرفقات</h3> <span *ngIf="config?.attachmentConfig?.isMandatory" style="color:crimson">*</span>
+                <span *ngIf="ticketForm?.get('attachments')?.valid" title="صالح" class="valid-symbol">✔</span>
+                <span *ngIf="ticketForm?.get('attachments')?.invalid " title="غير صالح" class="invalid-symbol">✖</span>
+            </div>
+            <app-add-attachments (fileUploadEvent)="onFileChange($event)" [fileParameters]="fileParameters"
+                [config]="config"
+                *ngIf="config.attachmentConfig?.showAttachmentSection && ticketForm?.controls && (ticketForm.controls | keyvalue).length > 0"></app-add-attachments>
+        </div>
+        <div [ngClass]="'col-md-1'">
+
+        </div>
+        <div [ngClass]="'col-md-6'">
+            <div class="form-group-label" *ngIf="config.isNew && config.showFormSignature" style="margin-top:1rem;">
+            </div>
+            <div class="form-group-label">
+                <label
+                    style="font-weight: bold; margin-left:2rem;color:green; min-height: 1.5em; min-width: 23rem; display: inline-block; white-space: pre-line;">{{displayedSubmissionLabel}}</label>
+
+                <button type="button" class="btn btn-success"
+                    [disabled]="(ticketForm && ticketForm.invalid )|| config.fieldsConfiguration.isDivDisabled"
+                    (click)="onSubmitClick()"
+                    *ngIf="(ticketForm && ticketForm.get('tkCategoryCd')?.value?.length>0) || customFilteredCategoryMand.length > 0">{{config.submitButtonText}}</button>
+
+                <button type="button" (click)="config.fieldsConfiguration.isDivDisabled = false;clearTreeSelection()"
+                    class="btn btn-primary"
+                    *ngIf="config && config.fieldsConfiguration.isDivDisabled && config.isNew">إضافة
+                    جديد</button>
+            </div>
+        </div>
+    </div>

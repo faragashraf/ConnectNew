@@ -1,0 +1,71 @@
+<div class="print-section">
+  <app-main-form [formData]="message" [id]="'printAtrea'+message.requestRef" hidden></app-main-form>
+</div>
+
+<!-- {{genericFormService.prePrintForm.getRawValue()|json}} -->
+<!-- <br> -->
+<!-- {{this.message.fields|json}} -->
+<!-- {{filteredCategory|json}} -->
+
+<div class="widget" *ngIf="this.filteredCategory.length>0">
+  <form [formGroup]="genericFormService.prePrintForm">
+    <div formArrayName="mandFileds" class="form-array" *ngIf="filteredCategory.length>0" class="form-array"
+      [class.disabled-div]="isDivDisabled">
+      <div *ngFor="let mandFiled of mandFileds.controls; let i=index" [formGroupName]="i">
+        <div *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)">
+          <app-generic-form-array [controlFullName]="ctrlName" [index]="i" [filtered_CategoryMand]="filteredCategory"
+            [isDivDisabled]="isDivDisabled" [ticketForm]="genericFormService.prePrintForm" [mandFileds]="mandFileds"
+            [timeOnly]="timeOnly" [dateFormat]="dateFormat" [maxDate]="date"
+            (genericEvent)="genericFormService.handleGenericEvent($event)"></app-generic-form-array>
+        </div>
+      </div>
+    </div>
+    <div *ngIf="genericFormService.getRequesterFieldTxt(message,'INQUIRY_TYPE') == 'إستعلام عن حسابات'">
+      <div *ngIf="isNew">
+        <button style="margin-left: 2rem;" class="btn btn-primary"
+          (click)="duplicateLastTwoGroupsWithIncrementedNames()"
+          [disabled]="mandFileds.length === 13 || disableAddButton || !isNew">إضافة
+          حساب</button>
+        <button class="btn btn-danger" (click)="removeLastMandField()" [disabled]="mandFileds.length <= 5">
+          إزالة الحساب الأخير
+        </button>
+      </div>
+      <br>
+      <span *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'HAVE_NOT_HAVE|2')?.value == 'لديه' ">
+        عدد الحسابات : {{getAccountNameCount()}} <span *ngIf="getAccountNameCount()==5" style="color: red;">الحد الأقصى
+          5 حسابات فقط</span>
+      </span>
+    </div>
+
+  </form>
+</div>
+<div class="widget">
+  <div class="form-array">
+    <div class="form-group">
+      <button [pTooltip]="'تسجيل'" pButton type="button" (click)="onSubmit()" style="margin-left: 2rem;"
+        styleClass="p-button-lg" class="p-button-raised p-button-rounded p-button-info"
+        [disabled]="genericFormService.prePrintForm.invalid || !isNew" [ngStyle]="{
+          cursor: (genericFormService.prePrintForm.invalid || !isNew) ? 'not-allowed' : 'pointer'
+        }">
+        تسجيل
+      </button>
+
+      <button
+        [pTooltip]="'طباعة النموذج - '+genericFormService.getRequesterFieldTxt(message,'AUTHORITY_ACCOUNT_NATURE')+' - '+genericFormService.getRequesterFieldTxt(message,'INQUIRY_TYPE')"
+        pButton type="button" style="font-size: 2rem" styleClass="p-button-lg" icon="pi pi-print"
+        [printSectionId]="'printAtrea'+message.requestRef" ngxPrint
+        class="p-button-raised p-button-rounded p-button-info" [printStyle]="printService.a4PortraitStyles"
+        [disabled]="genericFormService.prePrintForm.invalid || isNew" [ngStyle]="{
+          cursor: (genericFormService.prePrintForm.invalid || isNew) ? 'not-allowed' : 'pointer'
+        }"></button>
+      <app-awb-print [formData]="message"
+      [id]="'printAWB'+message.messageId"               hidden
+      ></app-awb-print>
+      <button [pTooltip]="'طباعة البوليصة'"
+        pButton type="button" style="font-size: 2rem;margin-right: 2rem;" styleClass="p-button-lg" icon="pi pi-barcode"
+        [printSectionId]="'printAWB'+message.messageId" ngxPrint
+        class="p-button-raised p-button-rounded p-button-success" [printStyle]="printService.a5LandscapeStyles"
+        ></button>
+    </div>
+  </div>
+</div>

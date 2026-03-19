@@ -1,0 +1,422 @@
+// Input Container Styles
+.input-container {
+    position: relative;
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+
+  /* make the input take available space and keep buttons to the side */
+  input {
+    flex: 1;
+  }
+
+  input {
+    border-bottom-left-radius: 0rem !important;
+    border-top-left-radius: 0rem !important;
+    border-bottom-right-radius: 1rem !important;
+    border-top-right-radius: 1rem !important;
+
+    &.with-user-card {
+      opacity: 0;
+      pointer-events: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: -1;
+    }
+  }
+
+  .button {
+    border-bottom-left-radius: 1rem !important;
+    border-top-left-radius: 1rem !important;
+    border-bottom-right-radius: 0rem !important;
+    border-top-right-radius: 0rem !important;
+  }
+
+  .input-action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-inline-start: 0.5rem; /* space between input and buttons in RTL */
+
+    .validate-btn {
+      padding: 0.375rem 0.75rem;
+    }
+
+    .delete-btn {
+      padding: 0.375rem 0.6rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+}
+
+// Selected User Card Styles
+.selected-user-card {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px solid #28a745;
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  min-height: 38px;
+  border-bottom-left-radius: 0rem !important;
+  border-top-left-radius: 0rem !important;
+  border-bottom-right-radius: 1rem !important;
+  border-top-right-radius: 1rem !important;
+  transition: all 0.2s ease;
+  position: relative;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  animation: slideInRight 0.3s ease-out;
+
+  /* Disabled state: disable mouse interactions and visual feedback
+     Supports three common patterns: a `.disabled` class, a `disabled`
+     attribute, or `aria-disabled="true"`. Adjust selectors if your
+     template uses a different convention. */
+  &.disabled,
+  &[disabled],
+  &[aria-disabled="true"] {
+    pointer-events: none; 
+    cursor:no-drop;
+    opacity: 0.55;
+    box-shadow: none;
+    transform: none;
+    filter: grayscale(0.15);
+  }
+
+  &:hover {
+    background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+    border-color: #20c997;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .user-avatar-small {
+    flex-shrink: 0;
+    margin-left: 0.5rem;
+
+    .avatar-img-small {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid #e9ecef;
+    }
+
+    .avatar-placeholder-small {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background-color: #e9ecef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.875rem;
+      color: #6c757d;
+    }
+  }
+
+  .user-info-small {
+    flex: 1;
+    min-width: 0;
+    text-align: right;
+
+    .user-name {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #495057;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+
+    .user-email {
+      font-size: 0.75rem;
+      color: #6c757d;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+      height: 1rem;
+    }
+  }
+
+  .clear-user-btn {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    margin-right: 0.25rem;
+
+    &:hover {
+      background-color: #e9ecef;
+      color: #495057;
+    }
+
+    i {
+      font-size: 0.75rem;
+    }
+  }
+}
+
+// User Overlay Styles
+.user-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+
+  &.show {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .overlay-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+  }
+
+  .user-card {
+    position: relative;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+    direction: rtl;
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #e9ecef;
+      background-color: #f8f9fa;
+      border-radius: 12px 12px 0 0;
+
+      .card-title {
+        color: #495057;
+        font-weight: 600;
+      }
+
+      .btn-close {
+        background: none;
+        border: none;
+        font-size: 1.2rem;
+        color: #6c757d;
+        cursor: pointer;
+        padding: 0.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background-color: #e9ecef;
+          color: #495057;
+        }
+      }
+    }
+
+    .card-body {
+      padding: 1.5rem;
+    }
+
+    .card-footer {
+      padding: 1rem 1.5rem;
+      background-color: #f8f9fa;
+      border-top: 1px solid #e9ecef;
+      border-radius: 0 0 12px 12px;
+    }
+  }
+
+  &.show .user-card {
+    transform: scale(1);
+  }
+}
+
+// User Avatar Styles
+.user-avatar {
+  margin-bottom: 1rem;
+
+  .avatar-img {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #e9ecef;
+  }
+
+  .avatar-placeholder {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: #6c757d;
+    margin: 0 auto;
+  }
+}
+
+// User Details Styles
+.user-details {
+  .detail-row {
+    display: flex;
+    margin-bottom: 0.75rem;
+    align-items: flex-start;
+
+    .detail-label {
+      font-weight: 600;
+      color: #495057;
+      min-width: 120px;
+      margin-left: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .detail-value {
+      color: #6c757d;
+      flex: 1;
+      word-break: break-word;
+    }
+  }
+}
+
+// Badge Styles
+.badge {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+
+  &.badge-success {
+    background-color: #d1e7dd;
+    color: #0f5132;
+  }
+
+  &.badge-warning {
+    background-color: #fff3cd;
+    color: #664d03;
+  }
+}
+
+// Groups Container
+.groups-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+
+  .group-badge {
+    background-color: #e7f3ff;
+    color: #0c63e4;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    border: 1px solid #b6d7ff;
+  }
+}
+
+// Button Gap Utility
+.gap-2 {
+  gap: 0.5rem !important;
+}
+
+// Animations
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+// Responsive Design
+@media (max-width: 768px) {
+  .user-overlay .user-card {
+    width: 95%;
+    margin: 1rem;
+
+    .card-body {
+      padding: 1rem;
+
+      .row {
+        flex-direction: column;
+      }
+
+      .col-md-3,
+      .col-md-9 {
+        flex: none;
+        width: 100%;
+      }
+
+      .user-avatar {
+        text-align: center;
+        margin-bottom: 1.5rem;
+      }
+    }
+  }
+
+  .user-details .detail-row {
+    flex-direction: column;
+
+    .detail-label {
+      min-width: auto;
+      margin-left: 0;
+      margin-bottom: 0.25rem;
+    }
+  }
+}

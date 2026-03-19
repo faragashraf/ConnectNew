@@ -1,0 +1,76 @@
+<div class="widget card" *ngIf="!isCollapsed">
+    <div class="generate-section">
+        <h3 class="section-title">
+            <i class="pi pi-code"></i>
+            Generated SQL
+        </h3>
+        <div class="query-controls">
+            <p-button icon="pi pi-copy" label="Copy" (click)="copyQuery()" class="p-button-sm p-button-help"></p-button>
+            <p-button icon="pi pi-play" label="Execute" (click)="onExecute()"
+                [disabled]="generateQueryService.generatedQuery ==undefined || generateQueryService.generatedQuery.length == 0"
+                class="p-button-sm"></p-button>
+
+            <p-button icon="pi pi-save" (click)="Save()"
+                [disabled]="generateQueryService.generatedQuery ==undefined ||generateQueryService.generatedQuery.length == 0"
+                class="p-button-sm" />
+
+            <p-button icon="pi pi-folder-open" (click)="selectGroupService.dialogVisible=true" class="p-button-sm" />
+        </div>
+        <!-- <pre *ngIf="generatedQuery">{{ generatedQuery }}</pre> -->
+        <textarea type="text" [(ngModel)]="generateQueryService.generatedQuery"
+            [rows]="generateQueryService.generatedQuery!= undefined && generateQueryService.generatedQuery.split('\n').length"
+            style="width: 100%;"></textarea>
+    </div>
+</div>
+
+    <!-- collapsed control -->
+    <div *ngIf="isCollapsed" style="margin:8px">
+        <p-button icon="pi pi-eye" label="Show SQL" class="p-button-sm p-button-secondary" (click)="expand()"></p-button>
+    </div>
+
+<p-dialog header="Group Name" [resizable]="false" [modal]="true" [maximizable]="true" appendTo="body" (onHide)="selectGroupService.IsSaveNewSelect = false;selectGroupService.IsEditSelectNode=false && 
+    selectGroupService.IsEditGroupNode=false;selectGroupService.frm.reset()"
+    [(visible)]="selectGroupService.dialogVisible" [style]="{width: '35vw', direction: 'ltr'}"
+    [contentStyle]="{ 'min-height': '20vh' }">
+    <form [formGroup]="selectGroupService.frm" (submit)="submitGroup()"
+        *ngIf="selectGroupService.IsSaveNewSelect || selectGroupService.IsEditGroupNode">
+        <div class="dialog-content">
+            <div class="form-group">
+                <label for="NameAr">Name</label>
+                <div class="input-group">
+                    <input type="text" formControlName="NameAr" id="NameAr" class="form-control"
+                        [class.is-invalid]="selectGroupService.frm.get('NameAr')?.invalid && selectGroupService.frm.get('NameAr')?.touched">
+                    <button type="submit" pButton pRipple label="Submit" class="btn btn-primary"
+                        [disabled]="selectGroupService.frm.invalid || selectGroupService.GroupsSelectedNode.key == undefined"></button>
+                </div>
+                <small
+                    *ngIf="selectGroupService.frm.get('NameAr')?.invalid && selectGroupService.frm.get('NameAr')?.touched"
+                    class="text-danger">
+                    هذا الحقل مطلوب
+                </small>
+            </div>
+            <div class="settings-item"
+                *ngIf="(selectGroupService.GroupsSelectedNode?.key?.split?.('-') ?? [])[0] == 'group'">
+                <label class="settings-label">Privacy </label>
+                <div class="settings-toggle">
+                    <p-toggleButton onLabel="Public" offLabel="Private" formControlName="PublicTrue"
+                        [(ngModel)]="selectGroupService.PublicTrue"></p-toggleButton>
+                </div>
+            </div>
+            <div class="settings-item"
+                *ngIf="(selectGroupService.GroupsSelectedNode?.key?.split?.('-') ?? [])[0] == 'select'">
+                <label class="settings-label">For Chart </label>
+                <div class="settings-toggle">
+                    <p-toggleButton onLabel="Yes" offLabel="No" formControlName="ChartTrue"
+                        [(ngModel)]="selectGroupService.ChartTrue"></p-toggleButton>
+                </div>
+            </div>
+        </div>
+    </form>
+    <app-select-groups-hierarchy *ngIf="!selectGroupService.IsEditSelectNode && !selectGroupService.IsEditGroupNode"
+        [NameAr]="selectGroupService.frm.get('NameAr')?.value"></app-select-groups-hierarchy>
+    <ng-template pTemplate="footer">
+        <button type="button" pButton pRipple (click)="selectGroupService.dialogVisible=false" label="Close"
+            icon="pi pi-times" class="p-button-text"></button>
+    </ng-template>
+</p-dialog>

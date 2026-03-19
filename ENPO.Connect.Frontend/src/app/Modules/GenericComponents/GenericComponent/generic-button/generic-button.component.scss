@@ -1,0 +1,52 @@
+/* Basic styling uses Bootstrap classes (btn, btn-primary, etc.).
+   Add any project-specific overrides here. */
+
+:host {
+    display: inline-block;
+}
+
+button.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Smooth scale on hover to make the button bigger */
+button.btn {
+    transition: transform 140ms ease-in-out;
+    will-change: transform;
+}
+
+button.btn:hover:not(:disabled) {
+    transform: scale(1.2);
+}
+
+.btn-content {
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon .pi {
+    font-size: 1.2rem;
+    color: inherit;
+    display: inline-block;
+    // font-weight: bold;
+}
+
+/* Ensure icon elements don't intercept pointer events so clicks target the button */
+.btn-icon,
+.btn-icon .pi,
+.btn-icon i {
+    pointer-events: none;
+}
+
+span {
+    color: white;
+    gap: .25rem;
+}

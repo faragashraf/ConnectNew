@@ -1,0 +1,101 @@
+<div class="container-main">
+    <div class="row">
+        <div class="col-md-4">
+            <h3>شجرة الصلاحيات </h3>
+
+        </div>
+        <div class="col-md-2"></div>
+        <div class="col-md-6">
+
+        </div>
+    </div>
+    <!-- {{messageDtos|json}} -->
+    <div class="row">
+        <div class="col-md-4">
+            <div class="widget">
+                <p-tree [value]="treeData" selectionMode="single" [(selection)]="selectedNode" [filter]="true"
+                    [contextMenu]="cm" (onNodeContextMenuSelect)="ContextMenuSelect($event)" filterPlaceholder="بحث"
+                    scrollHeight="600px" (onNodeSelect)="nodeSelection($event)"
+                    (onNodeUnselect)="nodeUnselection($event)" [validateDrop]="true" [draggableNodes]="true"
+                    [droppableNodes]="true" draggableScope="self" droppableScope="self"
+                    (onNodeDrop)="onNodeDrop($event)">
+                    <ng-template let-node pTemplate="default">
+                        <b>
+                            {{node.label }}
+                        </b>
+                    </ng-template>
+                </p-tree>
+            </div>
+        </div>
+        <div class="col-md-7">
+            <div class="widget">
+                <!-- <generic-table [showExportButton]="true" [showRemoveColumn]="true" [showDeleteButton]="true" [showEditButton]="false"
+                    (rowDelete)="deleteRow($event)"></generic-table> -->
+
+                       <generic-table tableId="itemTable" [tableGenericData]="itemData" [_columns]="item_columns" 
+                       [showExportButton]="true" [showRemoveColumn]="false" [showDeleteButton]="true" [rowsPerPage]="10"
+                    [dataKey]="'USER_ID'" (rowSelect)="onselectItemEvent($event)" [showEditButton]="false"
+                    (rowDelete)="deleteRow($event)" [showTableContextMenu]="false" ></generic-table>
+            </div>
+        </div>
+    </div>
+</div>
+<p-contextMenu [style]="{'width':'22.5rem','direction':'ltr'}" #cm [model]="items"></p-contextMenu>
+
+<p-dialog [header]="header" [resizable]="false" [modal]="true" [maximizable]="true" appendTo="body"
+    [(visible)]="dialogVisible" [style]="{width: '35vw', direction: 'rtl'}" [contentStyle]="{ 'min-height': '20vh' }">
+    <form [formGroup]="frm" (submit)="submit()">
+        <div class="dialog-content">
+            <div class="form-group">
+                <label for="NameAr">{{ _label }}</label>
+                <div class="input-group">
+                    <input type="text" formControlName="NameAr" id="NameAr" class="form-control"
+                        [class.is-invalid]="frm.get('NameAr')?.invalid && frm.get('NameAr')?.touched">
+
+                    <button type="button" pButton pRipple label="تحقق" class="btn btn-success"
+                        [disabled]="frm.invalid || isValidated" (click)="ValidateUser()"
+                        *ngIf="showValidateButton"></button>
+
+                    <button type="submit" pButton pRipple label="تسجيل" class="btn btn-primary"
+                        [disabled]="frm.invalid || isSubmitting || (!isValidated && showValidateButton)"></button>
+                </div>
+                <small *ngIf="frm.get('NameAr')?.invalid && frm.get('NameAr')?.touched" class="text-danger">
+                    هذا الحقل مطلوب
+                </small>
+            </div>
+            <span style="color: blue;">{{this.userName}}</span>
+        </div>
+    </form>
+    <ng-template pTemplate="footer">
+        <button type="button" pButton pRipple icon="pi pi-times" (click)="dialogVisible=false" label="إغلاق"
+            class="p-button-text"></button>
+    </ng-template>
+</p-dialog>
+<p-dialog header="إضافة صلاحية للمستخدم" [resizable]="false" [modal]="true" [maximizable]="true" appendTo="body"
+    [(visible)]="dialogAssignUserVisible" [style]="{width: '35vw', direction: 'rtl'}"
+    [contentStyle]="{ 'min-height': '20vh' }">
+    <form [formGroup]="frm" (submit)="submit()">
+        <div class="dialog-content">
+            <div class="form-group">
+                <label for="NameAr">اسم المستخدم</label>
+                <div class="input-group">
+                    <input type="text" formControlName="NameAr" id="NameAr" class="form-control"
+                        [class.is-invalid]="frm.get('NameAr')?.invalid && frm.get('NameAr')?.touched">
+
+                    <button type="button" pButton pRipple label="تحقق" class="btn btn-success"
+                        [disabled]="frm.invalid || isValidated"></button>
+
+                    <button type="submit" pButton pRipple label="تسجيل" class="btn btn-primary"
+                        [disabled]="frm.invalid || isSubmitting || !isValidated"></button>
+                </div>
+                <small *ngIf="frm.get('NameAr')?.invalid && frm.get('NameAr')?.touched" class="text-danger">
+                    هذا الحقل مطلوب
+                </small>
+            </div>
+        </div>
+    </form>
+    <ng-template pTemplate="footer">
+        <button type="button" pButton pRipple icon="pi pi-times" (click)="dialogVisible=false" label="إغلاق"
+            class="p-button-text"></button>
+    </ng-template>
+</p-dialog>

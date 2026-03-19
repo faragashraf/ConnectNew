@@ -1,0 +1,96 @@
+<div class="container-main">
+    <div class="split-layout mb-3" style="height:76vh;">
+        <aside class="sidebar-pane">
+            <div class="pane-content">
+                <app-tree-sidebar [tree]="tree" [title]="'القائمة الرئيسية'" [expandedWidth]="100" [scrollHeight]="43"
+                    [allExpanded]="true" (onNodeSelect)="onSidebarMenuItemSelected($event)"
+                    (onNodeUnselect)="nodeUnselection($event)"></app-tree-sidebar>
+            </div>
+        </aside>
+
+        <main class="pane-with-sticky main-pane">
+            <div class="widget sticky-header form-header">
+                <div class="form-header-row">
+                    <div class="form-header-controls">
+                        <button type="button" class="collapse-toggle" (click)="formExpanded = !formExpanded"
+                            [attr.aria-expanded]="!formExpanded" [title]="formExpanded ? 'إظهار محددات البحث' : 'إخفاء محددات البحث'">
+                            <span class="toggle-icon"><i class="pi" [ngClass]="{'pi-angle-up': !formExpanded, 'pi-angle-down': formExpanded}"></i></span>
+                        </button>
+                        <button type="button" class="collapse-toggle me-2" (click)="restartTour()" title="إعادة تشغيل الجولة التعريفية">
+                            <span class="toggle-icon"><i class="pi pi-video" style="font-size: 1.2rem;"></i></span>
+                        </button>
+                    </div>
+                    <div class="form-header-title" *ngIf="formExpanded">
+                        <h2>محددات البحث</h2>
+                    </div>
+                </div>
+                <div class="form-area" [class.collapsed]="formExpanded">
+                    <app-form-details [categoryTree]="categoryTree" [config]="config"
+                        (ticketFormChange)="updateForm($event)" [fileParameters]="fileParameters"
+                        (submitFormChange)="onSubmit($event)"></app-form-details>
+                </div>
+            </div>
+
+            <div class="table-container" *ngIf="config.pageSizes">
+                <generic-table  tableId="itemTable" [tableGenericData]="allPublications"
+                    [rowsPerPage]="config.listRequestModel.pageSize" [rowsPerPageOptions]="config.pageSizes"
+                    [_columns]="item_columns" [showExportButton]="showExportButton"
+                    [showRemoveColumn]="showRemoveColumn" [showDeleteButton]="showDeleteButton"
+                    [showViewButton]="showViewButton" [showFieldSort]="showFieldSort"
+                    [showColumnFilter]="showColumnFilter" [isLazyLoading]="true" [showTableDetails]="showTableDetails"
+                    [dataKey]="item_columns[0]" (rowSelect)="onselectItemEvent($event)"
+                    [showEditButton]="showEditButton"  (rowEdit)="edit($event)"
+                    (rowView)="viewRow($event)" [totalRecords]="config.totalRecords"
+                    [config]="config"
+                    (pageChange)="onPageChange($event)"></generic-table>
+            </div>
+        </main>
+    </div>
+        <!-- <ng-template pTemplate>
+            <div class="pane-content sidebar-pane">
+                <div class="news-container" aria-live="polite">
+                    <div class="news-header">
+                        <h3>أحدث الأخبار</h3>
+                        <p class="news-sub">نشرة أحداث سريعة</p>
+                    </div>
+                    <div class="news-list">
+                        <div class="news-card" *ngFor="let p of allPublications | slice:0:3">
+                            <div class="news-thumb">
+                                <img [src]="'assets/imges/SlideShow/2.jpg'"
+                                    [alt]="'عنوان الخبر ' + (p['DOCUMENT_NUMBER'] || p['MINI_DOC'])"
+                                    style="width:160px;height:90px;object-fit:cover;border-radius:4px;" />
+                            </div>
+                            <div class="news-content">
+                                <div class="news-title">{{ p['DOCUMENT_NUMBER'] || 'عنوان الخبر'}}</div>
+                                <div class="news-excerpt">{{p['MINI_DOC'] || 'ملخص قصير وجذاب يشرح الفكرة بسرعة.'}}
+                                </div>
+                                <div class="news-meta">{{ formatRelativeHours(p['LAST_MODIFIED_DATE']) }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </ng-template> -->
+    <!-- </p-splitter> -->
+</div>
+
+<!-- Dialog to show full row details -->
+<p-dialog header="عرض التفاصيل" [(visible)]="displayDialog" [modal]="true" [style]="{width: '35vw', direction: 'rtl'}"
+    [baseZIndex]="10000" [showTransitionOptions]="'400ms cubic-bezier(0.25, 0.8, 0.25, 1)'"
+    [hideTransitionOptions]="'200ms cubic-bezier(0.25, 0.8, 0.25, 1)'" (onHide)="closeDialog()">
+    <div class="container-main widget">
+        <div *ngIf="selectedRow">
+            <div class="row" *ngFor="let key of getRowKeys(selectedRow)">
+                <div class="col-4" style="font-weight:600;">{{formatHeader(key)}}</div>
+                <div class="col-8">{{ selectedRow[key] }}</div>
+            </div>
+        </div>
+            <div class="widget" *ngIf="fileParameters.length>0">
+            <app-add-attachments [fileParameters]="fileParameters" [config]="config" 
+                (AttachIDemit)="downloadAttachment($event)"></app-add-attachments>
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <button type="button" class="btn btn-secondary btn-sm" (click)="closeDialog()">اغلاق</button>
+    </ng-template>
+</p-dialog>

@@ -1,0 +1,16 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs
+
+/Core/bin/Debug/net6.0
+/Core/obj/Debug/net6.0
+/Core/obj
+/Models/bin/Debug/net6.0
+/Models/obj/Debug/net6.0
+/Models/obj
+/Persistence
+/Repositories/bin/Debug/net6.0
+/Repositories/obj/Debug/net6.0
+/Repositories/obj

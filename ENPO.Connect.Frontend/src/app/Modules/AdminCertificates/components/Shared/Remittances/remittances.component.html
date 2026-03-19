@@ -1,0 +1,10 @@
+بشأن الإستعلام عن بيان الحوالات {{
+genericFormService.GetControl(genericFormService.prePrintForm,'REMITTANCES_TYPE|2')?.value }}
+من {{ genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value }} / {{ genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_NAME') }}
+<span *ngIf="genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_ACCOUNT_NATURE') == 'فرد'">{{
+genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_VERFICATION_TYPE') }}
+{{ genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_VERFICATION_NUMBER') }}</span>
+<!-- إلى {{ genericFormService.tittleToType }}/ XXXXXXXXXXXXXXX 12345678912345 -->
+خلال الفترة من {{ conditionalDate.transform(genericFormService.getRequesterFieldTxt(formData,'FROM_DATE') , 'short')
+}}
+إلى {{ conditionalDate.transform(genericFormService.getRequesterFieldTxt(formData,'TO_DATE') , 'short') }}

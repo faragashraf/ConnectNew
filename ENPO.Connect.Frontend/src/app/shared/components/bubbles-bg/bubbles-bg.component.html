@@ -1,0 +1,49 @@
+<div class="bubbles-bg" [class.anim-disabled]="disableAnimations" aria-hidden="true">
+  <div class="bubbles" role="presentation">
+    <ng-container *ngFor="let b of bubbles; index as idx">
+      <div
+        class="bubble"
+        [attr.data-idx]="idx"
+        [style.left]="b.left"
+        [style.top]="b.top"
+        [style.width]="b.size"
+        [style.height]="b.size"
+        [style.background]="'radial-gradient(circle at 30% 30%, ' + b.color + ', rgba(255,255,255,0.0) 65%)'"
+        [style.--dx]="b.dx"
+        [style.--dy]="b.dy"
+        [style.--floatDur]="b.floatDur + 's'"
+        [style.--shimmerDur]="b.shimmerDur + 's'"
+        [style.animationDelay]="b.delay + 's, 0s'"
+      ></div>
+    </ng-container>
+  </div>
+
+  <!-- Built-in control panel (optional) -->
+  <div *ngIf="showControls" class="bubbles-control bottom-left">
+    <button class="toggle" (click)="togglePanel()" pTooltip="Bubbles settings" tooltipPosition="left" title="Bubbles settings">⚙</button>
+    <div class="panel" *ngIf="panelOpen">
+      <h4>Bubbles settings</h4>
+      <!-- Friendly note for users: this panel is just for fun -->
+      <p class="panel-note">خذ استراحة — هذه الإعدادات للترفيه فقط، جرّبها بحرية.</p>
+      <label>Density: <strong>{{density}}</strong></label>
+      <input type="range" min="1" max="20" [value]="density" (input)="setDensity($any($event.target).valueAsNumber)" />
+
+      <label>Speed: <strong>{{speed}}</strong></label>
+      <input type="range" min="0" max="5" step="0.1" [value]="speed" (input)="setSpeed($any($event.target).valueAsNumber)" />
+
+      <label>Scale: <strong>{{scale}}</strong></label>
+      <input type="range" min="0.2" max="3" step="0.1" [value]="scale" (input)="setScale($any($event.target).valueAsNumber)" />
+
+      <label>Palette:</label>
+      <select [value]="paletteId" (change)="onPaletteChange($any($event.target).value)">
+        <option *ngFor="let p of availablePalettes" [value]="p">{{p}}</option>
+      </select>
+
+      <div class="actions">
+        <button class="btn small" (click)="density=9; speed=1; scale=1; buildBubbles()">Reset</button>
+        <button class="btn primary" (click)="panelOpen=false">Close</button>
+      </div>
+    </div>
+  </div>
+
+</div>

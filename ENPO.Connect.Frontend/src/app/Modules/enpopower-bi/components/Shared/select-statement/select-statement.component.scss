@@ -1,0 +1,53 @@
+.generate-section {
+  textarea {
+    background: #1E293B;
+    color: #F8FAFC;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    margin-top: 1rem;
+    overflow-x: auto;
+  }
+}
+
+.query-controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.column-controls {
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.75rem;
+
+  .p-button {
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+  }
+}
+
+/* p-toggleButton CSS */
+.settings-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  margin-top: 15px;
+}
+
+.settings-label {
+  margin-right: 10px;
+  font-weight: bold;
+  padding-left: 30px;
+  width: 50%;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.settings-toggle p-toggleButton {
+  margin-left: 10px;
+}

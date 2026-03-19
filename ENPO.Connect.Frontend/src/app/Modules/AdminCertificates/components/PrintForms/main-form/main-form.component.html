@@ -1,0 +1,196 @@
+<div class="letter-container">
+    <div class="header-section">
+        <app-header [Area]="genericFormService.getRequesterFieldTxt(formData,'CREATED_AREA')"
+            [Sector]="genericFormService.getSector(genericFormService.getRequesterFieldTxt(formData,'CREATED_AREA'))"></app-header>
+    </div>
+
+    <div class="certificate arabic-text">
+        <h4 class="centered-title">
+            <u *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حوالات'">شهادة إدارية
+                بيان حوالات</u>
+            <u *ngIf=" genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE')  == 'إستعلام عن رصيد حساب'">شهادة
+                إدارية برصيد الحســــاب
+                <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_ACCOUNT_NATURE') == 'فرد'">
+                    "أشخاص طبيعية"
+                </span>
+                <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_ACCOUNT_NATURE') != 'فرد'">
+                    "أشخاص إعتبارية"
+                </span>
+            </u>
+            <u *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حسابات' ">شهادة إدارية
+                بموقف الحســــاب/الحسابات</u>
+            <u *ngIf="genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_TYPE') == 'POS'">شهادة
+                إدارية
+                - إستعلام عن مادة بريدية</u>
+            <!-- <u
+                *ngIf="genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_TYPE') == 'POS' && genericFormService.GetControl(genericFormService.prePrintForm,'INQUIRY_STATUS|4')?.value !=='نتيجة الإستعلام'">شهادة
+                إدارية
+                - سلبية</u> -->
+            <u *ngIf="genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_TYPE') == 'GOV' ">شهادة إدارية
+                - مدفوعات حكومية "{{genericFormService.getRequesterFieldTxt(formData,'SERVICE_TYPE')}}"</u>
+        </h4>
+
+        <h4 class="requester-info"
+            *ngIf="genericFormService.getRequesterFieldTxt(formData,'JUDICIAL_AUTHORITY_NAME').length>0">إلى السادة / {{
+            genericFormService.getRequesterFieldTxt(formData,'JUDICIAL_AUTHORITY_NAME') }}</h4>
+        <h4 class="requester-info"
+            *ngIf="genericFormService.getRequesterFieldTxt(formData,'JUDICIAL_AUTHORITY_NAME').length==0">{{
+            genericFormService.getRequesterFieldTxt(formData,'DESTINATION') }}</h4>
+        <h4 class="indented-text">تحيه طيبه وبعد ،،</h4>
+        <h4 class="justified-text">
+            <!-- إلى من يهمة الأمر -->
+            <app-to-any [formData]="formData"
+                *ngIf="genericFormService.getRequesterFieldTxt(formData,'DESTINATION') == 'إلى من يهمة الامر'"></app-to-any>
+            <!-- إلى جهه قضائية -->
+            <app-to-judicial-authority [formData]="formData"
+                *ngIf="genericFormService.getRequesterFieldTxt(formData,'DESTINATION') == 'إلى جهة قضائية'"></app-to-judicial-authority>
+            <!-- بيانات التوكيل -->
+            <app-authorization-data [formData]="formData"></app-authorization-data>
+            <!-- <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'AGENCY_NUMBER').length==0"> -بشخصه- </span> -->
+
+
+            <!-- إستعلام عن حوالات -->
+            <app-remittances [formData]="formData"
+                *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حوالات'"></app-remittances>
+            <!-- إستعلام عن حسابات -->
+            <app-accounts [formData]="formData" *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حسابات' || 
+                genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE')  == 'إستعلام عن رصيد حساب'"></app-accounts>
+
+            <!-- شهادة بريدية -->
+            <app-postal [formData]="formData"
+                *ngIf="genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_TYPE') == 'POS'"></app-postal>
+
+            <!-- شهادة حكومية -->
+            <app-gov [formData]="formData"
+                *ngIf="genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_TYPE') == 'GOV'"></app-gov>
+        </h4>
+
+        <h4 class="centered-title"><b><u>و عــــلـــيـــه</u></b></h4>
+        <h4 class="justified-text">
+            <!-- إستعلام عن حوالات -->
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حوالات' ||
+                genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_TYPE') == 'GOV'">تتشرف</span>
+
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حسابات' ||
+                 genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE')  == 'إستعلام عن رصيد حساب'||
+                 genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_TYPE')  == 'POS'">تشهد</span>
+            الإدارة العامة لمنطقة بريد {{ genericFormService.getRequesterFieldTxt(formData,'CREATED_AREA') }} التابعة
+            لقطاع
+            {{ genericFormService.getSector(genericFormService.getRequesterFieldTxt(formData,'CREATED_AREA')) }}
+            <!-- إستعلام عن حوالات -->
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حوالات'"> بأن ترفق
+                لسيادتكم بيان الحوالات
+                المطلوبة
+                <span>
+                    {{genericFormService.GetControl(genericFormService.prePrintForm,'STAKEHOLDER_COUNT|3')?.value}}</span> عاليه
+                عن الفترة من
+                {{ conditionalDate.transform(genericFormService.getRequesterFieldTxt(formData,'FROM_DATE'), 'short') }}
+                إلى {{ conditionalDate.transform(genericFormService.getRequesterFieldTxt(formData,'TO_DATE'), 'short') }}
+            </span>
+
+            <!-- إستعلام عن رصيد حساب -->
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن رصيد حساب'">بأن
+                {{genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value}} /
+                {{genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_NAME')}} لديه<span
+                    *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value!=='السيد'">{{genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value
+                    ==='السيده'?'ا':'م'}}</span> حساب رقم
+                {{genericFormService.getRequesterFieldTxt(formData,'ACCOUNT_NUMBER')}} نوعه
+                {{genericFormService.getRequesterFieldTxt(formData,'ACCOUNT_TYPE')}} ورصيده الحالي هو
+                [{{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_BALANCE|2')?.value}}] فقط
+                {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_BALANCE_TEXT|3')?.value}} لاغير
+            </span>
+
+            <!-- إستعلام عن حسابات -->
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حسابات'">بأن
+                {{genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value}} /
+                {{genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_NAME')}}
+                {{genericFormService.GetControl(genericFormService.prePrintForm,'HAVE_NOT_HAVE|2')?.value}}<span
+                    *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value!=='السيد'">{{genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value
+                    ==='السيده'?'ا':'م'}}</span>
+                <span *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'HAVE_NOT_HAVE|2')?.value == 'لديه'">
+                    <br> 1- حساب " {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_TYPEE|3')?.value}} "
+                    برقم {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_NUMBERR|4')?.value}}
+
+                    <span *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_TYPEE|5')!= undefined">
+                        <br> 2- حساب " {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_TYPEE|5')?.value}}
+                        " برقم {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_NUMBERR|6')?.value}}
+                    </span>
+
+                    <span *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_TYPEE|7')!= undefined">
+                        <br> 3- حساب " {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_TYPEE|7')?.value}}
+                        " برقم {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_NUMBERR|8')?.value}}
+                    </span>
+
+                    <span *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_TYPEE|9')!= undefined">
+                        <br> 4- حساب " {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_TYPEE|9')?.value}}
+                        " برقم {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_NUMBERR|10')?.value}}
+                    </span>
+
+                    <span *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_TYPEE|11')!= undefined">
+                        <br> 5- حساب "
+                        {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_TYPEE|11')?.value}} " برقم
+                        {{genericFormService.GetControl(genericFormService.prePrintForm,'ACCOUNT_NUMBERR|12')?.value}}
+                    </span>
+                </span>
+                <span *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'HAVE_NOT_HAVE|2')?.value != 'لديه'">
+                    حسابات بالهيئة القومية للبريد
+                </span>
+            </span>
+
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن رصيد حساب'">، إقفال
+                اليوم السابق وذلك من واقع النظام الآلي.</span>
+
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حسابات'"> - 
+                وذلك من واقع النظام الآلي.</span>
+
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'INQUIRY_TYPE') == 'إستعلام عن حوالات'">
+                <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'JUDICIAL_AUTHORITY_NAME').length==0">تنفيذاً
+                    لطلب العميل.
+                </span>
+                <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'JUDICIAL_AUTHORITY_NAME').length>0">تنفيذاً
+                    لطلب المحكمة
+                    الموقره. </span>
+            </span>
+
+            <!-- شهادة بريدية -->
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_TYPE') == 'POS'">بأنه بالبحث بسجلات
+                الإدارة عن المادة البريدية المستعلم عنها المودعة بتاريخ
+<span                                                                                                                   
+                    *ngIf="!genericFormService.GetControl(genericFormService.prePrintForm,'RESULT_DETAILS|5')">{{conditionalDate.transform(genericFormService.GetControl(genericFormService.prePrintForm,'ENTRY_DATE|2')?.value,'short')}}</span>
+                <span
+                    *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'RESULT_DETAILS|5')">{{conditionalDate.transform(genericFormService.GetControl(genericFormService.prePrintForm,'ENTRY_DATE|3')?.value,'short')}}</span>
+                باركود رقم /
+                {{genericFormService.getRequesterFieldTxt(formData,'BARCODE')}} تبين مايلي:-
+                <br>
+                <textarea class="textarea-class"
+                    *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'INQUIRY_STATUS|3')" [rows]="5"
+                    [cols]="genericFormService.GetPropertyValue('RESULT_DETAILS','width') | slice:0:-3"
+                    [value]="genericFormService.GetControl(genericFormService.prePrintForm,'RESULT_DETAILS|4')?.value">
+              </textarea>
+
+                <textarea class="textarea-class" 
+                    *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'INQUIRY_STATUS|4')" [rows]="5"
+                    [cols]="genericFormService.GetPropertyValue('RESULT_DETAILS','width') | slice:0:-3"
+                    [value]="genericFormService.GetControl(genericFormService.prePrintForm,'RESULT_DETAILS|5')?.value">
+        </textarea>
+            </span>
+
+            <!-- شهادة حكومية -->
+            <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_TYPE') == 'GOV'">بأن
+                ترفق لسيادتكم بيان ب<span
+                    *ngIf="genericFormService.getRequesterFieldTxt(formData,'SERVICE_TYPE')=='مدفوعات اسكان'">مدفوعات
+                    الإسكان</span><span
+                    *ngIf="genericFormService.getRequesterFieldTxt(formData,'SERVICE_TYPE')=='مدفوعات تعليم'">مدفوعات
+                    التعليم</span>
+                المطلوبة للمذكور<span
+                    *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value == 'السيده'">ة</span>
+                بعالية تنفيذا لطلب العميل<span
+                    *ngIf="genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value == 'السيده'">ة</span>.
+            </span>
+        </h4>
+    </div>
+    <div class="footer-section">
+        <app-footer [rightString]="'موظف خدمة العملاء'" [middleString]="'مدير إدارة خدمة العملاء'"
+            [leftString]="'مدير عام'" [stamptring]="'ختم الشعار'"></app-footer>
+    </div>
+</div>

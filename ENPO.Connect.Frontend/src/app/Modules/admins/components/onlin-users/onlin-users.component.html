@@ -1,0 +1,279 @@
+<!-- Header Section with Enhanced Design -->
+<div class="online-users-container">
+  <div class="header-section animate-fadeIn">
+    <div class="title-wrapper">
+      <div class="title-icon">
+        <i class="pi pi-users pulse-animation"></i>
+      </div>
+      <h2 class="page-title">Online Users Management</h2>
+      <div class="connection-status" [ngClass]="getConnectionStatusClass()">
+        <i class="pi pi-circle-fill status-indicator"></i>
+        <span>{{ getConnectionStatusText() }}</span>
+      </div>
+    </div>
+    
+    <!-- Statistics Cards -->
+    <div class="stats-container animate-slideUp">
+      <div class="stat-card gradient-blue">
+        <div class="stat-icon">
+          <i class="pi pi-users"></i>
+        </div>
+        <div class="stat-info">
+          <div class="stat-number counter-animation">{{ signalRService.onlineUsers.length }}</div>
+          <div class="stat-label">Total Online</div>
+        </div>
+      </div>
+      
+      <div class="stat-card gradient-green" 
+           [pTooltip]="getMostCommonApplication().name + ' has the most users (' + getMostCommonApplication().count + ')'"
+           tooltipPosition="top">
+        <div class="stat-icon">
+          <i class="pi pi-desktop"></i>
+        </div>
+        <div class="stat-info">
+          <div class="stat-number counter-animation">{{ getMostCommonApplication().count }}</div>
+          <div class="stat-label">{{ getMostCommonApplication().name }} Users</div>
+        </div>
+      </div>
+      
+      <div class="stat-card gradient-purple"
+           [pTooltip]="getUniqueApplicationsCount() + ' different applications in use'"
+           tooltipPosition="top">
+        <div class="stat-icon">
+          <i class="pi pi-sitemap"></i>
+        </div>
+        <div class="stat-info">
+          <div class="stat-number counter-animation">{{ getUniqueApplicationsCount() }}</div>
+          <div class="stat-label">Active Apps</div>
+        </div>
+      </div>
+      
+      <div class="stat-card gradient-orange"
+           [pTooltip]="getApplicationBreakdownTooltip()"
+           tooltipPosition="top">
+        <div class="stat-icon">
+          <i class="pi pi-list"></i>
+        </div>
+        <div class="stat-info">
+          <div class="stat-value" style="font-size: 0.8rem; line-height: 1.2;">{{ getFormattedApplicationCounts() }}</div>
+          <div class="stat-label">App Distribution</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="action-buttons animate-slideUp">
+      <p-button 
+        label="Refresh Users" 
+        icon="pi pi-refresh" 
+        [outlined]="true"
+        class="mr-2"
+        (onClick)="testSubscription()"
+        [loading]="isRefreshing">
+      </p-button>
+      
+      <p-button 
+        label="Export Data" 
+        icon="pi pi-download" 
+        severity="success"
+        [outlined]="true"
+        class="mr-2"
+        (onClick)="exportUsers()">
+      </p-button>
+      
+      <p-button 
+        label="Send Broadcast" 
+        icon="pi pi-megaphone" 
+        severity="warning"
+        [outlined]="true"
+        (onClick)="sendBroadcastMessage()">
+      </p-button>
+    </div>
+  </div>
+  
+  <!-- Table Section with Enhanced Container -->
+  <div class="table-section animate-fadeIn">
+    <div class="table-wrapper">
+      <div class="table-header">
+        <h4 class="table-title">
+          <i class="pi pi-table mr-2"></i>
+          Active Users Table
+        </h4>
+        <div class="table-actions">
+          <p-button 
+            icon="pi pi-filter" 
+            [text]="true" 
+            [rounded]="true"
+            pTooltip="Advanced Filters"
+            tooltipPosition="top">
+          </p-button>
+        </div>
+      </div>
+      
+      <generic-table 
+        tableId="itemTable" 
+        [tableGenericData]="itemData" 
+        [_columns]="item_columns" 
+        [showExportButton]="true"
+        [showRemoveColumn]="true" 
+        [showColumnFilter]="true" 
+        [showFieldSort]="true" 
+        [showTableContextMenu]="true" 
+        [contextMenuItems]="contextMenuItems"
+        [dataKey]="'uniqId'" 
+        (rowSelect)="onselectItemEvent($event)" 
+        [showEditButton]="false" 
+        [showDeleteButton]="false" 
+        (contextMenuItemSelected)="ContextMenuSelect($event)"
+        class="enhanced-table">
+      </generic-table>
+    </div>
+  </div>
+</div>
+
+<!-- Enhanced User Details Dialog -->
+<p-dialog 
+    header="User Details" 
+    [(visible)]="displayUserDetailsDialog" 
+    [modal]="true" 
+    [closable]="true"
+    [draggable]="true"
+    [resizable]="true"
+    [style]="{width: '55rem', minHeight: '500px'}"
+    [showHeader]="true"
+    styleClass="enhanced-dialog"
+    (onHide)="closeUserDetailsDialog()">
+    
+    <ng-template pTemplate="header">
+        <div class="dialog-header-content">
+            <div class="dialog-title-section">
+                <i class="pi pi-user-edit dialog-icon"></i>
+                <span class="dialog-title">User Details & Management</span>
+            </div>
+            <div class="user-status-badge" *ngIf="selectedUserDetails" 
+                 [ngClass]="selectedUserDetails.status ? 'online' : 'offline'">
+                <i class="pi pi-circle-fill"></i>
+                {{ selectedUserDetails.status ? 'Online' : 'Offline' }}
+            </div>
+        </div>
+    </ng-template>
+    
+    <div *ngIf="selectedUserDetails" class="user-details-container">
+        <!-- User Avatar Section -->
+        <div class="user-avatar-section">
+            <div class="avatar-wrapper">
+                <div class="user-avatar">
+                    <i class="pi pi-user"></i>
+                </div>
+                <div class="online-indicator" *ngIf="selectedUserDetails.status">
+                    <i class="pi pi-circle-fill"></i>
+                </div>
+            </div>
+            <div class="user-basic-info">
+                <h4 class="user-name">{{ selectedUserDetails.userName || selectedUserDetails.userId }}</h4>
+                <p class="user-id">ID: {{ selectedUserDetails.userId }}</p>
+            </div>
+        </div>
+        
+        <!-- User Information Cards -->
+        <div class="user-info-cards">
+            <div class="info-card" *ngFor="let key of getFilteredColumns(); let i = index" 
+                 [class.animate-slideIn]="true" 
+                 [style.animation-delay]="(i * 0.1) + 's'">
+                <div class="info-card-header">
+                    <i class="pi" [ngClass]="getFieldIcon(key)"></i>
+                    <span class="info-label">{{ getFieldLabel(key) }}</span>
+                </div>
+                <div class="info-card-content">
+                    <span *ngIf="key === 'connectionTime' || key === 'lastActivity' || key === 'lastSeen'; else normalValue" 
+                          class="date-value">
+                        <i class="pi pi-calendar mr-1"></i>
+                        {{ $any(selectedUserDetails)[key] | date:'short' }}
+                    </span>
+                    <ng-template #normalValue>
+                        <span *ngIf="key === 'isOnline'; else textValue" class="status-value">
+                            <i class="pi" [ngClass]="$any(selectedUserDetails)[key] ? 'pi-check-circle text-success' : 'pi-times-circle text-danger'"></i>
+                            {{ $any(selectedUserDetails)[key] ? 'Online' : 'Offline' }}
+                        </span>
+                        <ng-template #textValue>
+                            <span class="text-value">{{ $any(selectedUserDetails)[key] || 'N/A' }}</span>
+                        </ng-template>
+                    </ng-template>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Activity Timeline -->
+        <div class="activity-section" *ngIf="selectedUserDetails.status">
+            <h5 class="section-title">
+                <i class="pi pi-clock mr-2"></i>
+                Recent Activity
+            </h5>
+            <div class="activity-item">
+                <div class="activity-icon">
+                    <i class="pi pi-history"></i>
+                </div>
+                <div class="activity-content">
+                    <!-- <span class="activity-text">Last seen: {{ selectedUserDetails.status| date:'medium' }}</span> -->
+                    <span class="activity-time">{{ getRelativeTime(selectedUserDetails.status) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <ng-template pTemplate="footer">
+        <div class="dialog-footer-actions">
+            <div class="primary-actions">
+                <p-button 
+                    label="Send Message" 
+                    icon="pi pi-envelope" 
+                    severity="success"
+                    [outlined]="true"
+                    class="footer-btn"
+                    (onClick)="sendMessage($event)">
+                </p-button>
+                <p-button 
+                    label="Send Notification" 
+                    icon="pi pi-bell" 
+                    severity="info"
+                    [outlined]="true"
+                    class="footer-btn"
+                    (onClick)="sendNotification($event)">
+                </p-button>
+                <p-button 
+                    label="Copy ID" 
+                    icon="pi pi-copy" 
+                    severity="secondary"
+                    [outlined]="true"
+                    class="footer-btn"
+                    (onClick)="copyUserId($event)">
+                </p-button>
+            </div>
+            <div class="secondary-actions">
+                <p-button 
+                    label="Disconnect" 
+                    icon="pi pi-power-off" 
+                    severity="danger"
+                    [outlined]="true"
+                    class="footer-btn danger"
+                    (onClick)="disconnectUser($event)">
+                </p-button>
+                <p-button 
+                    label="Close" 
+                    icon="pi pi-times" 
+                    severity="secondary"
+                    class="footer-btn"
+                    (onClick)="closeUserDetailsDialog()">
+                </p-button>
+            </div>
+        </div>
+    </ng-template>
+</p-dialog>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" *ngIf="isRefreshing">
+    <div class="loading-content">
+        <p-progressSpinner strokeWidth="3" animationDuration="1s"></p-progressSpinner>
+        <p class="loading-text">Refreshing user data...</p>
+    </div>
+</div>

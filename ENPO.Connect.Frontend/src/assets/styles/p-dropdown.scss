@@ -1,0 +1,158 @@
+/* ================================================================
+   PrimeNG p-dropdown — Modern, Smart Design
+   ================================================================ */
+
+.p-dropdown {
+    display: inline-flex;
+    cursor: pointer;
+    position: relative;
+    -webkit-user-select: none;
+    user-select: none;
+    width: 100%;
+    margin: 0;
+    border-radius: 0.75rem;
+    border: 1.5px solid var(--app-border, #e2e8f0);
+    background: var(--app-surface, #ffffff);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.p-dropdown:hover:not(.p-disabled) {
+    border-color: var(--app-primary, #4f46e5);
+}
+
+.p-dropdown.p-focus {
+    border-color: var(--app-primary, #4f46e5);
+    box-shadow: 0 0 0 3px var(--app-primary-light, rgba(79, 70, 229, 0.08));
+}
+
+/* Disabled dropdowns — rely on PrimeNG's native [disabled] binding
+   which adds .p-disabled automatically. No pointer-events hack needed. */
+.p-dropdown.p-disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background-color: var(--app-surface-hover, #f1f5f9);
+}
+
+.p-dropdown.p-disabled .p-dropdown-label,
+.p-dropdown.p-disabled .p-dropdown-trigger {
+    color: var(--app-text-muted, #94a3b8);
+}
+
+.p-dropdown-filter-container {
+    position: relative;
+    padding: 0 1rem;
+}
+
+.p-dropdown-panel .p-dropdown-header .p-dropdown-filter {
+    margin-right: 0;
+    text-align: right;
+    border-radius: 0.5rem;
+    border: 1.5px solid var(--app-border, #e2e8f0);
+    transition: border-color 0.2s ease;
+}
+
+.p-dropdown-panel .p-dropdown-header .p-dropdown-filter:focus {
+    border-color: var(--app-primary, #4f46e5);
+    box-shadow: 0 0 0 2px var(--app-primary-light, rgba(79, 70, 229, 0.08));
+}
+
+.p-dropdown-panel .p-dropdown-header .p-dropdown-filter-icon {
+    color: var(--app-text-secondary, #64748b);
+    margin-right: .8rem;
+}
+
+.p-dropdown .p-dropdown-trigger .p-dropdown-trigger-icon {
+    display: inline-block;
+    width: 1.25rem;
+    height: 1.25rem;
+    vertical-align: middle;
+    line-height: 0;
+    font-size: 0;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    color: var(--app-text-secondary, #6b7280);
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.p-dropdown:hover:not(.p-disabled) .p-dropdown-trigger .p-dropdown-trigger-icon,
+.p-dropdown.p-focus .p-dropdown-trigger .p-dropdown-trigger-icon {
+    color: var(--app-primary, #4f46e5);
+}
+
+.p-dropdown .p-dropdown-clear-icon {
+    color: var(--app-text-muted, #6c757d);
+    right: 0.357rem;
+}
+
+.p-dropdown-panel {
+    border-radius: 0.75rem;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.10), 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--app-border-light, #f1f5f9);
+    overflow: hidden;
+    animation: dropdownSlideIn 0.18s ease-out;
+}
+
+@keyframes dropdownSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.p-dropdown-panel .p-dropdown-header {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--app-border-light, #f1f5f9);
+    color: var(--app-text-primary, #495057);
+    background: var(--app-surface-secondary, #f8fafc);
+    margin: 0;
+    border-radius: 0.75rem 0.75rem 0 0;
+}
+
+.p-dropdown-items-wrapper {
+    overflow: auto;
+    text-align: right;
+}
+
+/* Individual items */
+.p-dropdown-panel .p-dropdown-items .p-dropdown-item {
+    padding: 0.65rem 1rem;
+    border-radius: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    font-size: 0.95rem;
+}
+
+.p-dropdown-panel .p-dropdown-items .p-dropdown-item:not(.p-highlight):not(.p-disabled):hover {
+    background: var(--app-primary-light, rgba(79, 70, 229, 0.06));
+    color: var(--app-primary, #4f46e5);
+}
+
+.p-dropdown-panel .p-dropdown-items .p-dropdown-item.p-highlight {
+    background: var(--app-primary-light, rgba(79, 70, 229, 0.1));
+    color: var(--app-primary, #4f46e5);
+    font-weight: 600;
+}
+
+/* Empty message */
+.p-dropdown-panel .p-dropdown-items .p-dropdown-empty-message {
+    padding: 1.5rem 1rem;
+    text-align: center;
+    color: var(--app-text-muted, #94a3b8);
+    font-size: 0.9rem;
+}
+
+.p-dropdown.rtl-dropdown {
+    direction: rtl;
+    text-align: right;
+}
+
+.rtl .p-dropdown-panel,
+.p-dropdown-panel.rtl-dropdown,
+.p-dropdown.rtl-dropdown .p-dropdown-panel {
+    direction: rtl;
+    text-align: right;
+}

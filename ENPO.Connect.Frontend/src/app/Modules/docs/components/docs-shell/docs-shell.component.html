@@ -1,0 +1,33 @@
+<link rel="stylesheet" href="/assets/docs/styles.css">
+
+<div class="docs-shell" [attr.dir]="languageDir">
+  <!-- <header class="docs-topbar">
+    <button class="icon-btn" type="button" (click)="toggleSidebar()" aria-label="Toggle sidebar">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <div class="brand">
+      <div class="brand-title">Connect App. Documentation</div>
+      <div class="brand-subtitle">ENPO Connect</div>
+    </div>
+    <div class="topbar-spacer"></div>
+  </header> -->
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" [class.open]="mobileSidebarOpen">
+      <app-docs-sidebar
+        [languages]="languages"
+        [pages]="pages"
+        [currentLang]="currentLang"
+        [currentPageId]="currentPageId"
+        (langChange)="onChangeLang($event)"
+        (pageSelect)="onSelectPage($event)">
+      </app-docs-sidebar>
+    </aside>
+
+    <main class="docs-content">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+</div>

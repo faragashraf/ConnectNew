@@ -1,0 +1,71 @@
+{
+  "defaultLang": "en",
+  "languages": [
+    { "code": "en", "label": "English", "dir": "ltr" },
+    { "code": "ar", "label": "العربية", "dir": "rtl" }
+  ],
+  "pages": [
+    {
+      "id": "readme",
+      "label": { "en": "Overview", "ar": "نظرة عامة" },
+      "file": { "en": "en/README.md", "ar": "ar/README.md" }
+    },
+    {
+      "id": "chart-config-manager",
+      "label": { "en": "Chart Config Manager", "ar": "مدير إعدادات الرسوم" },
+      "file": { "en": "en/chart-config-manager.md", "ar": "ar/chart-config-manager.md" }
+    },
+    {
+      "id": "component-config-manager",
+      "label": { "en": "Component Config Manager", "ar": "مدير إعدادات المكونات" },
+      "file": { "en": "en/component-config-manager.md", "ar": "ar/component-config-manager.md" }
+    },
+    {
+      "id": "dto-renderer",
+      "label": { "en": "DTO Renderer", "ar": "مكوّن DTO Renderer" },
+      "file": { "en": "en/dto-renderer.md", "ar": "ar/dto-renderer.md" }
+    },
+    {
+      "id": "dynamic-fields-manager",
+      "label": { "en": "Dynamic Fields Manager", "ar": "مدير الحقول الديناميكية" },
+      "file": { "en": "en/dynamic-fields-manager.md", "ar": "ar/dynamic-fields-manager.md" }
+    },
+    {
+      "id": "nswag-editor",
+      "label": { "en": "NSwag Editor", "ar": "محرر NSwag" },
+      "file": { "en": "en/nswag-editor.md", "ar": "ar/nswag-editor.md" }
+    },
+    {
+      "id": "process-requests-populate",
+      "label": { "en": "Process Requests & Populate", "ar": "شرح Process Requests & Populate" },
+      "file": {
+        "en": "en/processRequestsAndPopulate-explained-en.md",
+        "ar": "ar/processRequestsAndPopulate-explained-ar.md"
+      }
+    },
+    {
+      "id": "process-requests-snippets",
+      "label": { "en": "Process Requests Snippets", "ar": "مقتطفات المعالجة" },
+      "file": {
+        "en": "en/processRequestsAndPopulate-snippets.md",
+        "ar": "en/processRequestsAndPopulate-snippets.md"
+      }
+    },
+    {
+      "id": "routing-func-changes",
+      "label": { "en": "Routing Function Changes", "ar": "تغييرات وظائف التوجيه" },
+      "file": {
+        "en": "en/routing-func-changes.md",
+        "ar": "en/routing-func-changes.md"
+      }
+    },
+    {
+      "id": "msgs-service-migration",
+      "label": { "en": "Msgs Service Migration", "ar": "ترحيل خدمة الرسائل" },
+      "file": {
+        "en": "en/msgs-service-migration-plan.md",
+        "ar": "en/msgs-service-migration-plan.md"
+      }
+    }
+  ]
+}

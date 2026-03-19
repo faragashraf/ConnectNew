@@ -1,0 +1,2921 @@
+[
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "administrativeCertificateController.getAllRequests",
+        "args": [
+          {
+            "pageNumber": 1,
+            "pageSize": 5,
+            "status": 5,
+            "categoryCd": 0,
+            "type": 1,
+            "requestedData": 0,
+            "search": {
+              "isSearch": false,
+              "searchKind": 0,
+              "searchField": "",
+              "searchText": "",
+              "searchType": ""
+            }
+          }
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.messageDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ]
+      },
+      {
+        "method": "powerBiController.getGenericDataById",
+        "args": [
+          37,
+          "this.userId"
+        ],
+        "requestsSelectionFields": [
+          "nextResponsibleSectorID"
+        ],
+        "arrName": "this.admCertDeptDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "UNIT_ID",
+          "PARENT_ID",
+          "UNIT_NAME",
+          "unitTree",
+          true,
+          false
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".png",
+        ".jpg",
+        ".pdf"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 0,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "allowStatusChange": true,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [
+      {
+        "label": "جديد",
+        "value": 0
+      },
+      {
+        "label": "جاري التنفيذ",
+        "value": 1
+      },
+      {
+        "label": "تم الرد",
+        "value": 2
+      },
+      {
+        "label": "مرفوض",
+        "value": 3
+      },
+      {
+        "label": "تمت الطباعة",
+        "value": 4
+      }
+    ],
+    "pageSizes": [
+      5,
+      10
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [],
+    "maximumFileSize": 2,
+    "routeKey": "AdminCer/AreaRequests",
+    "componentTitle": "الطلبات الواردة من المكاتب",
+    "genericFormName": "ADMIN CER",
+    "menuId": 1,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 1,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [
+      "messageId",
+      "requestRef",
+      "categoryCd",
+      "inquiryType",
+      "status"
+    ],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": "وسط و شمال القاهرة - خدمة العملاء"
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": true,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": true,
+      "sticky": true
+    },
+    "deadStatus": [
+      3,
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [
+      {
+        "header": "رقم الشهادة",
+        "field": "requestRef",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "نوع الشهادة",
+        "field": "categoryCd",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "حالة الشهادة",
+        "field": "status",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": true
+      },
+      {
+        "header": "تاريخ الإنشاء",
+        "field": "createdDate",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "صفة طالب الشهادة",
+        "field": "REQUSTER_NAME",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "طبيعة طالب الشهادة",
+        "field": "REQUSTER_NATURE",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      }
+    ],
+    "unitId": []
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "administrativeCertificateController.getAllRequests",
+        "args": [
+          {
+            "pageNumber": 1,
+            "pageSize": 5,
+            "status": 5,
+            "categoryCd": 0,
+            "type": 1,
+            "requestedData": 1,
+            "search": {
+              "isSearch": false,
+              "searchKind": 0,
+              "searchField": "",
+              "searchText": "",
+              "searchType": ""
+            }
+          }
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.messageDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".png",
+        ".jpg",
+        ".pdf"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 0,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": true,
+    "statusChangeOptions": [
+      {
+        "label": "جديد",
+        "value": 0
+      },
+      {
+        "label": "جاري التنفيذ",
+        "value": 1
+      },
+      {
+        "label": "تم الرد",
+        "value": 2
+      },
+      {
+        "label": "مرفوض",
+        "value": 3
+      },
+      {
+        "label": "تمت الطباعة",
+        "value": 4
+      }
+    ],
+    "pageSizes": [
+      5,
+      10,
+      25,
+      50,
+      100
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [],
+    "maximumFileSize": 2,
+    "routeKey": "AdminCer/MyInbox",
+    "componentTitle": "صندوق الوارد الخاص بي",
+    "genericFormName": "ADMIN CER",
+    "menuId": 1,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 1,
+      "requestedData": 1,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [
+      "messageId",
+      "requestRef",
+      "categoryCd",
+      "inquiryType",
+      "status",
+      "createdDate"
+    ],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": true,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": "2025-12-26T12:45:55.304Z",
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": false,
+      "sticky": false
+    },
+    "deadStatus": [
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [
+      {
+        "header": "رقم الشهادة",
+        "field": "requestRef",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "نوع الشهادة",
+        "field": "categoryCd",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "حالة الشهادة",
+        "field": "status",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": true
+      },
+      {
+        "header": "تاريخ الإنشاء",
+        "field": "createdDate",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "صفة طالب الشهادة",
+        "field": "REQUSTER_NAME",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "طبيعة طالب الشهادة",
+        "field": "REQUSTER_NATURE",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      }
+    ],
+    "unitId": []
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "administrativeCertificateController.getAllRequests",
+        "args": [
+          {
+            "pageNumber": 1,
+            "pageSize": 5,
+            "status": 5,
+            "categoryCd": 0,
+            "type": 1,
+            "requestedData": 2,
+            "search": {
+              "isSearch": false,
+              "searchKind": 0,
+              "searchField": "",
+              "searchText": "",
+              "searchType": ""
+            }
+          }
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.messageDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".png",
+        ".jpg",
+        ".pdf"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 0,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [
+      {
+        "label": "جديد",
+        "value": 0
+      },
+      {
+        "label": "جاري التنفيذ",
+        "value": 1
+      },
+      {
+        "label": "تم الرد",
+        "value": 2
+      },
+      {
+        "label": "مرفوض",
+        "value": 3
+      },
+      {
+        "label": "تمت الطباعة",
+        "value": 4
+      }
+    ],
+    "pageSizes": [
+      5,
+      10,
+      25,
+      50,
+      100
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [],
+    "maximumFileSize": 2,
+    "routeKey": "AdminCer/MyOutbox",
+    "componentTitle": "صندوق الصادر الخاص بي",
+    "genericFormName": "ADMIN CER",
+    "menuId": 1,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 1,
+      "requestedData": 2,
+      "search": {
+        "isSearch": false,
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [
+      "messageId",
+      "requestRef",
+      "categoryCd",
+      "inquiryType",
+      "status",
+      "createdDate"
+    ],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": ""
+    },
+    "deadStatus": [
+      4
+    ],
+    "fieldsConfiguration": {
+      "isDivDisabled": true,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": "2025-12-26T12:45:55.304Z",
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "sticky": false
+    },
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [
+      {
+        "header": "رقم الشهادة",
+        "field": "requestRef",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "نوع الشهادة",
+        "field": "categoryCd",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "حالة الشهادة",
+        "field": "status",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": true
+      },
+      {
+        "header": "تاريخ الإنشاء",
+        "field": "createdDate",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "صفة طالب الشهادة",
+        "field": "REQUSTER_NAME",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "طبيعة طالب الشهادة",
+        "field": "REQUSTER_NATURE",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      }
+    ],
+    "unitId": []
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "administrativeCertificateController.getAllRequests",
+        "args": [
+          {
+            "pageNumber": 1,
+            "pageSize": 5,
+            "status": 5,
+            "categoryCd": 0,
+            "type": 1,
+            "requestedData": 0,
+            "search": {
+              "isSearch": false,
+              "searchKind": 0,
+              "searchField": "",
+              "searchText": "",
+              "searchType": ""
+            }
+          }
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.messageDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrValue": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrValue": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrValue": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ],
+        "arrValue": []
+      },
+      {
+        "method": "powerBiController.getGenericDataById",
+        "args": [
+          37,
+          "0"
+        ],
+        "requestsSelectionFields": [
+          "nextResponsibleSectorID"
+        ],
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "UNIT_ID",
+          "PARENT_ID",
+          "UNIT_NAME",
+          "unitTree",
+          true,
+          false
+        ],
+        "arrName": "this.admCertDeptDtos"
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".png",
+        ".jpg",
+        ".pdf"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 0,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [
+      5,
+      10,
+      25,
+      50,
+      100
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [],
+    "maximumFileSize": 2,
+    "routeKey": "AdminCer/Global",
+    "componentTitle": "جميع الطلبات",
+    "genericFormName": "ADMIN CER",
+    "menuId": 1,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 1,
+      "requestedData": 3,
+      "search": {
+        "isSearch": false,
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [
+      "messageId",
+      "requestRef",
+      "categoryCd",
+      "inquiryType",
+      "status",
+      "createdDate"
+    ],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": true,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": "2025-12-26T12:45:55.304Z",
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "sticky": false
+    },
+    "deadStatus": [
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [
+      {
+        "header": "رقم الشهادة",
+        "field": "requestRef",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "نوع الشهادة",
+        "field": "categoryCd",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "حالة الشهادة",
+        "field": "status",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": true
+      },
+      {
+        "header": "تاريخ الإنشاء",
+        "field": "createdDate",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "صفة طالب الشهادة",
+        "field": "REQUSTER_NAME",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "طبيعة طالب الشهادة",
+        "field": "REQUSTER_NATURE",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      }
+    ],
+    "unitId": []
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "بحث",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "fullscreen",
+    "requestsarray": [
+      {
+        "method": "publicationsController.getCriteria",
+        "args": [
+          "Districts"
+        ],
+        "requestsSelectionFields": [
+          "DISTRICT_ID"
+        ],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": ""
+      },
+      {
+        "method": "publicationsController.getCriteria",
+        "args": [
+          "PublicationTypes"
+        ],
+        "requestsSelectionFields": [
+          "PUBLICATION_TYPE_ID"
+        ],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": ""
+      },
+      {
+        "method": "publicationsController.getDocumentsList_user",
+        "args": [
+          1,
+          5,
+          [
+            {}
+          ]
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": true,
+        "populateMethod": "this.populatePublicationTable",
+        "populateArgs": [],
+        "arrName": "this.allPublications"
+      },
+      {
+        "method": "publicationsController.getMenuItems",
+        "args": [],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "MENU_ITEM_ID",
+          "PARENT_MENU_ITEM_ID",
+          "MENU_ITEM_NAME",
+          "tree",
+          true,
+          false
+        ],
+        "arrName": ""
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "PUBL"
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto"
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "PUBL"
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": "this.genericFormService.cdmendDto"
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "PUBL"
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ],
+        "arrName": "this.genericFormService.cdcategoryDtos"
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": false,
+      "AllowedExtensions": [],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 2,
+      "allowAdd": false,
+      "allowMultiple": false
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [
+      3,
+      5,
+      10,
+      25
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      },
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
+    "showAttachmentSection": false,
+    "AllowedExtensions": [],
+    "maximumFileSize": 2,
+    "routeKey": "Publications/mainLayOut",
+    "componentTitle": "بحث المنشورات",
+    "genericFormName": "PUBL",
+    "menuId": 139,
+    "selectedNodeKey": "139",
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 25,
+      "status": "All",
+      "categoryCd": 0,
+      "type": 0,
+      "requestedData": "inbox",
+      "search": {
+        "isSearch": false,
+        "searchKind": "NoSearch",
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": true,
+    "userConfiguration": {
+      "currentUser": "",
+      "currentUserName": "",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": "2025-12-26T00:00:00.000Z",
+      "useDefaultRadioView": false,
+      "isNotRequired": true,
+      "sticky": false
+    },
+    "deadStatus": [
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "tableFields": [],
+    "unitId": []
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "publicationsController.getAdminMenuItems",
+        "args": [
+          [
+            4,
+            5,
+            7,
+            8,
+            25,
+            51,
+            54,
+            70,
+            73
+          ]
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": true,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "MENU_ITEM_ID",
+          "PARENT_MENU_ITEM_ID",
+          "MENU_ITEM_NAME",
+          "tree",
+          true,
+          false
+        ],
+        "arrName": "this.genericFormService.cdcategoryDtos"
+      },
+      {
+        "method": "publicationsController.getCriteria",
+        "args": [
+          "Districts"
+        ],
+        "requestsSelectionFields": [
+          "DISTRICT_ID"
+        ],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": ""
+      },
+      {
+        "method": "publicationsController.getCriteria",
+        "args": [
+          "PublicationTypes"
+        ],
+        "requestsSelectionFields": [
+          "PUBLICATION_TYPE_ID"
+        ],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": ""
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "PUBL"
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto"
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "PUBL"
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": "this.genericFormService.cdmendDto"
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "PUBL"
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ],
+        "arrName": "this.genericFormService.cdcategoryDtos"
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".doc",
+        ".docx"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": true,
+      "maxFileCount": 2,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [
+      3
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 108,
+        "value": "المنشورات"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [
+      ".doc",
+      ".docx"
+    ],
+    "maximumFileSize": 2,
+    "routeKey": "Publications/AddNew",
+    "componentTitle": "أضافة منشور",
+    "genericFormName": "PUBL",
+    "menuId": 3,
+    "selectedNodeKey": "108",
+    "tableColumns": [],
+    "deadStatus": [],
+    "totalRecords": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 0,
+      "categoryCd": 0,
+      "type": 0,
+      "requestedData": 0,
+      "search": {
+        "isSearch": false,
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [
+      "messageId"
+    ],
+    "isNew": true,
+    "userConfiguration": {
+      "currentUser": "",
+      "currentUserName": "",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": null,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "sticky": false
+    },
+    "tableFields": [],
+    "unitId": []
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "publicationsController.getAdminMenuItems",
+        "args": [
+          [
+            4,
+            5,
+            7,
+            8,
+            25,
+            51,
+            54,
+            70,
+            73
+          ]
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": true,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "MENU_ITEM_ID",
+          "PARENT_MENU_ITEM_ID",
+          "MENU_ITEM_NAME",
+          "tree",
+          true,
+          false
+        ]
+      },
+      {
+        "method": "publicationsController.getCriteria",
+        "args": [
+          "Districts"
+        ],
+        "requestsSelectionFields": [
+          "DISTRICT_ID"
+        ],
+        "arrName": "",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "publicationsController.getCriteria",
+        "args": [
+          "PublicationTypes"
+        ],
+        "requestsSelectionFields": [
+          "PUBLICATION_TYPE_ID"
+        ],
+        "arrName": "",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "PUBL"
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto"
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "PUBL"
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "arrName": "this.genericFormService.cdmendDto"
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "PUBL"
+        ],
+        "requestsSelectionFields": [],
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ],
+        "arrName": "this.genericFormService.cdcategoryDtos"
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".pdf"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 2,
+      "allowAdd": false,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [
+      3
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 108,
+        "value": "المنشورات"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [
+      ".pdf"
+    ],
+    "maximumFileSize": 2,
+    "routeKey": "Publications/FullPublication",
+    "componentTitle": "تعديل منشور",
+    "genericFormName": "PUBL",
+    "menuId": 3,
+    "selectedNodeKey": "108",
+    "tableColumns": [],
+    "deadStatus": [],
+    "totalRecords": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 0,
+      "categoryCd": 0,
+      "type": 0,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [
+      "messageId"
+    ],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "",
+      "currentUserName": "",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": null,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": false,
+      "sticky": true
+    },
+    "tableFields": [],
+    "unitId": []
+  },
+  {
+    "showFormSignature": true,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "powerBiController.getGenericDataById",
+        "args": [
+          36,
+          "0"
+        ],
+        "requestsSelectionFields": [
+          "DOC_SOURCE",
+          "StockholderID"
+        ],
+        "arrName": "",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "UNIT_ID",
+          "PARENT_ID",
+          "UNIT_NAME",
+          "this.unitTree",
+          true,
+          true
+        ]
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          false,
+          true
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".doc",
+        ".pdf",
+        ".docx"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": true,
+      "maxFileCount": 2,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [
+      5,
+      10,
+      25
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
+    "showAttachmentSection": false,
+    "AllowedExtensions": [
+      ".doc",
+      ".pdf",
+      ".docx"
+    ],
+    "maximumFileSize": 2,
+    "routeKey": "TopManagement/AddSubject",
+    "componentTitle": "إضافة موضوع جديد",
+    "genericFormName": "",
+    "menuId": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 4,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": true,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "dateFormat": "yy/mm/dd",
+      "showTime": true,
+      "timeOnly": false,
+      "maxDate": "2026-01-10T21:22:44.786Z",
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": false,
+      "sticky": false
+    },
+    "deadStatus": [
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [],
+    "unitId": []
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "powerBiController.getGenericDataById",
+        "args": [
+          36,
+          "0"
+        ],
+        "requestsSelectionFields": [
+          "DOC_SOURCE",
+          "StockholderID"
+        ],
+        "arrName": "",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "UNIT_ID",
+          "PARENT_ID",
+          "UNIT_NAME",
+          "this.unitTree",
+          true,
+          true
+        ]
+      },
+      {
+        "method": "administrativeCertificateController.getAllRequests",
+        "args": [
+          {
+            "pageNumber": 1,
+            "pageSize": 5,
+            "status": 5,
+            "categoryCd": 0,
+            "type": "this.config.genericFormName",
+            "requestedData": 0,
+            "search": {
+              "isSearch": false,
+              "searchKind": 0,
+              "searchField": "",
+              "searchText": "",
+              "searchType": ""
+            }
+          }
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.messageDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".pdf",
+        ".doc"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": true,
+      "maxFileCount": 2,
+      "allowAdd": false,
+      "allowMultiple": false
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [
+      5,
+      10,
+      25,
+      50
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [
+      ".pdf",
+      ".doc"
+    ],
+    "maximumFileSize": 2,
+    "routeKey": "TopManagement/ShowSubjects",
+    "componentTitle": "موضوعات المكتب الفني",
+    "genericFormName": "",
+    "menuId": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 4,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [
+      "messageId",
+      "requestRef"
+    ],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": "وسط و شمال القاهرة - خدمة العملاء"
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": true,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": "2025-12-26T12:45:55.304Z",
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": true,
+      "sticky": true
+    },
+    "deadStatus": [
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [
+      {
+        "header": "الرقم المرجعي",
+        "field": "requestRef",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "نوع الموضوع",
+        "field": "categoryCd",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "الحالة",
+        "field": "status",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": true
+      },
+      {
+        "header": "تاريخ الإنشاء",
+        "field": "createdDate",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "عنوان الموضوع",
+        "field": "Subject",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "درجة الأهمية",
+        "field": "PRIORITY_LEVEL",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "يتطلب توقيعات",
+        "field": "RECEIPT_SIGNATURE",
+        "useRequester": true,
+        "width": "5",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      }
+    ],
+    "unitId": []
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "Submit",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "fullscreen",
+    "requestsarray": [],
+    "attachmentConfig": {
+      "showAttachmentSection": false,
+      "AllowedExtensions": [],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 2,
+      "allowAdd": false,
+      "allowMultiple": false
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      },
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
+    "routeKey": "TopManagement/Chart",
+    "componentTitle": "المكاتب الفنية - Dashboard",
+    "genericFormName": "TM",
+    "menuId": 0,
+    "unitId": [
+      0
+    ],
+    "selectedNodeKey": "",
+    "tableColumns": [],
+    "tableFields": [],
+    "deadStatus": [],
+    "totalRecords": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 0,
+      "categoryCd": 0,
+      "type": 0,
+      "requestedData": 0,
+      "search": {
+        "isSearch": false,
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "",
+      "currentUserName": "",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": null,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "sticky": false
+    }
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "Submit",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "fullscreen",
+    "requestsarray": [],
+    "attachmentConfig": {
+      "showAttachmentSection": false,
+      "AllowedExtensions": [],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 2,
+      "allowAdd": false,
+      "allowMultiple": false
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      },
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
+    "routeKey": "AdminCer/Chart",
+    "componentTitle": "الشهادات الإدارية - Dashboard",
+    "genericFormName": "AdminCertificates",
+    "menuId": 0,
+    "unitId": [
+      0
+    ],
+    "selectedNodeKey": "",
+    "tableColumns": [],
+    "tableFields": [],
+    "deadStatus": [],
+    "totalRecords": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 0,
+      "categoryCd": 0,
+      "type": 0,
+      "requestedData": 0,
+      "search": {
+        "isSearch": false,
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "",
+      "currentUserName": "",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": null,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "sticky": false
+    }
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "Submit",
+    "submissionLabel": "طلبك محل اهتمام وتقدير",
+    "showViewToggle": true,
+    "formDisplayOption": "fullscreen",
+    "requestsarray": [],
+    "attachmentConfig": {
+      "showAttachmentSection": false,
+      "AllowedExtensions": [],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 2,
+      "allowAdd": false,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [
+      5,
+      10,
+      25,
+      50,
+      100
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      },
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
+    "routeKey": "Admin/ServiceDashboard",
+    "componentTitle": "Service Dashboard",
+    "genericFormName": "ServicesDashboard",
+    "menuId": 0,
+    "unitId": [
+      0
+    ],
+    "selectedNodeKey": "",
+    "tableColumns": [],
+    "tableFields": [],
+    "deadStatus": [],
+    "totalRecords": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 0,
+      "categoryCd": 0,
+      "type": 0,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "",
+      "currentUserName": "",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": null,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": false,
+      "sticky": false
+    }
+  },
+  {
+    "showFormSignature": true,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "طلبك محل اهتمام وتقدير\nبرجاء إستيفاء إيصالات السداد في موعد أقصاه يومين عمل\nفي حالة عدم إستيفاء إيصالات السداد\nسيتم إلغاء الطلب بشكل تلقائي من خلال النظام\n\nمع تحيات الإدارة العامة للشئون المعنوية",
+    "showViewToggle": false,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          false,
+          true
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".pdf",
+        ".jpg",
+        ".png"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 0,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [],
+    "tkCategoryCds": [
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
+    "showAttachmentSection": false,
+    "AllowedExtensions": [
+      ".doc",
+      ".pdf",
+      ".docx"
+    ],
+    "maximumFileSize": 2,
+    "routeKey": "EmployeeRequests/SummerRequests",
+    "componentTitle": "تسجيل طلب جديد",
+    "genericFormName": "ENPO",
+    "menuId": 2,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 4,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": true,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": false,
+      "sticky": false
+    },
+    "deadStatus": [
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [],
+    "unitId": []
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": false,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "powerBiController.getGenericDataById",
+        "args": [
+          50,
+          0
+        ],
+        "requestsSelectionFields": [
+          "Summer_Destination"
+        ],
+        "arrName": "",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "powerBiController.getGenericDataById",
+        "args": [
+          52,
+          0
+        ],
+        "requestsSelectionFields": [
+          "FamilyCount"
+        ],
+        "arrName": "",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "administrativeCertificateController.getAllRequests",
+        "args": [
+          {
+            "pageNumber": 1,
+            "pageSize": 5,
+            "status": 5,
+            "categoryCd": 0,
+            "type": 2,
+            "requestedData": 0,
+            "search": {
+              "isSearch": false,
+              "searchKind": 0,
+              "searchField": "",
+              "searchText": "",
+              "searchType": ""
+            }
+          }
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.messageDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".pdf"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": true,
+      "maxFileCount": 2,
+      "allowAdd": false,
+      "allowMultiple": false
+    },
+    "allowStatusChange": true,
+    "allowDefaultNextResponsibleSectorID": true,
+    "statusChangeOptions": [
+      {
+        "label": "جديد",
+        "value": 0
+      },
+      {
+        "label": "مرفوض",
+        "value": 1
+      },
+      {
+        "label": "موافقة مبدئية",
+        "value": 2
+      },
+      {
+        "label": "تم الإستيفاء",
+        "value": 3
+      },
+      {
+        "label": "تمت الموافقة",
+        "value": 4
+      }
+    ],
+    "pageSizes": [
+      5,
+      10,
+      25
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 147,
+        "value": "مرسى مطروح"
+      },
+      {
+        "key": 148,
+        "value": "راس البر"
+      },
+      {
+        "key": 149,
+        "value": "بور فؤاد"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [
+      ".pdf",
+      ".doc"
+    ],
+    "maximumFileSize": 2,
+    "routeKey": "EmployeeRequests/Summer2026Management",
+    "componentTitle": "طلبات حجز مصيف 2026",
+    "genericFormName": "ENPO",
+    "menuId": 2,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 2,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": "وسط و شمال القاهرة - خدمة العملاء"
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": true,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": true,
+      "sticky": true
+    },
+    "deadStatus": [
+      1,
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [
+      {
+        "header": "الرقم المرجعي",
+        "field": "requestRef",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "نوع الطلب",
+        "field": "categoryCd",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "الحالة",
+        "field": "status",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": true
+      },
+      {
+        "header": "تاريخ الإنشاء",
+        "field": "createdDate",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "الوجهة",
+        "field": "Summer_Destination",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "الاسم",
+        "field": "Emp_Name",
+        "useRequester": true,
+        "width": "5",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "عدد الأفراد",
+        "field": "FamilyCount",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "الفوج",
+        "field": "SummerCamp",
+        "useRequester": true,
+        "width": "5",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      }
+    ],
+    "unitId": [
+      0
+    ]
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "Submit",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "fullscreen",
+    "requestsarray": [],
+    "attachmentConfig": {
+      "showAttachmentSection": false,
+      "AllowedExtensions": [],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 2,
+      "allowAdd": false,
+      "allowMultiple": false
+    },
+    "allowStatusChange": true,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      },
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
+    "routeKey": "EmployeeRequests/Chart",
+    "componentTitle": "طلبات المصايف - Dashboard",
+    "genericFormName": "ENPO",
+    "menuId": 0,
+    "unitId": [
+      0
+    ],
+    "selectedNodeKey": "",
+    "tableColumns": [],
+    "tableFields": [],
+    "deadStatus": [],
+    "totalRecords": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 0,
+      "categoryCd": 0,
+      "type": 0,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "",
+      "currentUserName": "",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": false,
+      "sticky": false
+    }
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "submissionLabel": "",
+    "showViewToggle": false,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "powerBiController.getGenericDataById",
+        "args": [
+          50,
+          0
+        ],
+        "requestsSelectionFields": [
+          "Summer_Destination"
+        ],
+        "arrName": "",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "powerBiController.getGenericDataById",
+        "args": [
+          52,
+          0
+        ],
+        "requestsSelectionFields": [
+          "FamilyCount"
+        ],
+        "arrName": "",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "administrativeCertificateController.getAllRequests",
+        "args": [
+          {
+            "pageNumber": 1,
+            "pageSize": 5,
+            "status": 5,
+            "categoryCd": 0,
+            "type": 2,
+            "requestedData": 2,
+            "search": {
+              "isSearch": false,
+              "searchKind": 0,
+              "searchField": "",
+              "searchText": "",
+              "searchType": ""
+            }
+          }
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.messageDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "this.config.genericFormName"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".pdf"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": true,
+      "maxFileCount": 2,
+      "allowAdd": false,
+      "allowMultiple": false
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": true,
+    "statusChangeOptions": [
+      {
+        "label": "جديد",
+        "value": 0
+      },
+      {
+        "label": "مرفوض",
+        "value": 1
+      },
+      {
+        "label": "موافقة مبدئية",
+        "value": 2
+      },
+      {
+        "label": "تم الإستيفاء",
+        "value": 3
+      },
+      {
+        "label": "تمت الموافقة",
+        "value": 4
+      }
+    ],
+    "pageSizes": [
+      5,
+      10
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 147,
+        "value": "مرسى مطروح"
+      },
+      {
+        "key": 148,
+        "value": "راس البر"
+      },
+      {
+        "key": 149,
+        "value": "بور فؤاد"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [
+      ".pdf",
+      ".doc"
+    ],
+    "maximumFileSize": 2,
+    "routeKey": "EmployeeRequests/MyRequests",
+    "componentTitle": "طلباتي",
+    "genericFormName": "ENPO",
+    "menuId": 2,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 2,
+      "requestedData": 2,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": "وسط و شمال القاهرة - خدمة العملاء"
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": true,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": true,
+      "sticky": true
+    },
+    "deadStatus": [
+      3,
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [
+      {
+        "header": "الرقم المرجعي",
+        "field": "requestRef",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "نوع الطلب",
+        "field": "categoryCd",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "الحالة",
+        "field": "status",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": true
+      },
+      {
+        "header": "تاريخ الإنشاء",
+        "field": "createdDate",
+        "useRequester": false,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "الوجهة",
+        "field": "Summer_Destination",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "الاسم",
+        "field": "Emp_Name",
+        "useRequester": true,
+        "width": "5",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "عدد الأفراد",
+        "field": "FamilyCount",
+        "useRequester": true,
+        "width": "15",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      },
+      {
+        "header": "الفوج",
+        "field": "SummerCamp",
+        "useRequester": true,
+        "width": "5",
+        "sortable": false,
+        "visible": true,
+        "renderAsStatus": false
+      }
+    ],
+    "unitId": [
+      0
+    ]
+  }
+]

@@ -1,0 +1,79 @@
+<div class="container-main" style="width: 100%;">
+    <div class="widget">
+        <div class="row" style="direction:rtl;font-family: 'Times New Roman', Times, serif; text-align: center;">
+            <div class="col-md-4"></div>
+            <div class="col-md-3">
+                <ngx-barcode [bc-value]="genericFormService.getRequesterFieldTxt(formData,'CERTIFICATE_BARCODE')" [bc-format]="'CODE128'"
+                    [bc-display-value]="true" [bc-height]="50" [bc-width]="1.2"></ngx-barcode>
+            </div>
+            <div class="col-md-4"></div>
+            <table style="width: 100%; border-collapse:collapse; margin: 5px 0; border: 1px solid #000;">
+                <tr>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                    </td>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        بيانات الراسل
+                    </td>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                    </td>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        بيانات المرسل إليه
+                    </td>
+
+                </tr>
+                <tr>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        اسم الجهة
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        منطقة {{formData.assignedSectorId}} 
+                    </td>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        اسم العميل </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        {{genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NAME')}}
+                    </td>
+
+                </tr>
+                <tr>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        المنطقة
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        {{genericFormService.getRequesterFieldTxt(formData,'CREATED_AREA')}}
+                    </td>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        العنوان
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: right;">
+                       <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'GOV_RATE')!= 'اختر'">{{genericFormService.getRequesterFieldTxt(formData,'GOV_RATE')}} -</span> <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'CITY')!= 'اختر'"> {{genericFormService.getRequesterFieldTxt(formData,'CITY')}} - <br></span>  {{genericFormService.getRequesterFieldTxt(formData,'ADDRESS')}}
+                    </td>
+                </tr>
+                <tr>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        التاريخ </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                           {{conditionalDate.transform(genericFormService.getRequesterFieldTxt(formData,'CREATED_DATE'), 'short')}}
+                    </td>
+                    <td
+                        style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        التليفون
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        {{genericFormService.getRequesterFieldTxt(formData,'REQUSTER_PHONE')}}
+                    </td>
+                </tr>
+            </table>
+
+        </div>
+    </div>
+</div>

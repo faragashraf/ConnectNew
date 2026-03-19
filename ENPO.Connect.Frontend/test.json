@@ -1,0 +1,78 @@
+[
+    {
+        "keyProp": "RESORT_CODE",
+        "nameProp": "Summer_Destination",
+        "items": [
+            {
+                "key": "بورفؤاد",
+                "name": "بورفؤاد"
+            },
+            {
+                "key": "راس البر",
+                "name": "راس البر"
+            },
+            {
+                "key": "مرسى مطروح",
+                "name": "مرسى مطروح"
+            }
+        ]
+    },
+    {
+        "keyProp": "VALUE",
+        "nameProp": "FamilyCount",
+        "items": [
+            {
+                "key": "4",
+                "name": "4"
+            },
+            {
+                "key": "6",
+                "name": "6"
+            },
+            {
+                "key": "7",
+                "name": "7"
+            }
+        ]
+    },
+    {
+        "keyProp": "VALUE",
+        "nameProp": "FamilyCount",
+        "items": [
+            {
+                "key": "2",
+                "name": "2"
+            },
+            {
+                "key": "4",
+                "name": "4"
+            },
+            {
+                "key": "6",
+                "name": "6"
+            }
+        ]
+    },
+    {
+        "keyProp": "VALUE",
+        "nameProp": "FamilyCount",
+        "items": [
+            {
+                "key": "5",
+                "name": "5"
+            },
+            {
+                "key": "6",
+                "name": "6"
+            },
+            {
+                "key": "8",
+                "name": "8"
+            },
+            {
+                "key": "9",
+                "name": "9"
+            }
+        ]
+    }
+]   

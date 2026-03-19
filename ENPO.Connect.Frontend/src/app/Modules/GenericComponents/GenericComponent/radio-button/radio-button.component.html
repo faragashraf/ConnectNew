@@ -1,0 +1,38 @@
+<ng-container *ngIf="!useDefaultRadioView; else defaultView">
+    <div class="toggle-group" [class.disabled]="isDivDisabled" role="radiogroup" [attr.aria-label]="controlFullName || 'options'">
+            <ng-container *ngFor="let category of categories; let i = index; let last = last; trackBy: trackByCategory">
+                    <label
+                            class="toggle-pill"
+                            role="radio"
+                            tabindex="0"
+                            [class.active]="control?.value === category.key"
+                            (click)="select(category.key, $event)"
+                            (keydown.enter)="select(category.key, $event)"
+                            (keydown.space)="select(category.key, $event)"
+                            [attr.aria-checked]="control?.value === category.key"
+                            [attr.aria-disabled]="isDivDisabled">
+                            <input type="radio" [value]="category.key" [formControl]="control" [id]="category.key" />
+                            <span class="pill-content" title="{{ category.name }}">
+                                    <span class="pill-label">{{ category.name }}</span>
+                                    <span class="pill-check" aria-hidden="true">✓</span>
+                            </span>
+                    </label>
+            </ng-container>
+    </div>
+</ng-container>
+
+<ng-template #defaultView>
+    <div class="radio-default-group" role="radiogroup" [attr.aria-label]="controlFullName || 'options'">
+        <ng-container *ngFor="let category of categories; let i = index; trackBy: trackByCategory">
+            <div class="radio-item" [class.disabled]="isDivDisabled">
+                <input
+                    type="radio"
+                    [id]="category.key"
+                    [value]="category.key"
+                    [formControl]="control"
+                    (change)="select(category.key, $event)" />
+                <label [for]="category.key">{{ category.name }}</label>
+            </div>
+        </ng-container>
+    </div>
+</ng-template>

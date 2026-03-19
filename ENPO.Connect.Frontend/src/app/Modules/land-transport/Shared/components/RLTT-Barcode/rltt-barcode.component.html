@@ -1,0 +1,72 @@
+<div class="container-main" style="width: 100%;">
+    <div class="widget">
+        <div class="row" style="direction:rtl;font-family: 'Times New Roman', Times, serif; text-align: center;">
+            <div class="col-md-4"></div>
+            <div class="col-md-3">
+                <ngx-barcode [bc-value]="vwLtraTransTraficPrint.rlttBarcode" [bc-format]="'CODE128'"
+                [bc-display-value]="true"></ngx-barcode>
+            </div>
+            <div class="col-md-4"></div>
+            <table style="width: 100%; border-collapse:collapse; margin: 5px 0; border: 1px solid #000;">
+                <tr>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+
+                    </td>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        بيانات الراسل
+                    </td>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+
+                    </td>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        بيانات المرسل إلية
+                    </td>
+
+                </tr>
+                <tr>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        الراسل
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        جهاز تنظيم التقل البري
+                    </td>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        المرسل إلية
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        {{vwLtraTransTraficPrint.trafficUnitId}}
+                    </td>
+
+                </tr>
+                <tr>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        العنوان
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        الحي الحكومي - العاصمة الإدارية - القاهرة
+                    </td>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        العنوان
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        {{vwLtraTransTraficPrint.trafficUnitId}} - {{
+                        vwLtraTransTraficPrint.governorateId}} </td>
+                </tr>
+                <tr>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        اسم الشركة
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        {{vwLtraTransTraficPrint.companyName}}
+                    </td>
+                    <td style="border-collapse:collapse; font-size: large;font-weight: bold; border: 1px solid #000;text-align: center;">
+                        التاريخ
+                    </td>
+                    <td style="border-collapse:collapse;  border: 1px solid #000;text-align: center;">
+                        {{vwLtraTransTraficPrint.transDate | date:'dd-MM-yyyy hh:mm:ss a'}} </td>
+                </tr>
+            </table>
+
+        </div>
+    </div>
+</div>

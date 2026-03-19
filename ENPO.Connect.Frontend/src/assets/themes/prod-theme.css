@@ -1,0 +1,4 @@
+/* Prod Theme specific variables if needed */
+:root[data-theme="prod"] {
+  --primary-color: #0056b3; /* Example */
+}

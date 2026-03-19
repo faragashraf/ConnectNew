@@ -1,0 +1,149 @@
+.mascot-overlay {
+    position: fixed;
+    z-index: 10000;
+    pointer-events: none; /* Allow clicks to pass through container */
+    width: 200px;
+    height: 200px;
+    display: block;
+
+    /* Default Hidden State */
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+    will-change: opacity, transform;
+
+    /* NOTE: transform is set via inline styles for positioning and global scale */
+
+    &.visible {
+        opacity: 1;
+    }
+
+    /* We can enhance entrance with a scale animation on the SVG itself */
+    .mascot-svg {
+        transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        transform: scale(0.5); /* Start small */
+        pointer-events: none; /* Mascot body does NOT block clicks */
+    }
+    
+    .envelope-text {
+        /* Text positioning logic */
+        position: absolute;
+        left: 77%; 
+        top: 91%; 
+        /* 
+           Combined transform: 
+           1. Start small (scale 0.5) 
+           2. Rotate -10deg 
+           3. Center (-50%, -50%)
+        */
+        transform: translate(-50%, -50%) rotate(-10deg) scale(0.5); 
+        
+        width: 60px;
+        font-family: "Traditional Arabic", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 9px;
+        font-weight: bold;
+        color: #333;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: normal;
+        direction: rtl;
+        pointer-events: none; /* Text does NOT block clicks */
+        text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+        z-index: 1; /* Above SVG */
+        white-space: nowrap;
+
+        transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    &.visible .mascot-svg {
+        transform: scale(1); /* Full size relative to container scale */
+    }
+    
+    &.visible .envelope-text {
+         transform: translate(-50%, -50%) rotate(-10deg) scale(1);
+    }
+
+    /* Close Button - refined */
+    .close-btn {
+        position: absolute;
+        top: -10px; 
+        right: 0px;
+        width: 32px; 
+        height: 32px;
+        background: #ffffff;
+        border: 2px solid #e0e0e0;
+        border-radius: 50%;
+        color: #555;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        z-index: 10002; /* Topmost */
+        
+        opacity: 1; /* Always visible if container is, but we can fade it in too */
+        pointer-events: auto; /* MUST be clickable */
+        transition: opacity 0.3s, transform 0.2s, background-color 0.2s;
+        
+        /* Ensure it's hidden if container is hidden, relying on parent opacity mostly */
+        
+        &:hover {
+            background-color: #ffebee;
+            color: #d32f2f;
+            border-color: #d32f2f;
+            transform: scale(1.1);
+        }
+
+        i {
+            font-size: 1rem;
+            font-weight: bold;
+        }
+    }
+}
+
+/* --- ANIMATIONS --- */
+.mascot-svg {
+    overflow: visible;
+
+    // Animations triggered when "isLooking" is true
+    .looking & {
+        .eyes {
+            animation: blink 2.5s infinite;
+        }
+        .arm-wave {
+            animation: wave 1.2s ease-in-out infinite;
+        }
+        .mascot-head-group {
+            animation: headTilt 1.5s ease-in-out infinite alternate;
+        }
+    }
+}
+
+@keyframes blink {
+    0%, 48%, 52%, 100% { transform: scaleY(1); }
+    50% { transform: scaleY(0.1); }
+}
+
+@keyframes wave {
+    0%, 100% { transform: rotate(0deg); transform-origin: 150px 150px; }
+    50% { transform: rotate(-15deg); transform-origin: 150px 150px; }
+}
+
+@keyframes headTilt {
+    from { transform: rotate(-3deg); transform-origin: 100px 90px; }
+    to { transform: rotate(3deg); transform-origin: 100px 90px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mascot-overlay {
+        transition: opacity 1s ease !important;
+        transform: none !important;
+        top: auto !important;
+        left: auto !important;
+        bottom: 2rem !important;
+        right: 2rem !important;
+        &.visible { opacity: 1 !important; transform: none !important; }
+    }
+    .mascot-svg * { animation: none !important; }
+}

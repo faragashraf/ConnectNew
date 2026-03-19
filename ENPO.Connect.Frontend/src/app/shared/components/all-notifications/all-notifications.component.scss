@@ -1,0 +1,17 @@
+:host ::ng-deep .p-dialog .p-dialog-header {
+  background: #1976d2;
+  color: #fff;
+}
+:host ::ng-deep .p-dialog .p-dialog-content {
+  background: #f9f9f9;
+}
+:host ::ng-deep .p-table {
+  margin-top: 1rem;
+}
+
+th{
+    text-align: center !important;
+}
+td{
+    text-align: right !important;
+}

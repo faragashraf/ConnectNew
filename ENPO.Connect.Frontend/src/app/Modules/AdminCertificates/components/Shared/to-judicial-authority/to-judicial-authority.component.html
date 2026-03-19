@@ -1,0 +1,10 @@
+بناء على التصريح الصادر من سيادتكم بتاريخ {{
+conditionalDate.transform(genericFormService.getRequesterFieldTxt(formData,'PERMISSION_DATE'),'short') }} في القضية رقم {{
+genericFormService.getRequesterFieldTxt(formData,'CASE_NUMBER') }} والمحدد
+لنظرها
+جلسة بتاريخ {{
+conditionalDate.transform(genericFormService.getRequesterFieldTxt(formData,'SESSION_DATE'),'short')}}
+إلى {{ genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_REQUESTER_TYPE|0')?.value }}/ {{
+genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NAME') }}
+{{ genericFormService.getRequesterFieldTxt(formData,'REQUSTER_VERFICATION_TYPE') }}
+{{ genericFormService.getRequesterFieldTxt(formData,'REQUSTER_VERFICATION_NUMBER') }}

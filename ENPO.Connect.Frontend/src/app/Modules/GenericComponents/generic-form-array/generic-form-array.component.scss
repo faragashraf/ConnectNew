@@ -1,0 +1,220 @@
+/* Correspondances-form.component.css */
+
+
+form {
+    margin-bottom: 15px;
+    width: 100%;
+  }
+  
+  h3 {
+    color: var(--app-primary);
+  }
+  
+  // label {
+  //   padding: 0 .5rem 0 .5rem;
+  //   display: inline-flex;
+  //   width: 10rem;
+  //   min-width: 10rem;
+  //   color: rgb(0, 59, 252);
+  //   font-size: larger;
+  //   font-weight: bold;
+  //   font-family: 'Times New Roman', Times, serif;
+  //   // margin-left: .5rem;
+  // }
+  
+  
+  input,
+  textarea,
+  button {
+    margin: .25rem;
+  }
+  
+  .alert-danger {
+    color: red;
+  }
+  
+:host {
+    display: contents;
+}
+
+.form-array {
+    display: grid;
+    /* Adjusted for responsive: reduced min width to prevent overflow in small cols / high zoom */
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+    width: 100%;
+    padding: 0.5rem;
+  }
+  
+  .form-array input {
+    margin: 0.25rem;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+    min-width: 0; /* Prevents overflow in grid items */
+    
+    /* Smooth transition for hover effects */
+    transition: all 0.3s ease;
+  }
+
+  /* Labels sit above controls for all sizes */
+  .form-group label {
+    margin-bottom: 0.25rem;
+    text-align: right;
+    display: inline-flex;
+    align-items: center;
+    color: #495057; /* More professional dark gray */
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  
+  /* Required asterisk */
+  .form-group label span {
+      margin-right: 0.25rem;
+  }
+
+  .form-group input,
+  .form-group textarea,
+  .form-group select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.5rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 1rem;
+    background-color: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus,
+  .form-group select:focus {
+      border-color: #80bdff;
+      outline: 0;
+      box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  }
+
+  /* Entry animation: subtle slide up + fade */
+  .animated {
+    animation: slideUpFade 400ms cubic-bezier(.2,.9,.3,1) both;
+    animation-delay: var(--delay, 0ms);
+    will-change: transform, opacity;
+  }
+  
+  @keyframes slideUpFade {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Responsive Adjustments */
+  @media (max-width: 768px) {
+      .form-array {
+          grid-template-columns: 1fr; /* Full width on mobile */
+          gap: 1rem;
+      }
+      
+      .form-group label {
+          font-size: 0.95rem;
+      }
+  }
+
+  @keyframes slideLeftFade {
+    from {
+      transform: translateX(-14px);
+      opacity: 0;
+      filter: blur(4px);
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  /* Focus / interaction polish for inputs inside the group */
+  .form-group:focus-within {
+    /* subtle visual lift removed from axis change; keep minimal transform to preserve layout */
+    transform: translateX(0);
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus,
+  .form-group select:focus,
+  ::ng-deep .form-group .p-dropdown .p-dropdown-label:focus {
+    outline: none;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.08), 0 2px 6px rgba(63,81,181,0.12) inset;
+    border-color: rgba(63,81,181,0.6);
+    transition: box-shadow .15s ease, border-color .15s ease, transform .15s ease;
+    transform: translateY(-1px);
+  }
+  
+  .input-group {
+    display: flex;
+    align-items: center;
+    /* Vertically align the items */
+    gap: 0.5rem;
+    /* Add some space between the input and button */
+  }
+  
+  .input-group .form-control {
+    flex: 1;
+    /* Allow the input to grow and take up available space */
+  }
+  
+  .input-group .btn {
+    flex-shrink: 0;
+    /* Prevent the button from shrinking */
+  }
+  
+  // ::ng-deep .p-dropdown-panel .p-dropdown-header .p-dropdown-filter {
+  //   padding-right: 1.5rem;
+  //   margin-right: 0rem;
+  // }
+  
+  // ::ng-deep.p-dropdown .p-dropdown-clear-icon {
+  //   color: #6c757d;
+  //   right: 0.357rem;
+  // }
+
+  /* Responsive adjustments */
+  @media (max-width: 992px) {
+    .form-array {
+      gap: 0.5rem;
+    }
+    .form-group {
+      flex: 1 1 45%;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .form-array {
+      flex-direction: column;
+    }
+    .form-group {
+      flex-direction: column;
+      align-items: stretch;
+      text-align: left;
+    }
+    .input-group {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 420px) {
+    label { font-size: 0.95rem; }
+    .form-group { margin: 0.35rem 0; }
+  }

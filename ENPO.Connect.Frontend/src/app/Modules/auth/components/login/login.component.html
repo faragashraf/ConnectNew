@@ -1,0 +1,309 @@
+<div class="login-wrapper" dir="rtl">
+    <!-- Background Animation (Preserved) -->
+    <app-bubbles-bg [paletteId]="'default'" [density]="18" [speed]="1" [scale]="1" [disableAnimations]="false"
+        [showControls]="true"></app-bubbles-bg>
+
+    <div class="login-main-container">
+        <div class="login-card">
+
+            <!-- Loading Overlay (Visible when isFlipped is true) -->
+            <div *ngIf="isFlipped" class="loading-overlay">
+                <p-progressSpinner styleClass="w-4rem h-4rem" strokeWidth="4"
+                    animationDuration=".8s"></p-progressSpinner>
+                <p class="connecting">جاري الاتصال...</p>
+            </div>
+
+            <div class="login-content" [style.visibility]="isFlipped ? 'hidden' : 'visible'">
+                <!-- Header Section -->
+                <div class="login-header">
+                    <div class="logo-container">
+                        <a [pTooltip]="EgyptPostToolTip" tooltipPosition="bottom">
+                            <img src="assets/imges/Connect-Large.png" alt="Connect Logo" />
+                        </a>
+                    </div>
+
+                    <!-- Existing: Logged In / Domain State -->
+                    <div *ngIf="AuthService.isDomainAuthenticated" class="user-profile-chip">
+                        <img [src]="MeInfo.safeImage" *ngIf="MeInfo.userPicture != null" alt="User Avatar">
+                        <img src="assets/imges/User.png" *ngIf="MeInfo.userPicture == null" alt="Default Avatar">
+                        <div class="user-info">
+                            <span class="user-name">{{ MeInfo.userDisplayName }}</span>
+                            <small>تم التحقق من الهوية</small>
+                        </div>
+                    </div>
+
+                    <!-- Guest State Header -->
+                    <ng-container *ngIf="!AuthService.isDomainAuthenticated">
+                        <h2 class="text-900">مرحباً بك</h2>
+                        <p class="subtitle mb-4">Connect | بوابتك للخدمات الداخلية</p>
+
+                        <!-- 2FA Tutorial Video Pill (Visible only in credentials step) -->
+                        <div class="video-tutorial-pill mb-4" *ngIf="step === 'credentials'" (click)="openTwoFaVideo()">
+                            <div class="pill-content">
+                                <!-- <i class="pi pi-shield"></i> -->
+                                <img src="assets/imges/PreventOn.png" alt="" height="30" width="30"
+                                    style="filter: drop-shadow(0 0 2px rgb(185, 16, 16));"
+                                    pTooltip="المصادقة الثنائية غير مفعلة" tooltipPosition="bottom">
+                                <span class="mx-2">شاهد شرح المصادقة الثنائية</span>
+                                <div class="play-icon-circle">
+                                    <i class="pi pi-play" style="font-size: 0.6rem;"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- NEW: Login Method Selector (Initial State) -->
+                        <div class="method-selector-container mb-4 fade-in"
+                            *ngIf="mode === 'initial' && step === 'credentials' && !AuthService.isAuthenticated">
+
+                            <button pButton pRipple type="button" (click)="startWindowsAuth()"
+                                label="تسجيل الدخول باستخدام Windows" icon="pi pi-microsoft"
+                                class="p-button-rounded p-button-lg w-full mb-2 p-button-primary shadow-2">
+                            </button>
+
+                            <div class="text-center mb-3">
+                                <small class="text-500">
+                                    <i class="pi pi-info-circle mr-1" style="font-size: 0.8rem"></i>
+                                    هذه الميزة متاحة فقط من لمستخدمي الدومين
+                                </small>
+                            </div>
+
+                            <div class="text-divider mb-3"><span>أو</span></div>
+
+                            <button pButton pRipple type="button" (click)="switchToCredentials()"
+                                label="استخدام اسم المستخدم وكلمة المرور" icon="pi pi-user"
+                                style="color: #ffffff;background:linear-gradient(135deg, #009b70 0%, #d8b01d 100%)"
+                                class="p-button-outlined p-button-secondary p-button-rounded w-full">
+                            </button>
+                        </div>
+                    </ng-container>
+
+                    <h6 *ngIf="AuthService.isDomainAuthenticated && step !== 'otp'" class="mt-3 text-700">جاري تسجيل
+                        الدخول...</h6>
+                </div>
+
+                <!-- WINDOWS AUTH STATES (Checking, Success, Failed) -->
+                <div *ngIf="(mode === 'windows_checking' || mode === 'windows_success' || mode === 'windows_failed') && step === 'credentials' && !AuthService.isAuthenticated && !AuthService.isDomainAuthenticated"
+                    class="auto-login-container fade-in">
+
+                    <!-- Checking State -->
+                    <div *ngIf="mode === 'windows_checking'" class="status-card checking">
+                        <p-progressSpinner styleClass="w-3rem h-3rem" strokeWidth="4"></p-progressSpinner>
+                        <p class="mt-3 font-semibold text-600">جاري التحقق من دخول Windows...</p>
+                    </div>
+
+                    <!-- Success State -->
+                    <div *ngIf="mode === 'windows_success'" class="status-card success">
+                        <div class="user-preview mb-3">
+                            <img [src]="MeInfo.safeImage || 'assets/imges/User.png'" alt="User" class="shadow-1">
+                            <div class="info text-right">
+                                <div class="name font-bold text-700">{{ MeInfo.userDisplayName }}</div>
+                                <div class="email text-500 text-sm">{{ MeInfo.userEmail }}</div>
+                            </div>
+                        </div>
+
+                        <button pButton pRipple type="button" (click)="LoginWithOutPassword()"
+                            label="دخول باستخدام هذا الحساب" icon="pi pi-arrow-right" iconPos="left"
+                            class="w-full p-button-primary mt-2"></button>
+
+                        <button pButton pRipple type="button" (click)="switchToCredentials()" label="استخدام حساب آخر"
+                            icon="pi pi-user" class="p-button-text p-button-secondary w-full mt-2"></button>
+                    </div>
+
+                    <!-- Failed / Skipped State -->
+                    <div *ngIf="mode === 'windows_failed'" class="status-card failed">
+                        <div class="icon-circle error">
+                            <i class="pi pi-exclamation-triangle"></i>
+                        </div>
+                        <h4 class="mb-2 text-700">Windows login not available</h4>
+                        <p class="error-msg text-500 mb-3">
+                            {{ windowsError }}
+                        </p>
+
+                        <button pButton pRipple type="button" (click)="switchToCredentials()"
+                            label="الذهاب لصفحة الدخول" icon="pi pi-arrow-right" iconPos="left"
+                            class="p-button-primary w-full shadow-2"></button>
+                    </div>
+                </div>
+
+                <!-- Credentials Form -->
+                <form [formGroup]="loginForm" (ngSubmit)="LoginWithUserAndPassword()"
+                    *ngIf="mode === 'credentials' && step === 'credentials' && !AuthService.isAuthenticated"
+                    class="login-form fade-in">
+
+                    <!-- Username Field -->
+                    <div class="field custom-field">
+                        <span class="p-float-label">
+                            <i class="pi pi-user field-icon-right"></i>
+                            <input pInputText id="username" formControlName="username" class="w-full has-icon-right"
+                                [ngClass]="{'ng-invalid ng-dirty': loginForm.get('username')?.touched && loginForm.get('username')?.invalid}" />
+                            <label for="username">اسم المستخدم</label>
+                        </span>
+                        <small *ngIf="loginForm.get('username')?.touched && loginForm.get('username')?.invalid"
+                            class="p-error">
+                            اسم المستخدم مطلوب
+                        </small>
+                    </div>
+
+                    <!-- Password Field -->
+                    <div class="field custom-field">
+                        <span class="p-float-label">
+                            <input [type]="showPassword ? 'text' : 'password'" pInputText id="password"
+                                formControlName="password" class="w-full has-icon-left"
+                                (keydown)="checkCapsLock($event)" (keyup)="checkCapsLock($event)"
+                                [ngClass]="{'ng-invalid ng-dirty': loginForm.get('password')?.touched && loginForm.get('password')?.invalid}" />
+                            <label for="password">كلمة المرور</label>
+
+                            <!-- Password Toggle Icon -->
+                            <i class="pi field-icon-left clickable" [ngClass]="showPassword ? 'pi-eye-slash' : 'pi-eye'"
+                                (click)="togglePasswordVisibility()">
+                            </i>
+                        </span>
+
+                        <!-- Caps Lock Warning -->
+                        <div *ngIf="capsLockOn" class="caps-lock-warning">
+                            <i class="pi pi-exclamation-triangle"></i> زر Caps Lock مفعل
+                        </div>
+
+                        <small *ngIf="loginForm.get('password')?.touched && loginForm.get('password')?.invalid"
+                            class="p-error">
+                            كلمة المرور مطلوبة
+                        </small>
+                    </div>
+
+                    <div class="flex flex-column gap-2 mt-2">
+                        <button pButton pRipple type="submit" label="تسجيل الدخول" [loading]="isFlipped" class="w-full"
+                            style="margin-top: -2rem;"></button>
+                    </div>
+                </form>
+
+                <!-- Footer -->
+                <div class="login-footer" *ngIf="step !== 'otp' && mode === 'credentials'">
+                    <a routerLink="/Auth/Register">طلب تسجيل حساب جديد</a>
+                    <span class="divider">|</span>
+                    <a href="javascript:void(0)"
+                        (click)="msg.msgInfo('يرجى التواصل مع الدعم الفني', 'نسيت كلمة المرور')">نسيت كلمة المرور؟</a>
+                </div>
+
+                <!-- Download Google Authenticator (QR + Store Links) -->
+                <div *ngIf="!AuthService.isAuthenticated" class="auth-download-card fade-in mt-4 text-right">
+                    <h4 class="card-heading">حمّل Google Authenticator</h4>
+                    <p class="card-subtitle"> حمّل التطبيق وامسح الـ QR.</p>
+
+                    <div class="download-grid mt-3">
+                        <!-- Google Play Card -->
+                        <div class="download-card">
+                            <img [src]="googlePlayQrPath" alt="QR لكود Google Play" class="qr-img" />
+                            <div class="download-card-body">
+                                <!-- <div class="store-label">Android</div> -->
+                                <a rel="noopener noreferrer" aria-label="فتح Google Play" class="open-store">
+                                    <img *ngIf="googlePlayBadgePath" [src]="googlePlayUrl" alt="Google Play badge"
+                                        class="google-store-badge" />
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- App Store Card -->
+                        <div class="download-card">
+                            <img [src]="appStoreQrPath" alt="QR لكود App Store" class="qr-img" />
+                            <div class="download-card-body">
+                                <!-- <div class="store-label">iOS</div> -->
+                                <a target="_blank" rel="noopener noreferrer" aria-label="فتح App Store"
+                                    class="open-store">
+                                    <img *ngIf="appStoreBadgePath" [src]="appStoreUrl" alt="App Store badge"
+                                        class="app-store-badge" />
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OTP Verification Step -->
+                <div *ngIf="step === 'otp'" class="otp-container fade-in text-center">
+                    <img src="assets/imges/2StepAuth.png" alt="" height="200" width="200">
+
+                    <h3 class="text-900 mb-2">المصادقة الثنائية</h3>
+                    <p class="text-600 mb-4">أدخل الرمز المكون من 6 أرقام من تطبيق Google Authenticator</p>
+
+                    <div class="flex justify-content-center mb-4">
+                        <app-otp-code-input [length]="6" [disabled]="isVerifyingOtp" [loading]="isVerifyingOtp"
+                            [errorText]="otpError" [code]="otpPin" (codeChange)="otpPin = $event"
+                            (completed)="verifyOtp()">
+                        </app-otp-code-input>
+                    </div>
+
+                    <div class="flex flex-column gap-2 mt-4">
+                        <button pButton pRipple type="button" label="تحقق" (click)="verifyOtp()"
+                            [disabled]="otpPin.length !== 6 || isVerifyingOtp" [loading]="isVerifyingOtp"
+                            class="w-full"></button>
+
+                        <button pButton pRipple type="button" label="إلغاء" (click)="cancelOtp()"
+                            class="p-button-text p-button-secondary w-full"></button>
+                    </div>
+                </div>
+
+                <!-- Removed old sso-section and login-alternatives as they are replaced by tabs -->
+
+                <!-- 2FA Video Dialog -->
+                <p-dialog [(visible)]="isTwoFaVideoOpen" [modal]="true" [style]="{width: '90vw', maxWidth: '600px'}"
+                    [showHeader]="true" [draggable]="false" [resizable]="false" [dismissableMask]="true" appendTo="body"
+                    (onHide)="closeTwoFaVideo()" styleClass="video-dialog">
+                    <ng-template pTemplate="header">
+                        <span class="text-xl font-bold">شرح المصادقة الثنائية</span>
+                    </ng-template>
+
+                    <div class="video-wrapper">
+                        <video #twoFaVideo [src]="twoFaVideoSrc" controls preload="metadata" playsinline
+                            class="w-full border-round-md shadow-2" style="max-height: 70vh; background: #000;"></video>
+                    </div>
+
+                    <ng-template pTemplate="footer">
+                        <button pButton pRipple label="إغلاق" icon="pi pi-times" (click)="closeTwoFaVideo()"
+                            class="p-button-outlined p-button-secondary p-button-sm"></button>
+                    </ng-template>
+                </p-dialog>
+
+            </div>
+        </div>
+
+        <div class="login-info-card fade-in">
+            <div class="info-title">
+                <i class="pi pi-lock"></i>
+                <span>معلومات تسجيل الدخول</span>
+            </div>
+
+            <div class="info-content">
+                <div class="info-item">
+                    <i class="pi pi-check-circle"></i>
+                    <p>يرجى تسجيل الدخول بالرقم السري الخاص بمنصة تواصل.</p>
+                </div>
+
+                <div class="info-item">
+                    <i class="pi pi-envelope"></i>
+                    <p>
+                        في حال نسيت كلمة المرور، يرجى التواصل مع
+                        <a href="mailto:Postal-support@egyptpost.org"
+                            class="support-link">Postal-support@egyptpost.org</a>
+                        لطلب استعادة الرقم السري.
+                    </p>
+                </div>
+
+                <!-- Tracking Info (IP Address) -->
+                <div class="tracking-info fade-in" *ngIf="myIp">
+                    <div class="divider"></div>
+                    <div class="tracking-content">
+                        <i class="pi pi-shield"></i>
+                        <span>
+                            عنوانك "IP" الحالي هو :
+                            <span class="ip-address" dir="ltr">{{ myIp }}</span>
+                            <span style="display:block; margin-top: 0.5rem; color: #f00;" dir="ltr">كلمة المرور الخاصة
+                                بك هي مسئوليتك الشخصية</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Egypt Post Mascot (Moved to AppComponent) -->
+        <!-- app-mascot-peek [enabled]="true"></app-mascot-peek -->
+    </div>
+</div>

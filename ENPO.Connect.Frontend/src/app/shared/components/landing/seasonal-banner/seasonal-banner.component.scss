@@ -1,0 +1,125 @@
+.seasonal-banner-wrapper {
+    width: 100%;
+    padding: 0;
+    margin: 0; // Removed margin to sit flush if needed, usually managed by parent
+    margin-bottom: 20px;
+    direction: rtl;
+    
+    .seasonal-banner-content {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem 2rem;
+        background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        position: relative;
+        gap: 1.5rem;
+        transition: all 0.3s ease;
+        overflow: hidden;
+
+        // Ramadan Theme
+        &.ramadan-theme {
+            background: linear-gradient(135deg, #102d5e 0%, #1e4b8f 100%);
+            color: #fff;
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            box-shadow: 0 8px 20px rgba(16, 45, 94, 0.2);
+
+            // Islamic Pattern Overlay (Optional CSS trick)
+            &::before {
+                content: '';
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background-image: 
+                    radial-gradient(circle at 50% 50%, transparent 0%, transparent 60%, rgba(255,255,255,0.03) 61%, rgba(255,255,255,0.03) 100%);
+                opacity: 0.5;
+                pointer-events: none;
+            }
+
+            .banner-icon {
+                color: #ffd700; // Gold
+                font-size: 2.5rem;
+                filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.5));
+                animation: float 4s ease-in-out infinite;
+                z-index: 1;
+            }
+
+            .banner-title {
+                font-weight: 700;
+                font-size: 1.8rem;
+                color: #ffd700;
+                margin-bottom: 0.25rem;
+                z-index: 1;
+            }
+            
+            .banner-subtitle {
+                font-size: 1rem;
+                opacity: 0.9;
+                color: #e0e7ff;
+                z-index: 1;
+            }
+
+            .banner-close {
+                color: rgba(255,255,255,0.6);
+                z-index: 2;
+                &:hover {
+                    color: #fff;
+                    background: rgba(255,255,255,0.1);
+                }
+            }
+        }
+    }
+
+    .banner-text {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .banner-close {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 1.2rem;
+        padding: 0.5rem;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s;
+    }
+}
+
+@keyframes float {
+    0% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-5px) rotate(3deg); }
+    100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@media (max-width: 768px) {
+    .seasonal-banner-content {
+        flex-direction: column;
+        text-align: center;
+        padding: 1.5rem 1rem;
+        
+        .banner-text {
+            align-items: center;
+        }
+
+        .banner-close {
+            top: 10px;
+            left: 10px;
+            transform: none;
+        }
+        
+        .banner-icon {
+             font-size: 2rem;
+        }
+    }
+}

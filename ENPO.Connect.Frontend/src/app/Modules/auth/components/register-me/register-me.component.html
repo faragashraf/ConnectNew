@@ -1,0 +1,114 @@
+<div class="container-main">
+    <div class="row" style="margin:1rem 1rem 2rem 1rem ;">
+        <div class="col-md-2">
+            <h3> طلب تسجيل بالتطبيق :</h3>
+        </div>
+
+        <div class="col-md-4">
+            <button  class="btn btn-success" (click)="navigateToLogin()">
+                العودة لتسجيل الدخول
+            </button>
+        </div>
+        <div class="col-md-4">
+        </div>
+    </div>
+    <div class="row">
+        <div class="widget col-md-4">
+            <form [formGroup]="frm" (ngSubmit)="onSubmit()">
+                <div>
+                    <!-- Radio Button Group -->
+                    <div class="form-group">
+                        <label>طريقة التحقق:</label>
+                        <div class="radio-group">
+                            <input type="radio" id="option1" value="noParams" formControlName="authOption"
+                                class="radioButton" (change)="onOptionChange()" />
+                            <label for="option1">تحقق باليوزر دومين</label>
+                            <input type="radio" id="option2" value="withParams" formControlName="authOption"
+                                class="radioButton" *ngIf="IsAshrafAuth" (change)="onOptionChange()" />
+                            <label for="option2" *ngIf="IsAshrafAuth">تحقق من : {{frm.get('userName')?.value}}</label>
+                        </div>
+                    </div>
+                    <!-- Email Input -->
+                    <div class="form-group" *ngIf="authOption === 'withParams'">
+                        <label>
+                            البريد الإلكتروني: <span style="color: red;">*</span>
+                        </label>
+                        <div class="input-group">
+                            <input type="text" formControlName="userName" id="userName" class="form-control"
+                                placeholder="البريد الإلكتروني بدون اسم الدومين (مثال): a.farag;abc" />
+                            <!-- 
+                                <button (click)="ValidateUser()" class="btn btn-success"
+                                [disabled]="!frm.get('userName')?.valid">
+                                تحقق
+                            </button> -->
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            رقم الملف: <span style="color: red;">*</span>
+                        </label>
+                        <div class="input-group">
+                            <input type="text" formControlName="userId" id="userId" class="form-control"
+                                placeholder="رقم الملف أو اسم المستخدم الخاص بالباك أوفيس" />
+                            <!-- 
+                                <button (click)="ValidateUser()" class="btn btn-success"
+                                [disabled]="!frm.get('userName')?.valid">
+                            تحقق
+                        </button> -->
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" [disabled]="!frm.valid">
+                    إرسال طلب تسجيل
+                </button>
+            </form>
+        </div>
+
+        <div class="widget col-md-6" *ngIf="IsAuth">
+            <form [formGroup]="userForm" class="user-info-form">
+                <div class="form-header">
+                    <div class="row">
+                        <div class="col-md-3" style="text-align: right;">
+                            <img [src]="exchangeUserInfo.safeImage" alt="User Picture"
+                                *ngIf="exchangeUserInfo.userPicture != null || exchangeUserInfo.userPicture==''"
+                                width="80" height="80" style="border-radius: 20rem;" />
+                            <img src="assets/imges/User.png" alt="User Picture" width="80" height="80"
+                                *ngIf="exchangeUserInfo.userPicture == null " />
+                        </div>
+                        <div class="col-md-7" style="text-align: left;">
+                            <h2>Domain User Profile</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <!-- User Details -->
+                    <div class="form-group user-details">
+                        <div class="form-field">
+                            <label>الاسم </label>
+                            <input type="text" formControlName="userDisplayName" readonly>
+                        </div>
+
+                        <div class="form-field">
+                            <label>البريد الإلكتروني </label>
+                            <input type="email" formControlName="userEmail" readonly>
+                        </div>
+
+                        <div class="form-field">
+                            <label>الوظيفة</label>
+                            <input type="text" formControlName="userTitle" readonly>
+                        </div>
+
+                        <div class="form-field">
+                            <label>رقم التليفون</label>
+                            <input type="tel" formControlName="mobilePhone" readonly>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <span style="margin-right: 2.2rem;font-weight: bold;font-size: 1.2rem;"><a href="https://mail.egyptpost.org/owa/#path=/options/myaccount">* يتم تعديل هذه البيانات من خلال إعدادات البريد الإلكتروني <u style="color: red;"> فقط </u><u style="color: green;">من هنا </u></a></span>
+        </div>
+        <div class="col-md-8">
+            <!-- {{ frm.value | json }} -->
+        </div>
+    </div>
+</div>

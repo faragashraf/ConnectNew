@@ -1,0 +1,33 @@
+<div class="container-main">
+    <div class="edit-back-bar" *ngIf="isEditMode">
+        <button type="button" class="btn-back" (click)="goBack()"><i class="pi pi-arrow-right"></i> العودة للقائمة</button>
+    </div>
+    <app-form-details [config]="config" [messageDto]="messageDto" [categoryTree]="categoryTree" [unitTree]="unitTree" *ngIf="config"
+        (ticketFormChange)="formChanges($event)" (submitFormChange)="onSubmit()"
+        (genericEvent)="handleGenericEvent($event)" (fileUploadEvent)="onFileUpload($event)"></app-form-details>
+    <div class="row">
+        <!-- <div class="col-12" style="display:flex;justify-content:flex-end;margin-bottom:12px">
+            <button class="compose-btn" type="button" (click)="showMailDialog = true">✉️ Compose Mail</button>
+        </div> -->
+
+        <p-dialog [(visible)]="showMailDialog" [modal]="true" [style]="{width: '820px', maxWidth: '95%'}" [closeOnEscape]="true" appendTo="body" [styleClass]="'mail-dialog-custom'">
+            <ng-template pTemplate="header">
+                <div class="dialog-header">
+                    <div class="dialog-title">Compose Mail</div>
+                    <div class="dialog-sub">معاينة وتعديل الرسالة</div>
+                </div>
+            </ng-template>
+
+            <div class="mail-dialog-body">
+                <app-mail-composer [genericFormsService]="genericFormService" [fileParameters]="fileParameters" [initialHtml]="mailInitialHtml"
+                    (sendEmail)="sendMail($event)"></app-mail-composer>
+            </div>
+
+            <ng-template pTemplate="footer">
+                <div style="display:flex;gap:8px;justify-content:flex-end">
+                    <button class="compose-cancel" type="button" pButton (click)="showMailDialog=false">Cancel</button>
+                </div>
+            </ng-template>
+        </p-dialog>
+    </div>
+</div>

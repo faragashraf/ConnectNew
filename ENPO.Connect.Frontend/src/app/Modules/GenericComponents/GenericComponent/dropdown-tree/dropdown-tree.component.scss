@@ -1,0 +1,107 @@
+// styles for animated tree button
+.tree-button {
+	transition: transform 0.22s ease, box-shadow 0.22s ease;
+	border-radius: 4px;
+	transform-origin: center center;
+	will-change: transform;
+    flex-shrink: 0; /* Prevent button from crushing */
+    margin: 0 !important; /* Reset any global margins */
+    height: auto !important; /* Match stretch */
+}
+
+/* layout: keep the dropdown and tree button on the same line */
+.dropdown-with-button {
+	display: flex !important; 
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+	width: 100%;
+    align-items: stretch;
+    gap: 0.25rem; /* Small gap between input and button */
+}
+
+.tree-button:hover {
+	transform: scale(1.05);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+}
+
+.tree-button:active {
+	transform: scale(0.98);
+}
+
+/* when dialog is visible, give a subtle pulse to draw attention */
+.tree-button.open {
+	animation: dropdown-pulse 1.2s ease-in-out infinite;
+	box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+    border-color: #2563eb;
+    color: #2563eb;
+}
+
+@keyframes dropdown-pulse {
+	0% {
+		box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+	}
+	70% {
+		box-shadow: 0 0 0 6px rgba(37, 99, 235, 0);
+	}
+	100% {
+		box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+	}
+}
+
+/* rotate the icon slightly while active for extra polish */
+.tree-button.open .pi {
+	animation: dropdown-swing 0.9s ease-in-out infinite;
+	display: inline-block;
+	transform-origin: center center;
+}
+
+@keyframes dropdown-swing {
+	0% {
+		transform: rotate(0deg);
+	}
+
+	20% {
+		transform: rotate(-10deg);
+	}
+
+	50% {
+		transform: rotate(0deg);
+	}
+
+	80% {
+		transform: rotate(8deg);
+	}
+
+	100% {
+		transform: rotate(0deg);
+	}
+}
+
+/* accessibility focus style */
+.tree-button:focus {
+	outline: none;
+	box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.18);
+}
+
+// .disabled-div {
+//     opacity: 0.6;
+//     cursor: not-allowed;
+//     pointer-events: none;
+// }
+
+// .disabled-div label {
+//     color: #6c757d; 
+// }
+
+
+/* When tree button is present, dropdown is disabled via PrimeNG [disabled].
+   Style the disabled state subtly so users know to click the tree button instead. */
+:host ::ng-deep .dropdown-with-button .p-dropdown.p-disabled {
+    cursor: default;
+    opacity: 0.65;
+}
+
+:host ::ng-deep .dropdown-with-button .p-dropdown.p-disabled .p-dropdown-label {
+    color: var(--app-text-secondary, #64748b);
+}

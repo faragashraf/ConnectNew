@@ -1,0 +1,48 @@
+<ng-container *ngIf="tooltip && tooltip.length; else noTooltip">
+  <button
+    [type]="type"
+    [class]="cssClasses"
+    [disabled]="disabled"
+    (click)="onClick($event)"
+    (keydown.enter)="onClick($event)"
+    (keydown.space)="$event.preventDefault(); onClick($event)"
+    [attr.aria-label]="label || null"
+    [pTooltip]="tooltip"
+    [tooltipPosition]="tooltipPosition"
+    [attr.title]="tooltip || null"
+  >
+    <span class="btn-content">
+      <span class="btn-icon" *ngIf="icon" aria-hidden="true">
+        <i [class]="getIconClass()"></i>
+      </span>
+
+      <ng-content></ng-content>
+      <span *ngIf="label.length>0">{{ label }}</span>
+    </span>
+
+  </button>
+</ng-container>
+
+<ng-template #noTooltip>
+  <button
+    [type]="type"
+    [class]="cssClasses"
+    [disabled]="disabled"
+    (click)="onClick($event)"
+    (keydown.enter)="onClick($event)"
+    (keydown.space)="$event.preventDefault(); onClick($event)"
+    [attr.aria-label]="label || null"
+    [attr.title]="tooltip || null"
+  >
+    <span class="btn-content">
+      <span class="btn-icon" *ngIf="icon" aria-hidden="true">
+        <i [class]="getIconClass()"></i>
+      </span>
+
+      <ng-content></ng-content>
+      <span *ngIf="label.length>0">{{ label }}</span>
+    </span>
+
+  </button>
+</ng-template>
+ 

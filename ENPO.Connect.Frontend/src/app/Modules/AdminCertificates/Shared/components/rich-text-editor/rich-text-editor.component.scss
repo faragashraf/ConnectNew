@@ -1,0 +1,27 @@
+.rich-text-editor {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px;
+  }
+  
+  .toolbar {
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .toolbar button, .toolbar select {
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+  
+  .editor {
+    min-height: 100px;
+    border: 1px solid #ddd;
+    padding: 8px;
+    border-radius: 4px;
+    overflow: auto;
+    text-align: start; /* يتبع اتجاه النص */
+  }
+  

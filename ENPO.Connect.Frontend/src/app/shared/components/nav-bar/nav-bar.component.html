@@ -1,0 +1,535 @@
+<div id="tour-mega-menu">
+    <p-megaMenu [model]="authService.items1">
+        <ng-template pTemplate="start">
+            <img id="tour-app-logo" src="assets/imges/Connect-Large.png" width="180" height="60"
+                class="mr-2 rotating-logo" />
+        </ng-template>
+        <ng-template pTemplate="center">
+            <div class="nav-search-wrapper">
+                <span class="p-input-icon-right">
+                    <i class="pi pi-search"></i>
+                    <input type="text" pInputText placeholder="بحث..." class="modern-search" />
+                </span>
+            </div>
+        </ng-template>
+        <ng-template pTemplate="end">
+            <div class="navbar-actions">
+                <!-- Environment Badge -->
+                <div class="env-badge" *ngIf="Environment"
+                    [ngClass]="{'env-dev': Environment=='Development Mode', 'env-prod': Environment=='Production Mode'}">
+                    {{Environment}}
+                </div>
+                <!-- TEST Badge -->
+                <div class="env-badge env-test" *ngIf="isTest" style="background-color: #e65100; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; font-size: 0.8rem; margin-left: 10px;">
+                    نسخة TEST
+                </div>
+                 <!-- DEV Badge -->
+                 <div class="env-badge env-dev" *ngIf="isDev" style="background-color: #6200ea; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; font-size: 0.8rem; margin-left: 10px;">
+                    نسخة تطوير
+                </div>
+                <!-- User Section -->
+                <div class="user-controls" *ngIf="authService.currentUser.length > 0; else loginTemplate">
+
+                    <!-- 2FA Shield Icon -->
+                    <div class="notification-wrapper" style="margin-left: 1rem;">
+                        <!-- <i class="pi pi-shield" style="font-size: 1.5rem; color: #10b981;"></i> -->
+                        <img src="assets/imges/PreventOn.png" alt="" height="50" width="50"
+                            style="filter: drop-shadow(0 0 2px rgb(16, 185, 129));"
+                            *ngIf="authService.twoFactorProtected$ | async" pTooltip="المصادقة الثنائية غير مفعلة"
+                            tooltipPosition="bottom">
+                        <img src="assets/imges/PreventOff.png" alt="" height="50" width="50"
+                            style="filter: drop-shadow(0 0 2px rgb(185, 16, 16));"
+                            *ngIf="!(authService.twoFactorProtected$ | async)" pTooltip="المصادقة الثنائية غير مفعلة"
+                            tooltipPosition="bottom">
+                    </div>
+
+                    <!-- Help/Tour Button -->
+                    <div class="notification-wrapper" style="margin-left: 1rem; cursor: pointer;"
+                        (click)="startAppTour()" pTooltip="جولة تعريفية" tooltipPosition="bottom">
+                        <i class="pi pi-question-circle" style="font-size: 1.5rem; color: #555;"></i>
+                    </div>
+
+                    <!-- Notification Bell -->
+                    <div id="tour-notification-bell" class="notification-wrapper"
+                        (mouseenter)="showNotifications = true" (mouseleave)="showNotifications = false">
+                        <div class="bell-btn" pBadge [value]="signalRService.primMsgCount.toString()" severity="danger">
+                            <i class="pi pi-bell"></i>
+                        </div>
+
+                        <div class="notification-dropdown glass-panel"
+                            *ngIf="showNotifications && signalRService.primMsgList.length > 0">
+                            <div class="dropdown-header">الإشعارات</div>
+                            <ul class="notif-list">
+                                <li *ngFor="let msg of signalRService.primMsgList | slice:0:5" class="notif-item">
+                                    <div class="notif-title">{{msg.summary}}</div>
+                                    <div class="notif-desc" [innerHTML]="msg.detail"></div>
+                                </li>
+                            </ul>
+                            <div class="dropdown-footer" (click)="openAllNotifications()">
+                                عرض الكل
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Profile Pill -->
+                    <div id="tour-user-profile-pill" class="user-profile-pill"
+                        (click)="showNotifications=false; menu.toggle($event)">
+                        <div class="user-avatar">
+                            <img [src]="authService.pic"
+                                *ngIf="authService.UserPic && authService.UserPic !== 'undefined' && authService.UserPic !== 'null'" />
+                            <img src="assets/imges/User.png"
+                                *ngIf="!authService.UserPic || authService.UserPic === 'undefined' || authService.UserPic === 'null'" />
+                        </div>
+                        <span class="user-name">{{authService.currentUser}}</span>
+                        <i class="pi pi-angle-down"></i>
+                    </div>
+                    <p-menu #menu [model]="authService.userProfileItems" [popup]="true" appendTo="body"></p-menu>
+
+                </div>
+
+                <!-- Login Button Template (only render when on /Auth/Login route) -->
+                <ng-template #loginTemplate>
+                    <ng-container *ngIf="router.url !== '/Auth/Login'">
+                        <button pButton label="تسجيل الدخول" icon="pi pi-sign-in"
+                            class="p-button-rounded p-button-outlined login-btn"
+                            (click)="router.navigate(['/Auth/Login'])">
+                        </button>
+                    </ng-container>
+                </ng-template>
+            </div>
+        </ng-template>
+    </p-megaMenu>
+</div>
+
+<app-all-notifications [notifications]="signalRService.primMsgList" [(display)]="showAllNotificationsDialog">
+</app-all-notifications>
+
+
+<!-- User Profile Dialog -->
+<p-dialog [(visible)]="authService.showUserProfile" [modal]="true" appendTo="body" [draggable]="false"
+    [closable]="false" [style]="{width: '750px', maxWidth: '95vw', 'direction': 'rtl'}" styleClass="user-profile-dialog"
+    [baseZIndex]="10010" [dismissableMask]="true" [showHeader]="false" (onHide)="authService.showUserProfile=false"
+    (onShow)="onProfileDialogOpen()">
+
+    <div class="user-profile-content-wrapper modern-glass modern-tabs-layout">
+        <!-- Sticky Header (Title + Close) -->
+        <div class="profile-header-template sticky-header">
+            <div class="close-btn-container">
+                <button pButton type="button" icon="pi pi-times" class="p-button-rounded p-button-text white-icon-btn"
+                    (click)="authService.showUserProfile=false"></button>
+            </div>
+            <div class="profile-title">
+                <i class="pi pi-user-edit" style="margin-left: 0.5rem; font-size: 1.2rem;"></i>
+                الملف الشخصي
+            </div>
+        </div>
+
+        <!-- Scrollable Content Area -->
+        <div class="profile-scroll-container">
+            <p-tabView styleClass="profile-tabs">
+
+                <!-- TAB 1: Basic Information -->
+                <p-tabPanel header="البيانات الأساسية" leftIcon="pi pi-id-card">
+                    <div class="tab-content-pad">
+
+                        <!-- Avatar & Name Section -->
+                        <div class="profile-header-section">
+                            <div class="avatar-wrap">
+                                <div class="avatar-container">
+                                    <img *ngIf="userProfile?.userPicture"
+                                        [src]="'data:image/jpeg;base64,' + userProfile.userPicture" alt="User Avatar"
+                                        class="avatar-image" />
+                                    <img *ngIf="!userProfile?.userPicture" src="assets/imges/User.png"
+                                        alt="Default Avatar" class="avatar-image" />
+                                </div>
+                            </div>
+
+                            <div class="profile-info">
+                                <h2 class="user-name" style="margin-top: 2rem;">{{userProfile?.userDisplayName}}</h2>
+
+                                <!-- Organization Units Section -->
+                                <ng-container *ngIf="userProfile?.vwOrgUnitsWithCounts?.length > 0; else defaultTitle">
+                                    <div class="org-units-list">
+                                        <div *ngFor="let unit of userProfile.vwOrgUnitsWithCounts"
+                                            class="org-unit-item">
+                                            <div class="unit-name">
+                                                <i class="pi pi-briefcase"></i>
+                                                <span
+                                                    style="padding: 1rem; font-size: large;font-weight: bold;">{{unit.unitName}}</span>
+                                            </div>
+                                            <div class="unit-parent" *ngIf="unit.parentUnitName">
+                                                <i class="pi pi-sitemap"></i>
+                                                <span
+                                                    style="padding: 2rem;">{{unit.parentTypeName}}-{{unit.parentUnitName}}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </ng-container>
+
+                                <ng-template #defaultTitle>
+                                    <div class="user-title">
+                                        <i class="pi pi-briefcase"></i>
+                                        {{userProfile?.userTitle}}
+                                    </div>
+                                </ng-template>
+                            </div>
+                        </div>
+
+                        <!-- Basic Key-Value Grid -->
+                        <div class="info-grid">
+                            <div class="info-item" *ngFor="let row of basicInfoRows">
+                                <div class="icon-box"><i [class]="row?.icon || ''"></i></div>
+                                <div class="info-content">
+                                    <label>{{row?.label || ''}}</label>
+                                    <span>{{row?.value || ''}}</span>
+                                </div>
+                            </div>
+
+                            <!-- Mobile Row with Badge -->
+                            <div class="info-item" *ngIf="userProfile?.MobileNumber">
+                                <div class="icon-box"><i class="pi pi-phone"></i></div>
+                                <div class="info-content">
+                                    <label>رقم الهاتف</label>
+                                    <div class="value-with-badge">
+                                        <span>{{userProfile?.MobileNumber}}</span>
+                                        <p-tag *ngIf="validatedMobile" severity="success" value="موثق"
+                                            icon="pi pi-check" styleClass="mini-badge"></p-tag>
+                                        <p-tag *ngIf="validatedMobile === false" severity="warning" value="غير موثق"
+                                            icon="pi pi-exclamation-triangle" styleClass="mini-badge"></p-tag>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Groups Section -->
+                        <div class="profile-groups">
+                            <h4>
+                                <i class="pi pi-users"></i>
+                                المجموعات
+                            </h4>
+                            <div class="groups-container">
+                                <a *ngFor="let g of userProfile?.userGroups" href="#" class="custom-chip"
+                                    (click)="onGroupClick($event, g)">{{g}}</a>
+                                <span *ngIf="!userProfile?.userGroups?.length" class="no-groups">لا توجد مجموعات</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </p-tabPanel>
+
+                <!-- TAB 2: Mailbox Information -->
+                <p-tabPanel header="البريد / Mailbox" leftIcon="pi pi-envelope">
+                    <div class="tab-content-pad">
+
+                        <!-- Password Expiry Section -->
+                        <div class="pwd-expiry-section" *ngIf="passwordExpiryInfo" style="margin-bottom: 1.5rem;">
+                            <div class="pwd-expiry-chip large" [ngClass]="passwordExpiryInfo.cls">
+                                <i class="pi pi-clock"></i>
+                                <span *ngIf="passwordExpiryInfo.days >= 0">
+                                    تنتهي كلمة المرور خلال {{ passwordExpiryInfo.days }} يوم
+                                </span>
+                                <span *ngIf="passwordExpiryInfo.days < 0">كلمة المرور منتهية</span>
+                            </div>
+                        </div>
+
+                        <div class="info-grid single-col-mobile">
+
+                            <!-- Email Row with Badge -->
+                            <div class="info-item" *ngIf="userProfile?.Email || userProfile?.email">
+                                <div class="icon-box"><i class="pi pi-envelope"></i></div>
+                                <div class="info-content">
+                                    <label>البريد الإلكتروني</label>
+                                    <div class="value-with-badge">
+                                        <div class="value-row"
+                                            style="display:inline-flex; align-items:center; gap:0.5rem; cursor:pointer;"
+                                            (click)="copyEmail(userProfile?.Email || userProfile?.email)">
+                                            <span>{{userProfile?.Email || userProfile?.email}}</span>
+                                            <i class="pi pi-copy copy-icon"></i>
+                                        </div>
+
+                                        <p-tag *ngIf="validatedEmail" severity="success" value="موثق" icon="pi pi-check"
+                                            styleClass="mini-badge"></p-tag>
+                                        <p-tag *ngIf="validatedEmail === false" severity="warning" value="غير موثق"
+                                            icon="pi pi-exclamation-triangle" styleClass="mini-badge"></p-tag>
+                                    </div>
+                                    <span *ngIf="copiedEmail" class="copied-badge">تم النسخ</span>
+                                </div>
+                            </div>
+
+                            <!-- Additional Helper Rows -->
+                            <div class="info-item" *ngFor="let row of mailboxRows">
+                                <div class="icon-box"><i [class]="row?.icon || ''"></i></div>
+                                <div class="info-content">
+                                    <label>{{row?.label || ''}}</label>
+                                    <div class="value-row" [class.clickable]="row?.copy"
+                                        (click)="row?.copy ? copyEmail(row?.value) : null">
+                                        <span>{{row?.value || ''}}</span>
+                                        <i *ngIf="row?.copy" class="pi pi-copy copy-icon"></i>
+                                    </div>
+                                    <span *ngIf="row?.copy && copiedEmail" class="copied-badge">تم النسخ</span>
+                                </div>
+                            </div>
+
+                            <!-- Placeholder -->
+                            <div class="info-item"
+                                *ngIf="mailboxRows.length === 0 && !userProfile?.Email && !userProfile?.email">
+                                <div class="icon-box"><i class="pi pi-inbox"></i></div>
+                                <div class="info-content">
+                                    <label>معلومات البريد</label>
+                                    <span class="text-muted">لا تتوفر معلومات بريد إلكتروني حالياً.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </p-tabPanel>
+
+                <!-- TAB 3: User Configuration -->
+                <p-tabPanel header="الإعدادات" leftIcon="pi pi-cog">
+                    <div class="tab-content-pad">
+                        <!-- Settings Rows -->
+                        <div class="settings-list">
+
+                            <!-- Notification Strategy -->
+                            <div class="setting-row">
+                                <div class="setting-icon"><i class="pi pi-bell"></i></div>
+                                <div class="setting-details">
+                                    <div class="setting-label">نظام التنبيهات (Notification Strategy)</div>
+                                    <div class="setting-desc">اختر بين النظام الحديث أو النظام القديم.</div>
+                                </div>
+                                <div class="setting-control">
+                                    <p-inputSwitch [(ngModel)]="msgsService.usePrimeNG"
+                                        (onChange)="msgsService.setStrategy($event.checked)"></p-inputSwitch>
+                                </div>
+                            </div>
+
+                            <!-- Sound Settings -->
+                            <div class="setting-row">
+                                <div class="setting-icon"><i class="pi pi-volume-up"></i></div>
+                                <div class="setting-details">
+                                    <div class="setting-label">التفاعل الصوتي</div>
+                                    <div class="setting-desc">تشغيل الأصوات عند تلقي تنبيهات جديدة.</div>
+                                </div>
+                                <div class="setting-control">
+                                    <p-inputSwitch [(ngModel)]="soundService.isSoundEnabled"
+                                        (onChange)="soundService.setSoundStrategy($event.checked)"></p-inputSwitch>
+                                </div>
+                            </div>
+
+                            <!-- Ramadan Celebration -->
+                            <div class="setting-row">
+                                <div class="setting-icon"><i class="pi pi-moon"></i></div>
+                                <div class="setting-details">
+                                    <div class="setting-label">أجواء رمضان</div>
+                                    <div class="setting-desc">إظهار زينة رمضان والشخصية الترحيبية.</div>
+                                </div>
+                                <div class="setting-control">
+                                    <p-inputSwitch [ngModel]="authService.isRamadanCelebrationEnabled$ | async"
+                                        (onChange)="authService.setRamadanPreference($event.checked)"></p-inputSwitch>
+                                </div>
+                            </div>
+
+                            <!-- System Refresh -->
+                            <div class="setting-row">
+                                <div class="setting-icon"><i class="pi pi-database"></i></div>
+                                <div class="setting-details">
+                                    <div class="setting-label">تحديث النظام</div>
+                                    <div class="setting-desc">مسح التخزين المؤقت وإعادة تحميل الصفحة.</div>
+                                </div>
+                                <div class="setting-control">
+                                    <button pButton type="button" icon="pi pi-refresh" label="تحديث"
+                                        class="p-button-outlined p-button-sm p-button-secondary"
+                                        (click)="clearCache()"></button>
+                                </div>
+                            </div>
+
+                            <!-- Theme Customization -->
+                            <div class="setting-row">
+                                <div class="setting-icon"><i class="pi pi-palette"></i></div>
+                                <div class="setting-details">
+                                    <div class="setting-label">تخصيص المظهر</div>
+                                    <div class="setting-desc">اختر المظهر المفضل للتطبيق.</div>
+                                </div>
+                                <div class="setting-control">
+                                    <p-dropdown [options]="visualThemeOptions" [(ngModel)]="selectedVisualTheme" 
+                                        (onChange)="changeVisualTheme($event.value)" optionLabel="label" optionValue="value"
+                                        [style]="{'width':'150px'}"></p-dropdown>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Advanced / Test Tools -->
+                        <div class="advanced-section" style="margin-top: 2rem;">
+                            <p-accordion>
+                                <p-accordionTab header="أدوات اختبار (للمطورين)">
+                                    <div class="test-buttons-grid">
+                                        <button pButton type="button" label="نجاح" icon="pi pi-check"
+                                            class="p-button-success p-button-outlined" (click)="testSuccess()"></button>
+                                        <button pButton type="button" label="خطأ" icon="pi pi-times"
+                                            class="p-button-danger p-button-outlined" (click)="testError()"></button>
+                                        <button pButton type="button" label="معلومة" icon="pi pi-info-circle"
+                                            class="p-button-info p-button-outlined" (click)="testInfo()"></button>
+                                        <button pButton type="button" label="تأكيد" icon="pi pi-question"
+                                            class="p-button-help p-button-outlined" (click)="testConfirm()"></button>
+                                    </div>
+                                </p-accordionTab>
+                            </p-accordion>
+                        </div>
+                    </div>
+                </p-tabPanel>
+
+                <!-- TAB 4: 2FA Authentication -->
+                <p-tabPanel header="المصادقة الثنائية" leftIcon="pi pi-shield">
+                    <div class="tab-content-pad">
+
+                        <div class="auth-status-hero" [ngClass]="{'active': is2faEnabled, 'inactive': !is2faEnabled}">
+                            <div class="status-icon">
+                                <!-- <i class="pi pi-shield" style="font-size: 1.5rem; color: #10b981;"></i> -->
+                                <img src="assets/imges/PreventOn.png" alt="" height="50" width="50"
+                                    style="filter: drop-shadow(0 0 2px rgb(16, 185, 129));"
+                                    *ngIf="authService.twoFactorProtected$ | async"
+                                    pTooltip="المصادقة الثنائية غير مفعلة" tooltipPosition="bottom">
+                                <img src="assets/imges/PreventOff.png" alt="" height="50" width="50"
+                                    style="filter: drop-shadow(0 0 2px rgb(185, 16, 16));"
+                                    *ngIf="!(authService.twoFactorProtected$ | async)"
+                                    pTooltip="المصادقة الثنائية غير مفعلة" tooltipPosition="bottom">
+                            </div>
+                            <div class="status-text">
+                                <h3>{{ is2faEnabled ? 'الحساب محمي' : 'الحماية غير مفعلة' }}</h3>
+                                <p>المصادقة الثنائية (2FA) {{ is2faEnabled ? 'مفعلة وتعمل بشكل صحيح.' : 'غير مفعلة
+                                    حالياً.' }}</p>
+                            </div>
+                            <div class="status-action">
+                                <p-inputSwitch [ngModel]="is2faEnabled" [disabled]="toggleLoading"
+                                    (onChange)="onToggleCallback($event)"></p-inputSwitch>
+                                <span *ngIf="toggleLoading" class="spinner-sm"><i
+                                        class="pi pi-spin pi-spinner"></i></span>
+                            </div>
+                        </div>
+
+                        <div class="info-grid single-col" style="margin-top: 1.5rem;">
+                            <div class="info-item">
+                                <div class="icon-box"><i class="pi pi-mobile"></i></div>
+                                <div class="info-content">
+                                    <label>إعداد التطبيق</label>
+                                    <div
+                                        style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                        <div class="status-sub">
+                                            <span *ngIf="enrollment?.validatedAtUtc" class="text-success">
+                                                تم الربط ({{ enrollment?.createdAtUtc | date:'mediumDate' }})
+                                            </span>
+                                            <span *ngIf="!enrollment?.validatedAtUtc" class="text-muted">لم يتم الربط
+                                                بعد</span>
+                                        </div>
+                                        <button pButton type="button"
+                                            label="{{ enrollment?.validatedAtUtc ? 'إعادة الإعداد' : 'إعداد جديد' }}"
+                                            icon="pi pi-cog" class="p-button-outlined p-button-sm"
+                                            (click)="requestRepair()" [disabled]="pairingLoading || toggleLoading">
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="security-tips">
+                            <h4><i class="pi pi-info-circle"></i> لماذا أستخدم المصادقة الثنائية؟</h4>
+                            <ul>
+                                <li>حماية إضافية لحسابك ضد محاولات الاختراق.</li>
+                                <li>مطلوب رمز مؤقت من هاتفك عند تسجيل الدخول.</li>
+                                <li>يدعم تطبيقات مثل Google Authenticator و Microsoft Authenticator.</li>
+                            </ul>
+                        </div>
+
+                    </div>
+                </p-tabPanel>
+
+            </p-tabView>
+        </div>
+
+        <!-- Footer (Hidden from main view, actions are inside tabs or top right close) -->
+        <div class="profile-footer sticky-footer">
+            <button pButton type="button" label="تسجيل الخروج" icon="pi pi-sign-out"
+                class="p-button-danger logout-button"
+                (click)="broadcastService.post({ type: 'USER_SIGNOUT', payload: {} }); this.authService.SignOut();authService.showUserProfile=false"></button>
+
+            <button pButton type="button" label="إغلاق" icon="pi pi-times"
+                class="p-button-outlined p-button-secondary close-button"
+                (click)="authService.showUserProfile=false"></button>
+        </div>
+
+    </div>
+</p-dialog>
+
+
+<!-- 2FA Setup Dialog -->
+<p-dialog header="إعداد المصادقة الثنائية" [(visible)]="showSetupDialog" [modal]="true"
+    [style]="{width: '420px', maxWidth: '95vw', 'direction': 'rtl'}" [draggable]="false" [resizable]="false"
+    [closable]="false" appendTo="body" [dismissableMask]="false" [baseZIndex]="10020">
+
+    <div class="setup-content" *ngIf="pairing" style="padding-top: 0.5rem;">
+        <!-- Step 1: Scan OR Manual -->
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem; color: #1e293b;">1. امسح الرمز
+                بواسطة تطبيق المصادق</div>
+            <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 1rem;">(Google Authenticator, Microsoft
+                Authenticator, etc.)</div>
+
+            <div
+                style="background: #fff; padding: 0.75rem; border: 1px solid #e2e8f0; display: inline-block; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <img *ngIf="qrSafeUrl || qrDataUrl" [src]="qrSafeUrl || qrDataUrl" alt="QR Code" width="160"
+                    height="160" />
+            </div>
+
+            <div style="margin-top: 1rem;">
+                <p-accordion>
+                    <p-accordionTab header="لا يمكنك مسح الرمز؟ (الإدخال اليدوي)">
+                        <div
+                            style="display: flex; align-items: center; gap: 0.5rem; background: #f1f5f9; padding: 0.75rem; border-radius: 6px;">
+                            <code
+                                style="flex:1; font-family: monospace; font-size: 0.9rem; word-break: break-all; color: #334155;">{{pairing.manualEntryKey}}</code>
+                            <button pButton icon="pi pi-copy" class="p-button-text p-button-sm p-button-rounded"
+                                (click)="copyToClipboard(pairing.manualEntryKey)" pTooltip="نسخ"
+                                tooltipPosition="top"></button>
+                        </div>
+                    </p-accordionTab>
+                </p-accordion>
+            </div>
+        </div>
+
+        <p-divider></p-divider>
+
+        <!-- Step 2: Verify -->
+        <div style="margin-top: 1.5rem; text-align: center;">
+            <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 1rem; color: #1e293b;">2. أدخل رمز التحقق
+                الظاهر في التطبيق</div>
+
+            <!-- 6-Digit OTP Inputs -->
+            <div style="display:flex; justify-content:center; direction:ltr; margin-bottom: 1rem;">
+                <app-otp-code-input [length]="6" [disabled]="validateLoading" [loading]="validateLoading"
+                    [errorText]="validateError" [code]="otpPin" (codeChange)="otpPin = $event"
+                    (completed)="confirmAuthenticator($event)">
+                </app-otp-code-input>
+            </div>
+
+            <div style="min-height: 1.5rem;">
+                <small class="p-error" *ngIf="validateError">{{validateError}}</small>
+                <div *ngIf="validateLoading"
+                    style="color: #6366f1; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                    <i class="pi pi-spin pi-spinner"></i> جاري التحقق...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer Actions -->
+    <ng-template pTemplate="footer">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <button pButton label="إلغاء" icon="pi pi-times" class="p-button-text p-button-secondary"
+                (click)="cancelSetup()" [disabled]="validateLoading"></button>
+
+            <button pButton label="تأكيد وتفعيل" icon="pi pi-check" (click)="confirmAuthenticator()"
+                [loading]="validateLoading" [disabled]="!otpPin || otpPin.length !== 6"></button>
+        </div>
+    </ng-template>
+
+</p-dialog>

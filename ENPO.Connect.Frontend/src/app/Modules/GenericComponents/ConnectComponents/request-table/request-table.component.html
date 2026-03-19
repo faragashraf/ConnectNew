@@ -1,0 +1,409 @@
+<div class="col-md-12" style="margin-left:auto; margin-right:auto; float:none;" *ngIf="config.listRequestModel">
+    <!-- {{config|json}} -->
+    <div class="row" [hidden]="isSearchMode">
+        <div class="col-12">
+            <div class="filters-panel">
+                <div class="filters-panel-header d-flex align-items-center justify-content-between" role="button"
+                    tabindex="0" (click)="filtersCollapsed = !filtersCollapsed"
+                    [attr.aria-expanded]="!filtersCollapsed">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="pi pi-filter" style="font-size: 1.2rem; color: #0b3a9b;"></i>
+                        <h5 class="filters-title mb-0">محددات فلتر الطلبات</h5>
+                    </div>
+                    <button pButton type="button" class="p-button-text p-button-rounded p-button-plain"
+                        [icon]="filtersCollapsed ? 'pi pi-chevron-down' : 'pi pi-chevron-up'"></button>
+                </div>
+
+                <div class="filters-panel-body-wrapper" [class.collapsed]="filtersCollapsed">
+                    <div class="filters-panel-body">
+                        <div class="filters-panel-content row m-0 w-100">
+                            <div id="tour-request-type-filter" class="widget col-md-4">
+                                <form [formGroup]="typefrm">
+                                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                                        <h5>نوع الطلب:</h5>
+                                        <button pButton type="button" icon="pi pi-bars"
+                                            class="p-button-text p-button-rounded"
+                                            (click)="isCategoryTreeMode = !isCategoryTreeMode; prepareCategoryTree()"
+                                            pTooltip="تبديل العرض" *ngIf="!isCategoryTreeMode"></button>
+                                    </div>
+
+                                    <div class="form-group" style="position: relative; margin-top: .8rem;">
+                                        <ng-container *ngIf="!isCategoryTreeMode">
+                                            <div class="radio-group">
+                                                <div *ngFor="let cat of genericFormService.cdcategoryDtos"
+                                                    class="radio-option d-flex align-items-center mb-2"
+                                                    [class.selected]="typefrm.get('type')?.value == cat.catId">
+                                                    <input type="radio" [id]="'cat-' + cat.catId" name="type"
+                                                        [value]="cat.catId" formControlName="type"
+                                                        (change)="mergedFilterRequests()" class="radioButton me-2" />
+                                                    <label [for]="'cat-' + cat.catId"
+                                                        style="cursor: pointer;">{{cat.catName}}</label>
+                                                </div>
+                                                <div class="radio-option d-flex align-items-center mb-2"
+                                                    [class.selected]="typefrm.get('type')?.value == 0">
+                                                    <input type="radio" id="cat-0" name="type" [value]="0"
+                                                        formControlName="type" (change)="mergedFilterRequests()"
+                                                        class="radioButton me-2" />
+                                                    <label for="cat-0" style="cursor: pointer;">الكل</label>
+                                                </div>
+                                            </div>
+                                        </ng-container>
+
+                                        <div *ngIf="isCategoryTreeMode" id="overLayTree">
+                                            <button id="tour-tree-dropdown-btn" type="button" pButton
+                                                [label]="selectedCategoryLabel" icon="pi pi-filter"
+                                                (click)="prepareCategoryTree(); overlayVisible = !overlayVisible"
+                                                class="p-button-outlined w-100"
+                                                style="text-align: right; width: 100%; justify-content: space-between;"></button>
+
+                                            <div *ngIf="overlayVisible" class="tree-overlay-container">
+                                                <app-tree-sidebar [tree]="categoryTree" [showTreeContextMenu]="false"
+                                                    [allExpanded]="true" [expandedWidth]="100" [scrollHeight]="28"
+                                                    (onNodeSelect)="onCategoryNodeSelect($event)">
+                                                </app-tree-sidebar>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                            <div id="tour-request-status-filter" class="widget col-md-7"
+                                *ngIf="config.listRequestModel.requestedData != 1">
+                                <h5>حالة الطلب:</h5>
+                                <form [formGroup]="statusfrm">
+                                    <div class="radio-group">
+                                        <ng-container>
+                                            <div *ngFor="let option of config.statusChangeOptions"
+                                                class="radio-option d-flex align-items-center mb-2"
+                                                [class.selected]="statusfrm.get('type')?.value === option.value">
+                                                <input type="radio" [id]="option.value" [value]="option.value"
+                                                    formControlName="type" (change)="mergedFilterRequests()"
+                                                    class="radioButton me-2" />
+
+                                                <label [for]="option.value">
+                                                    <span class="p-tag"
+                                                        [ngClass]="'p-tag-' + getSeverity(option.label.toString())">
+                                                        {{ option.label }}
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </ng-container>
+                                        <!-- Option 4 -->
+                                        <div class="radio-option d-flex align-items-center mb-2"
+                                            [class.selected]="statusfrm.get('type')?.value == 5">
+                                            <input type="radio" id="الكل" value="5" formControlName="type"
+                                                (change)="mergedFilterRequests()" class="radioButton me-2" />
+                                            <label [for]="'الكل'">
+                                                <span class="p-tag" [ngClass]="'p-tag-' + getSeverity('الكل')">
+                                                    الكل
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div [ngClass]="{'pane-with-sticky': config.fieldsConfiguration.sticky}">
+            <div id="tour-request-table" class="table-container"
+                [ngStyle]="config.fieldsConfiguration.sticky ? {'max-height': isSearchMode ? '72vh' : '65vh','overflow':'auto'} : {}">
+                <p-table #dt1 selectionMode="single" [value]="messageDtos" [(selection)]="messageDto"
+                    [rows]="config.listRequestModel.pageSize" [paginator]="!loading && messageDtos.length>0"
+                    (onPage)="onPageChange($event)" [totalRecords]="config.totalRecords" [loading]="loading"
+                    [lazy]="true" [sortMode]="'single'" [sortField]="'createdDate'" [sortOrder]="-1"
+                    currentPageReportTemplate="عرض {first} إلي {last} من  إجمالي {totalRecords}"
+                    [showCurrentPageReport]="!loading" dataKey="messageId"
+                    [globalFilterFields]="config.globalFilterFields" rowExpandMode='single'
+                    [tableStyle]="{ 'min-width': '60rem' }" (onRowExpand)="handleRowExpand($event)"
+                    (onRowCollapse)="handleRowCollapse($event)" (onRowSelect)="onRowSelect($event)"
+                    (onRowUnselect)="onRowUnselect($event)">
+                    <ng-template pTemplate="caption">
+                        <div class="flex caption-row" style="align-items: center; gap: 1rem;">
+                            <div style="margin-right: 2rem;">
+                                <div id="tour-mode-toggle" class="flex mode-toggle-container" *ngIf="!loading">
+                                    <div class="mode-toggle" style=" display: flex;align-items: center;">
+                                        <label class="mode-radio-label">
+                                            <input type="radio" [attr.name]="uniqueId" [value]="false"
+                                                [(ngModel)]="isSearchMode" (change)="onSearchModeChange()"
+                                                class="mode-radio" />
+                                            <span class="mode-radio-custom" [class.active-mode]="!isSearchMode"></span>
+                                            <span class="mode-radio-text">الوضع العادي</span>
+                                        </label>
+                                        <label class="mode-radio-label">
+                                            <input type="radio" [attr.name]="uniqueId" [value]="true"
+                                                [(ngModel)]="isSearchMode" (change)="onSearchModeChange()"
+                                                class="mode-radio" />
+                                            <span class="mode-radio-custom" [class.active-mode]="isSearchMode"></span>
+                                            <span class="mode-radio-text">وضع الاستعلام</span>
+                                        </label>
+                                        <button id="tour-edit-btn" type="button" class="animated-edit-btn"
+                                            (click)="onEdit()" [disabled]="!messageDto || !messageDto.messageId" pRipple
+                                            [pTooltip]="!messageDto || !messageDto.messageId ? 'اختر سطرًا للتعديل' : 'تعديل السجل المحدد'"
+                                            *ngIf="authObjectsService.checkAuthFun('EditSubjectFunc')">
+                                            <span class="edit-icon" aria-hidden="true">✎</span>
+                                            <span class="edit-text">تعديل</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="search-bar-container" *ngIf="!loading && isSearchMode">
+                            <p-dropdown id="tour-search-fields" appendTo="body" [options]="searchOptions"
+                                optionLabel="cdMendLbl" optionValue="cdmendTxt" placeholder="اختر الحقل"
+                                [style]="{'width': '20rem','height':'3.5rem','border-radius':'20px','padding': '0.4rem'}"
+                                [(ngModel)]="TextKind" [filter]="true" [showClear]="true">
+                            </p-dropdown>
+
+                            <p-dropdown id="tour-search-type" class="search-dropdown" [options]="TextTypeOptions"
+                                placeholder="اختر نوع البحث" optionLabel="label" optionValue="value" appendTo="body"
+                                [style]="{'width': '13rem','height':'3.5rem','border-radius':'20px','padding': '0.4rem'}"
+                                [(ngModel)]="TextType" [filter]="true" [showClear]="true">
+                            </p-dropdown>
+                            <span id="tour-search-input" class="p-input-icon-left search-input-wrapper">
+                                <i class="pi pi-search search-icon"></i>
+                                <input pInputText type="text" placeholder="بحث"
+                                    style="width: 20rem;border-color:transparent" [(ngModel)]="TextSearch" />
+                            </span>
+                            <button id="tour-search-btn" pButton type="button" icon="pi pi-lightbulb" label="استعلام"
+                                class="smart-search-btn" (click)="onSmartSearch()"
+                                [disabled]="TextSearch.length==0 || TextKind.length==0"></button>
+                        </div>
+                    </ng-template>
+                    <!-- Custom paginator left to ensure rows-per-page dropdown is appended to body -->
+                    <ng-template pTemplate="paginatorright">
+                        <div class="custom-paginator-left"
+                            style="display:flex;align-items:center;justify-content:flex-start;gap:.5rem;">
+                            <p-dropdown [options]="config.pageSizes" [ngModel]="dt1.rows"
+                                (onChange)="onRowsPerPageChange($event)" appendTo="body"
+                                [autoWidth]="false"></p-dropdown>
+                        </div>
+                    </ng-template>
+                    <ng-template pTemplate="header">
+                        <tr class="p-0" *ngIf="!loading">
+                            <th style="width:2%;font-size: large;"></th>
+                            <th style="width:18%;font-size: large;text-align: center"
+                                *ngIf="this.config.listRequestModel.requestedData == 3"> المنطقة</th>
+
+                            <ng-container *ngIf="config.tableFields && config.tableFields.length>0; else staticHeaders">
+                                <ng-container *ngFor="let col of config.tableFields">
+                                    <th *ngIf="col.visible !== false" [style.width]="col.width"
+                                        [pSortableColumn]="col.sortable ? col.field : ''"
+                                        style="text-align: center;font-size: large;">
+                                        {{col.header}}
+                                    </th>
+                                </ng-container>
+                                <th></th>
+                            </ng-container>
+
+                            <ng-template #staticHeaders>
+                                <th style="width:10%;text-align: center;font-size: large;">
+                                    الرقم المرجعي
+                                </th>
+                                <th style="width:5%;text-align: center;font-size: large;">
+                                    النوع
+                                </th>
+                                <th pSortableColumn="status" style="width:8%;text-align: center;font-size: large;">
+                                    الحالة
+                                </th>
+                                <th pSortableColumn="createdDate"
+                                    style="width:12%;text-align: center;font-size: large;">
+                                    تاريخ الإنشاء
+                                </th>
+                                <th></th>
+                            </ng-template>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="body" let-message let-rowIndex="rowIndex" let-expanded="expanded">
+                        <tr [pSelectableRow]="message" [pSelectableRowIndex]="rowIndex" style="text-align: center"
+                            *ngIf="!loading" class="request-row row-entrance">
+                            <td>
+                                <span
+                                    *ngIf="authObjectsService.returnCurrentUser()=='84621'">{{message.messageId}}</span>
+                                <button type="button" pButton pRipple [pRowToggler]="message" single="true"
+                                    class="p-button-text p-button-rounded p-button-plain tour-row-toggler"
+                                    [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-left'"></button>
+                            </td>
+                            <td *ngIf="config.listRequestModel && config.listRequestModel.requestedData == 3">
+                                {{message.assignedSectorId}}</td>
+
+                            <ng-container *ngIf="config.tableFields && config.tableFields.length>0; else staticBody">
+                                <ng-container *ngFor="let col of config.tableFields">
+                                    <td *ngIf="col.visible !== false" style="text-align: center;">
+                                        <ng-container *ngIf="col.renderAsStatus || col.field === 'status'">
+                                            <span class="p-tag" v
+                                                [ngClass]="'p-tag-' + getSeverity(config.statusChangeOptions[message.status].label.toString())"
+                                                style="font-size: 1rem;">
+                                                {{ config.statusChangeOptions[message.status].label }}
+                                            </span>
+                                        </ng-container>
+                                        <ng-container *ngIf="!(col.renderAsStatus || col.field === 'status')">
+                                            <ng-container *ngIf="message[col.field] !== undefined">
+                                                <span *ngIf="col.field.toLowerCase().includes('date')">{{
+                                                    message[col.field] | date:'short' }}</span>
+                                                <span *ngIf="!col.field.toLowerCase().includes('date')">{{
+                                                    message[col.field] }}</span>
+                                            </ng-container>
+                                            <ng-container *ngIf="message[col.field] === undefined">
+                                                {{ genericFormService.getRequesterFieldTxt(message, col.field) ||
+                                                get(message, col.field) || '' }}
+                                            </ng-container>
+                                        </ng-container>
+                                    </td>
+                                </ng-container>
+                                <td>
+                                    <app-generic-button [type]="'button'"
+                                        [kind]="get(message,'TITLE_REQUESTER_TYPE').length==0?'primary':'success'"
+                                        [icon]="get(message,'TITLE_REQUESTER_TYPE').length==0?'pencil':'print'"
+                                        (clicked)="messageDto=message;genericFormService.prePrintFormVisible=true"
+                                        [tooltip]="get(message,'TITLE_REQUESTER_TYPE').length==0?'تجهيز المستند':'طباعة الشهادة'"
+                                        [tooltipPosition]="'top'"
+                                        *ngIf="canShowPrePrintButton(message)"></app-generic-button>
+
+                                    <app-generic-button [type]="'button'" [kind]="'success'" [icon]="'pencil'"
+                                        (clicked)="messageDto=message;EnpoCompleteRequestVisible=true"
+                                        [tooltip]="'استكمال إيصالات السداد'" [tooltipPosition]="'top'"
+                                        *ngIf="canShowEnpoCompleteRequest(message)"></app-generic-button>
+                                </td>
+                            </ng-container>
+
+                            <ng-template #staticBody>
+                                <td>{{message.requestRef}}</td>
+                                <td> {{message.categoryCd}}</td>
+                                <td>
+                                    <span class="p-tag" [ngClass]="'p-tag-' + getSeverity(message.status.toString())"
+                                        style="font-size: 1rem;">
+                                        {{ message.status.toString() }}
+                                    </span>
+                                </td>
+                                <td>{{ message.createdDate | date:'short' }} </td>
+                                <td>
+                                    <app-generic-button [type]="'button'"
+                                        [kind]="get(message,'TITLE_REQUESTER_TYPE').length==0?'primary':'success'"
+                                        [icon]="get(message,'TITLE_REQUESTER_TYPE').length==0?'pencil':'print'"
+                                        (clicked)="messageDto=message;genericFormService.prePrintFormVisible=true"
+                                        [tooltip]="get(message,'TITLE_REQUESTER_TYPE').length==0?'تجهيز المستند':'طباعة الشهادة'"
+                                        [tooltipPosition]="'top'"
+                                        *ngIf="canShowPrePrintButton(message)"></app-generic-button>
+                                </td>
+                            </ng-template>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="rowexpansion" let-message>
+                        <td colspan="11" style="text-align: center;">
+                            <div class="row-expansion-wrapper"
+                                style="padding: 1.5rem; display: flex; flex-direction: row; justify-content: flex-start; align-items: center;min-width: 68%;">
+                                <label
+                                    style="font-size: large; font-weight: bold; padding: 1rem; color: blue; margin-bottom: 1rem; box-shadow: inset 0px 0px 7px 7px rgb(9 49 221 / 28%); border-radius: 2rem; margin-left: 1rem;">تغيير
+                                    حالة الطلب:</label>
+                                <div class="radio-group no-hover"
+                                    style="flex-wrap:wrap; gap:1rem; justify-content:flex-start; min-width: 50%;">
+                                    <div *ngFor="let opt of config.statusChangeOptions"
+                                        class="radio-option d-flex align-items-center mb-2"
+                                        [class.selected]="isStatusChecked(message, opt.value)"
+                                        [class.no-animation]="config.allowStatusChange === false">
+                                        <input type="radio"
+                                            [id]="(message.messageId || message.requestRef || message.createdDate) + '-' + opt.value"
+                                            [name]="'status-change-' + (message.messageId || message.requestRef || message.createdDate)"
+                                            [value]="opt.value" [checked]="isStatusChecked(message, opt.value)"
+                                            [disabled]="isStatusChangeDisabled(message)"
+                                            (change)="onStatusRadioSelect(message, opt.value)" />
+
+                                        <label
+                                            [for]="(message.messageId || message.requestRef || message.createdDate) + '-' + opt.value">
+                                            <span class="p-tag" [ngClass]="'p-tag-' + getSeverity(opt.label.toString())"
+                                                style="font-size: 1rem;">
+                                                {{ opt.label }}
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tour-details-tabs">
+                                <p-tabView (onChange)="onTabChange($event, message)">
+                                    <p-tabPanel header="تفاصيل الطلب">
+                                        <app-form-details [messageDto]="message" [config]="config"
+                                            [unitTree]="unitTree"></app-form-details>
+                                    </p-tabPanel>
+                                    <p-tabPanel
+                                        header="مسار الطلب{{message.replies.length>0? - message.replies.length:''}}">
+                                        <div
+                                            style="display: flex; flex-wrap: wrap; align-content: stretch; flex-direction: column; justify-content: space-between;align-items: stretch;">
+                                            <app-replies-list [config]="config"
+                                                [replyDtos]="message.replies"></app-replies-list>
+                                        </div>
+                                    </p-tabPanel>
+                                    <p-tabPanel header="إضافة مسار للطلب"
+                                        *ngIf="(config.deadStatus.indexOf(message.status) === -1) && config.routeKey != 'AdminCer/MyOutbox'">
+                                        <div
+                                            style="display: flex; flex-wrap: wrap; align-content: stretch; flex-direction: column; justify-content: space-between;align-items: stretch;">
+                                            <app-reply [config]="config" (formSubmit)="handleFormReplySubmit($event)"
+                                                [message]="message" [unitTree]="unitTree"
+                                                [admCertDeptDtos]="admCertDeptDtos"></app-reply>
+                                        </div>
+                                    </p-tabPanel>
+                                </p-tabView>
+                            </div>
+                            <span style="color: red;text-align: center;">
+                                ###########################################################################################################################################
+                            </span>
+                        </td>
+                    </ng-template>
+                    <ng-template pTemplate="emptymessage">
+                        <tr>
+                            <td colspan="12" style="text-align: center;font-size: xx-large;color: blue;">
+                                لا توجد بيانات للعرض
+                            </td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </div>
+        </div>
+    </div>
+
+    <p-dialog *ngIf="messageDtos.length>0 && messageDtos[0].type ==1" [header]="messageDto.categoryCd + ' - '  + messageDto.requestRef +' - '+ 
+                        genericFormService.getRequesterFieldTxt(messageDto, 'REQUSTER_NAME')  
+                        " [resizable]="false" [modal]="true" [maximizable]="true" appendTo="body"
+        [(visible)]="genericFormService.prePrintFormVisible" [style]="{width: '65vw','direction':'rtl'}"
+        [contentStyle]="{height: '65vh'}" (onHide)="OnHideAction()">
+        <div>
+            <div class="box box-info">
+                <div class="box-header">
+                    <h3 class="box-title">استكمال البيانات</h3>
+                </div>
+                <div class="box-body">
+                    <app-pre-print-form [config]="config" [message]="messageDto"
+                        [messageDtos]="messageDtos"></app-pre-print-form>
+                </div>
+            </div>
+        </div>
+        <ng-template pTemplate="footer">
+            <button type="button" pButton pRipple icon="pi pi-times"
+                (click)="genericFormService.prePrintFormVisible=false" label="إغلاق" class="p-button-text"></button>
+        </ng-template>
+    </p-dialog>
+
+    <p-dialog *ngIf="messageDtos.length>0 && messageDtos[0].type ==2" [header]="messageDto.categoryCd + ' - '  + messageDto.requestRef +' - '+ 
+                        genericFormService.getRequesterFieldTxt(messageDto, 'Emp_Name')  
+                        " [resizable]="false" [modal]="true" [maximizable]="true" appendTo="body"
+        [(visible)]="EnpoCompleteRequestVisible" [style]="{width: '65vw','direction':'rtl'}"
+        [contentStyle]="{height: '95vh'}" (onHide)="OnHideAction()">
+        <div>
+            <div class="box box-info">
+                <div class="box-header">
+                    <h3 class="box-title">استكمال إيصالات السداد</h3>
+                </div>
+                <div class="box-body">
+                    <app-complete-request [config]="config" [message]="messageDto"
+                        [messageDtos]="messageDtos" (messageUpdated)="onMessageUpdated($event)"></app-complete-request>
+                </div>
+            </div>
+        </div>
+        <ng-template pTemplate="footer">
+            <button type="button" pButton pRipple icon="pi pi-times"
+                (click)="EnpoCompleteRequestVisible=false" label="إغلاق" class="p-button-text"></button>
+        </ng-template>
+    </p-dialog>

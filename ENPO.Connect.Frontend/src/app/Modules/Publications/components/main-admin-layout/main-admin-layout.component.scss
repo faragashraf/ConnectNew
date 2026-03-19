@@ -1,0 +1,506 @@
+.sidebar-layout.mini-sidebar .main-content-area {
+	margin-right: 70px;
+}
+
+/* New CSS-based splitter layout */
+.split-layout {
+	display: flex;
+	width: 100%;
+	height: 100%;
+	gap: 0.75rem;
+}
+
+.sidebar-pane {
+	width: 320px;
+	min-width: 380px;
+	max-width: 420px;
+	background: transparent;
+	display: flex;
+	flex-direction: column;
+	transition: width 0.28s ease, opacity 0.28s ease;
+	overflow: hidden;
+}
+.sidebar-pane .sidebar-controls {
+	display: flex;
+	justify-content: flex-end;
+	padding: 0.4rem;
+}
+.sidebar-pane.collapsed {
+	width: 64px;
+}
+
+.main-pane {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+/* Sticky+collapsible form header area */
+.form-header {
+	position: sticky;
+	top: 0;
+	z-index: 8;
+	background: #fff;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	padding: 0.5rem 0.6rem;
+	border-bottom: 1px solid #eef6f2;
+}
+.form-header .form-header-controls {
+	display: flex;
+	justify-content: flex-start;
+}
+
+/* New: styled collapse toggle and header row */
+.form-header-row {
+display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.75rem;
+}
+
+.collapse-toggle {
+ 	display: inline-flex;
+ 	align-items: center;
+ 	justify-content: center;
+ 	width: 44px;
+ 	height: 36px;
+ 	padding: 0.2rem 0.4rem;
+ 	border-radius: 10px;
+ 	background: linear-gradient(135deg, #00b894 0%, #009688 100%);
+ 	color: #fff;
+ 	border: 0;
+ 	box-shadow: 0 8px 20px rgba(3,105,95,0.12);
+ 	transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s;
+ 	cursor: pointer;
+}
+
+.collapse-toggle .toggle-icon i {
+ 	font-size: 1.12rem;
+ 	transition: transform 0.25s ease;
+}
+
+.collapse-toggle:hover {
+ 	transform: translateY(-2px);
+ 	box-shadow: 0 12px 30px rgba(3,105,95,0.16);
+}
+
+.form-header-title h2 {
+ 	margin: 0;
+ 	font-size: 2rem;
+ 	color: #00665b;
+ 	font-weight: 700;
+ 	letter-spacing: 0.6px;
+	font-family: inherit;
+}
+.form-area {
+	transition: max-height 0.36s ease, opacity 0.28s ease, padding 0.28s ease;
+	max-height: 400px;
+	overflow: hidden;
+	opacity: 1;
+	padding: 0.25rem 0;
+}
+.form-area.collapsed {
+	max-height: 0;
+	opacity: 0;
+	padding: 0;
+}
+
+.pane-with-sticky .table-container {
+	overflow: auto;
+	flex: 1 1 auto;
+	min-height: 0;
+	padding-top: 0.6rem;
+}
+
+@media (max-width: 900px) {
+	.sidebar-pane { width: 72px; }
+	.sidebar-pane.collapsed { width: 56px; }
+}
+
+.config-bar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 1.5rem;
+	white-space: nowrap;
+	position: relative;
+}
+
+.config-gear {
+	position: relative;
+	z-index: 2;
+}
+
+.toggle-arrow-horizontal {
+	margin-right: 0.2rem;
+	font-size: 1.3rem;
+	color: #009688;
+	transition: transform 0.3s;
+	display: inline-flex;
+	align-items: center;
+}
+
+.toggle-arrow-horizontal.open {
+	transform: rotate(180deg);
+}
+
+.config-options-horizontal-bar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 1.5rem;
+	white-space: nowrap;
+	overflow: hidden;
+	width: 0;
+	opacity: 0;
+	transition: width 0.4s cubic-bezier(0.23, 1, 0.32, 1), opacity 0.3s;
+	position: absolute;
+	right: 12.5rem;
+	top: 50%;
+	transform: translateY(-50%);
+	background: transparent;
+}
+
+.config-options-horizontal-bar.open {
+	width: 48rem;
+	opacity: 1;
+}
+
+.config-bar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 1.5rem;
+	white-space: nowrap;
+}
+
+.config-options-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 1.5rem;
+	white-space: nowrap;
+}
+
+.config-title.horizontal-toggle {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+}
+
+.toggle-arrow-horizontal {
+	margin-right: 0.5rem;
+	font-size: 1.3rem;
+	color: #009688;
+	transition: transform 0.3s;
+	display: inline-flex;
+	align-items: center;
+}
+
+.toggle-arrow-horizontal.open {
+	transform: rotate(180deg);
+}
+
+.config-options-horizontal {
+	display: inline-block;
+	vertical-align: top;
+	overflow: hidden;
+	width: 0;
+	opacity: 0;
+	transition: width 0.4s cubic-bezier(0.23, 1, 0.32, 1), opacity 0.3s;
+	white-space: nowrap;
+}
+
+.config-options-horizontal.open {
+	width: 420px;
+	opacity: 1;
+}
+
+.toggle-arrow {
+	margin-right: 0.5rem;
+	font-size: 1.3rem;
+	color: #009688;
+	transition: transform 0.3s;
+	display: inline-flex;
+	align-items: center;
+}
+
+.toggle-arrow.open {
+	transform: rotate(180deg);
+}
+
+// Animated and attractive style for the table configuration panel
+.table-config-panel.animated-config-panel {
+	background: linear-gradient(135deg, #e0ffe7 0%, #ffffff 100%);
+	border-radius: 18px;
+	box-shadow: 0 6px 24px 0 rgba(0, 0, 0, 0.13);
+	padding: 1.5rem 2rem 1rem 2rem;
+	margin-bottom: 2rem;
+	margin-top: 1rem;
+	border: 2px solid #7be495;
+	position: relative;
+	animation: fadeInPanel 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+	transition: box-shadow 0.3s, border 0.3s;
+}
+
+.table-config-panel.animated-config-panel:hover {
+	box-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.18);
+	border-color: #00b894;
+}
+
+.config-title {
+	font-size: 1.3rem;
+	font-weight: bold;
+	color: #009688;
+	margin-bottom: 1rem;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	letter-spacing: 1px;
+}
+
+// Fix gear icon rotation center
+// Fix gear icon rotation center for all icon types
+// Strongest centralization for gear icon spin
+.config-gear {
+	font-size: 1.5rem;
+	color: #00b894;
+	margin-right: 0.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.2rem;
+	height: 2.2rem;
+	vertical-align: middle;
+	position: relative;
+	aspect-ratio: 1/1;
+}
+
+
+.config-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1.2rem 2.5rem;
+	margin-bottom: 0.5rem;
+}
+
+.config-checkbox {
+	font-size: 1.48rem;
+	color: #333;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	cursor: pointer;
+	transition: color 0.2s;
+	user-select: none;
+	font-family: 'Times New Roman', Times, serif;
+}
+
+.config-checkbox input[type="checkbox"] {
+	accent-color: #00b894;
+	width: 1.1rem;
+	height: 1.1rem;
+	margin-right: 0.3rem;
+	transition: box-shadow 0.2s;
+}
+
+.config-checkbox input[type="checkbox"]:hover {
+	box-shadow: 0 0 0 2px #00b89433;
+}
+
+.config-checkbox span {
+	transition: color 0.2s;
+}
+
+.config-checkbox input[type="checkbox"]:checked+span {
+	color: #009688;
+	font-weight: bold;
+}
+
+@keyframes fadeInPanel {
+	0% {
+		opacity: 0;
+		transform: translateY(-30px) scale(0.98);
+	}
+
+	100% {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+// Sidebar overlay layout
+.sidebar-layout {
+	position: relative;
+	width: 100%;
+	height: 80vh;
+}
+
+.main-content-area {
+	transition: margin-right 0.3s;
+	margin-right: 0;
+	z-index: 10000;
+}
+
+.sidebar-layout.sidebar-opened .main-content-area {
+	margin-right: 350px;
+}
+
+/* Left-side news panel */
+.news-container {
+	margin-top: 1.25rem;
+	background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,255,250,0.85));
+	border-radius: 12px;
+	padding: 0.9rem;
+	box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+	border: 1px solid rgba(0,0,0,0.04);
+}
+
+.news-header {
+	display:flex;
+	flex-direction:column;
+	gap: 0.15rem;
+	margin-bottom: 0.6rem;
+}
+
+.news-header h3 {
+	margin:0;
+	font-size:1.02rem;
+	color:#03695f;
+}
+.news-header .news-sub {
+	margin:0;
+	font-size:0.75rem;
+	color:#6b6b6b;
+}
+
+.news-list {
+	display:flex;
+	flex-direction:column;
+	gap:0.6rem;
+}
+
+.news-card {
+	display:flex;
+	gap:0.8rem;
+	align-items:flex-start;
+	padding:0.6rem;
+	border-radius:10px;
+	background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,255,250,0.9));
+	box-shadow: 0 6px 18px rgba(3,105,95,0.06);
+	border: 1px solid rgba(3,105,95,0.06);
+	transform: translateY(6px);
+	animation: newsFadeUp 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.news-card:nth-child(1) { animation-delay: 0s; }
+.news-card:nth-child(2) { animation-delay: 0.06s; }
+.news-card:nth-child(3) { animation-delay: 0.12s; }
+.news-card:nth-child(4) { animation-delay: 0.18s; }
+
+.news-thumb {
+	width:160px;
+	height:90px;
+	border-radius:8px;
+	background: linear-gradient(135deg,#00c9a7,#00796b);
+	flex-shrink:0;
+	box-shadow: inset 0 -6px 14px rgba(0,0,0,0.06);
+	position: relative;
+	overflow: hidden;
+}
+
+/* Image styling and subtle dark gradient to improve text contrast */
+.news-thumb img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	transition: transform 0.28s ease, filter 0.28s ease;
+	filter: brightness(0.78);
+}
+
+.news-thumb::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 56%;
+	background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%);
+	pointer-events: none;
+}
+
+.news-content {
+	display:flex;
+	flex-direction:column;
+	gap:0.28rem;
+}
+.news-title {
+	font-weight:600;
+	color:#023d36;
+	font-size:0.95rem;
+	/* text shadow to increase contrast when over images */
+	text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+.news-excerpt {
+	font-size:0.8rem;
+	color:#56615f;
+	text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+}
+.news-meta {
+	font-size:0.72rem;
+	color:#8aa7a0;
+}
+
+/* When the content is placed on top of the image (overlay), use white text */
+.news-card.overlay .news-content {
+	position: absolute;
+	left: 12px;
+	right: 12px;
+	bottom: 10px;
+	z-index: 2;
+	color: #fff;
+}
+
+.news-card.overlay .news-title,
+.news-card.overlay .news-excerpt,
+.news-card.overlay .news-meta {
+	text-shadow: 0 2px 6px rgba(0,0,0,0.65);
+}
+
+.news-card:hover {
+	transform: translateY(-6px) scale(1.01);
+	box-shadow: 0 12px 32px rgba(2,93,84,0.12);
+}
+
+@keyframes newsFadeUp {
+	0% { opacity:0; transform: translateY(18px) scale(0.995); }
+	100% { opacity:1; transform: translateY(0) scale(1); }
+}
+
+/* Sticky header + scrollable table inside splitter pane */
+.pane-with-sticky {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+.pane-with-sticky .sticky-header {
+	position: sticky;
+	top: 0;
+	z-index: 6;
+	background: #fff;
+}
+.pane-with-sticky .table-container {
+	overflow: auto;
+	flex: 1 1 auto;
+	min-height: 0; /* allow flex child to shrink properly */
+	padding-top: 0.6rem;
+}
+
+/* Make the table header inside `generic-table` stick to the top of .table-container */
+/* Table header sticky rules moved to global p-datatable.scss */
+

@@ -1,0 +1,40 @@
+<div class="rich-text-editor">
+  <div class="toolbar">
+    <button (click)="formatText('bold')">Bold</button>
+    <button (click)="formatText('italic')">Italic</button>
+    <button (click)="formatText('underline')">Underline</button>
+
+    <!-- Font Color -->
+    <label for="font-color">Font Color:</label>
+    <select id="font-color" (change)="changeFontColor($event)" class="form-control">
+      <option value="black" selected>Black</option>
+      <option value="red">Red</option>
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+      <option value="purple">Purple</option>
+    </select>
+
+    <!-- Font Size -->
+    <label for="font-size">Font Size:</label>
+    <select id="font-size" (change)="changeFontSize($event)" class="form-control">
+      <option value="12px" selected>12px</option>
+      <option value="16px">16px</option>
+      <option value="20px">20px</option>
+      <option value="24px">24px</option>
+      <option value="28px">28px</option>
+    </select>
+
+    <!-- Text Alignment -->
+    <!-- <button (click)="alignText('justifyLeft')">Align Left</button>
+      <button (click)="alignText('justifyCenter')">Center</button>
+      <button (click)="alignText('justifyRight')">Align Right</button>
+      <button (click)="alignText('justifyFull')">Justify</button> -->
+    <!-- 
+      <button (click)="setTextDirection('rtl')">RTL</button>
+  <button (click)="setTextDirection('ltr')">LTR</button> -->
+  </div>
+
+  <div class="editor" contenteditable="true" [style.direction]="textDirection"
+    [style.textAlign]="textDirection === 'rtl' ? 'right' : 'left'" [innerHTML]="value" (input)="onInput($event)"
+    (blur)="onBlur($event)"></div>{{value}}
+</div>

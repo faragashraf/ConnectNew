@@ -1,0 +1,254 @@
+----- swal2 ----
+
+
+
+/* Ensure SweetAlert2 (Swal.fire) overlays all elements */
+/* Covers modals/popups, backdrop/overlay, and toast containers */
+body.swal2-shown > [class^="swal2-"] {
+  z-index: 2147483647 !important;
+}
+
+.swal2-container {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important; /* top-most */
+}
+
+/* Ensure the popup itself doesn't reset its z-index if it doesn't need to */
+.swal2-popup,
+.swal2-modal {
+  z-index: inherit !important;
+}
+
+/* Ensure toasts are also top-most */
+.swal2-toast-container {
+  z-index: 2147483647 !important;
+}
+
+/* RTL Specific Toast Positioning */
+.swal2-toast-container.rtl-toast {
+  right: auto !important;
+  left: 12px !important;
+  direction: rtl !important;
+}
+
+.swal2-toast-container.rtl-toast .swal2-popup {
+  text-align: right !important;
+}
+
+/* ==============================================
+   Modern SweetAlert2 Theme
+   ============================================== */
+
+/* Backdrop Blur */
+.swal2-backdrop-show {
+  backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.4) !important; /* Dark overlay with slate tint */
+}
+
+/* Popup Container */
+.swal2-popup {
+  background: var(--app-surface, #ffffff) !important;
+  color: var(--app-text-primary, #1e293b) !important;
+  border-radius: 16px !important;
+  padding: 1rem 0 0.25em !important;
+  box-shadow: var(--app-shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.1)) !important;
+  font-family: inherit !important;
+  border: 1px solid var(--app-border-light, #f1f5f9);
+}
+
+/* Title */
+.swal2-title {
+  color: var(--app-text-heading, #0f172a) !important;
+  font-size: 1.5rem !important;
+  font-weight: 700 !important;
+  margin-bottom: 0.5rem !important;
+}
+
+/* Content */
+.swal2-html-container {
+  color: var(--app-text-secondary, #64748b) !important;
+  font-size: 1rem !important;
+  line-height: 1.6 !important;
+  margin: 0.5rem 1.6em !important;
+}
+
+/* Icons */
+.swal2-icon {
+  border-width: 3px !important;
+  margin: 1.5rem auto !important;
+}
+
+/* Success Icon */
+.swal2-icon.swal2-success {
+  border-color: var(--app-accent-success, #059669) !important;
+  color: var(--app-accent-success, #059669) !important;
+}
+.swal2-icon.swal2-success [class^='swal2-success-line'] {
+  background-color: var(--app-accent-success, #059669) !important;
+}
+.swal2-icon.swal2-success .swal2-success-ring {
+  border-color: rgba(5, 150, 105, 0.3) !important;
+}
+
+/* Error/Danger Icon */
+.swal2-icon.swal2-error {
+  border-color: var(--app-accent-danger, #dc2626) !important;
+  color: var(--app-accent-danger, #dc2626) !important;
+}
+.swal2-icon.swal2-error [class^='swal2-x-mark-line'] {
+  background-color: var(--app-accent-danger, #dc2626) !important;
+}
+
+/* Warning Icon */
+.swal2-icon.swal2-warning {
+  border-color: var(--app-accent-warning, #d97706) !important;
+  color: var(--app-accent-warning, #d97706) !important;
+}
+
+/* Info Icon */
+.swal2-icon.swal2-info {
+  border-color: var(--app-accent-info, #0891b2) !important;
+  color: var(--app-accent-info, #0891b2) !important;
+}
+
+/* Actions/Buttons Container */
+.swal2-actions {
+  margin-top: 1.5rem !important;
+  gap: 0.75rem;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap-reverse; /* Ensure actions stack nicely on mobile if needed */
+}
+
+/* Common Button Styles */
+.swal2-styled {
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  font-size: 0.95rem !important;
+  transition: all 0.2s ease-in-out !important;
+  box-shadow: none !important; /* Reset default swal shadow */
+}
+
+/* Confirm Button (Primary) */
+.swal2-confirm {
+  background-color: var(--app-primary, #4f46e5) !important;
+  color: #fff !important;
+  border: none !important;
+}
+
+.swal2-confirm:hover {
+  background-color: var(--app-primary-hover, #4338ca) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px var(--app-primary-light, rgba(79, 70, 229, 0.2)) !important;
+}
+
+.swal2-confirm:focus {
+  box-shadow: 0 0 0 3px var(--app-primary-border, rgba(79, 70, 229, 0.3)) !important;
+}
+
+/* Cancel Button (Secondary/Outline) */
+.swal2-cancel {
+  background-color: transparent !important;
+  color: var(--app-text-secondary, #64748b) !important;
+  border: 1px solid var(--app-border, #e2e8f0) !important;
+}
+
+.swal2-cancel:hover {
+  background-color: var(--app-surface-hover, #f1f5f9) !important;
+  color: var(--app-text-primary, #1e293b) !important;
+  border-color: var(--app-text-muted, #94a3b8) !important;
+}
+
+/* Deny Button (Danger) */
+.swal2-deny {
+  background-color: var(--app-accent-danger, #dc2626) !important;
+  color: #fff !important;
+  border: none !important;
+}
+
+.swal2-deny:hover {
+  background-color: #b91c1c !important; /* Slightly darker red */
+}
+
+/* Toast Customization */
+.swal2-toast {
+  background: var(--app-surface, #ffffff) !important;
+  box-shadow: var(--app-shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1)) !important;
+  border: 1px solid var(--app-border-light, #f1f5f9) !important;
+  border-radius: 10px !important;
+  padding: 0.75rem 1rem !important;
+}
+
+.swal2-toast .swal2-title {
+  color: var(--app-text-primary, #1e293b) !important;
+  font-size: 0.95rem !important;
+  margin: 0 !important;
+}
+
+.swal2-toast .swal2-icon {
+  margin: 0 0.5rem 0 0 !important;
+  transform: scale(0.6);
+}
+
+/* Input Fields */
+.swal2-input,
+.swal2-textarea {
+  border: 1px solid var(--app-border, #e2e8f0) !important;
+  border-radius: 8px !important;
+  font-size: 1rem !important;
+  color: var(--app-text-primary, #1e293b) !important;
+  transition: border-color 0.2s;
+  box-shadow: none !important;
+}
+
+.swal2-input:focus,
+.swal2-textarea:focus {
+  border-color: var(--app-primary, #4f46e5) !important;
+  box-shadow: 0 0 0 3px var(--app-primary-light, rgba(79, 70, 229, 0.1)) !important;
+}
+
+/* ==============================================
+   Dark Theme Overrides
+   ============================================== */
+body.dark-theme .swal2-popup {
+  background: #1e293b !important; /* Slate 800 */
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+body.dark-theme .swal2-title {
+  color: #f8fafc !important;
+}
+
+body.dark-theme .swal2-html-container {
+  color: #cbd5e1 !important;
+}
+
+body.dark-theme .swal2-cancel {
+  border-color: #475569 !important;
+  color: #cbd5e1 !important;
+}
+
+body.dark-theme .swal2-cancel:hover {
+  background-color: #334155 !important;
+  color: #fff !important;
+}
+
+body.dark-theme .swal2-input,
+body.dark-theme .swal2-textarea {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #fff !important;
+}
+
+body.dark-theme .swal2-toast {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+body.dark-theme .swal2-toast .swal2-title {
+  color: #f1f5f9 !important;
+}
+

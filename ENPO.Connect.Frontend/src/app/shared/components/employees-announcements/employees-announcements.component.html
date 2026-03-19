@@ -1,0 +1,155 @@
+<div class="page-container" dir="rtl">
+    <!-- Background -->
+    <app-bubbles-bg [paletteId]="'sunset'" [density]="18" [speed]="1" [scale]="1" [disableAnimations]="false"
+        [showControls]="false"></app-bubbles-bg>
+
+    <!-- SECTION A: HERO (Summer 2026) -->
+    <header class="hero-section" #anim>
+        <div class="hero-content container">
+            <div class="hero-badge">الموسم الجديد</div>
+            <h1 class="hero-title">المصايف <span class="year">2026</span></h1>
+            <p class="hero-lead">استعد لأجواء الصيف الرائعة! تم تجهيز وجهات مميزة لراحتك وراحة أسرتك.</p>
+
+            <div class="announcement-card" dir="rtl">
+                <div class="launch-details">
+                    <div class="date-box">
+                        <span class="label">موعد الطرح</span>
+                        <span class="value">1 أبريل 2026</span>
+                    </div>
+                    <div class="countdown-box">
+                        <span class="count">{{ daysRemaining }}</span>
+                        <span class="unit">يوم متبقي</span>
+                    </div>
+                </div>
+                <!-- <button class="btn-primary" (click)="scrollTo('summer-details')">استكشف تفاصيل المصايف</button> -->
+            </div>
+        </div>
+
+        <div class="wave-decoration">
+            <svg viewBox="0 0 1440 320" preserveAspectRatio="none">
+                <path fill="#ffffff" fill-opacity="1"
+                    d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,112C672,96,768,96,864,112C960,128,1056,160,1152,160C1248,160,1344,128,1392,112L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z">
+                </path>
+            </svg>
+        </div>
+    </header>
+
+    <!-- SECTION B: CONNECT PLATFORM ANNOUNCEMENT -->
+    <section class="connect-reveal container" #anim>
+        <div class="connect-card">
+            <div class="content-side">
+                <h2 class="section-title">Connect <span class="divider">|</span> <span class="arabic">بوابتك للخدمات
+                        الداخلية</span></h2>
+                <p class="description">
+                    المنصة الرقمية الموحدة التي تضع كافة الخدمات الداخلية بين يديك.<br>
+                    <strong>Connect</strong> هو البديل المطور لمنصة "تواصل" السابقة، بتجربة مستخدم عصرية وأداء أسرع.
+                </p>
+                <ul class="features-list">
+                    <li class="stagger-item">🚀 <strong>أسرع:</strong> وصول فوري للخدمات والأدلة.</li>
+                    <li class="stagger-item">🔄 <strong>موحّد:</strong> كافة الأنظمة في مكان واحد.</li>
+                    <li class="stagger-item">🔔 <strong>إشعارات أذكى:</strong> ابقَ على اطلاع دائم بما يهمك.</li>
+                </ul>
+                <button class="btn-secondary" (click)="scrollTo('portal-contents')">اعرف الجديد</button>
+            </div>
+            <div class="visual-side">
+                <div class="device-mockup">
+                    <div class="screen">
+                        <div class="app-header"></div>
+                        <div class="app-body">
+                            <div class="skeleton-row"></div>
+                            <div class="skeleton-grid">
+                                <span>
+                                    <div class="mini-card">
+                                        <img src="assets/imges/SlideShow/icons/publications.png" alt="publications" />
+                                        <!-- <div class="mini-label">المنشورات</div> -->
+                                    </div>
+                                </span>
+                                <span>
+                                    <div class="mini-card">
+                                        <img src="assets/imges/SlideShow/icons/hr.png" alt="hr" />
+                                        <!-- <div class="mini-label">الموارد البشرية</div> -->
+                                    </div>
+                                </span>
+                                <span>
+                                    <div class="mini-card">
+                                        <img src="assets/imges/SlideShow/icons/atm.png" alt="atm" />
+                                        <!-- <div class="mini-label">ماكينات الصراف</div> -->
+                                    </div>
+                                </span>
+                                <span>
+                                    <div class="mini-card">
+                                        <img src="assets/imges/SlideShow/icons/summer.png" alt="post" />
+                                        <!-- <div class="mini-label">مصايف العاملين</div> -->
+                                    </div>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION C: PORTAL CONTENTS -->
+    <section id="portal-contents" class="portal-contents container" #anim>
+        <div class="section-header">
+            <h2>محتويات البوابة</h2>
+            <p>جولة سريعة في أقسام Connect الجديدة</p>
+        </div>
+
+        <div class="grid-cards" [@listStagger]="portalContents.length">
+            <div class="flip-card stagger-item" *ngFor="let item of portalContents" (click)="toggleFlip(item.id)"
+                [class.flipped]="isFlipped(item.id)">
+                <div class="flip-card-inner">
+                    <!-- Front -->
+                    <div class="flip-card-front">
+                        <!-- Stamped badge for items coming soon (no route) -->
+                        <div *ngIf="!item.route || item.route.length==0" class="coming-soon-stamp">قريباً</div>
+                        <div *ngIf="item.route || item.route.length>0" class="live-stamp">الآن</div>
+                        <!-- <div class="card-icon">{{ item.icon }}</div> -->
+                        <img class="slide-icon-image" [src]="item.icon" height="300" width="175" />
+                        <!-- <h3 class="card-title">{{ item.title }}</h3> -->
+                        <!-- <p class="card-teaser">{{ item.teaser }}</p> -->
+                        <span class="status-tag" [attr.data-status]="item.status">{{ item.status }}</span>
+                    </div>
+                    <!-- Back -->
+                    <div class="flip-card-back">
+                        <h3 class="back-title">{{ item.title }}</h3>
+                        <p class="back-desc">{{ item.desc }}</p>
+                        <div class="back-footer">
+                            <button class="btn-mini" [ngClass]="{ 'btn-mini-live': item.route && item.route.length>0, 'btn-mini-soon': !item.route || item.route.length==0 }" (click)="(item.route && item.route.length>0) ? router.navigate([item.route]) : null">
+                                <span *ngIf="item.route && item.route.length>0" class="badge live" style="font-size: 1rem;" >الآن</span>
+                                <span *ngIf="!item.route || item.route.length==0" class="badge coming-soon" style="font-size: 1rem;">قريباً</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION D: MARQUEE -->
+    <section class="news-ticker-section" #anim>
+        <div class="news-integrated">
+            <div class="news-label">آخر الأخبار</div>
+            <div class="news-marquee">
+                <div class="marquee-content" [ngStyle]="{'--marquee-duration': marqueeDuration}">
+                    <span *ngFor="let news of newsList">{{news}} &nbsp;&bull;&nbsp; </span>
+                    <span style="min-width: 100px;"></span>
+                    <span *ngFor="let news of newsList">{{news}} &nbsp;&bull;&nbsp; </span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION A Target (Placeholder for logic) -->
+    <div id="summer-details" style="height: 1px;"></div>
+
+    <!-- SECTION E: FLOATING ACTION DOCK -->
+    <button class="fab-dock" (click)="scrollToTop()" aria-label="إعلانات العاملين">
+        <div class="fab-icon">📢</div>
+        <span class="fab-text">إعلانات العاملين</span>
+        <div class="fab-pulse"></div>
+    </button>
+
+</div>

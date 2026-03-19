@@ -1,0 +1,115 @@
+<div class="container-main crypto-page">
+  <div class="crypto-hero">
+    <div class="hero-title">
+      <h2>Encrypt / Decrypt</h2>
+      <p class="text-muted">
+        Sensitive operations. Results auto-clear after {{ clearAfterSeconds }} seconds.
+      </p>
+    </div>
+    <div class="hero-meta">
+      <span class="meta-chip">Zero cache</span>
+      <span class="meta-chip">Secure session</span>
+      <span class="meta-chip">Auto-clear</span>
+    </div>
+  </div>
+
+  <div class="row crypto-grid">
+    <div class="col-md-6">
+      <div class="widget crypto-card is-decrypt">
+        <form [formGroup]="decryptForm" (ngSubmit)="decrypt()" autocomplete="off">
+          <div class="card-header">
+            <div>
+              <h4>Decrypt Password by User ID</h4>
+              <span class="card-subtitle">Reveal stored credentials for support workflows.</span>
+            </div>
+            <span class="card-badge">Decrypt</span>
+          </div>
+
+          <div class="form-group field-block">
+            <label for="userId">User ID</label>
+            <input id="userId" type="text" class="form-control" formControlName="userId" autocomplete="off"
+              spellcheck="false" />
+            <div class="invalid-feedback"
+              *ngIf="decryptForm.get('userId')?.touched && decryptForm.get('userId')?.invalid">
+              User ID is required.
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button class="btn btn-primary action-primary" type="submit" [disabled]="decrypting">
+              {{ decrypting ? 'Decrypting...' : 'Decrypt' }}
+            </button>
+            <button class="btn btn-outline-secondary action-ghost" type="button" (click)="clearDecrypt()">
+              Clear
+            </button>
+          </div>
+
+          <div class="alert alert-danger mt-3" *ngIf="decryptError">
+            {{ decryptError }}
+          </div>
+
+          <div class="result-block mt-3" *ngIf="decryptResult">
+            <label>Decrypted Password</label>
+            <div class="input-group">
+              <input class="form-control" [type]="showDecrypted ? 'text' : 'password'" [value]="decryptResult"
+                readonly />
+              <button class="btn btn-outline-secondary action-ghost" type="button" (click)="toggleDecrypted()">
+                {{ showDecrypted ? 'Hide' : 'Show' }}
+              </button>
+            </div>
+            <small class="text-muted">Auto-clears for security.</small>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="widget crypto-card is-encrypt">
+        <form [formGroup]="encryptForm" (ngSubmit)="encrypt()" autocomplete="off">
+          <div class="card-header">
+            <div>
+              <h4>Encrypt Text</h4>
+              <span class="card-subtitle">Lock content before sharing or storage.</span>
+            </div>
+            <span class="card-badge">Encrypt</span>
+          </div>
+
+          <div class="form-group field-block">
+            <label for="valueToEncrypt">Password / Text</label>
+            <input id="valueToEncrypt" type="password" class="form-control" formControlName="valueToEncrypt"
+              autocomplete="off" spellcheck="false" />
+            <div class="invalid-feedback"
+              *ngIf="encryptForm.get('valueToEncrypt')?.touched && encryptForm.get('valueToEncrypt')?.invalid">
+              Value is required.
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button class="btn btn-primary action-primary" type="submit" [disabled]="encrypting">
+              {{ encrypting ? 'Encrypting...' : 'Encrypt' }}
+            </button>
+            <button class="btn btn-outline-secondary action-ghost" type="button" (click)="clearEncrypt()">
+              Clear
+            </button>
+          </div>
+
+          <div class="alert alert-danger mt-3" *ngIf="encryptError">
+            {{ encryptError }}
+          </div>
+
+          <div class="result-block mt-3" *ngIf="encryptResult">
+            <label>Encrypted Text</label>
+            <div class="input-group">
+              <input class="form-control" [type]="showEncrypted ? 'text' : 'password'" [value]="encryptResult"
+                readonly />
+              <button class="btn btn-outline-secondary action-ghost" type="button" (click)="toggleEncrypted()">
+                {{ showEncrypted ? 'Hide' : 'Show' }}
+              </button>
+            </div>
+            <small class="text-muted">Auto-clears for security.</small>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

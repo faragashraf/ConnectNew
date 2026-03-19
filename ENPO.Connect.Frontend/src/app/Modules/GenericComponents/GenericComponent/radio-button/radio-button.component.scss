@@ -1,0 +1,226 @@
+/* Animated toggle pills for radio-like selection - improved visuals & accessibility */
+
+:root {
+    --toggle-bg: #f7f8fb;
+    --toggle-active: #4f46e5;
+    /* indigo */
+    --toggle-active-2: #06b6d4;
+    /* teal accent */
+    --pill-text: #0f172a;
+    --pill-muted: #6b7280;
+    --pill-radius: 999px;
+}
+
+.toggle-group {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.6rem;
+    align-items: flex-start;
+    /* padding: 0.35rem; */
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+.toggle-group.disabled {
+    opacity: 0.55;
+    pointer-events: none;
+    filter: grayscale(0.15);
+}
+
+.toggle-pill {
+    --pill-padding: 0.55rem 1.05rem;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    border-radius: var(--pill-radius);
+    background: linear-gradient(180deg, var(--toggle-bg), #ffffff);
+    padding: var(--pill-padding);
+    transition: transform 180ms cubic-bezier(.2, .9, .2, 1), box-shadow 220ms, background 220ms;
+    box-shadow: inset 1px 1px 20px 20px rgb(10 86 239 / 4%), inset 0 -1px 0 rgb(255 255 255);
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+    min-width: 3.2rem;
+    border-radius: 2rem;
+}
+
+.toggle-pill:hover {
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 10px 20px rgba(16, 24, 40, 0.06);
+}
+
+/* Keep the native radio in DOM for form semantics, but visually hide it while remaining focusable */
+.toggle-pill input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip: rect(0 0 0 0);
+    overflow: hidden;
+}
+
+.pill-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.pill-label {
+    color: var(--pill-text);
+    font-weight: 600;
+    font-size: 0.96rem;
+    line-height: 1;
+    max-width: 12rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    height: 2rem;
+    padding: .25rem
+}
+
+.pill-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: transparent;
+    color: transparent;
+    font-size: 0.95rem;
+    transition: transform 200ms cubic-bezier(.2, .9, .2, 1), background 200ms, color 200ms;
+}
+
+.toggle-pill.active {
+    color: #000000;
+    background: linear-gradient(90deg, var(--toggle-active), var(--toggle-active-2));
+    box-shadow: 0 10px 26px rgba(79, 70, 229, 0.15), 0 4px 10px rgba(6, 182, 212, 0.04);
+    border-radius: 2rem;
+}
+
+.toggle-pill.active .pill-label {
+    color: #0004ff;
+    padding: .25rem
+}
+
+.toggle-pill.active .pill-check {
+    color: #0cdf0c;
+    background: rgba(255, 255, 255, 0.12);
+    transform: scale(1.08);
+}
+
+/* Stronger, consistent focus-visible ring for keyboard users */
+.toggle-pill:focus {
+    outline: none;
+}
+
+.toggle-pill:focus-visible {
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.14);
+    transform: translateY(-2px) scale(1.01);
+}
+
+/* subtle ripple effect when clicked (pure CSS) */
+.toggle-pill::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 320ms ease, height 320ms ease, opacity 320ms ease;
+    opacity: 0;
+}
+
+.toggle-pill:active::after {
+    width: 200%;
+    height: 200%;
+    opacity: 1;
+}
+
+/* Disabled pills should be visually quiet but readable */
+.toggle-group.disabled .toggle-pill {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none;
+    filter: grayscale(0.15);
+}
+
+/* small responsive tweak */
+@media (max-width: 520px) {
+    .toggle-group {
+        gap: 0.4rem;
+    }
+
+    .toggle-pill {
+        padding: 0.4rem 0.85rem;
+    }
+
+    .pill-label {
+        font-size: 0.9rem;
+        max-width: 8.5rem;
+    }
+}
+
+/* Styles for the default/native radio view to make it richer */
+.radio-default-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.25rem 0.15rem;
+}
+
+.radio-item {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    /* gap between radio input and label */
+    padding: 0.45rem 0.6rem;
+    border-radius: 8px;
+    transition: background 160ms ease, transform 120ms ease, box-shadow 160ms ease;
+}
+
+.radio-item:not(.disabled):hover {
+    background: rgba(79, 70, 229, 0.04);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(79, 70, 229, 0.04);
+}
+
+.radio-item input[type="radio"] {
+    width: 1.05rem;
+    height: 1.05rem;
+    accent-color: #4f46e5;
+    /* modern browsers */
+}
+
+.radio-item label {
+    font-size: 0.95rem;
+    color: var(--pill-text);
+    font-weight: 600;
+    line-height: 1;
+}
+
+.radio-item.disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: grayscale(0.15);
+}
+
+/* Responsive tweak for default view */
+@media (max-width: 520px) {
+    .radio-item {
+        gap: 0.45rem;
+        padding: 0.35rem 0.45rem;
+        border-radius: 6px;
+    }
+
+    .radio-item label {
+        font-size: 0.92rem;
+    }
+}

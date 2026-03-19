@@ -1,0 +1,280 @@
+<div class="generic-manager-container">
+  <div class="header">
+    <div class="title-block">
+      <h2>Application Generic Manager</h2>
+      <p class="subtitle">Applications → Categories → Groups → Fields</p>
+    </div>
+    <div class="breadcrumb" *ngIf="(breadcrumb$ | async) as bc">
+      <span class="chip">{{ bc }}</span>
+    </div>
+  </div>
+
+  <div class="main-card">
+    <p-tabView [(activeIndex)]="activeTabIndex" styleClass="custom-tabs">
+
+      <!-- Tab 1: Applications -->
+      <p-tabPanel header="Applications" leftIcon="pi pi-th-large">
+        <div class="panel" @fadeSlide>
+          <div class="panel-header">
+            <div>
+              <h3>Applications</h3>
+              <p class="muted">Select an application to unlock child tabs</p>
+            </div>
+            <div class="actions">
+              <button pButton label="New" icon="pi pi-plus" class="p-button-outlined" (click)="appDialogVisible=true"></button>
+            </div>
+          </div>
+
+          <div *ngIf="(loadingApps$ | async)" class="skeleton-grid">
+            <div class="skeleton-card" *ngFor="let i of [1,2,3]"></div>
+          </div>
+
+          <div *ngIf="!(loadingApps$ | async)" class="table-wrap" @staggerList>
+            <generic-table
+              [tableGenericData]="(applications$ | async) || []"
+              [_columns]="appCols"
+              [showGlobalSearch]="true"
+              [showExportButton]="true"
+              [showEditButton]="true"
+              [showDeleteButton]="true"
+              [rowsPerPage]="10"
+              (rowSelect)="selectApplication($event)"
+              (rowEdit)="editApplication($event?.data || $event)"
+              (rowDelete)="deleteApplication($event)">
+            </generic-table>
+          </div>
+        </div>
+      </p-tabPanel>
+
+      <!-- Tab 2: Categories -->
+      <p-tabPanel header="Categories" leftIcon="pi pi-tags" [disabled]="(isTabsDisabled() | async) ?? false">
+        <div class="panel" @fadeSlide>
+          <div class="panel-header">
+            <div>
+              <h3>Categories</h3>
+              <p class="muted">Bound to selected application</p>
+            </div>
+            <div class="actions">
+              <button pButton label="New" icon="pi pi-plus" class="p-button-outlined" (click)="categoryDialogVisible=true"></button>
+            </div>
+          </div>
+
+          <div *ngIf="(loadingCategories$ | async)" class="skeleton-grid">
+            <div class="skeleton-card" *ngFor="let i of [1,2,3]"></div>
+          </div>
+
+          <div *ngIf="!(loadingCategories$ | async)" class="table-wrap">
+            <generic-table
+              [tableGenericData]="(categories$ | async) || []"
+              [_columns]="categoryCols"
+              [showEditButton]="true"
+              [showDeleteButton]="true"
+              [rowsPerPage]="10"
+              (rowSelect)="selectCategory($event)"
+              (rowEdit)="editCategory($event?.data || $event)"
+              (rowDelete)="deleteCategory($event)">
+            </generic-table>
+          </div>
+        </div>
+      </p-tabPanel>
+
+      <!-- Tab 3: Groups -->
+      <p-tabPanel header="Groups" leftIcon="pi pi-users">
+        <div class="panel" @fadeSlide>
+          <div class="panel-header">
+            <div>
+              <h3>Groups</h3>
+              <p class="muted">Global groups CRUD</p>
+            </div>
+            <div class="actions">
+              <button pButton label="New Group" icon="pi pi-plus" class="p-button-success p-button-outlined" (click)="groupDialogVisible=true"></button>
+            </div>
+          </div>
+
+          <div *ngIf="(loadingGroups$ | async)" class="skeleton-grid">
+            <div class="skeleton-card" *ngFor="let i of [1,2]"></div>
+          </div>
+
+          <div *ngIf="!(loadingGroups$ | async)" class="table-wrap">
+            <generic-table
+              [tableGenericData]="(groups$ | async) || []"
+              [_columns]="groupCols"
+              [showEditButton]="true"
+              [showDeleteButton]="true"
+              [rowsPerPage]="10"
+              (rowEdit)="editGroup($event?.data || $event)"
+              (rowDelete)="deleteGroup($event)">
+            </generic-table>
+
+            <div class="related-groups" *ngIf="(selectedCategory$ | async) as selCat">
+              <h4>Related Groups for {{ selCat.catName }}</h4>
+              <div *ngIf="(filteredGroups$ | async) as fgs">
+                <ng-container *ngIf="fgs?.length; else noRelated">
+                  <div class="chips">
+                    <button *ngFor="let g of fgs" pButton type="button" class="p-button-text" (click)="selectGroup(g)">{{ g.GroupName }}</button>
+                  </div>
+                </ng-container>
+                <ng-template #noRelated><p class="muted">No related groups for selected category.</p></ng-template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </p-tabPanel>
+
+      <!-- Tab 4: Fields -->
+      <p-tabPanel header="Fields" leftIcon="pi pi-list" [disabled]="(isTabsDisabled() | async) ?? false">
+        <div class="panel" @fadeSlide>
+          <div class="panel-header">
+            <div>
+              <h3>Fields</h3>
+              <p class="muted">Fields limited to selected application</p>
+            </div>
+            <div class="actions">
+              <button pButton label="New Field" icon="pi pi-plus" class="p-button-outlined" (click)="fieldDialogVisible=true"></button>
+            </div>
+          </div>
+
+          <div *ngIf="(loadingFields$ | async)" class="skeleton-grid">
+            <div class="skeleton-card" *ngFor="let i of [1,2,3]"></div>
+          </div>
+
+          <div *ngIf="!(loadingFields$ | async)" class="table-wrap">
+            <generic-table
+              [tableGenericData]="(fields$ | async) || []"
+              [_columns]="fieldCols"
+              [showEditButton]="true"
+              [showDeleteButton]="true"
+              [rowsPerPage]="10"
+              (rowSelect)="selectField($event)"
+              (rowEdit)="editField($event?.data || $event)"
+              (rowDelete)="deleteField($event)">
+            </generic-table>
+          </div>
+        </div>
+      </p-tabPanel>
+
+      <!-- Tab 5: Nesting & Grouping -->
+      <p-tabPanel header="Nesting & Grouping" leftIcon="pi pi-sitemap" [disabled]="(isTabsDisabled() | async) ?? false">
+        <div class="panel grid" @fadeSlide>
+          <div class="left col-12 md:col-3">
+            <h4>Select Category</h4>
+            <generic-table
+              [tableGenericData]="(categories$ | async) || []"
+              [_columns]="['catName']"
+              [showGlobalSearch]="false"
+              [rowsPerPage]="10"
+              (rowSelect)="selectCategory($event)">
+            </generic-table>
+          </div>
+
+          <div class="right col-12 md:col-9">
+            <div class="selector-row">
+              <p-dropdown
+                [options]="(filteredGroups$ | async) || []"
+                optionLabel="GroupName"
+                [disabled]="!(selectedCategory$ | async)"
+                [ngModel]="(selectedGroup$ | async)"
+                (ngModelChange)="selectedGroup$.next($event)"
+                placeholder="Select Group"
+                [style]="{'width':'40%'}">
+              </p-dropdown>
+
+              <p-dropdown
+                [options]="(fields$ | async) || []"
+                optionLabel="cdMendLbl"
+                [disabled]="!(selectedCategory$ | async)"
+                [ngModel]="(selectedField$ | async)"
+                (ngModelChange)="selectedField$.next($event)"
+                placeholder="Select Field"
+                [style]="{'width':'40%'}">
+              </p-dropdown>
+
+              <button pButton label="Add Link" icon="pi pi-link" (click)="addLink()" class="p-button-success"></button>
+            </div>
+
+            <div class="toggle-row">
+              <label class="muted">Only active links</label>
+              <p-inputSwitch [ngModel]="(onlyActiveLinks$ | async)" (ngModelChange)="onlyActiveLinks$.next($event)"></p-inputSwitch>
+            </div>
+
+            <div class="table-wrap mt-3">
+              <generic-table
+                [tableGenericData]="(filteredHierarchyRows$ | async) || []"
+                [_columns]="['catName','groupName','mendField','cdmendLbl','mendStat']"
+                [showDeleteButton]="true"
+                [showEditButton]="true"
+                [showViewButton]="true"
+                (rowDelete)="deleteLink($event?.mendSQL)"
+                (rowEdit)="toggleLinkActive($event?.mendSQL,$event?.mendStat)"
+                (rowView)="openDetails($event)">
+              </generic-table>
+            </div>
+          </div>
+        </div>
+      </p-tabPanel>
+
+    </p-tabView>
+  </div>
+
+  <!-- Dialogs -->
+  <p-dialog header="Application" [(visible)]="appDialogVisible" [modal]="true" [style]="{width:'520px'}" [closable]="true">
+    <form [formGroup]="appForm" class="p-fluid">
+      <div class="p-field"><label>Application Name</label><input pInputText formControlName="appName" /></div>
+      <div class="p-field"><label>Code</label><input pInputText formControlName="appCode" /></div>
+      <div class="p-field"><p-checkbox formControlName="isActive" [binary]="true" label="Active"></p-checkbox></div>
+    </form>
+    <ng-template pTemplate="footer">
+      <button pButton label="Cancel" class="p-button-text" (click)="appDialogVisible=false"></button>
+      <button pButton label="Save" (click)="saveApplication()" [disabled]="appForm.invalid"></button>
+    </ng-template>
+  </p-dialog>
+
+  <p-dialog header="Group" [(visible)]="groupDialogVisible" [modal]="true" [style]="{width:'520px'}">
+    <form [formGroup]="groupForm" class="p-fluid">
+      <div class="p-field"><label>Group Name</label><input pInputText formControlName="groupName" /></div>
+      <div class="p-field"><label>Order</label><p-inputNumber formControlName="groupOrder"></p-inputNumber></div>
+    </form>
+    <ng-template pTemplate="footer">
+      <button pButton label="Cancel" class="p-button-text" (click)="groupDialogVisible=false"></button>
+      <button pButton label="Save" (click)="saveGroup()" [disabled]="groupForm.invalid"></button>
+    </ng-template>
+  </p-dialog>
+
+  <p-dialog header="Category" [(visible)]="categoryDialogVisible" [modal]="true" [style]="{width:'520px'}">
+    <form [formGroup]="categoryForm" class="p-fluid">
+      <div class="p-field"><label>Category Name</label><input pInputText formControlName="categoryName" /></div>
+    </form>
+    <ng-template pTemplate="footer">
+      <button pButton label="Cancel" class="p-button-text" (click)="categoryDialogVisible=false"></button>
+      <button pButton label="Save" (click)="saveCategory()" [disabled]="categoryForm.invalid"></button>
+    </ng-template>
+  </p-dialog>
+
+  <p-dialog header="Field" [(visible)]="fieldDialogVisible" [modal]="true" [style]="{width:'680px'}">
+    <form [formGroup]="fieldForm" class="p-fluid">
+      <div class="p-field"><label>Field Code</label><input pInputText formControlName="cdmendTxt" /></div>
+      <div class="p-field"><label>Label</label><input pInputText formControlName="cdMendLbl" /></div>
+      <div class="p-field"><label>Type</label><input pInputText formControlName="cdmendType" /></div>
+    </form>
+    <ng-template pTemplate="footer">
+      <button pButton label="Cancel" class="p-button-text" (click)="fieldDialogVisible=false"></button>
+      <button pButton label="Save" (click)="saveField()" [disabled]="fieldForm.invalid"></button>
+    </ng-template>
+  </p-dialog>
+
+  <p-dialog header="Details" [(visible)]="detailsDialogVisible" [modal]="true" [style]="{width:'80vw', height:'80vh'}">
+    <div *ngIf="(formDetailsReady$ | async)">
+      <app-form-details
+        [messageDto]="formDetailsMessage"
+        [config]="formDetailsConfig"
+        [tree]="[]"
+        [categoryTree]="categoryTree"
+        [unitTree]="[]"
+        [formSubmited]="false">
+      </app-form-details>
+    </div>
+  </p-dialog>
+
+  <p-toast></p-toast>
+  <p-confirmDialog></p-confirmDialog>
+</div>

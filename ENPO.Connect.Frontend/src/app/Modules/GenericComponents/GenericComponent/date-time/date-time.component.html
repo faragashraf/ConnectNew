@@ -1,0 +1,8 @@
+<div style="width: 100%;">
+  <p-calendar [formControl]="control" [id]="controlFullName" appendTo="body"
+    [class.disabled-div]="isDivDisabled||genericFormService.GetPropertyValue(controlFullName,'isDisabledInit')=='true'"
+    (onBlur)="onBlur($event)" (onSelect)="onSelect($event)" [style]="{'width': '100%'}" [inputStyle]="{'width': '100%'}"
+    [placeholder]="genericFormService.GetPropertyValue(controlFullName,'placeholder')" [dateFormat]="dateFormat"
+    [showTime]="showTime" [timeOnly]="timeOnly" [hourFormat]="hourFormat" [monthNavigator]="true" [yearNavigator]="true" yearRange="1900:2050"
+    [minDate]="minDate!" [maxDate]="maxDate!"></p-calendar>
+</div>

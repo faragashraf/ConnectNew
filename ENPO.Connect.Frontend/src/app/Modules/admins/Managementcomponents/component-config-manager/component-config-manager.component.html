@@ -1,0 +1,475 @@
+<div class="ccm-root">
+    <div class="ccm-header">
+        <h2>Component Configs</h2>
+        <div class="actions">
+            <button class="btn btn btn-primary" (click)="openNew()">+ New</button>
+        </div>
+    </div>
+
+    <div class="ccm-body">
+        <div class="list">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Route</th>
+                        <th>Title</th>
+                        <th>Form</th>
+                        <th>Menu</th>
+                        <th>Unit</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let c of configs">
+                        <td>{{ c.routeKey }}</td>
+                        <td>{{ c.componentTitle }}</td>
+                        <td>{{ c.genericFormName }}</td>
+                        <td>{{ c.menuId }}</td>
+                        <td>{{ c.unitId }}</td>
+                        <td class="row-actions">
+                            <button class="btn" (click)="edit(c)">Edit</button>
+                            <button class="btn danger" (click)="remove(c)">Delete</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p-dialog [(visible)]="showDrawer" [modal]="true" [closable]="true" [style]="{width: '98vw',height: '98vh'}"
+            [baseZIndex]="10000" [draggable]="true" [resizable]="false" [closeOnEscape]="true" [focusOnShow]="true"
+            [dismissableMask]="true" appendTo="body">
+
+            <ng-template pTemplate="header">
+                <div class="dialog-header-with-tabs">
+                    <div class="dialog-tab-nav">
+                        <button type="button" class="tab-btn" [class.active]="activeTabIndex===0"
+                            (click)="activeTabIndex = 0">General</button>
+                        <button type="button" class="tab-btn" [class.active]="activeTabIndex===1"
+                            (click)="activeTabIndex = 1">List</button>
+                        <button type="button" class="tab-btn" [class.active]="activeTabIndex===2"
+                            (click)="activeTabIndex = 2">Requests</button>
+                        <button type="button" class="tab-btn" [class.active]="activeTabIndex===3"
+                            (click)="activeTabIndex = 3">Fields</button>
+                        <button type="button" class="tab-btn" [class.active]="activeTabIndex===4"
+                            (click)="activeTabIndex = 4">Table & Categories</button>
+                        <button type="button" class="tab-btn" [class.active]="activeTabIndex===5"
+                            (click)="activeTabIndex = 5">Attachments</button>
+                    </div>
+                    <div class="dialog-title">{{ (selected ? 'Edit' : 'New') + ' Config' + ' - ' +
+                        (form.get('componentTitle')?.value || '') }}</div>
+                </div>
+            </ng-template>
+            <div class="drawer-inner">
+                <form [formGroup]="form" (ngSubmit)="save()">
+                    <p-tabView [(activeIndex)]="activeTabIndex">
+                        <p-tabPanel header="General">
+                            <section class="section">
+                                <label>Route Key</label>
+                                <input class="form-control" formControlName="routeKey" />
+
+                                <label>Title</label>
+                                <input class="form-control" formControlName="componentTitle" />
+
+                                <label>Form Display</label>
+                                <select formControlName="formDisplayOption">
+                                    <option value="fullscreen">Fullscreen</option>
+                                    <option value="tabs">Tabs</option>
+                                </select>
+
+                                <label>Generic Form</label>
+                                <input class="form-control" formControlName="genericFormName" />
+
+                                <label>Selected Node Key</label>
+                                <input class="form-control" formControlName="selectedNodeKey" />
+
+                                <label>Menu Id</label>
+                                <input class="form-control" type="number" formControlName="menuId" />
+
+                                <label>Unit Id (comma separated)</label>
+                                <input class="form-control" formControlName="unitId" />
+
+                                <label class="pill-checkbox">
+                                    <input type="checkbox" formControlName="isNew" />
+                                    <span class="pill-text" title="Is New">Is New</span>
+                                </label>
+
+                                <!-- Attachments moved to dedicated tab -->
+
+                                <label class="pill-checkbox">
+                                    <input type="checkbox" formControlName="showFormSignature" />
+                                    <span class="pill-text" title="Show Form Signature">Show Form Signature</span>
+                                </label>
+
+                                <label class="pill-checkbox">
+                                    <input type="checkbox" formControlName="showViewToggle" />
+                                    <span class="pill-text" title="Show View Mode Toggle">Show View Mode Toggle</span>
+                                </label>
+
+                                <label>Submit Button Text</label>
+                                <input class="form-control" formControlName="submitButtonText" />
+
+                                <label>Submission Label</label>
+                                <input class="form-control" formControlName="submissionLabel" />
+
+
+                            </section>
+
+                            <section class="section">
+                                <h4>Page Sizes & Global Filters</h4>
+                                <label>Page Sizes</label>
+                                <div class="page-sizes-checkboxes">
+                                    <label *ngFor="let s of availablePageSizes" class="pill-checkbox">
+                                        <input type="checkbox" [checked]="isSelected('pageSizes', s)"
+                                            (change)="onToggle('pageSizes', s, $event)" />
+                                        <span class="pill-text" [title]="s">{{ s }}</span>
+                                    </label>
+                                </div>
+                                <label>Global Filter Fields</label>
+                                <div class="page-sizes-checkboxes">
+                                    <label *ngFor="let f of availableGlobalFilterFields" class="pill-checkbox">
+                                        <input type="checkbox" [checked]="isSelected('globalFilterFields', f)"
+                                            (change)="onToggle('globalFilterFields', f, $event)" />
+                                        <span class="pill-text" [title]="f">{{ f }}</span>
+                                    </label>
+                                </div>
+                                <label class="pill-checkbox">
+                                    <input type="checkbox" formControlName="allowStatusChange" />
+                                    <span class="pill-text" title="Allow Status Change">Allow Status Change</span>
+                                </label>
+                                <label class="pill-checkbox">
+                                    <input type="checkbox" formControlName="allowDefaultNextResponsibleSectorID" />
+                                    <span class="pill-text" title="Allow Default nextResponsibleSectorID">Allow Default nextResponsibleSectorID</span>
+                                </label>
+                                <label>Status Change Options (Radio)</label>
+                                <div class="array-list" formArrayName="statusChangeOptions">
+                                    <div *ngFor="let opt of statusChangeOptionsArr.controls; let i = index" [formGroupName]="i" class="array-item">
+                                        <label>Label</label>
+                                        <input class="form-control" formControlName="label" placeholder="e.g. جاري التنفيذ" />
+                                        <label>Value</label>
+                                        <input class="form-control" formControlName="value" type="number" placeholder="e.g. 2" />
+                                        <div class="row-actions">
+                                            <button class="btn" type="button" (click)="removeStatusChangeOption(i)">Remove</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="btn" type="button" (click)="addStatusChangeOption()">+ Add Status Option</button>
+                                <label>Dead Status (comma separated numbers)</label>
+                                <input class="form-control"
+                                    [value]="deadStatusControl.value ? deadStatusControl.value.join(',') : ''"
+                                    (input)="onDeadStatusChange($event)" />
+                                <label>Total Records</label>
+                                <input class="form-control" type="number" formControlName="totalRecords" />
+                            </section>
+                        </p-tabPanel>
+
+
+                        <p-tabPanel header="List">
+                            <section class="section">
+                                <h4>List Request Model</h4>
+                                <div formGroupName="listRequestModel">
+                                    <label>Page Number</label>
+                                    <input class="form-control" formControlName="pageNumber" type="number" />
+                                    <label>Page Size</label>
+                                    <input class="form-control" formControlName="pageSize" type="number" />
+                                    <label>Status</label>
+                                    <input class="form-control" formControlName="status" type="number" />
+                                    <label>Category Code</label>
+                                    <input class="form-control" formControlName="categoryCd" type="number" />
+                                    <label>Requested Data</label>
+                                    <input class="form-control" formControlName="requestedData" type="number" />
+                                    <label>Type</label>
+                                    <input class="form-control" formControlName="type" type="number" />
+                                    <div formGroupName="search">
+                                        <label>Search Field</label>
+                                        <input class="form-control" formControlName="searchField" />
+                                        <label>Search Text</label>
+                                        <input class="form-control" formControlName="searchText" />
+                                    </div>
+                                </div>
+                            </section>
+                        </p-tabPanel>
+
+                        <p-tabPanel header="Requests">
+                            <section class="section">
+                                <h4>Requests</h4>
+                                <div class="array-list" formArrayName="requestsarray" *ngIf="form.get('requestsarray')">
+                                    <div *ngFor="let r of requestsarrayControls; let i = index" [formGroupName]="i"
+                                        class="array-item">
+                                        <div class="request-col request-col">
+                                            <div class="populate-args">
+                                                <label>Method</label>
+                                                <p-dropdown [style]="{'direction':'rtl','text-align':'right'}"
+                                                    [showClear]="true" [filter]="true" appendTo="body" filterBy="label"
+                                                    [options]="publicationsApiMethods" optionLabel="label"
+                                                    optionValue="value" formControlName="method"
+                                                    placeholder="Select endpoint"
+                                                    (onChange)="onSelectPublicationEndpoint(i, $event.value)">
+                                                </p-dropdown>
+                                                    <label class="pill-checkbox small">
+                                                    <input type="checkbox" formControlName="wrapBodyAsArray" />
+                                                    <span class="pill-text" title="Wrap body as array">Wrap body as array</span>
+                                                </label>
+                                                <label>Args</label>
+                                                <div class="args-list">
+                                                    <div *ngFor="let a of getArgsArray(i); let ai = index"
+                                                        class="arg-item">
+                                                        <ng-container
+                                                            *ngIf="isBodyArg(i, ai) || isObjectArg(i, ai); else normalArg">
+                                                            <app-dto-renderer [value]="getArgsArray(i)[ai]"
+                                                                (valueChange)="setArgValue(i, ai, $event)"></app-dto-renderer>
+                                                        </ng-container>
+                                                        <ng-template #normalArg>
+                                                            <input class="form-control"
+                                                                [placeholder]="publicationsArgsPlaceholders[i] && publicationsArgsPlaceholders[i][ai] ? publicationsArgsPlaceholders[i][ai] : '(empty)'"
+                                                                [value]="formatArgValue(a)"
+                                                                (input)="setArgValue(i, ai, $any($event.target).value)" />
+                                                        </ng-template>
+                                                        <button class="btn" type="button"
+                                                            (click)="removeArg(i, ai)">Remove</button>
+                                                    </div>
+                                                </div>
+                                                <button class="btn" type="button" (click)="addArg(i)">+ Add
+                                                    Arg</button>
+                                            </div>
+                                        </div>
+                                        <div class="request-col request-col">
+                                            <div class="populate-args">
+                                                <label>Requests Selection Fields</label>
+                                                <div class="args-list">
+                                                    <div *ngFor="let sf of getRequestArrayValues(i, 'requestsSelectionFields'); let sfi = index"
+                                                        class="arg-item">
+                                                        <input placeholder="(empty)" class="form-control" [value]="sf"
+                                                            (input)="setRequestArrayValue(i, 'requestsSelectionFields', sfi, $any($event.target).value)" />
+                                                        <button class="btn" type="button"
+                                                            (click)="removeRequestArrayItem(i, 'requestsSelectionFields', sfi)">Remove</button>
+                                                    </div>
+                                                </div>
+                                                <button class="btn" type="button"
+                                                    (click)="addRequestArrayItem(i, 'requestsSelectionFields')">+
+                                                    Add
+                                                    Selection Field</button>
+
+                                                <div style="margin-top:10px;">
+                                                    <label>Arr (arrName | arrValue)</label>
+                                                    <div class="args-list">
+                                                        <div class="arg-item">
+                                                            <input placeholder="Enter property path (e.g. this.messageDtos) or JSON array" class="form-control" formControlName="arrName" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="request-col request-col">
+                                            <div class="populate-method">
+                                                <label>{{ formatDefaultLabel('populateMethod') }}</label>
+                                                <p-dropdown [style]="{'direction':'rtl', 'text-align': 'left'}"
+                                                    formControlName="populateMethod" [showClear]="true"
+                                                    [options]="populateMethodOptions" emptyMessage="No options found"
+                                                    [filter]="true" appendTo="body" filterBy="label" optionValue="value"
+                                                    optionLabel="label" placeholder="Select populate method">
+                                                </p-dropdown>
+                                            </div>
+                                            <div class="populate-args">
+                                                <label>{{ formatDefaultLabel('populateArgs') }}</label>
+                                                <div class="args-list">
+                                                    <ng-container
+                                                        *ngIf="requiresPopulateArgs(r.get('populateMethod')?.value); else genericArgs">
+                                                        <ng-container
+                                                            *ngFor="let def of getPopulateDefaults(r.get('populateMethod')?.value); let idx = index">
+                                                            <label
+                                                                *ngIf="isDefaultString(!isDefaultBoolean(getPopulateArgValue(i, idx)))">{{
+                                                                formatDefaultLabel(def) }}</label>
+
+                                                            <input
+                                                                *ngIf="!isDefaultBoolean(getPopulateArgValue(i, idx))"
+                                                                class="form-control"
+                                                                [value]="getPopulateArgValue(i, idx)"
+                                                                (input)="setPopulateArgValue(i, idx, $any($event.target).value)" />
+
+                                                            <label class="pill-checkbox"
+                                                                *ngIf="isDefaultBoolean(getPopulateArgValue(i, idx))">
+                                                                <input type="checkbox"
+                                                                    [checked]="getPopulateArgValue(i, idx)"
+                                                                    (change)="setPopulateArgValue(i, idx, $any($event.target).checked)" />
+                                                                <span class="pill-text">{{ isDefaultString(def) ?
+                                                                    formatDefaultLabel(def) : ('Arg ' + (idx+1))
+                                                                    }}</span>
+                                                            </label>
+                                                        </ng-container>
+                                                    </ng-container>
+                                                </div>
+                                                <ng-template #genericArgs>
+                                                    <input class="form-control" formControlName="populateArgs" />
+                                                </ng-template>
+                                            </div>
+                                        </div>
+                                        <button class="btn" type="button" (click)="removeRequest(i)">Remove</button>
+                                    </div>
+                                    <button class="btn" type="button" (click)="addRequest()">+ Add Request</button>
+                                </div>
+                            </section>
+                        </p-tabPanel>
+
+                        <p-tabPanel header="Fields">
+                            <section class="section">
+                                <h4>Fields Configuration</h4>
+                                <div formGroupName="fieldsConfiguration">
+                                                        <label class="pill-checkbox">
+                                                            <input type="checkbox" formControlName="isDivDisabled" />
+                                                            <span class="pill-text" [title]="formatDefaultLabel('isDivDisabled')">{{ formatDefaultLabel('isDivDisabled') }}</span>
+                                                        </label>
+                                        <label class="pill-checkbox">
+                                        <input type="checkbox" formControlName="useDefaultRadioView" />
+                                        <span class="pill-text" title="Use Default Radio View">Use Default Radio View</span>
+                                    </label>
+                                        <label class="pill-checkbox">
+                                        <input type="checkbox" formControlName="isNotRequired" />
+                                        <span class="pill-text" title="Is Not Required">Is Not Required</span>
+                                    </label>
+                                    <label class="pill-checkbox">
+                                        <input type="checkbox" formControlName="isCategoryTreeMode" />
+                                        <span class="pill-text" title="Use Category Tree Mode">Use Category Tree Mode</span>
+                                    </label>
+                                    <label class="pill-checkbox">
+                                        <input type="checkbox" formControlName="sticky" />
+
+                                        <span class="pill-text" title="Enable Sticky Table Header/Paginator">Enable Sticky Table Header/Paginator</span>
+                                    </label>
+                                </div>
+                            </section>
+                        </p-tabPanel>
+
+                        <p-tabPanel header="Table & Categories">
+                            <section class="section tk-categories-section" dir="rtl">
+                                <div class="section-header">
+                                    <h4>TK Categories</h4>
+                                    <button type="button" class="btn" (click)="addTkCategory()">+ Add Category</button>
+                                </div>
+                                <div class="tk-cats-grid" formArrayName="tkCategoryCds" *ngIf="form.get('tkCategoryCds')">
+                                    <div class="grid-head">
+                                        <div class="center">Key</div>
+                                        <div>Value</div>
+                                        <div class="actions-col"></div>
+                                    </div>
+                                    <div *ngFor="let t of tkCategoryCdsControls; let i = index" [formGroupName]="i" class="tk-cat-item">
+                                        <input class="form-control small" formControlName="key" type="number" />
+                                        <input class="form-control" formControlName="value" />
+                                        <div class="actions-col">
+                                            <button type="button" class="btn danger" (click)="removeTkCategory(i)">Remove</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="section">
+                                <h4>Table Columns</h4>
+                                <div class="array-list" formArrayName="tableColumns">
+                                    <div *ngFor="let tc of tableColumnsArr.controls; let i = index" [formGroupName]="i"
+                                        class="array-item">
+                                        <label>Key</label>
+                                        <input class="form-control" formControlName="key" />
+                                        <label>Value</label>
+                                        <input class="form-control" formControlName="value" />
+                                        <div class="row-actions">
+                                            <button class="btn" type="button"
+                                                (click)="removeTableColumn(i)">Remove</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="btn" type="button" (click)="addTableColumn()">+ Add Column</button>
+                            </section>
+                            <section class="section table-fields-section" dir="rtl">
+                                <div class="section-header">
+                                    <h4>Table Fields</h4>
+                                    <button type="button" class="btn" (click)="addTableField()">+ Add Field</button>
+                                </div>
+                                <div class="table-fields-grid" formArrayName="tableFields" *ngIf="form.get('tableFields')">
+                                    <div class="grid-head">
+                                        <div>Header</div>
+                                        <div>Field</div>
+                                        <div class="center">Requester</div>
+                                        <div class="center">Width</div>
+                                        <div class="center">Sortable</div>
+                                        <div class="center">Status</div>
+                                        <div class="center">Visible</div>
+                                        <div class="actions-col"></div>
+                                    </div>
+
+                                    <div *ngFor="let tf of tableFieldsArr.controls; let i = index" [formGroupName]="i" class="table-field-item">
+                                        <input class="form-control small" formControlName="header" placeholder="Header" />
+                                        <input class="form-control small" formControlName="field" placeholder="fieldName" />
+                                        <label class="pill-checkbox center small-toggle">
+                                            <input type="checkbox" formControlName="useRequester" />
+                                            <span class="pill-text" title="Use">use Requester</span>
+                                        </label>
+                                        <input class="form-control tiny" formControlName="width" placeholder="e.g. 10%" />
+                                        <label class="pill-checkbox center small-toggle">
+                                            <input type="checkbox" formControlName="sortable" />
+                                            <span class="pill-text" title="Sort">Sort</span>
+                                        </label>
+                                        <label class="pill-checkbox center small-toggle">
+                                            <input type="checkbox" formControlName="renderAsStatus" />
+                                            <span class="pill-text" title="Status">Status</span>
+                                        </label>
+                                        <label class="pill-checkbox center small-toggle">
+                                            <input type="checkbox" formControlName="visible" />
+                                            <span class="pill-text" title="Show">Show</span>
+                                        </label>
+                                        <div class="field-actions">
+                                            <button type="button" class="btn" (click)="removeTableField(i)">Remove</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        </p-tabPanel>
+                        <p-tabPanel header="Attachments">
+                            <section class="section attachments-section" [formGroupName]="'attachmentConfig'">
+                                    <label class="pill-checkbox">
+                                        <input type="checkbox" formControlName="showAttachmentSection" />
+                                        <span class="pill-text" title="Show Attachments">Show Attachments</span>
+                                    </label>
+
+                                    <label class="pill-checkbox">
+                                        <input type="checkbox" formControlName="isMandatory" />
+                                        <span class="pill-text" title="Attachments Are Mandatory">Attachments Are Mandatory</span>
+                                    </label>
+
+                                <label>Attachment Allowed (select multiple)</label>
+                                <div class="page-sizes-checkboxes">
+                                    <label *ngFor="let a of availableAttachmentOptions" class="pill-checkbox">
+                                        <input type="checkbox"
+                                            [checked]="isSelected('attachmentConfig.AllowedExtensions', a)"
+                                            (change)="onToggle('attachmentConfig.AllowedExtensions', a, $event)" />
+                                        <span class="pill-text" [title]="a">{{ a }}</span>
+                                    </label>
+                                </div>
+
+                                <label>Maximum file size (MB)</label>
+                                <input class="form-control" type="number" min="0" formControlName="maximumFileSize" />
+
+                                <label>Max file count</label>
+                                <input class="form-control" type="number" min="0" formControlName="maxFileCount" />
+
+                                <label class="pill-checkbox">
+                                    <input type="checkbox" formControlName="allowAdd" />
+                                    <span class="pill-text" title="Allow Add (show add button)">Allow Add (show add button)</span>
+                                </label>
+
+                                <label class="pill-checkbox">
+                                    <input type="checkbox" formControlName="allowMultiple" />
+                                    <span class="pill-text" title="Allow Multiple Files">Allow Multiple Files</span>
+                                </label>
+                            </section>
+                        </p-tabPanel>
+                    </p-tabView>
+
+                </form>
+            </div>
+
+            <ng-template pTemplate="footer">
+                <button class="btn primary" type="button" (click)="save()">Save</button>
+                <button class="btn" type="button" (click)="showDrawer=false">Cancel</button>
+            </ng-template>
+        </p-dialog>
+    </div>
+</div>

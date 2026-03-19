@@ -1,0 +1,326 @@
+// Smart, attractive table design for PrimeNG p-table (with fallback for p-datatable)
+// Includes: variables, wrapper, header, body, rows, modifiers, utilities, responsive, animations
+
+// Color tokens (use CSS custom properties for theme-awareness)
+$table-bg: #ffffff;
+$table-border: #e9ecef;
+$muted: #6c757d;
+$primary: #4f46e5;
+$accent: #20c997;
+$row-hover: rgba(79, 70, 229, 0.06);
+$row-selected-bg: rgba(79, 70, 229, 0.08) !important;
+$shadow: 0 6px 18px rgba(14, 30, 37, 0.06);
+
+// Wrapper: basic container styles for p-table / p-datatable
+.p-table,
+.p-datatable {
+  background: $table-bg;
+  border-radius: 8px;
+  border: 1px solid $table-border;
+  overflow: visible !important; // keep rounded corners
+}
+
+// Keep expanded content visible when using row expansion or toggles
+.p-table-wrapper,
+.p-datatable-wrapper,
+.p-table-tbody,
+.p-datatable-tbody,
+.p-row-toggler,
+.p-table .p-row-toggler,
+.p-datatable .p-row-toggler {
+  overflow: visible !important;
+}
+
+// Table header
+.p-table .p-table-thead>tr>th,
+.p-datatable .p-datatable-thead>tr>th {
+    background: transparent;
+    color: #000000;
+    font-weight: bold;
+    text-transform: none;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid #eff1f3;
+    font-size: 1.2rem;
+}
+
+/* Round the top-left and top-right header cells so the table header matches
+   the wrapper's rounded corners. Using 8px to match `.p-table` / `.p-datatable`.
+*/
+.p-table .p-table-thead>tr>th:first-child,
+.p-datatable .p-datatable-thead>tr>th:first-child,
+.p-table table thead>tr>th:first-child,
+.p-datatable table thead>tr>th:first-child {
+  border-top-right-radius: 8px;
+  overflow: hidden;
+  /* ensure background/clipping respects rounding */
+}
+
+.p-table .p-table-thead>tr>th:last-child,
+.p-datatable .p-datatable-thead>tr>th:last-child,
+.p-table table thead>tr>th:last-child,
+.p-datatable table thead>tr>th:last-child {
+  border-top-left-radius: 8px;
+  overflow: hidden;
+}
+
+// Rows: spacing, subtle borders and entrance animation
+.p-table .p-table-tbody>tr,
+.p-datatable .p-datatable-tbody>tr,
+.p-table table tbody>tr,
+.p-datatable table tbody>tr {
+  text-align: left;
+  border-bottom: 1px solid $table-border;
+  padding: 0.6rem 1rem;
+  color: #0b0b0b;
+  transition: background-color 220ms ease, transform 200ms cubic-bezier(.2, .9, .2, 1), box-shadow 200ms ease;
+  will-change: transform, box-shadow, background-color;
+  background-clip: padding-box;
+  animation: fadeInLeftToRight 320ms ease both;
+}
+
+// Zebra rows for readability
+.p-table .p-table-tbody>tr,
+.p-datatable .p-datatable-tbody>tr,
+.p-table table tbody>tr,
+.p-datatable table tbody>tr {
+  background-color: rgba(0, 0, 0, 0.015);
+}
+
+// Hover: lift + subtle shadow + pointer
+.p-table .p-table-tbody>tr:hover,
+.p-datatable .p-datatable-tbody>tr:hover,
+.p-table table tbody>tr:hover,
+.p-datatable table tbody>tr:hover {
+  transform: translateY(-3px);
+  box-shadow: $shadow;
+  color: var(--app-primary, #4f46e5);
+  cursor: pointer;
+}
+
+// Optional hover style for a specific hoverable rows mode
+.p-datatable.p-datatable-hoverable-rows .p-datatable-tbody>tr:not(.p-highlight):hover {
+  color: var(--app-primary, #4f46e5) !important;
+  box-shadow: inset 0 0 0 2px var(--app-primary-border, rgba(79, 70, 229, 0.18)),
+              0 4px 12px rgba(79, 70, 229, 0.08) !important;
+  border-radius: .75rem;
+  transform: translateY(-3px);
+  position: relative;
+}
+
+// Selected row: PrimeNG uses .p-highlight -- style it plus a custom helper
+.p-table .p-table-tbody>tr.p-highlight,
+.p-table .p-table-tbody>tr.row-selected,
+.p-datatable .p-datatable-tbody>tr.p-highlight,
+.p-datatable .p-datatable-tbody>tr.row-selected,
+.p-table table tbody>tr.p-highlight,
+.p-table table tbody>tr.row-selected,
+.p-datatable table tbody>tr.p-highlight,
+.p-datatable table tbody>tr.row-selected {
+  color: var(--app-primary, #4f46e5) !important;
+  box-shadow: inset 0 0 0 2px var(--app-primary-border, rgba(79, 70, 229, 0.18)),
+              0 4px 12px rgba(217, 119, 6, 0.1) !important;
+  border-radius: .75rem;
+  transform: translateY(-3px);
+  position: relative;
+}
+
+/* Specific styling for p-datatable highlighted rows (lighter blue background + muted text)
+   Placed immediately after the generic selected-row rules to ensure it applies to p-datatable instances. */
+.p-datatable .p-datatable-tbody>tr.p-highlight {
+  background: #ffffff00;
+  color: #000000;
+}
+
+// Focus state for keyboard accessibility
+.p-table .p-table-tbody>tr:focus,
+.p-table .p-table-tbody>tr:focus-visible,
+.p-datatable .p-datatable-tbody>tr:focus,
+.p-datatable .p-datatable-tbody>tr:focus-visible,
+.p-table table tbody>tr:focus,
+.p-table table tbody>tr:focus-visible,
+.p-datatable table tbody>tr:focus,
+.p-datatable table tbody>tr:focus-visible {
+  /* Use box-shadow instead of outline so the focus ring follows border-radius. */
+  outline: none;
+  box-shadow: 0 0 0 3px rgba($primary, 0.12);
+  border-radius: 1rem;
+  /* match selected-row radius for consistent rounding */
+}
+
+// Cells: padding and truncation rules
+.p-table .p-table-tbody>tr>td,
+.p-datatable .p-datatable-tbody>tr>td,
+.p-table table tbody>tr>td,
+.p-datatable table tbody>tr>td {
+  overflow: hidden;
+  white-space: nowrap; // keep single-line layout for cleaner rows
+  text-overflow: ellipsis;
+  padding:0.25rem 0.75rem 0.25rem 1rem;
+  vertical-align: middle;
+  text-wrap: auto;
+  text-align: center;
+  font-size: 1.20rem;
+}
+
+// Small-cell modifiers (icons, actions)
+.p-table .p-table-tbody>tr>td.small,
+.p-table .p-table-tbody>tr>th.small,
+.p-datatable .p-datatable-tbody>tr>td.small,
+.p-datatable .p-datatable-tbody>tr>th.small,
+.p-table table tbody>tr>td.small,
+.p-table table tbody>tr>th.small,
+.p-datatable table tbody>tr>td.small,
+.p-datatable table tbody>tr>th.small {
+  width: 56px;
+  white-space: nowrap;
+}
+
+/* Table-only tweak: apply icon-only button icon alignment inside tables only
+   Keeps change scoped so other p-button instances aren't affected. */
+.p-table table tbody td .p-button.p-button-icon-only .p-button-icon-left,
+.p-table table tbody td .p-button.p-button-icon-only .p-button-icon-right,
+.p-datatable table tbody td .p-button.p-button-icon-only .p-button-icon-left,
+.p-datatable table tbody td .p-button.p-button-icon-only .p-button-icon-right {
+  margin: 0;
+  font-weight: bold;
+  margin-top: .25rem;
+}
+
+// Utility: make clickable elements inside cells feel tappable
+.p-table .p-table-tbody>tr a,
+.p-table .p-table-tbody>tr button,
+.p-datatable .p-datatable-tbody>tr a,
+.p-datatable .p-datatable-tbody>tr button,
+.p-table table tbody>tr a,
+.p-table table tbody>tr button,
+.p-datatable table tbody>tr a,
+.p-datatable table tbody>tr button {
+  color: $primary;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.p-table .p-table-tbody>tr a:hover,
+.p-table .p-table-tbody>tr button:hover,
+.p-datatable .p-datatable-tbody>tr a:hover,
+.p-datatable .p-datatable-tbody>tr button:hover,
+.p-table table tbody>tr a:hover,
+.p-table table tbody>tr button:hover,
+.p-datatable table tbody>tr a:hover,
+.p-datatable table tbody>tr button:hover {
+  color: darken($primary, 6%);
+  transform: translateY(-1px);
+}
+
+// Responsive: wrap cells on very small screens while preserving look
+@media (max-width: 640px) {
+  .p-datatable .p-datatable-tbody>tr>td {
+    white-space: normal;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.95rem;
+  }
+
+  .p-datatable .p-datatable-thead {
+    display: none;
+  }
+
+  .p-table .p-table-tbody>tr,
+  .p-table table tbody>tr {
+    display: block;
+    margin-bottom: 0.6rem;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    padding: 0.4rem;
+  }
+}
+
+// Animated row entrance + hover polish: slide in from left to right
+@keyframes fadeInLeftToRight {
+  from {
+    opacity: 0;
+    /* start slightly left and a bit down so the motion feels natural */
+    transform: translateX(-78px) translateY(8px);
+    overflow: hidden;
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+    overflow: hidden;
+  }
+}
+
+/* Sticky table header rules for tables placed inside .pane-with-sticky .table-container
+   Moved here so they apply globally (targets rendered table inside generic-table)
+*/
+// .pane-with-sticky .table-container table thead {
+//   position: sticky;
+//   top: 0;
+//   z-index: 5;
+//   background: #fff;
+// }
+
+// .pane-with-sticky .table-container table thead th {
+//   background: inherit;
+//   z-index: 6;
+// }
+
+/* Scoped sticky header for PrimeNG tables inside our pane */
+.pane-with-sticky .table-container .p-table table thead,
+.pane-with-sticky .table-container .p-datatable table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--app-surface, #ffffff);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.pane-with-sticky .table-container .p-table table thead th,
+.pane-with-sticky .table-container .p-datatable table thead th {
+  background: inherit;
+  z-index: 11;
+}
+
+/* Sticky paginator/footer for tables inside .pane-with-sticky .table-container
+   Keeps the paginator visible when the table content scrolls. */
+.pane-with-sticky .table-container .p-paginator,
+.pane-with-sticky .table-container .p-table .p-paginator,
+.pane-with-sticky .table-container .p-datatable .p-paginator {
+  position: sticky;
+  bottom: 0;
+  z-index: 900;
+  background: #fff;
+  box-shadow: 0 -6px 18px rgba(14, 30, 37, 0.06);
+}
+
+/* Ensure paginator dropdowns appear above sticky headers */
+.p-paginator .p-dropdown {
+  z-index: 12;
+  text-align: center;
+}
+
+/* Place our custom paginator control at the end of the paginator row */
+.p-paginator .custom-paginator-left {
+  margin-inline-start: auto;
+  /* pushes element to the logical end (supports LTR/RTL) */
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Reset right-content margin so paginator items align correctly */
+.p-paginator .p-paginator-right-content {
+  margin-left: 0 !important;
+}
+
+.p-paginator .p-paginator-left-content {
+  margin-right: 0 !important;
+}
+
+.p-paginator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  flex-direction: row;
+}

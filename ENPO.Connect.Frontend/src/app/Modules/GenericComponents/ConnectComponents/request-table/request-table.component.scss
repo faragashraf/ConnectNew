@@ -1,0 +1,512 @@
+////////////////////////////////////////////////////
+/// 
+/// 
+// Radiobutton
+.radio-group {
+  display: flex;
+  gap: 1.2rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+
+.radio-option {
+  position: relative;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  padding: .3rem .5rem;
+  transition: transform 220ms cubic-bezier(.2, .9, .2, 1),
+    box-shadow 220ms cubic-bezier(.2, .9, .2, 1),
+    background-color 220ms ease,
+    font-size 220ms ease,
+    padding 220ms ease,
+    filter 220ms ease,
+    opacity 220ms ease;
+  filter: none;
+  text-align: center;
+  min-width: 5.5rem;
+  max-width: 100%;
+  flex: 1;
+  box-sizing: border-box;
+  justify-content: center;
+  font-size: x-large;
+  transform-origin: center center;
+  will-change: transform, box-shadow, font-size;
+  z-index: 1;
+}
+
+.radio-option.selected {
+  // background-color: rgba(182, 233, 140, 0.7333333333) !important;
+  box-shadow: 6px 4px 20px rgb(76 175 80 / 55%), inset -2px -2px 3px 0px rgba(255, 255, 255, 0.2) !important;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.6rem;
+  justify-content: center;
+  color: #004cff;
+  // transform: scale(1.1);
+  padding: .5rem .5rem;
+  filter: none;
+  z-index: 2;
+}
+
+.radio-option label {
+  cursor: pointer;
+  margin: 0;
+  font-weight: bold;
+  font-family: 'Times New Roman', Times, serif;
+  width: 100%;
+}
+
+.radio-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  height: 0;
+  width: 0;
+}
+
+/* Hover effect */
+.radio-option:hover:not(.selected) {
+  background-color: #f5f5f5ef;
+  transform: scale(1.1);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+  z-index: 2;
+  filter: none;
+  // font-size: 1.15em;
+  padding: .1rem .1rem;
+}
+
+.radio-option.no-animation {
+  transition: none !important;
+}
+
+.radio-option.no-animation label {
+  cursor: default !important;
+}
+
+.radio-option.no-animation:hover:not(.selected) {
+  background-color: transparent !important;
+  transform: none !important;
+  box-shadow: none !important;
+  padding: .3rem .5rem !important;
+  z-index: 1 !important;
+}
+
+/* Pill-style radios used in row-expansion */
+.pill-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  margin: 0.2rem 0.4rem;
+  padding: .35rem .6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbfb 100%);
+  box-shadow: 0 4px 10px rgba(16, 24, 40, 0.04);
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+}
+
+.pill-checkbox input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pill-checkbox:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
+}
+
+.pill-checkbox[disabled],
+.pill-checkbox input[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.pill-checkbox input[type="radio"]:checked+.pill-text,
+.pill-checkbox.selected .pill-text {
+  color: #fff;
+}
+
+.pill-text {
+  display: inline-block;
+  padding: .05rem .1rem;
+  line-height: 1;
+  color: #1144cc;
+  background: linear-gradient(90deg, #ffffff00 0%, #ffffff00 100%);
+  border-radius: 999px;
+}
+
+.pill-checkbox input[type="radio"]:checked~.pill-text,
+.pill-checkbox input[type="radio"]:checked+.pill-text {
+  background: linear-gradient(90deg, #4caf50 0%, #1e88e5 100%);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(30, 136, 229, 0.18);
+}
+
+/* Focus state */
+.radio-option:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px rgba(63, 81, 181, 0.18);
+  transform: scale(1.03);
+  z-index: 3;
+}
+
+/* Broad fallback for browsers that do not support :has() */
+.radio-option:focus-within {
+  box-shadow: 0 0 0 3px rgba(63, 81, 181, 0.18);
+  transform: scale(1.03);
+  z-index: 3;
+}
+
+/* Only blur other options while the group is hovered;
+   when not hovering the group, nothing is blurred. */
+.radio-group:hover .radio-option:not(:hover):not(.selected):not(:focus-within) {
+  filter: blur(3px);
+  opacity: 0.95;
+  transform: none;
+  box-shadow: none;
+  z-index: 0;
+}
+
+
+.mode-toggle-container {
+  justify-content: flex-end;
+  // margin-bottom: 1rem;
+}
+
+.mode-toggle {
+  background: #f6f8fa;
+  border-radius: 2rem;
+  padding: 0.5rem 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+}
+
+.mode-radio-label {
+  display: flex;
+  cursor: pointer;
+  gap: 0.5rem;
+  font-weight: bold;
+  color: #1100ff;
+  font-size: x-large;
+  font-family: 'Khaled Art';
+  padding: 0 .5rem 0 .5rem;
+  width: 10rem;
+  min-width: 18.5rem;
+  align-items: center // font-size: larger;
+
+}
+
+.mode-radio {
+  display: none;
+}
+
+.mode-radio-custom {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #b6e98c;
+  background: #fff;
+  display: inline-block;
+  position: relative;
+  transition: border-color 0.2s;
+}
+
+
+.mode-radio-custom.active-mode {
+  border-color: #4caf50;
+  background: linear-gradient(135deg, #b6e98c 60%, #4caf50 100%);
+  box-shadow: 0 0 0 2px #b6e98c44;
+}
+
+.mode-radio-text {
+  margin-right: 0.25rem;
+}
+
+.search-bar-container {
+  align-items: center;
+  display: flex;
+  gap: 1.5rem;
+  background: #f6f8fa;
+  border-radius: 1.5rem;
+  padding: 0.75rem 2rem;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.08);
+  margin-bottom: 1rem;
+  margin-top: 0.5rem;
+  justify-content: flex-start;
+  flex-direction: row;
+}
+
+.search-dropdown .p-dropdown {
+  min-width: 180px;
+  font-size: 1.05rem;
+  border-radius: 1rem;
+  border: 1px solid #b6e98c;
+  background: #fff;
+  text-align: right;
+}
+
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: 0 1px 4px rgba(76, 175, 80, 0.07);
+  padding: 0.25rem 1rem;
+  border: 1px solid #b6e98c;
+}
+
+.search-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 1.1rem;
+  padding: 0.25rem 0.5rem;
+  width: 160px;
+}
+
+.search-icon {
+  color: #4caf50;
+  font-size: 1.2rem;
+  margin-left: 0.5rem;
+}
+
+.smart-search-btn {
+  margin-right: 1.5rem;
+  background: linear-gradient(90deg, #b6e98c 60%, #4caf50 100%);
+  color: #fff;
+  border: none;
+  border-radius: 1.5rem;
+  font-weight: 600;
+  font-size: 1.05rem;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.10);
+  padding: 0.5rem 1.5rem;
+  transition: background 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.smart-search-btn:hover {
+  background: linear-gradient(90deg, #4caf50 60%, #b6e98c 100%);
+  box-shadow: 0 4px 16px rgba(76, 175, 80, 0.18);
+}
+
+.smart-search-btn:disabled {
+  background: var(--app-text-muted);
+}
+
+/* Animated Edit Button */
+.caption-row {
+  display: flex;
+  align-items: center;
+}
+
+.animated-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: linear-gradient(135deg, #ff8a65 0%, #ff7043 50%, #ff5722 100%);
+  color: #fff;
+  border: none;
+  padding: 0.5rem 0.9rem;
+  border-radius: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(255, 112, 67, 0.22);
+  transform: translateY(0);
+  transition: transform 220ms ease, box-shadow 220ms ease, filter 220ms ease;
+  will-change: transform;
+}
+
+.animated-edit-btn .edit-icon {
+  display: inline-flex;
+  width: 1.2rem;
+  height: 1.2rem;
+  font-size: 1rem;
+  line-height: 1;
+  transform-origin: center;
+  transition: transform 220ms ease;
+}
+
+.animated-edit-btn:hover {
+  transform: translateY(-4px) rotate(-1deg) scale(1.02);
+  box-shadow: 0 10px 30px rgba(255, 112, 67, 0.28);
+}
+
+.animated-edit-btn:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.animated-edit-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: grayscale(0.2) saturate(0.8);
+}
+
+p-tabPanel {
+  div {
+    padding: 0 0 1rem;
+  }
+
+  text-align: right;
+
+  span {
+    color: var(--app-primary);
+    margin-left: 1rem;
+  }
+}
+
+.tree-overlay-container {
+  position: absolute;
+  z-index: 110010 !important;
+  /* High z-index for Tour visibility */
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 10px;
+  width: 100%;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-top: 5px;
+  height: 30rem;
+  /* Fixed height to allow % height child to work */
+  display: flex;
+  /* Ensure child fills it */
+  flex-direction: column;
+}
+
+app-tree-sidebar {
+  height: 100% !important;
+  width: 100% !important;
+  display: block !important;
+}
+
+.tour-status-dropdown-style {
+  box-shadow: 0px -1px 13px 10px rgb(28 214 23 / 33%);
+  margin: 0 0 23px 0;
+  min-width: 23rem;
+  text-align: right;
+}
+
+/* When a radio-group needs hover disabled (e.g. row-expansion), use .no-hover */
+.radio-group.no-hover .radio-option:hover,
+.radio-group.no-hover .radio-option:focus-within {
+  transform: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
+
+.radio-group.no-hover:hover .radio-option:not(:hover):not(.selected):not(:focus-within) {
+  filter: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Show not-allowed cursor and dim disabled radio options */
+.radio-option input[type="radio"][disabled]+label,
+.radio-option input[type="radio"][disabled]~label {
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
+  filter: grayscale(0.15);
+}
+
+.radio-option input[type="radio"][disabled]~label .p-tag,
+.radio-option input[type="radio"][disabled]+label .p-tag {
+  opacity: 0.7;
+  filter: grayscale(0.15);
+}
+
+/* Modern Collapsible Filter Panel */
+.filters-panel {
+  background: #ffffff;
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  margin-bottom: 1.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  /* Ensure filters appear above table when overlay is open */
+  position: relative;
+  z-index: 998;
+  transition: box-shadow 0.3s ease;
+}
+
+.filters-panel:hover {
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.09);
+}
+
+.filters-panel-header {
+  padding: 0 1.5rem;
+  cursor: pointer;
+  user-select: none;
+  background: #f8f9fa;
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid transparent;
+}
+
+.filters-panel-header:hover {
+  background: #f1f3f5;
+}
+
+.filters-panel-header[aria-expanded="true"] {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: #ffffff;
+}
+
+.filters-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: #2c3e50;
+}
+
+/* Smooth height animation using CSS Grid */
+.filters-panel-body-wrapper {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.filters-panel-body-wrapper.collapsed {
+  grid-template-rows: 0fr;
+}
+
+.filters-panel-body {
+  overflow: hidden;
+}
+
+// Allow overflow when expanded so dropdowns/overlays are visible
+.filters-panel-body-wrapper:not(.collapsed) .filters-panel-body {
+  overflow: visible;
+}
+
+.filters-panel-content {
+  padding: 1.5rem;
+  transition: opacity 300ms ease, transform 300ms ease;
+  opacity: 1;
+  transform: translateY(0);
+  gap: 1rem;
+
+}
+
+.filters-panel-body-wrapper.collapsed .filters-panel-content {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* Adjust inner widgets for the new flex layout */
+.filters-panel .widget {
+  box-shadow: none;
+  background: transparent;
+  padding: 1rem;
+  margin: 0;
+}
+
+.filters-panel .p-button {
+  height: 2.5rem;
+  width: 2.5rem;
+}

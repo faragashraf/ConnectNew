@@ -1,0 +1,18 @@
+<div >
+    <p-tree 
+    [value]="teamTree" 
+    selectionMode="single" 
+    [(selection)]="selectedNode" 
+    [filter]="true" 
+    filterPlaceholder="بحث" 
+    scrollHeight="600px" 
+    (onNodeSelect)="nodeSelection($event)"
+    (onNodeUnselect)="nodeUnselection($event)">
+    
+    <ng-template let-node pTemplate="default">
+      <b [class.children]="node.children.length==0" [class.parents]="node.children.length>0">
+        <span [innerHTML]="highlightFilter(node.label)"></span>
+      </b>
+    </ng-template>
+  </p-tree>
+</div>

@@ -1,0 +1,101 @@
+<div class="row" *ngIf="config.attachmentConfig.showAttachmentSection || fileParameters.length>0">
+    <!-- <div class="col-md-1"></div> -->
+    <div class="col-md-12">
+        <div class="modern-file-uploader">
+            <!-- Header Section with Action Buttons -->
+            <div [hidden]="config.fieldsConfiguration.isDivDisabled">
+                <div class="uploader-header" *ngIf="fileParameters.length">
+                    <div class="files-count">
+                        <i class="pi pi-file"></i>
+                        <span>{{ fileParameters.length }} ملف محدد</span>
+                    </div>
+                    <button class="delete-all-btn" [disabled]="config.fieldsConfiguration.isDivDisabled" (click)="deleteAll()"
+                        title="حذف جميع الملفات">
+                        <i class="pi pi-trash"></i>
+                        <span>حذف الكل</span>
+                    </button>
+                </div>
+                <!-- Upload Zone -->
+                <div class="upload-zone" [class.has-files]="fileParameters.length > 0" [class.disabled]="config.fieldsConfiguration.isDivDisabled || (config.attachmentConfig.maxFileCount&& config.attachmentConfig.maxFileCount > 0 && fileParameters.length >= config.attachmentConfig.maxFileCount)">
+                    <input type="file" id="fileUpload" name="fileUpload" [accept]="acceptString" hidden
+                        (change)="onFileChange($event)" [multiple]="config.attachmentConfig.allowMultiple"
+                        [disabled]="config.fieldsConfiguration.isDivDisabled || ( config.attachmentConfig.maximumFileSize > 0 && config.attachmentConfig.maxFileCount &&fileParameters.length >= config.attachmentConfig.maxFileCount)">
+
+                    <label for="fileUpload" class="upload-area" [class.disabled]="config.fieldsConfiguration.isDivDisabled" [class.dragover]="isDragOver"
+                        (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)">
+                        <div class="upload-icon">
+                            <i class="pi pi-cloud-upload"></i>
+                        </div>
+                        <div class="upload-text">
+                            <h3>{{ uploadTitleText }}</h3>
+                            <p>اسحب الملفات هنا أو انقر للاختيار</p>
+                            <p class="upload-hint">
+                                <ng-container *ngFor="let line of (uploadHintText?.split('\n') || []); let last = last">
+                                    <span [class.last-line]="last">{{ line }}</span><br *ngIf="last">
+                                </ng-container>
+                            </p>
+                            <p *ngIf="config.attachmentConfig.maxFileCount && config.attachmentConfig.maxFileCount > 0" class="remaining-text">{{ remainingText }}</p>
+                        </div>
+                        <!-- <div class="upload-hint">
+                        <span>{{ uploadHintText }}</span>
+                    </div> -->
+                    </label>
+                </div>
+            </div>
+            <!-- Files List -->
+            <div class="files-container" *ngIf="fileParameters.length > 0">
+                <h4 class="files-title">
+                    <i class="pi pi-list"></i>
+                    الملفات المرفقة
+                </h4>
+
+                <div class="files-list">
+                    <div *ngFor="let file of fileParameters; let i = index" class="file-item">
+                        <div class="file-preview">
+                            <div class="file-icon" [class]="'file-type-' + getFileType(file.fileName).toLowerCase()">
+                                <i class="pi" [class]="getFileIcon(file.fileName)"></i>
+                            </div>
+                        </div>
+
+                        <div class="file-content">
+                            <div class="file-name" [title]="file.fileName">
+                                {{ truncateName(file.fileName, 35) }}
+                            </div>
+                            <div class="file-meta">
+                                <span class="file-size">{{ getFileSizeForDisplay(file) }}</span>
+                                <span class="file-type">{{ getFileType(file.fileName) }}</span>
+                            </div>
+                        </div>
+
+                        <div class="file-actions">
+                            <button class="action-btn preview-btn" title="معاينة الملف" type="button" *ngIf="config?.attachmentConfig?.allowAdd || config.fieldsConfiguration.isDivDisabled"
+                                (click)="previewFile(file, i)" [disabled]="config.fieldsConfiguration.isDivDisabled">
+                                <i class="pi pi-eye"></i>
+                            </button>
+                            <button class="action-btn download-btn" title="تحميل الملف" type="button"
+                                (click)="downloadFile(file, file.fileName)" >
+                                <i class="pi pi-download"></i>
+                            </button>
+                            <button class="action-btn remove-btn" title="حذف الملف" type="button"
+                                (click)="deleteFile(i)" *ngIf="config?.attachmentConfig?.allowAdd" [disabled]="config.fieldsConfiguration.isDivDisabled">
+                                <i class="pi pi-times"></i>
+                            </button>
+                        </div>
+                        <div class="file-progress">
+                            <div class="progress-bar"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state" *ngIf="fileParameters.length === 0">
+                <div class="empty-icon">
+                    <i class="pi pi-inbox"></i>
+                </div>
+                <p>لم يتم اختيار أي ملفات بعد</p>
+            </div>
+        </div>
+    </div>
+    <!-- <div class="col-md-1"></div> -->
+</div>

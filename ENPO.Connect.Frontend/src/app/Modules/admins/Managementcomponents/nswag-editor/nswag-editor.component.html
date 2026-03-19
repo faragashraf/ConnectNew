@@ -1,0 +1,64 @@
+<div class="editor-root" [class.loading]="loading">
+  <h2 class="title">NSWAG Services Editor</h2>
+
+  <div *ngIf="loading" class="loader">Loading…</div>
+
+  <form [formGroup]="form" class="editor-form" (ngSubmit)="save()">
+    <div formArrayName="items" class="items">
+      <div *ngFor="let fg of items.controls; let i = index" [formGroupName]="i" class="card">
+        <div class="card-content">
+          <div class="field">
+            <label for="label-{{i}}">Label</label>
+            <input id="label-{{i}}" formControlName="label" placeholder="Label" aria-label="Label" />
+          </div>
+          <div class="field">
+            <label for="envProperty-{{i}}">Env Property</label>
+            <p-dropdown
+              id="envProperty-{{i}}"
+              [options]="envProperties"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="envProperty"
+              placeholder="Env Property"
+              [filter]="true">
+            </p-dropdown>
+          </div>
+          <div class="field">
+            <label for="url-{{i}}">URL</label>
+            <input id="url-{{i}}" formControlName="url" placeholder="URL" aria-label="URL" />
+          </div>
+          <div class="field">
+            <label for="urlProduction-{{i}}">URL Production</label>
+            <input id="urlProduction-{{i}}" formControlName="urlProduction" placeholder="URL Production" aria-label="URL Production" />
+          </div>
+          <div class="field">
+            <label for="output-{{i}}">Output</label>
+            <input id="output-{{i}}" formControlName="output" placeholder="Output" aria-label="Output" />
+          </div>
+          <div class="field inline">
+            <label for="isproduction-{{i}}">Is Production</label>
+            <label class="switch">
+              <input id="isproduction-{{i}}" type="checkbox" formControlName="isproduction" aria-label="Production toggle" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="field inline">
+            <label for="regenerate-{{i}}">Regenerate</label>
+            <label class="switch">
+              <input id="regenerate-{{i}}" type="checkbox" formControlName="regenerate" aria-label="Regenerate toggle" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button type="button" (click)="remove(i)" class="btn danger">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn" (click)="addNew()">Add New</button>
+      <button type="submit" class="btn primary" [disabled]="saving">Save</button>
+    </div>
+  </form>
+</div>

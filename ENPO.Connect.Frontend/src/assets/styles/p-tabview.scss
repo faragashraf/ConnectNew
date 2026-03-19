@@ -1,0 +1,86 @@
+.p-tabview-nav {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+    flex: 1 1 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.p-tabview .p-tabview-nav li {
+    margin-right: 1rem;
+    margin-bottom: .5rem;
+}
+
+
+.p-tabview .p-tabview-nav li .p-tabview-nav-link {
+    color: var(--app-text-primary, #1e293b);
+    font-weight: 600;
+    border-top-right-radius: 3px;
+    border-top-left-radius: 3px;
+    border-style: solid;
+    border-image: initial;
+    border-width: 0px 0px 2px;
+    border-color: transparent transparent var(--app-border, #e2e8f0);
+    background: var(--app-surface, #ffffff);
+    padding: 1rem;
+    transition: color 0.15s ease-in-out, box-shadow 0.2s;
+    margin: 0px 0px -2px;
+    border-radius: 2rem;
+}
+
+.p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+    background: #ffffff;
+    border-color: var(--app-primary, #4f46e5);
+    border-style: double;
+    color: var(--app-primary, #4f46e5);
+    border-radius: 1rem;
+}
+
+.p-tabview .p-tabview-nav {
+    background: #ffffff;
+}
+
+
+.p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+    background: #ffffff;
+    border-color: var(--app-primary-border, rgba(79, 70, 229, 0.18));
+    color: var(--app-primary, #4f46e5) !important;
+    border-radius: 2rem;
+    margin: 0 1rem 7px 0;
+
+    box-shadow: inset 0 0 0 2px var(--app-primary-border, rgba(79, 70, 229, 0.18)),
+                0 2px 8px rgba(79, 70, 229, 0.1) !important;
+}
+
+// .p-tabview .p-tabview-nav li:not(.p-highlight) .p-tabview-nav-link:hover {
+//     background: #ffffff;
+//     border-color: #2196F3;
+//     color: #2196F3;
+//     border-radius: 2rem;
+//     box-shadow: inset 1px 1px 18px 0px rgb(255, 208, 0) !important;
+// }
+
+.p-tabview .p-tabview-nav li:not(.p-highlight):not(.p-disabled):hover .p-tabview-nav-link {
+    background: #ffffff;
+    border-color: var(--app-primary-border, rgba(79, 70, 229, 0.18));
+    color: var(--app-primary, #4f46e5);
+    border-radius: 2rem;
+    box-shadow: inset 0 0 0 2px var(--app-primary-border, rgba(79, 70, 229, 0.18)),
+                0 2px 8px rgba(79, 70, 229, 0.06) !important;
+}
+
+/* Dialog header tab nav buttons used by ComponentConfigManager */
+.dialog-tab-nav .tab-btn{ background:transparent; border:1px solid rgba(15,23,42,0.04); padding:6px 10px; border-radius:8px; cursor:pointer }
+.dialog-tab-nav .tab-btn.active{ background: linear-gradient(90deg,#7c3aed,#06b6d4); color:white; border:none }
+.p-splitter-panel-nested {
+    display: flex;
+    flex-direction: column;
+}
+
+.p-tabview .p-tabview-close {
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+    color: var(--app-accent-danger, #dc2626);
+}

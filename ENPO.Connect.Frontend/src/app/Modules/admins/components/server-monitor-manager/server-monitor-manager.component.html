@@ -1,0 +1,80 @@
+<div class="container-main" style="direction: ltr;">
+    <div class="row">
+        <div class="col-md-5">
+            <h2>Server Monitor Manager</h2>
+            <hr />
+
+        </div>
+        <div class="col-md-7">
+        </div>
+    </div>
+    <div class="widget">
+        <p-tabView (onChange)="onTabSelect($event)">
+            <p-tabPanel >
+                <ng-template pTemplate="header">
+                    Server Monitor Items ( <span style="color: green;font-size: large;">{{ itemData.length || 0
+                        }}</span> )
+                </ng-template>
+                <generic-table tableId="itemTable" [tableGenericData]="itemData" [_columns]="item_columns"
+                 [istitlecase]="false"   [showExportButton]="true" [showRemoveColumn]="false" [showDeleteButton]="true" [showEditButton]="false"  [dataKey]="'ITEM_ID'"
+                    (rowSelect)="onselectItemEvent($event)" (rowDelete)="deleteServerItemRow($event)"
+                    (rowEdit)="EditRow($event)"></generic-table>
+            </p-tabPanel>
+            <p-tabPanel
+                *ngIf="generateServerMonitorItems.tableGenericSelectedRow&&generateServerMonitorItems.tableGenericSelectedRow.ITEM_ID>0">
+                <ng-template pTemplate="header">
+                    Subscribers ( <span style="color: green;font-size: large;">{{ subscribersData.length || 0 }}</span>
+                    )
+                </ng-template>
+                <generic-table tableId="subscriberTable" [tableGenericData]="subscribersData"
+                    [_columns]="subscribers_columns" [showExportButton]="true" [showRemoveColumn]="false"
+                    [showDeleteButton]="true" [showEditButton]="false"  [dataKey]="'SUBSCRIBER_ID'"
+                     (rowDelete)="deleteSubscriberRow($event)"></generic-table>
+            </p-tabPanel>
+            <p-tabPanel 
+                *ngIf="LogData.length>0">
+                                <ng-template pTemplate="header">
+                    Server Monitor Items ( <span style="color: green;font-size: large;">{{ LogData.length || 0
+                        }}</span> )
+                </ng-template>
+                <generic-table tableId="logTable" [tableGenericData]="LogData" [_columns]="Log_columns"
+                    [showExportButton]="true" [showEditButton]="false"  [showRemoveColumn]="false" [showDeleteButton]="false" [dataKey]="'LOG_ID'"></generic-table>
+            </p-tabPanel>
+        </p-tabView>
+    </div>
+</div>
+
+<p-dialog header="Manage Data" [(visible)]="isDialogVisible" [modal]="true" [closable]="false"
+    [style]="{width: '500px'}">
+    <form [formGroup]="form" class="smart-form">
+        <div *ngFor="let col of this.expectedColumns" class="p-field p-grid">
+            <ng-container *ngIf="col !== 'ITEM_ID'">
+                <label [for]="col" class="p-col-4 p-mb-2">{{ col | titlecase }}</label>
+                <div class="p-col-8">
+                    <ng-container *ngIf="col === 'CATEGORY'; else otherInputs">
+                        <p-dropdown [options]="categoryOptions" formControlName="CATEGORY" placeholder="Select a Category"></p-dropdown>
+                    </ng-container>
+                    <ng-template #otherInputs>
+                        <ng-container *ngIf="col === 'IS_HA'; else defaultInput">
+                            <p-selectButton [options]="isHaOptions" formControlName="IS_HA" optionLabel="label" optionValue="value"></p-selectButton>
+                        </ng-container>
+                        <ng-template #defaultInput>
+                            <input id="{{ col }}" type="text" pInputText formControlName="{{ col }}" class="p-inputtext p-component" />
+                        </ng-template>
+                    </ng-template>
+                    <small *ngIf="form.get(col)?.invalid && form.get(col)?.touched" class="p-error">
+                        {{ col }} is required.
+                    </small>
+                </div>
+            </ng-container>
+        </div>
+    </form>
+    <p-footer>
+        <button pButton type="button" label="Save" icon="pi pi-check" (click)="saveData()"
+            [disabled]="form.invalid"></button>
+        <button pButton type="button" label="Cancel" icon="pi pi-times" class="p-button-secondary"
+            (click)="closeDialog()"></button>
+    </p-footer>
+</p-dialog>
+
+<button pButton type="button" label="Add Row" icon="pi pi-plus" (click)="openDialog()"></button>

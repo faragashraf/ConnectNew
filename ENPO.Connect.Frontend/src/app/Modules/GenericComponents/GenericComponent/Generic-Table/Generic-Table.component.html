@@ -1,0 +1,133 @@
+<p-contextMenu #tableContextMenu [model]="contextMenuItems" [position]="'dynamic'" [appendTo]="'body'"
+    [style]="{'width':'22.5rem','direction':'ltr','z-index':'9999'}"></p-contextMenu>
+
+<p-table #dt1 [value]="tableGenericData || []" [paginator]="true" [rows]="rowsPerPage" selectionMode="single"
+    [(selection)]="generateQueryService.tableGenericSelectedRow" [dataKey]="dataKey" rowExpandMode="single"
+    [globalFilterFields]="_columns" paginatorPosition="bottom" [lazy]="isLazyLoading" [totalRecords]="totalRecords"
+    [contextMenu]="showTableContextMenu?tableContextMenu:null"
+    [(contextMenuSelection)]="generateQueryService.tableGenericSelectedRow" [showCurrentPageReport]="true"
+    currentPageReportTemplate="عرض {first} إلي {last} من  إجمالي {totalRecords}" [alwaysShowPaginator]="false"
+    (onPage)="onPageChange($event)" (selectionChange)="onRowSelect($event)">
+    <ng-template pTemplate="caption">
+        <div class="flex">
+            <span class="p-input-icon-left mr-auto" *ngIf="showGlobalSearch">
+                <i class="pi pi-search"></i>
+                <input pInputText type="text" (input)="onFilterInput($event)" placeholder="بحث" />
+            </span>
+            <button pButton type="button" label="Export to Excel" icon="pi pi-file-excel" *ngIf="showExportButton"
+                [disabled]="!tableGenericData || tableGenericData.length === 0" class="p-button-success p-mb-2"
+                (click)="generateQueryService.exportToExcel(tableGenericData, _columns)">
+            </button>
+            <!-- New Remove Empty Columns Button -->
+            <button pButton type="button" label="Remove Empty Columns" icon="pi pi-filter-slash"
+                *ngIf="showRemoveColumn" [disabled]="!tableGenericData || tableGenericData.length === 0"
+                class="p-button-warning p-mb-2 p-ml-2" (click)="generateQueryService.removeEmptyColumns()">
+            </button>
+        </div>
+    </ng-template>
+    <!-- Custom paginator left to ensure rows-per-page dropdown is appended to body -->
+    <ng-template pTemplate="paginatorright">
+        <div class="custom-paginator-left"
+            style="display:flex;align-items:center;justify-content:flex-start;gap:.5rem;">
+            <p-dropdown [options]="rowsPerPageOptions" [ngModel]="dt1.rows" (onChange)="onRowsPerPageChange($event)"
+                appendTo="body" [autoWidth]="false"></p-dropdown>
+        </div>
+    </ng-template>
+    <!-- Dynamic Headers -->
+    <ng-template pTemplate="header">
+        <tr>
+            <th>#</th>
+            <th *ngFor="let col of _columns" [pSortableColumn]="col" class="text-center">
+                <div class="header-content">
+                    {{ istitlecase? (col | titlecase ):col}}
+                    <span class="header-text">
+                        <p-sortIcon [field]="col" class="sort-icon" *ngIf="showFieldSort"></p-sortIcon>
+                    </span>
+                    <button type="button" (click)="generateQueryService.removeColumn(col)" *ngIf="showRemoveColumn"
+                        class="p-button p-button-rounded p-button-text p-button-sm close-button" title="Hide Column">
+                        <i class="pi pi-times"></i>
+                    </button>
+                    <p-columnFilter type="text" [field]="col" [placeholder]=" col" [showClearButton]="false"
+                        (click)="$event.stopPropagation()" *ngIf="showColumnFilter"></p-columnFilter>
+                </div>
+            </th>
+            <th *ngIf="showEditButton || showDeleteButton || showViewButton" style="width: 7rem;"></th>
+        </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-item let-rowIndex="rowIndex">
+        <tr [pSelectableRow]="item" [pSelectableRowIndex]="rowIndex">
+            <td> {{rowIndex + 1}}</td>
+            <td *ngFor="let col of _columns" class="text-center">
+                <ng-container>
+                    <!-- Status column renders with a tag -->
+                    <ng-container *ngIf="col === 'الحالة' || col === 'Status'">
+                        <span class="p-tag" [ngClass]="'p-tag-' + getSeverity(item[col] || '')" style="font-size: 1rem;">
+                            {{ item[col] || '' }}
+                        </span>
+                    </ng-container>
+
+                    <!-- Date-like columns use date pipe; otherwise fall back to normal -->
+                    <ng-container *ngIf="col !== 'الحالة' && col !== 'Status'">
+                        <!-- Check if it is a Date -->
+                        <ng-container
+                            *ngIf="col?.toLowerCase()?.includes('تاريخ') || col?.toLowerCase()?.includes('date'); else urlCheck">
+                            {{ item[col] | date:'short' }}
+                        </ng-container>
+                        
+                        <!-- Check if it is a URL - New Logic -->
+                        <ng-template #urlCheck>
+                            <ng-container *ngIf="col?.toLowerCase()?.includes('url') || col?.toLowerCase()?.includes('موقع'); else normal">
+                                <a [href]="item[col]" target="_blank" rel="noopener noreferrer" title="Location" style="text-decoration: none; color: inherit;">
+                                    <i class="pi pi-map-marker" aria-hidden="true" style="font-size:1.5rem;color:var(--primary-color,#0a6ebd)"></i>
+                                </a>
+                            </ng-container>
+                        </ng-template>
+                    </ng-container>
+                </ng-container>
+                <ng-template #normal>
+                    <!-- ATM type column renders icons instead of text -->
+                    <ng-container *ngIf="col?.toLowerCase()?.includes('سحب/إيداع')">
+                        <ng-container>
+                            <!-- Deposit icon for values indicating deposit or deposit+withdraw -->
+                            <ng-container *ngIf="(item[col] + '')?.includes('وايداع') || (item[col] + '')?.toLowerCase()?.includes('deposit') || (item[col] + '')?.includes('ايداع')">
+                                <i class="pi pi-plus-circle" title="إيداع" aria-hidden="true" style="color:green;font-size:1.1rem;margin-inline-end:.35rem"></i>
+                            </ng-container>
+                            <!-- Withdraw icon for values indicating withdraw or deposit+withdraw -->
+                            <ng-container *ngIf="(item[col] + '')?.includes('سحب') || (item[col] + '')?.toLowerCase()?.includes('withdraw')">
+                                <i class="pi pi-minus-circle" title="سحب" aria-hidden="true" style="color:crimson;font-size:1.1rem"></i>
+                            </ng-container>
+                        </ng-container>
+                    </ng-container>
+                    <ng-container *ngIf="!col?.toLowerCase()?.includes('سحب/إيداع')">
+                        {{ item[col] }}
+                    </ng-container>
+                </ng-template>
+            </td>
+            <td style="display: flex;align-items: center;gap: 1.25rem;"
+                *ngIf="showEditButton || showDeleteButton || showViewButton">
+                <button pButton type="button" icon="pi pi-pencil" class="p-button-warning p-button-rounded p-button-sm"
+                    title="تعديل" (click)="EditRow(item,rowIndex)" *ngIf="showEditButton">
+                </button>
+
+                <app-generic-button [type]="'button'" [kind]="'primary'" [icon]="'show'"
+                    (clicked)="viewRow(item,rowIndex)" [tooltip]="'عرض التفاصيل'" [tooltipPosition]="'top'"
+                    *ngIf="showViewButton"></app-generic-button>
+
+                <app-generic-button [type]="'button'" [kind]="'danger'" [icon]="'trash'" (clicked)="deleteRow(item)"
+                    [tooltip]="'حذف'" [tooltipPosition]="'top'" *ngIf="showDeleteButton"></app-generic-button>
+            </td>
+        </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+        <tr>
+            <td colspan="12" style="text-align: center;font-size: xx-large;color: blue;">
+                لا توجد بيانات للعرض
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+<div *ngIf="showTableDetails">
+    <span>Total Rows : <span style="color: black;"> {{tableGenericData.length | number}} </span>
+        | Duration : <span style="color: black;"> {{generateQueryService.duration}}</span> Sec </span>
+    <span> | Columns Count : <span style="color: black;"> {{_columns.length | number}} </span></span>
+</div>

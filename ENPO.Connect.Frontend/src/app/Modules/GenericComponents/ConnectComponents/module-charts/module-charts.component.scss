@@ -1,0 +1,125 @@
+.module-charts {
+    &.charts-flex-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        direction: rtl;
+    }
+
+    .chart-item-wrapper {
+        flex: 1 1 500px;
+        min-width: 0; // standard flexbox fix for nested overflow content
+        position: relative;
+        /* contain absolute controls */
+
+        .chart-item-controls {
+            position: absolute;
+            top: 16px;
+            left: -2px;
+            right: auto;
+            z-index: 6;
+            display: flex;
+            gap: 6px;
+
+            p-button {
+                line-height: 1;
+            }
+        }
+    }
+}
+
+h2 {
+    direction: rtl;
+    box-shadow: inset 0px 0px 23px 0px rgba(79, 70, 229, 0.45);
+    border-radius: 0.7rem;
+    padding: 0.6rem 9.6px;
+    text-align: center;
+}
+
+/* Modern toolbar for chart controls */
+.chart-controls-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    margin: 1rem 0;
+    background: rgba(255, 255, 255, 0.85);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    direction: rtl;
+    flex-direction: row-reverse;
+    width: 49rem;
+
+    &.collapsed {
+        padding: 0.4rem 1rem;
+        background: rgba(255, 255, 255, 0.7);
+    }
+
+    .chart-controls-left {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+
+        .toggle-btn {
+            color: #6366f1;
+            transition: transform 0.3s ease;
+            
+            &:hover {
+                background: rgba(99, 102, 241, 0.1);
+            }
+        }
+    }
+
+    .chart-controls-content {
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                    opacity 0.2s ease-in-out;
+        max-width: 600px; /* Sufficient for dropdown + button */
+        opacity: 1;
+    }
+
+    &.collapsed .chart-controls-content {
+        max-width: 0;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .chart-controls-right {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding-right: 0.5rem;
+    }
+
+    .chart-controls-title {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1a1a1a;
+        white-space: nowrap;
+    }
+
+    .compact-dropdown .p-dropdown {
+        border-radius: 8px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        
+        &:hover {
+            border-color: #cbd5e1;
+        }
+    }
+
+    p-button {
+        ::ng-deep .p-button {
+            border-radius: 8px;
+            font-weight: 500;
+        }
+    }
+}

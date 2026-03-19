@@ -1,0 +1,39 @@
+// Dialog
+label{
+  font-size: large;
+}
+
+.input-group {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.form-control {
+  flex: 1;
+  min-width: 250px;
+}
+
+.dialog-content {
+  padding: 1rem;
+}
+
+.text-danger {
+  color: #dc3545;
+  font-size: 0.875em;
+}
+
+/* Start tree Style */
+.children{
+  color: aqua;
+}
+.parents{
+  color: rgb(255, 255, 255);
+  font-family: 'Times New Roman', Times, serif;
+  font-size: x-large;
+}
+.filter-highlight {
+  background-color: yellow;
+  font-weight: bold;
+  color: #b41d1d;
+}

@@ -1,0 +1,30 @@
+<div class="sidebar-inner">
+  <div class="sidebar-section">
+    <div class="section-title">Language</div>
+    <div class="lang-toggle">
+      <button
+        *ngFor="let lang of languages"
+        type="button"
+        class="lang-btn"
+        [class.active]="lang.code === currentLang"
+        (click)="onLangClick(lang.code)">
+        {{ lang.label }}
+      </button>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="section-title">Pages</div>
+    <div class="page-list">
+      <button
+        *ngFor="let page of pages"
+        type="button"
+        class="page-link"
+        [class.active]="page.id === currentPageId"
+        (click)="onPageClick(page.id)">
+        <span class="dot"></span>
+        {{ getPageLabel(page) }}
+      </button>
+    </div>
+  </div>
+</div>

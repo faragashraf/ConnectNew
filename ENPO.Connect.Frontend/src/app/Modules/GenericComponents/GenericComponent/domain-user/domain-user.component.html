@@ -1,0 +1,128 @@
+<div class="input-group position-relative">
+    <!-- Input Container -->
+    <div class="input-container"
+        *ngIf="genericFormsService?.GetPropertyValue(controlFullName,'cdmendType') == 'DomainUser'">
+
+        <!-- Selected User Card (shown when user is selected) -->
+        <div class="selected-user-card" *ngIf="isUserSelected && SelectedexchangeUserInfo.userEmail" [attr.aria-disabled]="isDivDisabled ? 'true' : null"
+            (click)="isDivDisabled?null:showUserDetails()" title="انقر لعرض التفاصيل">
+            <div class="user-avatar-small">
+                <img *ngIf="SelectedexchangeUserInfo.userPicture" [src]="SelectedexchangeUserInfo.safeImage"
+                    alt="صورة المستخدم" class="avatar-img-small">
+                <div *ngIf="!SelectedexchangeUserInfo.userPicture" class="avatar-placeholder-small">
+                    <i class="fas fa-user"></i>
+                </div>
+            </div>
+            <div class="user-info-small">
+                <div class="user-name">{{SelectedexchangeUserInfo.userDisplayName}}</div>
+                <div class="user-email">{{SelectedexchangeUserInfo.userEmail}}</div>
+            </div>
+            <button type="button" class="clear-user-btn" (click)="clearUserSelection(); $event.stopPropagation()"
+                title="مسح الاختيار">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <!-- Regular Input (shown when no user is selected) -->
+        <input type="text" [formControl]="control" [readonly]="isDivDisabled"
+            [class.disabled-div]="genericFormsService?.GetPropertyValue(controlFullName,'isDisabledInit')=='true' || isDivDisabled"
+            [class.with-user-card]="isUserSelected"
+            [id]="controlFullName" class="form-control"
+            [placeholder]="genericFormsService?.GetPropertyValue(controlFullName,'placeholder')" (blur)="onBlur($event)"
+            (focus)="onFocus($event)" (input)="onInput($event)" />
+
+        <div class="input-action-buttons" *ngIf="!isDivDisabled">
+            <button class="btn btn-danger delete-btn" title="حذف" 
+                *ngIf="genericFormsService?.GetPropertyValue(controlFullName,'cdmendType')== 'DomainUser'"
+                [disabled]="!control?.value || isDivDisabled" (click)="clearUserSelection(); $event.stopPropagation()">
+                <i class="pi pi-trash"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- User Info Overlay -->
+    <div class="user-overlay" *ngIf="showUserOverlay && exchangeUserInfo?.userEmail" [class.show]="showUserOverlay"
+        (keydown)="onOverlayKeydown($event)" tabindex="-1">
+        <div class="overlay-backdrop" (click)="closeOverlay()"></div>
+        <div class="user-card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">معلومات المستخدم</h5>
+                <button type="button" class="btn-close" (click)="closeOverlay()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <div class="user-avatar">
+                            <img *ngIf="exchangeUserInfo.userPicture" [src]="exchangeUserInfo.safeImage"
+                                alt="صورة المستخدم" class="avatar-img">
+                            <div *ngIf="!exchangeUserInfo.userPicture" class="avatar-placeholder">
+                                <i class="fas fa-user"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="user-details">
+                            <div class="detail-row">
+                                <label class="detail-label">الاسم:</label>
+                                <span class="detail-value">{{exchangeUserInfo.userDisplayName}}</span>
+                            </div>
+                            <div class="detail-row">
+                                <label class="detail-label">البريد الإلكتروني:</label>
+                                <span class="detail-value">{{exchangeUserInfo.userEmail}}</span>
+                            </div>
+                            <div class="detail-row">
+                                <label class="detail-label">المسمى الوظيفي:</label>
+                                <span class="detail-value">{{exchangeUserInfo.userTitle}}</span>
+                            </div>
+                            <div class="detail-row" *ngIf="exchangeUserInfo.mobilePhone">
+                                <label class="detail-label">رقم الهاتف:</label>
+                                <span class="detail-value">{{exchangeUserInfo.mobilePhone}}</span>
+                            </div>
+                            <div class="detail-row">
+                                <label class="detail-label">معرف المستخدم:</label>
+                                <span class="detail-value">{{exchangeUserInfo.userId}}</span>
+                            </div>
+                            <div class="detail-row">
+                                <label class="detail-label">حالة التسجيل:</label>
+                                <span class="detail-value">
+                                    <span class="badge" [class.badge-success]="exchangeUserInfo.registrationStatus"
+                                        [class.badge-warning]="!exchangeUserInfo.registrationStatus">
+                                        {{exchangeUserInfo.registrationStatus ? 'مسجل' : 'غير مسجل'}}
+                                    </span>
+                                </span>
+                            </div>
+                            <div class="detail-row"
+                                *ngIf="exchangeUserInfo.userGroups && exchangeUserInfo.userGroups.length > 0">
+                                <label class="detail-label">المجموعات:</label>
+                                <div class="groups-container">
+                                    <span class="group-badge" *ngFor="let group of exchangeUserInfo.userGroups">
+                                        {{group}}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-secondary" (click)="closeOverlay()">
+                        إغلاق
+                    </button>
+                    <button type="button" class="btn btn-warning" *ngIf="isUserSelected" (click)="clearUserSelection()">
+                        مسح الاختيار
+                    </button>
+                    <button type="button" class="btn btn-primary" *ngIf="!isUserSelected" (click)="selectUser()">
+                        اختيار المستخدم
+                    </button>
+                    <button type="button" class="btn btn-success" *ngIf="isUserSelected" (click)="closeOverlay()">
+                        تم الاختيار
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

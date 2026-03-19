@@ -1,0 +1,1475 @@
+/* You can add global styles to this file, and also import other style files */
+@import 'driver.js/dist/driver.css';
+
+/* Driver.js Z-Index Override for interaction with PrimeNG Dialogs */
+.driver-popover {
+  z-index: 110002 !important;
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+.driver-popover .driver-popover-progress-text {
+  direction: rtl !important;
+}
+
+.driver-popover .driver-popover-title,
+.driver-popover .driver-popover-description {
+  font-family: 'Khaled Art', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+}
+
+/* Ensure specific tour elements are above the driver overlay */
+#tour-tree-overlay {
+  z-index: 110010 !important;
+}
+
+.driver-active-element,
+.driver-overlay {
+  z-index: 110000 !important;
+}
+
+div#driver-popover-item {
+  z-index: 110001 !important;
+}
+
+/* Ensure the close button is explicitly clickable */
+.driver-popover .driver-close-btn {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 110006 !important;
+  /* Higher than popover base */
+}
+
+/* PrimeNG Theme */
+@import "~primeng/resources/themes/saga-blue/theme.css";
+/* PrimeNG Core CSS */
+@import "~primeng/resources/primeng.min.css";
+/* Import Google Fonts */
+// @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+
+@import "./assets/styles/app.scss";
+@import "./assets/styles/swal2.scss";
+@import "./assets/styles/p-datatable.scss";
+@import "./assets/styles/p-dropdown.scss";
+@import "./assets/styles/p-tag.scss";
+@import "./assets/styles/p-tree.scss";
+@import "./assets/styles/p-tabview.scss";
+@import "./assets/styles/p-megamenu.scss";
+
+/* Enhanced RTL Support */
+.rtl {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+.rtl-flex {
+  direction: rtl !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+}
+
+.rtl-text {
+  text-align: right !important;
+  direction: rtl !important;
+}
+
+.rtl-text-center {
+  text-align: center !important;
+}
+
+.rtl-text-left {
+  text-align: left !important;
+}
+
+/* RTL Button Styles */
+.p-button.rtl-button {
+  direction: rtl;
+  text-align: right;
+}
+
+.p-button.rtl-button .pi {
+  margin-left: 0.5rem;
+  margin-right: 0;
+}
+
+/* RTL Form Controls */
+.p-inputtext.rtl-input {
+  direction: rtl;
+  text-align: right;
+}
+
+/* RTL Table Styles */
+.p-datatable.rtl-table {
+  direction: rtl;
+}
+
+.p-datatable.rtl-table .p-datatable-thead>tr>th {
+  text-align: right;
+}
+
+.p-datatable.rtl-table .p-datatable-tbody>tr>td {
+  text-align: right;
+}
+
+/* RTL TreeTable Enhancements */
+.p-treetable.rtl-treetable {
+  direction: rtl;
+}
+
+.p-treetable.rtl-treetable .p-treetable-thead>tr>th {
+  text-align: right;
+}
+
+.p-treetable.rtl-treetable .p-treetable-tbody>tr>td {
+  text-align: right;
+}
+
+/* RTL Icon Adjustments */
+.rtl .pi {
+  margin-left: 0.5rem;
+  margin-right: 0;
+}
+
+.rtl .p-ml-2 {
+  margin-left: 0 !important;
+  margin-right: 0.5rem !important;
+}
+
+.rtl .p-mr-2 {
+  margin-right: 0 !important;
+  margin-left: 0.5rem !important;
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  // flex-direction: row-reverse;
+}
+
+.row.rtl-row {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+}
+
+
+
+
+
+.support-info a:hover {
+  text-decoration: underline;
+}
+
+.p-button.p-button-text.p-button-plain {
+  color: white;
+  background-color: var(--app-accent-danger);
+  border-radius: 0.75rem;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.p-button.p-button-text.p-button-plain:enabled:hover {
+  background: var(--app-primary);
+  color: white;
+  transform: translateY(-1px);
+}
+
+
+
+.disabled-div {
+  cursor: not-allowed;
+  opacity: 0.5;
+  filter: grayscale(0.1);
+
+  label,
+  span,
+  p {
+    color: var(--app-text-muted) !important;
+  }
+}
+
+/* ==============================================
+   Design Tokens — Unified Color Palette
+   ============================================== */
+:root {
+  /* Primary */
+  --app-primary: #4f46e5;
+  --app-primary-hover: #4338ca;
+  --app-primary-light: rgba(79, 70, 229, 0.08);
+  --app-primary-border: rgba(79, 70, 229, 0.18);
+
+  /* Text hierarchy */
+  --app-text-heading: #0f172a;
+  --app-text-primary: #1e293b;
+  --app-text-secondary: #64748b;
+  --app-text-muted: #94a3b8;
+
+  /* Surfaces */
+  --app-surface: #ffffff;
+  --app-surface-secondary: #f8fafc;
+  --app-surface-hover: #f1f5f9;
+
+  /* Borders */
+  --app-border: #e2e8f0;
+  --app-border-light: #f1f5f9;
+
+  /* Semantic accents */
+  --app-accent-success: #059669;
+  --app-accent-warning: #d97706;
+  --app-accent-danger: #dc2626;
+  --app-accent-info: #0891b2;
+
+  /* Table header */
+  --th-background-color: rgba(79, 70, 229, 0.09);
+
+  /* Shadows */
+  --app-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --app-shadow-md: 0 6px 18px rgba(14, 30, 37, 0.06);
+  --app-shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.1);
+}
+
+th {
+  background-color: var(--th-background-color) !important;
+  color: var(--app-text-heading);
+}
+
+/* ==============================================
+   Global Headings — Unified h1–h5 Styles
+   ============================================== */
+h1,
+h2,
+h3,
+h4,
+h5 {
+  color: var(--app-text-heading);
+}
+
+/* ==============================================
+   Global Disabled Elements
+   ============================================== */
+.p-disabled,
+.p-component:disabled,
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.1);
+}
+
+/* ==============================================
+   Modern Form Inputs — Consistent border & focus
+   ============================================== */
+.p-inputtext {
+  border-radius: 0.75rem;
+  border: 1.5px solid var(--app-border, #e2e8f0);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  text-align: right;
+}
+
+.p-inputtext:enabled:hover {
+  border-color: var(--app-primary, #4f46e5);
+}
+
+.p-inputtext:enabled:focus {
+  border-color: var(--app-primary, #4f46e5);
+  box-shadow: 0 0 0 3px var(--app-primary-light, rgba(79, 70, 229, 0.08));
+}
+
+.p-inputtextarea {
+  border-radius: 0.75rem;
+  border: 1.5px solid var(--app-border, #e2e8f0);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.p-inputtextarea:enabled:hover {
+  border-color: var(--app-primary, #4f46e5);
+}
+
+.p-inputtextarea:enabled:focus {
+  border-color: var(--app-primary, #4f46e5);
+  box-shadow: 0 0 0 3px var(--app-primary-light, rgba(79, 70, 229, 0.08));
+}
+
+
+@media print {
+  @page {
+    size: A5 landscape;
+    margin: 0;
+  }
+
+  body {
+    margin: 0 !important;
+  }
+
+  .print-section {
+    width: 210mm;
+    height: 148mm;
+  }
+}
+
+@font-face {
+  font-family: 'Khaled Art';
+  src: url('assets/fonts/KhaledArt.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+
+
+/* Pane content should fill the splitter panel and allow internal scrolling */
+.pane-content {
+  // height: 100%;
+  // width: 100%;
+  display: block;
+  // overflow: auto;
+}
+
+.sidebar-pane .pane-content,
+.sidebar-pane app-sidebar {
+  height: 100%;
+  overflow: auto;
+}
+
+
+
+
+/* RTL Utility Classes for Components */
+/* These classes can be applied to any component for consistent RTL behavior */
+
+/* Layout Utilities */
+.rtl-container {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+.rtl-inline {
+  direction: rtl !important;
+  display: inline-block !important;
+  text-align: right !important;
+}
+
+.rtl-block {
+  direction: rtl !important;
+  display: block !important;
+  text-align: right !important;
+}
+
+/* Margin and Padding RTL Utilities */
+.rtl-pr-1 {
+  padding-right: 0.25rem !important;
+}
+
+.rtl-pr-2 {
+  padding-right: 0.5rem !important;
+}
+
+.rtl-pr-3 {
+  padding-right: 1rem !important;
+}
+
+.rtl-pr-4 {
+  padding-right: 1.5rem !important;
+}
+
+.rtl-pr-5 {
+  padding-right: 3rem !important;
+}
+
+.rtl-pl-1 {
+  padding-left: 0.25rem !important;
+}
+
+.rtl-pl-2 {
+  padding-left: 0.5rem !important;
+}
+
+.rtl-pl-3 {
+  padding-left: 1rem !important;
+}
+
+.rtl-pl-4 {
+  padding-left: 1.5rem !important;
+}
+
+.rtl-pl-5 {
+  padding-left: 3rem !important;
+}
+
+.rtl-mr-1 {
+  margin-right: 0.25rem !important;
+}
+
+.rtl-mr-2 {
+  margin-right: 0.5rem !important;
+}
+
+.rtl-mr-3 {
+  margin-right: 1rem !important;
+}
+
+.rtl-mr-4 {
+  margin-right: 1.5rem !important;
+}
+
+.rtl-mr-5 {
+  margin-right: 3rem !important;
+}
+
+.rtl-ml-1 {
+  margin-left: 0.25rem !important;
+}
+
+.rtl-ml-2 {
+  margin-left: 0.5rem !important;
+}
+
+.rtl-ml-3 {
+  margin-left: 1rem !important;
+}
+
+.rtl-ml-4 {
+  margin-left: 1.5rem !important;
+}
+
+.rtl-ml-5 {
+  margin-left: 3rem !important;
+}
+
+/* RTL Form Utilities */
+.rtl-form-group {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+.rtl-form-group label {
+  text-align: right !important;
+  display: block !important;
+}
+
+.rtl-form-control {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+/* RTL Navigation and Menu Utilities */
+.rtl-nav {
+  direction: rtl !important;
+}
+
+.rtl-nav .nav-link {
+  text-align: right !important;
+}
+
+.rtl-dropdown-menu {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+/* RTL Card and Panel Utilities */
+.rtl-card {
+  direction: rtl !important;
+}
+
+.rtl-card .card-header,
+.rtl-card .card-body,
+.rtl-card .card-footer {
+  text-align: right !important;
+}
+
+/* RTL Dialog and Modal Utilities */
+.rtl-dialog {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+.rtl-dialog .p-dialog-header,
+.rtl-dialog .p-dialog-content,
+.rtl-dialog .p-dialog-footer {
+  text-align: right !important;
+}
+
+/* RTL Animation and Transition Utilities */
+.rtl-slide-in {
+  animation: rtlSlideIn 0.3s ease-in-out;
+}
+
+@keyframes rtlSlideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.rtl-fade-in {
+  animation: rtlFadeIn 0.3s ease-in-out;
+}
+
+@keyframes rtlFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* RTL PrimeNG Component Overrides */
+.p-component.rtl-override {
+  direction: rtl !important;
+}
+
+.p-component.rtl-override .p-inputtext {
+  text-align: right !important;
+}
+
+.p-component.rtl-override .p-calendar input {
+  text-align: right !important;
+}
+
+/* Arabic Font Support */
+.arabic-font {
+  font-family: 'Khaled Art', 'Arabic UI Text', 'Segoe UI Historic', 'Segoe UI Emoji', Arial, sans-serif !important;
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+
+
+
+/* Enhanced Animation Keyframes */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-50px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+
+  70% {
+    transform: scale(0.9);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ================================
+   TEST + DEV Watermarks (Corners + Center)
+   Applies ONLY when: html[data-env="test" | "dev"]
+================================ */
+
+/* Ensure body allows pseudo elements positioning */
+html[data-env="test"] body,
+html[data-env="dev"] body {
+  position: relative;
+}
+
+/* ===== Corners watermark ===== */
+html[data-env="test"] body::before,
+html[data-env="test"] body::after,
+html[data-env="dev"] body::before,
+html[data-env="dev"] body::after {
+  position: fixed;
+  z-index: 9999;
+  font-weight: 800;
+  letter-spacing: 10px;
+  font-size: 20px;
+  opacity: 0.075;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-18deg);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  font-family: sans-serif;
+  color: #000;
+}
+
+/* Text content based on environment */
+html[data-env="test"] body::before,
+html[data-env="test"] body::after {
+  content: "TEST";
+}
+
+html[data-env="dev"] body::before,
+html[data-env="dev"] body::after {
+  content: "DEV";
+}
+
+/* Positioning for corners */
+html[data-env="test"] body::before,
+html[data-env="dev"] body::before {
+  top: 14px;
+  left: 14px;
+}
+
+html[data-env="test"] body::after,
+html[data-env="dev"] body::after {
+  bottom: 14px;
+  right: 14px;
+}
+
+/* ===== Center diagonal watermark (big) =====
+   Using an extra element instead of body pseudo-elements to avoid conflict with corners
+*/
+html[data-env="test"] body .env-center-watermark,
+html[data-env="dev"] body .env-center-watermark {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  /* Just below corners */
+  pointer-events: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+html[data-env="test"] body .env-center-watermark::before,
+html[data-env="dev"] body .env-center-watermark::before {
+  content: "TEST";
+  font-weight: 900;
+  letter-spacing: 18px;
+  font-size: clamp(64px, 10vw, 140px);
+  opacity: 0.045;
+  /* Very subtle */
+  transform: rotate(-24deg);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  font-family: sans-serif;
+  color: #000;
+}
+
+/* Override content for DEV */
+html[data-env="dev"] body .env-center-watermark::before {
+  content: "DEV";
+  opacity: 0.055;
+  /* Slightly more visible for Dev */
+}
+
+/* ================================
+   Visual Themes (Light / Dark)
+================================ */
+
+/* Smooth theme transition on toggle — scoped to theme-aware containers only */
+.content,
+.container-main,
+.widget,
+.app-footer,
+.p-megamenu,
+.p-dialog,
+.p-tabview {
+  transition: background-color 0.3s ease, color 0.2s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Dark Theme Overrides */
+body.dark-theme {
+  background-color: #121212 !important;
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .content {
+  background-color: #121212 !important;
+  border-color: var(--app-border-light) !important;
+}
+
+body.dark-theme .container-main,
+body.dark-theme .widget {
+  background-color: var(--app-surface) !important;
+  box-shadow: var(--app-shadow-md) !important;
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-component {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-dialog .p-dialog-header,
+body.dark-theme .p-dialog .p-dialog-content,
+body.dark-theme .p-dialog .p-dialog-footer {
+  background-color: var(--app-surface) !important;
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-tabview .p-tabview-nav,
+body.dark-theme .p-tabview .p-tabview-panels {
+  background-color: var(--app-surface) !important;
+}
+
+body.dark-theme .p-tabview .p-tabview-nav li .p-tabview-nav-link {
+  background-color: var(--app-surface-secondary) !important;
+  color: var(--app-text-secondary) !important;
+  border-color: transparent transparent var(--app-border) !important;
+}
+
+body.dark-theme .p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  background-color: var(--app-surface-hover) !important;
+  color: var(--app-primary) !important;
+  border-color: var(--app-primary-border) !important;
+  box-shadow: inset 0 0 0 2px var(--app-primary-border),
+    0 2px 8px rgba(129, 140, 248, 0.15) !important;
+}
+
+body.dark-theme .p-tabview .p-tabview-nav li:not(.p-highlight):not(.p-disabled):hover .p-tabview-nav-link {
+  background-color: var(--app-surface-hover) !important;
+  color: var(--app-text-heading) !important;
+  border-color: var(--app-primary-border) !important;
+  box-shadow: inset 0 0 0 2px var(--app-primary-border),
+    0 2px 8px rgba(129, 140, 248, 0.08) !important;
+}
+
+body.dark-theme .p-datatable .p-datatable-thead>tr>th,
+body.dark-theme .p-datatable .p-datatable-tbody>tr>td {
+  background-color: var(--app-surface) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-datatable.p-datatable-hoverable-rows .p-datatable-tbody>tr:not(.p-highlight):hover>td {
+  background-color: var(--app-surface-secondary) !important;
+  color: var(--app-text-heading) !important;
+  box-shadow: inset 0 0 0 2px var(--app-primary-border) !important;
+}
+
+body.dark-theme .p-datatable .p-datatable-tbody>tr.p-highlight>td,
+body.dark-theme .p-datatable .p-datatable-tbody>tr.row-selected>td {
+  background-color: var(--app-surface-hover) !important;
+  color: var(--app-primary) !important;
+  box-shadow: inset 0 0 0 2px var(--app-primary-border) !important;
+}
+
+body.dark-theme .p-dropdown {
+  background-color: var(--app-surface-secondary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-dropdown .p-dropdown-label {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-dropdown-panel {
+  background-color: var(--app-surface-secondary) !important;
+}
+
+body.dark-theme .p-dropdown-panel .p-dropdown-items .p-dropdown-item {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-dropdown-panel .p-dropdown-items .p-dropdown-item:not(.p-highlight):not(.p-disabled):hover {
+  background-color: var(--app-surface-hover) !important;
+}
+
+/* Dark Theme Overrides for p-tag */
+body.dark-theme .p-tag.p-tag-primary {
+  background: linear-gradient(90deg, rgba(79, 70, 229, 0.3), rgba(79, 70, 229, 0.6)) !important;
+  color: var(--app-primary) !important;
+  border-color: var(--app-primary-border) !important;
+}
+
+body.dark-theme .p-tag.p-tag-secondary {
+  background: linear-gradient(90deg, rgba(66, 66, 66, 0.5), rgba(66, 66, 66, 0.8)) !important;
+  color: var(--app-text-primary) !important;
+  border-color: rgba(224, 224, 224, 0.3) !important;
+}
+
+body.dark-theme .p-tag.p-tag-info {
+  background: linear-gradient(90deg, rgba(8, 145, 178, 0.3), rgba(8, 145, 178, 0.6)) !important;
+  color: var(--app-accent-info) !important;
+  border-color: rgba(34, 211, 238, 0.3) !important;
+}
+
+body.dark-theme .p-tag.p-tag-warning {
+  background: linear-gradient(90deg, rgba(217, 119, 6, 0.3), rgba(217, 119, 6, 0.6)) !important;
+  color: var(--app-accent-warning) !important;
+  border-color: rgba(251, 191, 36, 0.3) !important;
+}
+
+body.dark-theme .p-tag.p-tag-danger {
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.3), rgba(220, 38, 38, 0.6)) !important;
+  color: var(--app-accent-danger) !important;
+  border-color: rgba(248, 113, 113, 0.3) !important;
+}
+
+body.dark-theme .p-tag.p-tag-success {
+  background: linear-gradient(90deg, rgba(5, 150, 105, 0.3), rgba(5, 150, 105, 0.6)) !important;
+  color: var(--app-accent-success) !important;
+  border-color: rgba(52, 211, 153, 0.3) !important;
+}
+
+body.dark-theme .p-inputtext {
+  background-color: var(--app-surface-secondary) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-button.p-button-outlined {
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-button.p-button-outlined:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Dark Theme Overrides for p-tree */
+body.dark-theme .p-tree {
+  background-color: var(--app-surface) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-tree .p-treenode-content {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-tree .p-treenode-icon,
+body.dark-theme .p-tree .p-treenode-toggler,
+body.dark-theme .p-tree .p-treenode-leaf-icon {
+  color: var(--app-primary) !important;
+}
+
+body.dark-theme .p-tree .p-treenode:hover {
+  border-right-color: var(--app-accent-warning) !important;
+}
+
+body.dark-theme .p-tree .p-treenode:hover .p-treenode-content {
+  color: var(--app-text-heading) !important;
+}
+
+body.dark-theme .p-tree .p-treenode:hover>.p-treenode-children,
+body.dark-theme .p-tree .p-treenode:hover .p-treenode-children {
+  border-right-color: var(--app-primary-border) !important;
+}
+
+body.dark-theme .p-tree .p-treenode.p-highlight .p-treenode-content,
+body.dark-theme .p-tree .p-treenode .p-treenode-content.p-highlight {
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.15) 0%, var(--app-primary-light) 100%) !important;
+  color: var(--app-text-heading) !important;
+}
+
+body.dark-theme .p-tree .p-treenode-children {
+  border-right-color: var(--app-primary-border) !important;
+}
+
+body.dark-theme .p-tree .p-treenode-children .p-treenode .p-treenode-content {
+  color: var(--app-primary) !important;
+}
+
+body.dark-theme .p-tree .p-treenode-children .p-treenode:hover .p-treenode-content {
+  color: var(--app-text-heading) !important;
+}
+
+/* Dark Theme Overrides for p-megamenu */
+body.dark-theme .p-megamenu {
+  background: rgba(30, 30, 30, 0.85) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-theme .p-megamenu:hover {
+  background: rgba(30, 30, 30, 0.95) !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link:not(.p-disabled):hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--app-text-heading) !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-root-list>.p-menuitem.p-menuitem-active>.p-menuitem-link {
+  background: linear-gradient(135deg, var(--app-primary) 0%, #7c3aed 100%) !important;
+  color: #ffffff !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-root-list>.p-menuitem.p-menuitem-active>.p-menuitem-link:not(.p-disabled):hover {
+  background: linear-gradient(135deg, var(--app-primary-hover) 0%, #6d28d9 100%) !important;
+}
+
+body.dark-theme .p-megamenu .p-menuitem-link:not(.p-disabled):hover {
+  background: var(--app-primary) !important;
+  color: #ffffff !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link .p-menuitem-icon {
+  color: var(--app-accent-danger) !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link:not(.p-disabled):hover .p-menuitem-icon {
+  color: var(--app-accent-success) !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-panel {
+  background: var(--app-surface-secondary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-panel .p-megamenu-submenu-header {
+  background: linear-gradient(135deg, var(--app-primary) 0%, #a78bfa 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  border-bottom-color: var(--app-border) !important;
+  box-shadow: -3px -1px 14px 5px rgba(129, 140, 248, 0.15) !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-panel .p-menuitem-link {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-megamenu .p-megamenu-panel .p-menuitem-link:not(.p-disabled):hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--app-text-heading) !important;
+}
+
+body.dark-theme .p-megamenu .p-menuitem-link.router-link-active,
+body.dark-theme .p-megamenu .p-menuitem-link.router-link-active:hover {
+  background: var(--app-primary-light) !important;
+  color: var(--app-primary) !important;
+  border-color: var(--app-primary-border) !important;
+  box-shadow: 0 2px 4px rgba(129, 140, 248, 0.15) !important;
+}
+
+body.dark-theme .p-megamenu .p-menuitem-link.router-link-active::before {
+  background: var(--app-primary) !important;
+}
+
+body.dark-theme .p-megamenu .p-menuitem-link .p-menuitem-text {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-megamenu .p-menuitem-link .p-menuitem-icon {
+  color: var(--app-text-secondary) !important;
+}
+
+body.dark-theme .p-megamenu .p-menuitem-link:hover .p-menuitem-icon {
+  color: var(--app-primary) !important;
+}
+
+body.dark-theme .modern-glass {
+  background: rgba(30, 30, 30, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-theme .profile-header-template {
+  background: rgba(30, 30, 30, 0.95) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-theme .profile-footer {
+  background: rgba(30, 30, 30, 0.95) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-theme .info-item {
+  background: var(--app-surface-secondary) !important;
+  border: 1px solid var(--app-surface-hover) !important;
+}
+
+body.dark-theme .info-item label {
+  color: var(--app-text-secondary) !important;
+}
+
+body.dark-theme .info-item span {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .setting-row {
+  background: var(--app-surface-secondary) !important;
+  border: 1px solid var(--app-surface-hover) !important;
+}
+
+body.dark-theme .setting-label {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .setting-desc {
+  color: var(--app-text-secondary) !important;
+}
+
+body.dark-theme .auth-status-hero {
+  background: var(--app-surface-secondary) !important;
+  border: 1px solid var(--app-surface-hover) !important;
+}
+
+body.dark-theme .auth-status-hero h3 {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .auth-status-hero p {
+  color: var(--app-text-secondary) !important;
+}
+
+body.dark-theme .security-tips {
+  background: var(--app-surface-secondary) !important;
+  border: 1px solid var(--app-surface-hover) !important;
+}
+
+body.dark-theme .security-tips h4 {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .security-tips li {
+  color: var(--app-text-secondary) !important;
+}
+
+body.dark-theme .custom-chip {
+  background: var(--app-surface-hover) !important;
+  color: var(--app-text-primary) !important;
+  border: 1px solid var(--app-border) !important;
+}
+
+body.dark-theme .custom-chip:hover {
+  background: #4d4d4d !important;
+}
+
+body.dark-theme .pwd-expiry-chip {
+  background: var(--app-surface-secondary) !important;
+  border: 1px solid var(--app-surface-hover) !important;
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .app-footer {
+  background-color: #1a1a1a !important;
+  border-top: 1px solid var(--app-border-light) !important;
+  color: var(--app-text-muted) !important;
+}
+
+body.dark-theme .app-footer .support-info a {
+  color: var(--app-primary) !important;
+}
+
+/* Dark Theme: design tokens override */
+body.dark-theme {
+  --app-primary: #818cf8;
+  --app-primary-hover: #6366f1;
+  --app-primary-light: rgba(129, 140, 248, 0.12);
+  --app-primary-border: rgba(129, 140, 248, 0.25);
+
+  --app-text-heading: #f1f5f9;
+  --app-text-primary: #e2e8f0;
+  --app-text-secondary: #94a3b8;
+  --app-text-muted: #64748b;
+
+  --app-surface: #1e1e1e;
+  --app-surface-secondary: #2d2d2d;
+  --app-surface-hover: #3d3d3d;
+
+  --app-border: #3d3d3d;
+  --app-border-light: #333;
+
+  --app-accent-success: #34d399;
+  --app-accent-warning: #fbbf24;
+  --app-accent-danger: #f87171;
+  --app-accent-info: #22d3ee;
+
+  --th-background-color: rgba(129, 140, 248, 0.15);
+
+  --app-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --app-shadow-md: 0 6px 18px rgba(0, 0, 0, 0.3);
+  --app-shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+/* Dark Theme: table th */
+body.dark-theme th {
+  background-color: var(--th-background-color) !important;
+  color: var(--app-text-primary) !important;
+}
+
+/* Dark Theme: p-accordion */
+body.dark-theme .p-accordion .p-accordion-header .p-accordion-header-link {
+  background: var(--app-surface-secondary) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-accordion .p-accordion-header:not(.p-disabled):hover .p-accordion-header-link {
+  background: var(--app-surface-hover) !important;
+}
+
+body.dark-theme .p-accordion .p-accordion-content {
+  background: var(--app-surface) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+/* Dark Theme: p-inputswitch */
+body.dark-theme .p-inputswitch .p-inputswitch-slider {
+  background: var(--app-border) !important;
+}
+
+body.dark-theme .p-inputswitch.p-inputswitch-checked .p-inputswitch-slider {
+  background: var(--app-primary) !important;
+}
+
+/* Dark Theme: p-calendar / p-datepicker */
+body.dark-theme .p-datepicker {
+  background: var(--app-surface-secondary) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-datepicker .p-datepicker-header {
+  background: var(--app-surface-secondary) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-datepicker table td>span {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-datepicker table td>span.p-highlight {
+  background: var(--app-primary) !important;
+  color: #fff !important;
+}
+
+/* Dark Theme: p-textarea */
+body.dark-theme .p-inputtextarea {
+  background-color: var(--app-surface-secondary) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+/* Dark Theme: p-checkbox / p-radiobutton */
+body.dark-theme .p-checkbox .p-checkbox-box,
+body.dark-theme .p-radiobutton .p-radiobutton-box {
+  background: var(--app-surface-secondary) !important;
+  border-color: #666 !important;
+}
+
+body.dark-theme .p-checkbox .p-checkbox-box.p-highlight,
+body.dark-theme .p-radiobutton .p-radiobutton-box.p-highlight {
+  background: var(--app-primary) !important;
+  border-color: var(--app-primary) !important;
+}
+
+/* Dark Theme: scrollbar */
+body.dark-theme ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+body.dark-theme ::-webkit-scrollbar-track {
+  background: var(--app-surface);
+}
+
+body.dark-theme ::-webkit-scrollbar-thumb {
+  background: var(--app-border);
+  border-radius: 4px;
+}
+
+body.dark-theme ::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+/* Dark Theme: text selection */
+body.dark-theme ::selection {
+  background: rgba(79, 70, 229, 0.4);
+  color: #ffffff;
+}
+
+/* Dark Theme: widget hover accent (keep blue border but subtler) */
+body.dark-theme .widget:hover,
+body.dark-theme .widget:focus,
+body.dark-theme .widget:active,
+body.dark-theme .widget:focus-within {
+  border-top: 3px solid var(--app-primary) !important;
+}
+
+/* Dark Theme: notification dropdown in navbar */
+body.dark-theme .notification-dropdown {
+  background: var(--app-surface-secondary) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: var(--app-shadow-lg) !important;
+}
+
+body.dark-theme .notification-dropdown .dropdown-header {
+  color: var(--app-text-primary) !important;
+  border-bottom-color: var(--app-border) !important;
+}
+
+body.dark-theme .notification-dropdown .notif-item:hover {
+  background: var(--app-surface-hover) !important;
+}
+
+body.dark-theme .notification-dropdown .notif-title {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .notification-dropdown .notif-desc {
+  color: var(--app-text-secondary) !important;
+}
+
+body.dark-theme .notification-dropdown .dropdown-footer {
+  color: var(--app-primary) !important;
+  border-top-color: var(--app-border) !important;
+}
+
+/* Dark Theme: p-dropdown filter header */
+body.dark-theme .p-dropdown-panel .p-dropdown-header {
+  background: var(--app-surface-hover) !important;
+  color: var(--app-text-primary) !important;
+  border-bottom-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-dropdown-panel .p-dropdown-header .p-dropdown-filter {
+  background: var(--app-surface-secondary) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+/* Dark Theme: p-dropdown item highlight */
+body.dark-theme .p-dropdown-panel .p-dropdown-items .p-dropdown-item.p-highlight {
+  background: var(--app-primary-light) !important;
+  color: var(--app-primary) !important;
+}
+
+/* Dark Theme: p-splitter */
+body.dark-theme .p-splitter {
+  background: var(--app-surface) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-splitter-gutter {
+  background: var(--app-border-light) !important;
+}
+
+/* Dark Theme: p-paginator */
+body.dark-theme .p-paginator {
+  background: var(--app-surface) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .p-paginator .p-paginator-pages .p-paginator-page {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-paginator .p-paginator-pages .p-paginator-page.p-highlight {
+  background: var(--app-primary) !important;
+  color: #fff !important;
+}
+
+/* Dark Theme: user profile pill (navbar) */
+body.dark-theme .user-profile-pill {
+  background: var(--app-surface-secondary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .user-profile-pill:hover {
+  background: var(--app-surface-hover) !important;
+  border-color: #777 !important;
+}
+
+body.dark-theme .user-name {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .bell-btn {
+  background: var(--app-surface-secondary) !important;
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .bell-btn:hover {
+  background: var(--app-surface-hover) !important;
+  color: var(--app-primary) !important;
+}
+
+/* Dark Theme: env badge */
+body.dark-theme .env-badge.env-dev {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: var(--app-accent-danger) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+body.dark-theme .env-badge.env-prod {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: var(--app-primary) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Dark Theme: user profile dialog content wrapper */
+body.dark-theme .user-profile-content-wrapper {
+  background: linear-gradient(145deg, rgba(30, 30, 30, 0.98) 0%, rgba(18, 18, 18, 0.98) 100%) !important;
+}
+
+body.dark-theme .profile-header-section h2.user-name {
+  color: var(--app-text-heading) !important;
+}
+
+body.dark-theme .profile-header-section .user-title {
+  color: var(--app-text-secondary) !important;
+}
+
+/* Dark Theme: profile tabs inside dialog */
+body.dark-theme .profile-tabs .p-tabview-nav-container {
+  background: rgba(30, 30, 30, 0.5) !important;
+  border-bottom-color: var(--app-border-light) !important;
+}
+
+body.dark-theme .profile-tabs .p-tabview-nav li .p-tabview-nav-link {
+  color: var(--app-text-secondary) !important;
+  border-bottom-color: transparent !important;
+}
+
+body.dark-theme .profile-tabs .p-tabview-nav li .p-tabview-nav-link:hover {
+  color: var(--app-primary) !important;
+}
+
+body.dark-theme .profile-tabs .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  color: var(--app-primary) !important;
+  border-bottom-color: var(--app-primary) !important;
+}
+
+/* Dark Theme: info-item icon box */
+body.dark-theme .info-item .icon-box {
+  background: var(--app-surface-hover) !important;
+  color: var(--app-primary) !important;
+}
+
+/* Dark Theme: groups list chips */
+body.dark-theme .groups-list .group {
+  background: var(--app-surface-secondary) !important;
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .group-chip {
+  background: var(--app-surface-secondary) !important;
+  color: var(--app-text-primary) !important;
+}
+
+/* Dark Theme: verify card */
+body.dark-theme .verify-card {
+  background: var(--app-surface-secondary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .verify-card .otp-input {
+  background: var(--app-surface-hover) !important;
+  color: var(--app-text-primary) !important;
+  border-color: var(--app-border) !important;
+}
+
+body.dark-theme .enroll-status-card {
+  background: var(--app-surface-secondary) !important;
+  border-color: var(--app-border) !important;
+}
+
+/* Dark Theme: expiry badges */
+body.dark-theme .expiry-ok {
+  background: rgba(6, 78, 59, 0.2) !important;
+  color: var(--app-accent-success) !important;
+  border-color: rgba(6, 78, 59, 0.3) !important;
+}
+
+body.dark-theme .expiry-soon {
+  background: rgba(146, 64, 14, 0.2) !important;
+  color: var(--app-accent-warning) !important;
+  border-color: rgba(146, 64, 14, 0.3) !important;
+}
+
+body.dark-theme .expiry-expired {
+  background: rgba(136, 17, 55, 0.2) !important;
+  color: var(--app-accent-danger) !important;
+  border-color: rgba(136, 17, 55, 0.3) !important;
+}
+
+body.dark-theme .expiry-value {
+  color: var(--app-text-primary) !important;
+}
+
+/* Dark Theme: p-button variants */
+body.dark-theme .p-button {
+  transition: all 0.2s ease !important;
+}
+
+body.dark-theme .p-button.p-button-secondary.p-button-outlined {
+  color: var(--app-text-primary) !important;
+  border-color: #666 !important;
+}
+
+body.dark-theme .p-button.p-button-secondary.p-button-outlined:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Dark Theme: disabled-div */
+body.dark-theme .disabled-div {
+  opacity: 0.45;
+  // color: white;
+  cursor: not-allowed !important;
+}
+
+/* Dark Theme: generic disabled inputs & buttons */
+body.dark-theme button:disabled,
+body.dark-theme input:disabled,
+body.dark-theme select:disabled,
+body.dark-theme textarea:disabled {
+  background-color: var(--app-surface-hover) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-text-muted) !important;
+}
+
+/* Dark Theme: p-menu overlay */
+body.dark-theme .p-menu.p-menu-overlay {
+  background: var(--app-surface-secondary) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: var(--app-shadow-md) !important;
+}
+
+body.dark-theme .p-menu .p-menuitem-link {
+  color: var(--app-text-primary) !important;
+}
+
+body.dark-theme .p-menu .p-menuitem-link:not(.p-disabled):hover {
+  background: var(--app-surface-hover) !important;
+}
+
+/* Dark Theme: Watermark text color fix */
+body.dark-theme[data-env="test"]::before,
+body.dark-theme[data-env="test"]::after,
+body.dark-theme[data-env="dev"]::before,
+body.dark-theme[data-env="dev"]::after {
+  color: #fff !important;
+}
+
+body.dark-theme .env-center-watermark::before {
+  color: #fff !important;
+}

@@ -1,0 +1,6 @@
+/* Test Theme specific variables */
+:root[data-theme="test"] {
+  --primary-color: #e65100; /* Example: Orange for test */
+}
+
+/* Ensure global header or other elements reflect test status if using CSS variables */

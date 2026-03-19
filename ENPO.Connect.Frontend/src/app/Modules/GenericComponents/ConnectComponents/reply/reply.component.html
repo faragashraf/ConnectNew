@@ -1,0 +1,58 @@
+<div class="widget">
+    <app-seach-domain-users [(dialogVisible)]="dialogVisible" (errorMessage)="seterrorMessage($event)"
+        (exchangeUserInfoOut)="handleDataFromChild($event)"></app-seach-domain-users>
+    <form [formGroup]="replyForm" (ngSubmit)="onSubmit()">
+        <div class="form-group">
+            <div *ngIf="config.routeKey=='AdminCer/AreaRequests' || config.routeKey=='AdminCer/Global'">
+                <label for="nextResponsibleSectorID">المرسل إلية:</label>
+                <div class="input-group">
+                    <app-dropdown-tree [parentForm]="replyForm" [control]="replyForm.get('nextResponsibleSectorID') "
+                        [controlFullName]="'nextResponsibleSectorID'" [tree]="unitTree" [showTreeButton]="true"
+                        [isDivDisabled]="false"></app-dropdown-tree>
+                </div>
+            </div>
+            <div class="input-group">
+                <span style="margin-right: 1rem;margin-top: 1rem;">
+                    {{SearchText}}
+                </span>
+                <button pButton pRipple
+                    (click)="SearchText='';errorMessage='';replyForm.get('nextResponsibleSectorID')?.patchValue('')"
+                    *ngIf="SearchText.length>0" class="p-button-text p-button-rounded " pTooltip="Delete">
+                    <i [class]="'pi pi-trash'" style="color: red;font-size: 2rem;"></i>
+                </button>
+            </div>
+        </div>
+        <div class="alert-danger" *ngIf="replyForm.get('nextResponsibleSectorID')?.invalid || errorMessage.length>0 ">
+            {{errorMessage}}
+        </div>
+        <div *ngIf="hasSector" class="form-group" @fadeSlide>
+            <label for="message">الرد:</label>
+            <textarea type="text" formControlName="message" id="message" class="form-control" rows="7"
+                cols="80"></textarea>
+            <div class="alert-danger" *ngIf="replyForm.get('message')?.invalid && replyForm.get('message')?.touched">
+                برجاء إدخال نص الرد
+            </div>
+        </div>
+        <div hidden>
+            <label for="messageId">Message ID:</label>
+            <input id="messageId" formControlName="messageId" type="number" class="form-control">
+            <div class="alert-danger"
+                *ngIf="replyForm.get('messageId')?.invalid && replyForm.get('messageId')?.touched">
+                Message ID is required.
+            </div>
+        </div>
+        <div *ngIf="hasMessageText" @fadeSlide>
+            <button type="submit" class="btn btn-success" style="margin-bottom: 2rem;"
+                [disabled]="replyForm.invalid || errorMessage.length>0">تسجيل</button>
+        </div>
+    </form>
+    <div class="row">
+        <div class="col-md-4">
+            <div class="widget ">
+                <app-add-attachments (fileUploadEvent)="onFileChange($event)" [config]="config"></app-add-attachments>
+            </div>
+        </div>
+    </div>
+
+
+</div>

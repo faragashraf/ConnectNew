@@ -1,0 +1,61 @@
+<div class="mail-composer">
+  <div class="toolbar">
+    <div class="left">
+      <div class="to-list">
+        <label>To:</label>
+        <div *ngFor="let ctrl of toControls; let i = index" class="to-item">
+          <app-domain-user [control]="ctrl" [controlFullName]="'TO|'+ i"
+            (genericEvent)="onDomainUserEvent($event, i, 'to')" [genericFormsService]="genericFormsService"></app-domain-user>
+          <button *ngIf="toControls.length>1" type="button" class="btn remove" title="Remove recipient"
+            (click)="removeTo(i)"><i style="color: red;" class="pi pi-trash"></i></button>
+        </div>
+        <button type="button" class="btn add" title="Add recipient" (click)="addTo()">Add</button>
+      </div>
+      <div class="cc-list">
+        <label>Cc:</label>
+        <div *ngFor="let ctrl of ccControls; let i = index" class="to-item">
+          <app-domain-user [control]="ctrl" [controlFullName]="'CC|' + i"
+            (genericEvent)="onDomainUserEvent($event, i, 'cc')" [genericFormsService]="genericFormsService"></app-domain-user>
+          <button *ngIf="ccControls.length>1" type="button" class="btn remove" title="Remove Cc recipient"
+            (click)="removeCc(i)"><i style="color: red;" class="pi pi-trash"></i></button>
+        </div>
+        <button type="button" class="btn add" title="Add Cc recipient" (click)="addCc()">Add</button>
+      </div>
+    </div>
+    <div class="right">
+      <input placeholder="Subject" [value]="subject" (input)="subject = $any($event.target).value" class="subject"
+        aria-label="Subject" />
+      <button type="button" (click)="send()" class="btn send" aria-label="Send">Send</button>
+    </div>
+  </div>
+
+
+
+  <div class="attachments">
+    <div class="attachments-title">المرفقات</div>
+    <div *ngIf="!fileParameters || fileParameters.length === 0" class="no-att">No attachments</div>
+    <ul>
+      <li *ngFor="let f of fileParameters; let i = index">
+        <span class="file-name">{{f.fileName || ('file_' + i)}}</span>
+        <!-- <button type="button"  class="btn remove">Remove</button> -->
+        <button  type="button" class="btn remove" title="Remove recipient"
+          (click)="removeAttachment(i)"><i style="color: red;" class="pi pi-trash"></i></button>
+
+      </li>
+    </ul>
+  </div>
+    <div class="formatting" role="toolbar" aria-label="Formatting">
+    <button type="button" (click)="format('bold')" title="Bold"><b>B</b></button>
+    <button type="button" (click)="format('italic')" title="Italic"><i>I</i></button>
+    <button type="button" (click)="format('underline')" title="Underline"><u>U</u></button>
+    <button type="button" (click)="format('insertUnorderedList')" title="Bullet list">•</button>
+    <button type="button" (click)="format('insertOrderedList')" title="Numbered list">1.</button>
+    <button type="button" (click)="format('removeFormat')" title="Clear formatting">Clear</button>
+    <button type="button" (click)="togglePlainText()" title="Toggle plain text">Text</button>
+  </div>
+
+  <div class="editor-wrapper">
+    <div #editor class="editor" contenteditable="true" role="textbox" aria-multiline="true"
+      data-placeholder="Start typing your message..."></div>
+  </div>
+</div>

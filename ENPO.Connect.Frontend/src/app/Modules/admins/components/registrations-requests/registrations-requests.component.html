@@ -1,0 +1,192 @@
+<div class="container-main">
+    <div class="row">
+        <div class="col-md-4">
+            <h3>طلبات التسجيل </h3>
+
+        </div>
+        <div class="col-md-2"></div>
+        <div class="col-md-6">
+
+        </div>
+    </div>
+    <!-- {{messageDtos|json}} -->
+    <div class="row">
+        <div class="col-md-5">
+            <div class="widget">
+                <app-team-tree (dataEvent)="receiveData($event)"></app-team-tree>
+            </div>
+        </div>
+        <div class="col-md-7">
+            <div class="widget">
+                <h3 style="color: blue;" *ngIf="registrationRequests.length===0">لا توجد طلبات متاحة وفقا
+                    لإختياراتك
+                </h3>
+                <h3 style="color: blue;" *ngIf="registrationRequests.length===0">لا توجد هناك أي طلبات </h3>
+                <p-table #dt1 selectionMode="single" [value]="registrationRequests"
+                    [(selection)]="registrationRequest" *ngIf="registrationRequests.length>0" [rows]="pageSize"
+                    [paginator]="true" (onPage)="onPageChange($event)" [totalRecords]="totalRecords" [loading]="loading"
+                    currentPageReportTemplate="عرض {first} إلي {last} من  إجمالي {totalRecords}" dataKey="id"
+                    [globalFilterFields]="['regUserId', 'regName','regRealName','regTitle','regApplicationId','regGsm','regAproved']"
+                    rowExpandMode='single' [showCurrentPageReport]="true" [tableStyle]="{ 'min-width': '60rem' }">
+                    <ng-template pTemplate="caption">
+                        <div class="flex">
+                            <span class="p-input-icon-left mr-auto">
+                                <i class="pi pi-search"></i>
+                                <input pInputText type="text" (input)="onFilterInput($event)" placeholder="بحث" />
+                            </span>
+                        </div>
+                        <!-- <p-button label=" جديد " icon="pi pi-plus" iconPos="left"> </p-button> -->
+
+                    </ng-template>
+                    <ng-template pTemplate="header">
+                        <tr class="p-0">
+                            <th style="width:   5%;text-align: center;font-size: large;">
+                            </th>
+                            <th pSortableColumn="id"
+                                style="width:15%;text-align: center;font-size: large;">
+                                رقم الاشتراك <p-sortIcon field="id" />
+                            </th>
+                            <th style="width:15%;text-align: center;font-size: large;">
+                                رقم الملف
+                            </th>
+                            <th style="width:10%;text-align: center;font-size: large;">
+                                رقم المجموعة
+                            </th>
+
+                            <th style="width:5%;text-align: center;font-size: large;">
+                                الإيميل
+                            </th>
+                            <th style="width:15%;text-align: center;font-size: large;">
+                                تاريخ التسجيل
+                            </th>
+                            <th style="">
+                                Approval Status
+                            </th>
+                            <th style="">
+                                Approved By
+                            </th>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="body" let-registration let-rowIndex="rowIndex" let-expanded="expanded">
+                        <tr [pSelectableRow]="registration" [pSelectableRowIndex]="rowIndex" style="text-align: right">
+                            <td>
+                                <button type="button" pButton pRipple [pRowToggler]="registration" single="true"
+                                    class="p-button-text p-button-rounded p-button-plain"
+                                    (click)="registrationRequest=registration"
+                                    [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-left'"></button>
+                            </td>
+                            <td style="width: 11%;">{{registration.id}}</td>
+                            <td style="width: 11%;">{{registration.regUserId}}</td>
+                            <td style="width: 12%;"> {{registration.regCat}}</td>
+                            <td style="width: 12%;"> {{ registration.regEmail.split('@')[0] }} </td>
+                            <td style="width: 12%;"> {{registration.regDate | date:'dd-MM-yyyy'}}</td>
+                            <td style="width: 15%;vertical-align: middle;">
+                                <div style="text-align: center;border-radius: .5rem;height: 2rem;"
+                                    [style]="{'background-color':registration.regAproved=='معتمد'? 'rgba(159, 240, 159, 0.3)':'  rgba(255, 89, 89, 0.3)'}">
+                                    {{registration.regAproved}} </div>
+                            </td>
+                            <td style="width: 12%;"> {{registration.regAprrovedby}}</td>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="rowexpansion" let-registration>
+                        <td colspan="14">
+                            <div class="widget">
+                                <div class="user-info-form">
+                                    <form [formGroup]="registrationForm">
+                                        <div class="form-row">
+                                            <!-- User Details -->
+                                            <div class="form-group user-details">
+                                                <div class="form-field">
+                                                    <label>الاسم </label>
+                                                    <input type="text" formControlName="regRealName"
+                                                        [(ngModel)]="registration.regRealName" readonly>
+                                                </div>
+
+                                                <div class="form-field">
+                                                    <label>البريد الإلكتروني </label>
+                                                    <input type="email" formControlName="regEmail"
+                                                        [(ngModel)]="registration.regEmail" readonly>
+                                                </div>
+
+                                                <div class="form-field">
+                                                    <label>الوظيفة</label>
+                                                    <input type="text" formControlName="regTitle"
+                                                        [(ngModel)]="registration.regTitle" readonly>
+                                                </div>
+
+                                                <div class="form-field">
+                                                    <label>رقم التليفون</label>
+                                                    <input type="tel" formControlName="regGsm"
+                                                        [(ngModel)]="registration.regGsm" readonly>
+                                                </div>
+
+                                                <div class="form-field">
+                                                    <label>IP Address</label>
+                                                    <input type="text" formControlName="regIp"
+                                                        [(ngModel)]="registration.regIp" readonly>
+                                                </div>
+
+                                                <div class="form-field">
+                                                    <label>اسم التطبيق</label>
+                                                    <!-- <input type="text" [value]="registration.regApplicationId" readonly> -->
+
+                                                    <select formControlName="regApplicationId"
+                                                        [(ngModel)]="registration.regApplicationId"
+                                                        (change)="updateStatus()" class="form-control">
+                                                        <option *ngFor="let app of appOptions" [value]="app.value">
+                                                            {{ app.label }}
+                                                        </option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="form-field">
+                                                    <label>كود المجموعة</label>
+                                                    <input type="text" formControlName="regCat"
+                                                        [(ngModel)]="registration.regCat" readonly>
+                                                </div>
+                                                <div class="form-field">
+                                                    <label>النوع</label>
+                                                    <select formControlName="regGender"
+                                                        [(ngModel)]="registration.regGender" class="form-control">
+                                                        <option *ngFor="let gender of genderOptions"
+                                                            [value]="gender.value">
+                                                            {{ gender.label }}
+                                                        </option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-field">
+                                                    <label>رقم الملف</label>
+                                                    <input type="text" formControlName="regUserId"
+                                                        [(ngModel)]="registration.regUserId" >
+                                                </div>
+                                                <div class="form-field">
+                                                    <label>حالة الموافقة</label>
+                                                    <select formControlName="regAproved"
+                                                        [(ngModel)]="registration.regAproved" class="form-control">
+                                                        <option *ngFor="let approval of approvalOptions"
+                                                            [value]="approval.value">
+                                                            {{ approval.label }}
+                                                        </option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                                <div
+                                    style="display: flex; flex-direction: row; justify-content: space-evenly; width: 100%;">
+                                    <button type="button" class="btn btn-primary" (click)="verifyUser()">تحقق</button>
+                                    <button type="button" class="btn btn-info" (click)="isverified = true"
+                                        [disabled]="!registrationForm.get('regCat')?.value || isverified">تم
+                                        التحقق</button>
+                                    <button type="button" class="btn btn-success" (click)="UpdateRegistration()"
+                                        [disabled]="!registrationForm.get('regCat')?.value || !isverified">تسجيل</button>
+                                </div>
+                            </div>
+                        </td>
+                    </ng-template>
+                </p-table>
+            </div>
+        </div>
+    </div>
+</div>

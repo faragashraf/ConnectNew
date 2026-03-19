@@ -1,0 +1,2 @@
+ بـــشأن الإســـتعلام عـــن الحســـابات المفتوحـــة بالهيئـــة القوميـــة للبريـــد الخاص ب<span *ngIf="genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_ACCOUNT_NATURE') == 'فرد'">العميل.</span>
+<span *ngIf="genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_ACCOUNT_NATURE') != 'فرد'">السادة/ {{genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_NAME')}}</span>

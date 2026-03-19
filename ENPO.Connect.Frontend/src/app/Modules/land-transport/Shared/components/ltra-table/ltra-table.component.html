@@ -1,0 +1,102 @@
+<h4 style="color: blue;" *ngIf="vwLtraTransTraficPrint?.length==0">لا توجد طلبات</h4>
+<p-table *ngIf="vwLtraTransTraficPrint.length>0" selectionMode="single" [value]="vwLtraTransTraficPrint" [selection]="traTransTrafic"
+    [rows]="pageSize" [paginator]="true" (onPage)="onPageChange($event)" [totalRecords]="totalRecords" dataKey="rlttBarcode"
+    [loading]="loading" [paginator]="true" [rowHover]="true"
+    currentPageReportTemplate="عرض {first} إلي {last} من  إجمالي {totalRecords}" [showCurrentPageReport]="true"
+    rowExpandMode='single'  [tableStyle]="{ 'min-width': '60rem' }"   (onRowSelect)="onRowSelect($event)"
+  (onRowUnselect)="onRowUnselect($event)">
+
+    <ng-template pTemplate="header">
+        <tr style="text-align: center;">
+            <th style="width: 4%;text-align: center;">باركود</th>
+            <th style="width: 4%;text-align: center;" >باركود الخطاب</th>
+            <!-- <th>نوع المستند</th> -->
+            <th pSortableColumn="plateNumberPrint"
+                style="width: 3%;text-align: center;;">
+                رقم اللوحات
+                <p-sortIcon field="plateNumberPrint" />
+            </th>
+            <th pSortableColumn="companyName"
+                style="width: 12%;text-align: center;;">
+                اسم الشركة
+                <p-sortIcon field="companyName" />
+            </th>
+            <th pSortableColumn="vehicleBrand"
+                style="width: 6%;text-align: center;;">
+                ماركة المركبة
+                <p-sortIcon field="vehicleBrand" />
+            </th>
+            <th pSortableColumn="yearOfManufacture"
+                style="width: 4%;text-align: center;;">
+                سنة الصنع
+                <p-sortIcon field="yearOfManufacture" />
+            </th>
+            <th pSortableColumn="carActivity"
+                style="width: 4%;text-align: center;;">
+                نوع المركبة
+                <p-sortIcon field="carActivity" />
+            </th>
+            <th pSortableColumn="modelBody"
+                style="width: 4%;text-align: center;;">
+                نوع الهيكل
+                <p-sortIcon field="modelBody" />
+            </th>
+            <th pSortableColumn="licensesNum"
+                style="width: 4%;text-align: center;;">
+                رقم الرخصة
+                <p-sortIcon field="licensesNum" />
+            </th>
+            <th pSortableColumn="trafficUnitId"
+                style="width: 4%;text-align: center;;">
+                وحدة المرور
+                <p-sortIcon field="trafficUnitId" />
+            </th>
+            <th style="width: 4%;text-align: center;;"></th>
+            <th style="width: 4%;text-align: center;;" ></th>
+            <th style="width: 4%;text-align: center;;"></th>
+        </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-traTransTrafic let-rowIndex="rowIndex">
+        <tr [pSelectableRow]="traTransTrafic" [pSelectableRowIndex]="rowIndex" style="text-align: center;">
+            <td style="text-align: right">{{traTransTrafic.barcode}} </td>
+            <td style="text-align: right" >{{traTransTrafic.rlttBarcode}} </td>
+            <td style="text-align: right">{{traTransTrafic.plateNumber}} </td>
+            <td style="text-align: right">{{traTransTrafic.companyName}} </td>
+            <td style="text-align: right">{{traTransTrafic.vehicleBrand}} </td>
+            <td style="text-align: right">{{traTransTrafic.yearOfManufacture}} </td>
+            <td style="text-align: right">{{traTransTrafic.carActivity}} </td>
+            <td style="text-align: right">{{traTransTrafic.modelBody}} </td>
+            <td style="text-align: right">{{traTransTrafic.licensesNum}} </td>
+            <td style="text-align: right">{{traTransTrafic.trafficUnitId}} - {{
+                traTransTrafic.governorateId}} </td>
+            <app-letters-print-design [id]="'printAtrea'+traTransTrafic.rlttBarcode+traTransTrafic.plateNumber"
+                [vwLtraTransTraficPrint]="traTransTrafic" hidden>
+            </app-letters-print-design>
+            <app-rltt-barcode [id]="'printFORM'+traTransTrafic.rlttBarcode+traTransTrafic.plateNumber"
+                [vwLtraTransTraficPrint]="traTransTrafic" hidden></app-rltt-barcode>
+
+            <td>
+                <button pTooltip="طباعة خطاب المرور" pButton type="button" style="font-size: 2rem"
+                    styleClass="p-button-lg" icon="pi pi-print"
+                    [printSectionId]="'printAtrea'+traTransTrafic.rlttBarcode+traTransTrafic.plateNumber" ngxPrint
+                    class="p-button-raised p-button-rounded p-button-info" 
+                    [printStyle]="a4PortraitStyles"
+                    ></button>
+            </td>
+            <td >
+                <button pTooltip="طباعة النموذج" pButton type="button" style="font-size: 2rem" styleClass="p-button-lg"
+                    icon="pi pi-file-word" (click)="afterPrint(traTransTrafic)"
+                    [printSectionId]="'printFORM'+traTransTrafic.rlttBarcode+traTransTrafic.plateNumber" ngxPrint
+                    class="p-button-raised p-button-rounded p-button-primary" [disabled]="!traTransTrafic.isPrint"
+                    [printStyle]="printService.a5LandscapeStyles"
+                    ></button>
+            </td>
+            <td>
+                <button pTooltip="تسجيل الطباعه" pButton type="button" style="font-size: 2rem" styleClass="p-button-lg"
+                    icon="pi pi-pencil" (click)="UpdatePrintStatus(traTransTrafic)"
+                    class="p-button-raised p-button-rounded p-button-success" [disabled]="traTransTrafic.isPrint"
+                    *ngIf="!IsReprint"></button>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>

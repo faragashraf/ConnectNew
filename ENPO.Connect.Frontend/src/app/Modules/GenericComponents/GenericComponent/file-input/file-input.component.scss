@@ -1,0 +1,139 @@
+.form-group {
+    margin-bottom: 20px;
+
+    label {
+        display: block;
+        font-weight: 600;
+        font-size: 16px;
+        margin-bottom: 8px;
+        color: #495057;
+
+        .required {
+            color: #dc3545;
+            margin-right: 5px;
+        }
+    }
+
+    .form-control {
+        padding: 10px 15px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 14px;
+        transition: all 0.3s;
+        width: 100%;
+
+        &:focus {
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+        &.is-invalid {
+            border-color: #dc3545;
+        }
+    }
+
+    textarea.form-control {
+        min-height: 100px;
+        resize: vertical;
+    }
+
+    .invalid-feedback-err {
+        color: #dc3545;
+        font-size: 12px;
+        margin-top: 5px;
+        display: block;
+    }
+
+    .file-upload {
+        position: relative;
+        margin-bottom: 1rem;
+        width: 100%;
+
+        .upload-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            background-color: #f8f9fa;
+            border: 2px dashed #6c757d;
+            border-radius: 8px;
+            color: #6c757d;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+
+            &:hover {
+                background-color: #e9ecef;
+                border-color: #495057;
+                color: #495057;
+            }
+
+            i {
+                margin-left: 8px;
+                font-size: 1.2rem;
+            }
+        }
+
+        input[type="file"] {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+    }
+
+    .file-info {
+
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        border: 1px solid #eee;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        color: #212529;
+        animation: fadeIn 0.3s ease-out;
+
+        .file-details {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-name-text {
+            max-width: 420px;
+            display: inline-block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
+        }
+
+        i {
+            color: #dc3545;
+            font-size: 1.5rem;
+        }
+
+        .file-size {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+
+        .cust-remove-btn {
+            border: 0;
+            background: transparent;
+            cursor: pointer;
+            margin-right: 8px;
+        }
+
+        .file-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    }
+}

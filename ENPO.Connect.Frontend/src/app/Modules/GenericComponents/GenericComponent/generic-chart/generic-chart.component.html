@@ -1,0 +1,73 @@
+<div class="widget chart-wrapper" *ngIf="loading">
+    <div class="flex justify-content-center p-3">
+        <i class="pi pi-spin pi-spinner text-2xl"></i>
+    </div>
+</div>
+
+<div class="widget chart-wrapper" *ngIf="!loading && hasData">
+    <h5 *ngIf="title">{{ title }}</h5>
+    <div class="chart-scroll"
+         [style.height]="containerHeight"
+         [style.--canvas-width]="canvasWidth"
+         [style.--canvas-height]="canvasHeight">
+        <div class="chart-content-wrapper" [style.minWidth.px]="containerMinWidth">
+            <p-chart [type]="chartType" 
+                     [data]="chartData"
+                     [options]="chartOptions"
+                     [plugins]="plugins"
+                     (onDataSelect)="onChartClick($event)">
+            </p-chart>
+        </div>
+    </div>
+    <div class="chart-footer border-top-1 surface-border surface-50 p-2 border-round-bottom-xl" *ngIf="hasData">
+        <div class="flex justify-content-between align-items-center">
+             <!-- Table Toggle -->
+             <div class="flex align-items-center">
+                <button pButton pRipple 
+                          [icon]="showDataTable ? 'pi pi-eye-slash' : 'pi pi-table'" 
+                          [label]="showDataTable ? 'إخفاء الجدول' : 'عرض الجدول'" 
+                          class="p-button-text p-button-sm p-button-secondary" 
+                          (click)="toggleDataTable()"></button>
+           </div>
+           
+           <!-- Load Time -->
+           <div class="flex align-items-center gap-2 text-color-secondary" *ngIf="formattedLoadTime">
+                <span class="text-sm"><i class="pi pi-clock mr-1 text-primary" style="padding: 0 0 0rem .5rem;"></i>زمن التحميل:</span>
+                <span class="font-medium text-sm" dir="ltr">{{ formattedLoadTime }}</span>
+           </div>
+        </div>
+
+        <!-- Data Table Section -->
+        <div *ngIf="showDataTable" class="chart-data-table mt-2 surface-card shadow-1 border-round overflow-hidden">
+            <div class="p-2 surface-100 text-700 font-bold text-sm border-bottom-1 surface-border flex justify-content-between">
+                <span>البيانات التفصيلية</span>
+                <span *ngIf="totalRowsCount > tableRows.length" class="text-xs font-normal">عرض {{tableRows.length}} من {{ totalRowsCount }} صفوف</span>
+            </div>
+             <div style="max-height: 250px; overflow:auto;">
+                <table class="w-full text-sm" style="border-collapse: collapse;">
+                    <thead class="bg-gray-50 text-700 sticky top-0 z-1 surface-50">
+                        <tr>
+                            <th *ngFor="let h of tableHeaders" class="p-2 text-right border-bottom-1 surface-border white-space-nowrap font-medium">{{h}}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-700">
+                        <tr *ngFor="let row of tableRows; let odd = odd" [class.bg-gray-50]="odd" class="hover:surface-ground transition-colors">
+                            <td *ngFor="let h of tableHeaders" class="p-2 text-right border-bottom-1 surface-border">{{ formatCell(row[h]) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+             </div>
+        </div>
+        
+         <!-- Axis Info -->
+         <div *ngIf="axisSeriesMappings.length" class="mt-2 text-right p-2 surface-100 border-round text-xs text-600">
+            <div *ngFor="let m of axisSeriesMappings" class="mb-1 flex align-items-center gap-1">
+                <span class="font-bold text-700">المحور {{m.axisId}} ({{m.position}}):</span>
+                <span>{{ m.series.join(', ') }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+<div *ngIf="!loading && loaded && !hasData" class="no-data-msg p-3 text-center">
+    No data to display
+</div>

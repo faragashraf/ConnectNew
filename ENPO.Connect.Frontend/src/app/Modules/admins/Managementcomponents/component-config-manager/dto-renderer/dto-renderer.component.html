@@ -1,0 +1,49 @@
+<div class="dto-root ccm-body">
+    <!-- Array of objects: render editor for first element -->
+    <ng-container *ngIf="value && value.length !== undefined && value.length && value[0] && isObject(value[0])">
+        <div class="array-item">
+            <label class="dto-array-label badge muted">[0]</label>
+            <app-dto-renderer [value]="value[0]" (valueChange)="onArrayFirstChanged($event)"></app-dto-renderer>
+        </div>
+        <div class="drawer-actions">
+            <button class="btn primary" type="button" (click)="addArrayElement()">+ Add Element</button>
+        </div>  
+    </ng-container>
+
+    <!-- Array of primitives -->
+    <ng-container *ngIf="value && value.length !== undefined && (!value.length || !isObject(value[0]))">
+        <div class="request-col">
+          <input class="form-control" [value]="(value || []).join(',')" (input)="onArrayInput($event)" />
+                    <button class="btn small" type="button" (click)="addArrayElement()">+ Add Element</button>
+        </div>
+    </ng-container>
+
+    <!-- Object editor -->
+    <ng-container *ngIf="isObject(value)">
+        <div class="request-col dto-obj">
+            <div *ngFor="let k of objectKeys(value); let idx = index" class="dto-prop populate-row">
+                <label class="pill-text">{{ k }}</label>
+                <ng-container *ngIf="isObject(value[k]); else primitiveField">
+                    <app-dto-renderer [value]="value[k]" (valueChange)="onNestedChange(k, $event)"></app-dto-renderer>
+                </ng-container>
+                <ng-template #primitiveField>
+                    <input class="form-control" [value]="value[k]" (input)="onPropChange(k, $any($event.target).value)" />
+                </ng-template>
+                                <div class="btn-row">
+                                    <button class="btn small" type="button" (click)="addProperty(k)">Duplicate</button>
+                                    <button class="btn small" type="button" (click)="removeProperty(k)">Remove</button>
+                                </div>
+            </div>
+            <div class="drawer-actions">
+              <button class="btn primary" type="button" (click)="addProperty()">+ Add Property</button>
+            </div>
+        </div>
+    </ng-container>
+
+    <!-- Fallback: primitive value -->
+    <ng-container *ngIf="!isObject(value) && !(value && value.length !== undefined)">
+        <div class="request-col">
+          <input class="form-control" [value]="value" (input)="valueChange.emit($any($event.target).value)" />
+        </div>
+    </ng-container>
+</div>

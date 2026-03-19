@@ -1,0 +1,41 @@
+<div class="sidebar-container" [class.collapsed]="collapsed" [attr.aria-disabled]="isDivDisabled ? 'true' : null"
+    [style.width.%]="collapsed ? collapsedWidth : expandedWidth">
+    <div class="sidebar-title-wrap">
+        <h3 *ngIf="!collapsed" class="sidebar-title">{{ title }}</h3>
+
+        <div class="header-actions">
+            <button type="button" class="tiny-btn toggle-expand" (click)="toggleExpandCollapseAll()"
+                title="Toggle expand/collapse all">
+                <i class="pi" [ngClass]="!allExpanded ? 'pi-minus' : 'pi-plus'"></i>
+            </button>
+            <button *ngIf="showCollapseButton" type="button" class="collapse-pane-btn" (click)="toggleCollapse()"
+                [attr.aria-expanded]="!collapsed" [title]="collapsed ? 'Expand' : 'Collapse'">
+                <i class="pi pi-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="sidebar-content" [class.disabled-div]="isDivDisabled">
+        <p-contextMenu #treeContextMenu [model]="contextMenuItems" [style]="{'width':'22.5rem','direction':'ltr'}"
+            (onClick)="onContextMenuItemClick($event)"></p-contextMenu>       
+        <p-tree [value]="tree" selectionMode="single"  [(selection)]="selectedNode"  [filter]="true" filterPlaceholder="بحث" [scrollHeight]="scrollHeight+'rem'"
+            [validateDrop]="enableTreeDragDrop" [draggableNodes]="enableTreeDragDrop" [droppableNodes]="enableTreeDragDrop" draggableScope="self"
+            droppableScope="self" [contextMenu]="showTreeContextMenu?treeContextMenu:null"
+            (onNodeSelect)="handleNodeSelect($event)" (onNodeUnselect)="handleNodeUnselect($event)"
+            (onNodeExpand)="handleNodeExpand($event)" (onNodeCollapse)="handleNodeCollapse($event)"
+            (onNodeDrop)="handleNodeDrop($event)" (onNodeContextMenuSelect)="handleNodeContextMenuSelect($event)"
+            (onNodeDragStart)="handleNodeDragStart($event)" (onNodeDragEnd)="handleNodeDragEnd($event)">
+            <ng-template let-node pTemplate="default">
+                <span class="node-content" [attr.title]="node.tooltip || node.label"
+                    [attr.aria-label]="node.tooltip || node.label">
+                    <ng-container *ngIf="collapsed; else expandedNode">
+                        <i class="node-icon" [ngClass]="node.icon || 'pi pi-fw pi-folder'"></i>
+                    </ng-container>
+                    <ng-template #expandedNode>
+                        <b class="node-label">{{ node.label }}</b>
+                    </ng-template>
+                </span>
+            </ng-template>
+        </p-tree>
+    </div>
+</div>

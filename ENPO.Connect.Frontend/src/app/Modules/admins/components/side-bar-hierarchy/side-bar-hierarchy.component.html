@@ -1,0 +1,116 @@
+<div class="container-main">
+    <div class="row">
+        <div class="col-md-4">
+            <h3>Side Bar </h3>
+
+        </div>
+        <div class="col-md-2"></div>
+        <div class="col-md-6">
+
+        </div>
+    </div>
+    <!-- {{messageDtos|json}} -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="widget">
+                <app-tree-sidebar [tree]="treeData" [showTreeContextMenu]="true" [enableTreeDragDrop] ="true" [contextMenuItems]="items" [allExpanded]="false"
+                    [expandedWidth]="100" [scrollHeight]="40" [title]="'القوائم الرئيسية'" (onNodeSelect)="nodeSelection($event)"
+                    (onNodeUnselect)="nodeUnselection($event)" (onNodeDrop)="onNodeDrop($event)"
+                    (onNodeContextMenuSelect)="ContextMenuSelect($event)"
+                    (contextMenuItemSelected)="ContextMenuSelect($event)"
+                    [multiExpand]="true">
+                </app-tree-sidebar>
+
+            </div>
+        </div>
+    </div>
+</div>
+<p-contextMenu [style]="{'width':'22.5rem','direction':'ltr'}" #cm [model]="items"></p-contextMenu>
+<i class="pi pi-bars"></i>
+<p-dialog [(visible)]="dialogVisible" [style]="{width: '50rem',height: '45vw','direction':'rtl'}" [modal]="true"
+    [resizable]="false" [closeOnEscape]="true">
+    <ng-template pTemplate="header">
+        <i [ngClass]="_ngClass" style="color: blue;font-size: x-large;"></i> <span
+            style="color: green;font-size: larger;text-align: right;width: 89%;"> {{Header}}</span>
+    </ng-template>
+    <div class="row card flex justify-content-center ">
+        <form [formGroup]="frm">
+            <div class="col-md-12">
+                <div class="form-group">
+                    <label htmlFor="sbId">ID </label>
+                    <input type="text" class="form-control" name="sbId" formControlName="sbId"
+                        style="font-size: large;color: rgb(0, 0, 0);font-family:  'Times New Roman';">
+                </div>
+                <div class="form-group">
+                    <label htmlFor="sbSubId">Parent Id </label>
+                    <input type="text" class="form-control" name="sbSubId" formControlName="sbSubId"
+                        style="font-size: large;color: rgb(0, 0, 0);font-family:  'Times New Roman';">
+                </div>
+                <div class="form-group">
+                    <label htmlFor="itemName">Name </label>
+                    <input type="text" class="form-control" name="itemName" formControlName="itemName"
+                        style="font-size: large;color: rgb(0, 0, 0);font-family:  'Times New Roman';">
+                </div>
+                <div class="form-group">
+                    <label htmlFor="ItemRoute">Route </label>
+                    <input type="text" class="form-control" name="sbRoute" formControlName="sbRoute"
+                        style="font-size: large;color: rgb(0, 0, 0);font-family:  'Times New Roman';">
+
+                    <span style="color: red;" *ngIf="frm.controls['sbRoute'].valid && 
+          frm.controls['sbRoute'].dirty"> يرجى التأكد أولاً من مطابقة قيمة الـ Route بالقيمة الموجوده
+                        بالكود</span>
+                </div>
+                <div class="form-group">
+                    <label htmlFor="sbType">Type </label><br>
+                    <p-dropdown [options]="sideBarType" [(ngModel)]="sideBarTypeSelected" formControlName="sbType"
+                        [filter]="true" [style]="{'minWidth':'50px', 'width': '350px','direction':'ltr'}"
+                        filterMatchMode="contains" placeholder="Select Side Bar Type"
+                        (onChange)="onsideBarTypeSelected($event)" [showClear]="true">
+                    </p-dropdown>
+                </div>
+                <div class="form-group">
+                    <label htmlFor="functionIntId">Function Code </label>
+                    <div style="display: flex;flex-direction: row;justify-content: space-between;">
+                        <div class="col-md-3">
+                            <input type="text" class="form-control" name="functionIntId" formControlName="functionIntId"
+                                [style]="{'height':'45px'}"
+                                style="font-size: large;color: rgb(0, 0, 0);font-family:  'Times New Roman';"
+                                (keyup)="onChangeFncID()">
+                        </div>
+                        <div class="col-md-1"></div>
+                        <div class="col-md-7">
+                            <p-dropdown [options]="functions" [(ngModel)]="function" [filter]="true"
+                                [disabled]="!frm.get('functionIntId')?.enabled"
+                                [style]="{'minWidth':'50px', 'width': '350px','direction':'ltr'}"
+                                filterMatchMode="contains" formControlName="functionName" optionLabel="functionName"
+                                placeholder="Select a Function" (onChange)="onFunctionelected($event)"
+                                [showClear]="true">
+                            </p-dropdown>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label htmlFor="sbApplicationId">Application </label>
+                    <input type="text" class="form-control" name="sbApplicationId" formControlName="sbApplicationId"
+                        readonly style="font-size: large;color: rgb(0, 0, 0);font-family:  'Times New Roman';">
+                </div>
+            </div>
+        </form>
+        <div class="col-md-7">
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <!-- <p-button *ngIf="Remove" icon="pi pi-trash" (click)="Delete()" label=" Delete" iconPos="right"
+    styleClass="p-button-rounded p-button-danger"></p-button>
+  <p-button *ngIf="edit" icon="pi pi-save" (click)="editItem()" label="Submit Edit" iconPos="right"
+    styleClass="p-button-rounded p-button-danger" [disabled]="!frm.valid"></p-button>
+  <p-button *ngIf="add" [disabled]="!frm.valid" icon="pi pi-save" (click)="addNew()" label="Submit New"
+    iconPos="right"></p-button> -->
+
+        <!-- <button *ngIf="Remove" class="btn btn-danger" (click)="Delete()">Delete</button>
+        <button *ngIf="edit" class="btn btn-success" [disabled]="!frm.valid" (click)="editItem()">Submit Edit</button> -->
+        <button class="btn btn-success" [disabled]="!frm.valid" (click)="submit()">Submit New</button>
+
+
+    </ng-template>
+</p-dialog>

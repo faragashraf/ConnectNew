@@ -1,0 +1,118 @@
+<p-dialog header="نتيجة البحث" [resizable]="false" [modal]="true" [maximizable]="true" appendTo="body"
+    [(visible)]="dialogVisible" [style]="{width: '85vw','direction':'rtl'}" [contentStyle]="{height: '85vh'}"
+    (onHide)="onHide()">
+    <div class="widget">
+        <div class="row" style="margin-bottom: 3rem;">
+            <div class="col-md-3 ">
+                <input type="text" [(ngModel)]="SearchText" class="form-control" placeholder="البحث بالبريد الإلكتروني"
+                    style="width: 20rem;margin-left: 2rem;">
+
+            </div>
+            <div class="col-md-4  ">
+                <button class="btn btn-success" (click)="SearchUser()" [disabled]="SearchText.length===0">
+                    بحث
+                </button>
+            </div>
+            <div class="col-md-5 ">
+            </div>
+        </div>
+        <h3 style="color: blue;" *ngIf="exchangeUserInfos.length===0">لا توجد نتيجة للبحث </h3>
+
+
+        <p-table #dt2 [value]="exchangeUserInfos" [rows]="5" [paginator]="true" [rowHover]="true"
+            *ngIf="exchangeUserInfos.length>0" [rowsPerPageOptions]="[5,10,25,50,100 ]" dataKey="userEmail"
+            [(selection)]="SelectedexchangeUserInfo" selectionMode="single" (onRowSelect)="onRowSelect($event)"
+            (onRowUnselect)="onRowUnselect($event)"
+            currentPageReportTemplate="عرض {first} إلي {last} من  إجمالي {totalRecords}" [showCurrentPageReport]="true"
+            rowExpandMode='single' [tableStyle]="{ 'min-width': '65rem' }"
+            [globalFilterFields]="['userDisplayName', 'userTitle','mobilePhone','userEmail']" responsiveLayout="scroll"
+            sortField="matchingStatus" [sortOrder]="-1">
+            <ng-template pTemplate="caption">
+                <div class="flex">
+                    <span class="p-input-icon-left mr-auto">
+                        <i class="pi pi-search"></i>
+                        <input pInputText type="text" (input)="onFilterInput($event)" placeholder="بحث" />
+                    </span>
+                </div>
+                <!-- <p-button label=" جديد " icon="pi pi-plus" iconPos="left"> </p-button> -->
+
+            </ng-template>
+            <ng-template pTemplate="header">
+                <tr>
+                    <th> </th>
+                    <th pSortableColumn="userDisplayName" style="width: 20%;text-align: center;"> الاسم<p-sortIcon
+                            field="userDisplayName"></p-sortIcon></th>
+                    <th pSortableColumn="userTitle" style="width: 20%;text-align: center;">الوظيفة <p-sortIcon
+                            field="userTitle"></p-sortIcon></th>
+                    <th pSortableColumn="mobilePhone" style="width: 20%;text-align: center;">رقم التليفون <p-sortIcon
+                            field="mobilePhone"></p-sortIcon> </th>
+                    <th pSortableColumn="userEmail" style="width: 3px;text-align: center"> البريد الإلكتروني<p-sortIcon
+                            field="userEmail"></p-sortIcon></th>
+                    <th style="text-align: center"> كود المستخدم</th>
+                    <th style="text-align: center">عدد المجموعة </th>
+                    <th style="text-align: center;width: 12%;"> حالة التسجيل</th>
+                    <th> </th>
+                </tr>
+            </ng-template>
+
+            <ng-template pTemplate="body" let-contact let-rowIndex="rowIndex" let-expanded="expanded">
+                <tr [pSelectableRow]="contact" [pSelectableRowIndex]="rowIndex"
+                    (dblclick)="onRowDblClick(contact)">
+                    <td>
+                        <button type="button" pButton pRipple [pRowToggler]="contact" single="true"
+                            class="p-button-text p-button-rounded p-button-plain" *ngIf="contact.isGroup"
+                            [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-left'"></button>
+                    </td>
+                    <td style="text-align: center"> {{contact.userDisplayName}} </td>
+                    <td style="text-align: center"> {{contact.userTitle}} </td>
+                    <td style="text-align: center"> {{contact.mobilePhone}} </td>
+                    <td style="text-align: center"> {{contact.userEmail}} </td>
+                    <td style="text-align: center"> {{contact.userId}} </td>
+                    <td style="text-align: center"> {{contact.isGroup? contact.groupMembers?.length:''}} </td>
+                    <td>
+                        <div style="text-align: center;border-radius: .5rem;height: 2rem;" *ngIf="!contact.isGroup"
+                            [style]="{'background-color':contact.registrationStatus?' rgba(159, 240, 159, 0.3)':'  rgba(255, 89, 89, 0.3)'}">
+                            {{contact.registrationStatus?'مسجل بالتطبيق':'غير مسجل'}}</div>
+
+                    </td>
+                    <td style="text-align: center">
+                        <img [src]="contact.safeImage" alt="User Picture" *ngIf="contact.userPicture !=null" width="80"
+                            height="80" />
+                        <img src="assets/imges/User.png" alt="User Picture" width="80" height="80"
+                            *ngIf="contact.userPicture ==null" />
+                    </td>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="rowexpansion" let-contact>
+                <td colspan="10">
+                    <p-table  [value]="contact.groupMembers" [rows]="3" [paginator]="true" [rowHover]="true"
+                        *ngIf="contact.groupMembers.length>0" [rowsPerPageOptions]="[5,10,25 ]"
+                        dataKey="userEmail" [(selection)]="SelectedexchangeUserInfo" selectionMode="single"
+                        currentPageReportTemplate="عرض {first} إلي {last} من  إجمالي {totalRecords}"
+                        [showCurrentPageReport]="true" rowExpandMode='single' [tableStyle]="{ 'min-width': '65rem' }">
+                        <ng-template pTemplate="header">
+                            <tr>
+                                <th pSortableColumn="userDisplayName" style="width: 20%;text-align: center;">
+                                    الاسم<p-sortIcon field="userDisplayName"></p-sortIcon></th>
+                                <th pSortableColumn="userEmail" style="width: 3px;text-align: center"> البريد
+                                    الإلكتروني<p-sortIcon field="userEmail"></p-sortIcon></th>
+                            </tr>
+                        </ng-template>
+
+                        <ng-template pTemplate="body" let-contact let-rowIndex="rowIndex" let-expanded="expanded">
+                            <tr [pSelectableRow]="contact" [pSelectableRowIndex]="rowIndex"
+                                (dblclick)="onRowDblClick(contact)">
+                                <td style="text-align: center"> {{contact.userDisplayName}} </td>
+                                <td style="text-align: center"> {{contact.userEmail}} </td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                </td>
+            </ng-template>
+        </p-table>
+        <!-- <ng-template pTemplate="footer">
+        <button type="button" pButton pRipple icon="pi pi-times" (click)="dialogVisible=false" label="خروج"
+            class="p-button-text"></button>
+    </ng-template> -->
+    </div>
+</p-dialog>

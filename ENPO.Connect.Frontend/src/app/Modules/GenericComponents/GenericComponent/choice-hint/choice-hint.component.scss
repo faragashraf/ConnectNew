@@ -1,0 +1,50 @@
+/* Small non-blocking hint that points to the tree when no category selected */
+.select-category-hint {
+  position: absolute;
+  right: 50%; /* approximate position near splitter/tree */
+  top: 30%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 25;
+  cursor:auto;
+  transform-origin: center left;
+  animation: hint-bob 1.6s ease-in-out infinite;
+}
+.select-category-hint .hint-card {
+  background: #ffc107;
+  color: #212121;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.select-category-hint .hint-text {
+  display: inline-block;
+}
+.select-category-hint .hint-arrow {
+  width: 0;
+  height: 0;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-left: 14px solid #ffc107;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.12));
+  transform: translateX(-6px);
+}
+
+@keyframes hint-bob {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+  100% { transform: translateY(0); }
+}
+
+/* Highlight effect for the sidebar when user requests guidance */
+.sidebar-pane.highlight {
+  animation: sidebar-pulse 1.8s ease-in-out;
+}
+@keyframes sidebar-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255,193,7,0.45); }
+  50% { box-shadow: 0 0 0 12px rgba(255,193,7,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,193,7,0); }
+}

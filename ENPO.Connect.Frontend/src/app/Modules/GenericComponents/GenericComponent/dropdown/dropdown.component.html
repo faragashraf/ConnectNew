@@ -1,0 +1,20 @@
+<!-- optional button to open tree dialog (visible when `showTreeButton` is true) -->
+<div style="width: 100%;">
+    <p-dropdown  [options]="genericFormService.implementControlSelection(controlFullName)"
+        [style]="{'width':'100%','pointer-events': isDivDisabled ? 'none' : 'auto'}"
+        [disabled]="isDivDisabled || (genericFormService.GetPropertyValue(controlFullName,'isDisabledInit')=='true' && !isCurrentUser)"
+        emptyMessage [filter]="!isDivDisabled" filterBy="name" optionValue="key" optionLabel="name"
+        [showClear]="!isDivDisabled && !(genericFormService.GetPropertyValue(controlFullName,'isDisabledInit')=='true' && !isCurrentUser)"
+        [editable]="false"
+        [tabindex]="isDivDisabled ? -1 : 0"
+        [panelStyle]="{ 'direction': 'rtl', 'text-align': 'right','width':'100%'}"
+        panelStyleClass="rtl-dropdown" appendTo="body"
+        [placeholder]="genericFormService.GetPropertyValue(controlFullName,'placeholder')" [formControl]="control"
+        (onChange)="onChange($event)">
+        <ng-template let-category pTemplate="name">
+            <div>
+                  {{ category.name }}
+            </div>
+        </ng-template>
+    </p-dropdown>
+</div>

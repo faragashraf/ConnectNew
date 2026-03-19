@@ -1,0 +1,116 @@
+// Dialog
+label{
+    font-size: large;
+    color: blue
+  }
+  
+  .input-group {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  
+  .form-control {
+    flex: 1;
+    min-width: 250px;
+  }
+  
+  .dialog-content {
+    padding: 1rem;
+  }
+  
+  .text-danger {
+    color: #dc3545;
+    font-size: 0.875em;
+  }
+  
+  /* Start tree Style */
+  .children{
+    color: aqua;
+  }
+  .parents{
+    color: rgb(255, 255, 255);
+    font-family: 'Times New Roman', Times, serif;
+    font-size: x-large;
+  }
+  .filter-highlight {
+    background-color: yellow;
+    font-weight: bold;
+    color: #b41d1d;
+  }
+  
+  //Tree Styling
+  ::ng-deep .p-tree {
+    background: #222d32 !important;
+    color: #ffffff !important;
+    // padding: 0.25rem !important;
+    border-radius: 6px !important;
+    border-color: #222d32;
+    border: 0;
+  }
+  
+  ::ng-deep .p-tree .p-tree-filter-container {
+    margin-bottom: 0rem;
+  }
+  
+  ::ng-deep .p-tree .p-tree-filter-container .p-tree-filter {
+    width: 99% !important;
+    padding-right: 1.75rem !important;
+    align-items: center !important;
+  }
+  ::ng-deep .p-tree-empty-message {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  ::ng-deep.p-tree .p-tree-filter-container .p-tree-filter {
+    border-radius: 1px;
+    width: 100% !important;
+  }
+  ::ng-deep.p-treenode-label {
+    margin-right: 1rem;
+  
+  }
+  ::ng-deep
+    .p-tree
+    .p-tree-container
+    .p-treenode
+    .p-treenode-content
+    .p-tree-toggler {
+    margin-right: 0.5rem !important;
+    width: 2rem !important;
+    height: 2rem !important;
+    color: #ffffff;
+    border: 0 none !important;
+    border-radius: 50% !important;
+    transition: background-color 0.2s, color 0.2s, box-shadow 0.2s !important;
+    margin-left: 0.8rem !important;
+    display: flex !important;
+    justify-content: space-around !important;
+    // transform: rotate(180deg) !important;
+  }
+  ::ng-deep.p-tree .p-tree-container .p-treenode .p-treenode-content:hover {
+    & .p-tree-toggler {
+      color: #222d32 !important;
+    }
+  }
+  ::ng-deep.p-tree .p-tree-container .p-treenode .p-treenode-content.p-highlight {
+    background: #007c06!important;
+    color: #ffffff!important;
+  }
+  ::ng-deep .p-tree .p-treenode-children {
+    margin-right: 1rem !important;
+    font-size: large;
+    font-family: 'Times New Roman', Times, serif;
+  }
+  
+  .node-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  ::ng-deep .p-tree .p-tree-container .p-treenode .p-treenode-content .p-treenode-icon {
+    margin-right: 0.5rem;
+    color: #50aaf8;
+  }

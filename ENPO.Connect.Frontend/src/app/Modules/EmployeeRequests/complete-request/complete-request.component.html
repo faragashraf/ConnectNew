@@ -1,0 +1,10 @@
+<div class="widget" *ngIf="filteredCategory.length > 0">
+  <app-form-details 
+      [customFilteredCategoryMand]="filteredCategory"
+      [messageDto]="message"
+      [config]="localConfig"
+      [fileParameters]="fileParameters"
+      (fileUploadEvent)="onFileChange($event)"
+      (submitFormChange)="onSubmitData($event)">
+  </app-form-details>
+</div>

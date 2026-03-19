@@ -1,0 +1,201 @@
+<div class="landing-root">
+    <app-bubbles-bg [paletteId]="'sunset'" [density]="18" [speed]="1" [scale]="1" [disableAnimations]="false"
+        [showControls]="true"></app-bubbles-bg>
+
+    <header class="hero-section">
+        <!-- Occasion Banner -->
+        <div class="container">
+            <app-seasonal-banner></app-seasonal-banner>
+        </div>
+
+        <div class="container hero-container">
+            <div class="hero-content" dir="rtl">
+                <div class="badge-pill">بوابتك للخدمات الداخلية</div>
+                <h1 class="hero-title">أهلاً بك في <br class="mobile-break"><span class="logo-wrapper"><img
+                            src="assets/imges/Connect-Large.png" alt="Connect" class="hero-logo"></span></h1>
+                <p class="hero-subtitle">
+                    بوابتك الرقمية الموحدة لجميع خدمات البريد المصري الداخلية.<br>
+                    تواصل، أنجز، وارتقِ بأدائك اليومي من مكان واحد.
+                </p>
+                <div class="hero-actions" >
+                    <button class="btn-primary" (click)="scrollTo(mainFooter)">استعراض الخدمات</button>
+                    <!-- NEW: Employees Announcements CTA -->
+                    <a class="btn-primary btn-announce" routerLink="/employees-announcements"
+                        aria-label="إعلانات العاملين" >
+                        <span class="btn-ico">📣</span>
+                        إعلانات العاملين
+                    </a>
+                </div>
+            </div>
+
+            <div class="hero-visual">
+                <!-- Visual Anchor: The animated circles moved here -->
+                <div class="circles-stage">
+                    <div class="container circles">
+                        <div class="connect-badge" role="img" aria-label="Connect">
+                            <div class="ep-inner">
+                                <div class="connect-title">Connect</div>
+                                <div class="connect-sub">Global Portal</div>
+                            </div>
+                            <!-- Rings -->
+                            <div class="connect-rings" aria-hidden="true">
+                                <span class="ring" style="--j:0;"></span>
+                                <span class="ring" style="--j:1;"></span>
+                                <span class="ring" style="--j:2;"></span>
+                                <span class="ring" style="--j:3;"></span>
+                                <span class="ring" style="--j:4;"></span>
+                                <span class="ring" style="--j:5;"></span>
+                                <span class="ring" style="--j:6;"></span>
+                                <span class="ring" style="--j:7;"></span>
+                            </div>
+                        </div>
+                        <!-- Concentric Circles Background -->
+                        <!-- <div class="circle" style="--i:0;"></div>
+                        <div class="circle" style="--i:1;"></div>
+                        <div class="circle" style="--i:2;"></div>
+                        <div class="circle" style="--i:3;"></div>
+                        <div class="circle" style="--i:4;"></div>
+                        <div class="circle" style="--i:5;"></div>
+                        <div class="circle" style="--i:6;"></div>
+                        <div class="circle" style="--i:7;"></div>
+                        <div class="circle" style="--i:8;"></div>
+                        <div class="circle" style="--i:9;"></div>
+                        <div class="circle" style="--i:10;"></div>
+                        <div class="circle" style="--i:11;"></div>
+                        <div class="circle" style="--i:12;"></div>
+                        <div class="circle" style="--i:13;"></div>
+                        <div class="circle" style="--i:14;"></div>
+                        <div class="circle" style="--i:15;"></div>
+                        <div class="circle" style="--i:16;"></div>
+                        <div class="circle" style="--i:17;"></div>
+                        <div class="circle" style="--i:18;"></div>
+                        <div class="circle" style="--i:19;"></div>
+                        <div class="circle" style="--i:20;"></div> -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="news-integrated">
+            <div class="news-label">آخر الأخبار</div>
+            <div class="news-marquee">
+                <div class="marquee-content" [ngStyle]="{'--marquee-duration': marqueeDuration}">
+                    <!-- Duplicate list for seamless infinite scroll -->
+                    <span *ngFor="let news of newsList">{{news}} &nbsp;&bull;&nbsp; </span>
+                    <!-- Spacer for separation -->
+                    <span style="min-width: 100px;"></span>
+                    <span *ngFor="let news of newsList">{{news}} &nbsp;&bull;&nbsp; </span>
+                    <!-- Spacer for symmetry (critical for 50% loop) -->
+                    <span style="min-width: 100px;"></span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section #servicesSection class="features container current-services" dir="rtl">
+        <div class="section-header">
+            <h2 class="section-title">الخدمات الحالية <span class="en-title">Current Services</span></h2>
+            <p class="lead">الخدمات التالية متاحة الآن — يمكنك الوصول إليها مباشرة</p>
+        </div>
+
+        <div class="cards">
+            <!-- Admin Certificates -->
+            <article class="card in-view" (click)="toggleFlip(101)" [class.flipped]="isFlipped(101)">
+                <div class="card-accent" style="background:linear-gradient(180deg,#3b82f6, rgba(59,130,246,0.1));">
+                </div>
+                <div class="card-inner">
+                    <div class="card-front">
+                        <div class="card-main front-only">
+                            <div class="card-head front-head">
+                                <div class="icon">📄</div>
+                                <div class="meta">
+                                    <h3>طلبات الشهادات الإدارية</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-back">
+                        <div class="back-content">
+                            <h4>إدارة طلبات الشهادات الإدارية</h4>
+                            <p>نظام لإدارة الطلبات، إنهاء الإجراءات، وطباعة الشهادات.</p>
+                            <div class="card-footer back-footer">
+                                <span class="tag available">متاحة الآن</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Land Transport -->
+            <article class="card in-view" (click)="toggleFlip(102)" [class.flipped]="isFlipped(102)">
+                <div class="card-accent" style="background:linear-gradient(180deg,#10b981, rgba(16,185,129,0.1));">
+                </div>
+                <div class="card-inner">
+                    <div class="card-front">
+                        <div class="card-main front-only">
+                            <div class="card-head front-head">
+                                <div class="icon">🚚</div>
+                                <div class="meta">
+                                    <h3>خطابات النقل البري</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-back">
+                        <div class="back-content">
+                            <h4>خطابات النقل البري</h4>
+                            <p>إصدار ومتابعة خطابات النقل البري للمركبات.</p>
+                            <div class="card-footer back-footer">
+                                <span class="tag available">متاحة الآن</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <!-- Upcoming Services / 3D Slideshow -->
+    <section class="features container upcoming-section" dir="rtl">
+        <div class="section-header">
+            <h2 class="section-title">محفظة الخدمات <span class="en-title">Services Portfolio</span></h2>
+            <p class="lead">استعرض خدماتنا القادمة والحالية في جولة سريعة</p>
+        </div>
+
+        <div class="slideshow" role="region" aria-label="Landing slideshow" tabindex="0" (keydown)="onKeydown($event)">
+            <div class="carousel-viewport" [ngStyle]="carouselStyle">
+                <div class="slide carousel-slide" *ngFor="let s of slides; let i = index" [class.active]="i === current"
+                    [style.background]="'linear-gradient(135deg,' + s.color + ', rgba(0,0,0,0.08))'"
+                    [ngStyle]="getSlideStyle(i)">
+                    <img *ngIf="s.image" class="slide-image" [src]="s.image" alt="slide image" />
+                    <div class="slide-inner">
+                        <div class="slide-content">
+                            <ng-container *ngIf="getIconImage(s) as iconImage; else emojiIcon">
+                                <img class="slide-icon-image" [src]="iconImage" [alt]="s.title + ' icon'" />
+                            </ng-container>
+                            <ng-template #emojiIcon>
+                                <span class="slide-icon">{{s.icon}}</span>
+                            </ng-template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button class="prev" (click)="prev()">›</button>
+            <button class="next" (click)="next()">‹</button>
+            <div class="dots">
+                <button *ngFor="let _ of slides; let i = index" (click)="current = i"
+                    [class.active]="i === current"></button>
+            </div>
+        </div>
+    </section>
+
+    <footer class="landing-footer" #mainFooter>
+        <!-- <small>© 2026 Connect Portal. All rights reserved.</small> -->
+    </footer>
+
+    <!-- FAB for Announcements -->
+    <a class="fab-landing" routerLink="/employees-announcements" title="إعلانات العاملين">
+        <span class="fab-icon">📢</span>
+        <span class="fab-label">جديد</span>
+    </a>
+</div>

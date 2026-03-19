@@ -1,0 +1,2 @@
+ بـــشأن الإســـتعلام عـــن المادة البريدية باركود رقم {{genericFormService.getRequesterFieldTxt(formData,'BARCODE')}}
+ <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'DESTINATION') == 'إلى جهة قضائية'">وبناء على موافقة الإدارة القانونية بتاريخ {{conditionalDate.transform(genericFormService.GetControl(genericFormService.prePrintForm,'APPROVAL_DATE|2')?.value,'short')}}</span>.

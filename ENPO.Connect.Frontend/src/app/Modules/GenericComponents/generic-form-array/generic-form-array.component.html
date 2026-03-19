@@ -1,0 +1,94 @@
+<div class="form-group animated" [style.--delay]="(index * 80) + 'ms'"
+    [style.grid-column]="genericFormService.GetWidth(controlFullName) ? 'span ' + (genericFormService.GetWidth(controlFullName)! > 20 ? 2 : 1) : 'auto'">
+    <!-- {{controlFullName}} - {{control.value | json}}  -->
+
+    <label *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')!=='LABLE'" [for]="controlFullName"
+        [ngClass]="{'alert-danger':genericFormService.returnFormErrors(controlFullName)}">
+        {{genericFormService.GetPropertyValue(controlFullName,'cdMendLbl')}}
+        : <span style="color: red;"
+            *ngIf="!isNotRequired && (genericFormService.filedIsRequired(genericFormService.GetPropertyValue(controlFullName,'cdmendTxt')) 
+            || (genericFormService.filedIsRequired(genericFormService.GetPropertyValue(controlFullName,'cdmendTxt')) && control.enabled))">*</span></label>
+
+
+
+    <!------------------------------------------------------------------------ LABLE ----------------------------------------------------------------------->
+    <label *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')==='LABLE'" [for]="controlFullName"
+        [ngClass]="{'alert-danger':genericFormService.returnFormErrors(controlFullName)}" style="font-weight: bold; margin-left:2rem;color:green;font-size:1rem"> 
+        {{ genericFormService.GetPropertyValue(controlFullName,'defaultValue') }}
+    </label>
+
+    <!------------------------------------------------------------------------ InputText ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='InputText'">
+        <app-input-text [parentForm]="ticketForm" [controlFullName]="controlFullName"
+            [control]="genericFormService.GetControl( mandFileds,controlFullName)"
+            [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled"
+            *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='InputText'"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-input-text>
+    </div>
+    <!------------------------------------------------------------------------ DomainUser ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='DomainUser'">
+        <app-domain-user [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control, $event.eventType)"></app-domain-user>
+    </div>
+    <!------------------------------------------------------------------------ InputText-integeronly ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='InputText-integeronly'">
+        <app-input-text-integeronly [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-input-text-integeronly>
+    </div>
+    <!------------------------------------------------------------------------ Textarea  ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='Textarea'">
+        <app-textarea [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-textarea>
+    </div>
+    <!------------------------------------------------------------------------ RadioButton  ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='RadioButton'">
+        <app-radio-button [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [useDefaultRadioView]="useDefaultRadioView" [cdCategoryMandDto]="filtered_CategoryMand[index]"
+            [isDivDisabled]="isDivDisabled"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-radio-button>
+    </div>
+    <!------------------------------------------------------------------------ Dropdown    ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='Dropdown'" style="width: 100%;">
+        <app-dropdown [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled"
+            [isCurrentUser]="isCurrentUser"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-dropdown>
+    </div>
+    <!------------------------------------------------------------------------ Dropdown Tree  ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='DropdownTree'" style="width: 100%;">
+        <app-dropdown-tree [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [tree]="tree" [showTreeButton]="showTreeButton" [cdCategoryMandDto]="filtered_CategoryMand[index]"
+            [isDivDisabled]="isDivDisabled" [isCurrentUser]="isCurrentUser"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-dropdown-tree>
+    </div>
+    <!------------------------------------------------------------------------ File    ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='FileUpload'"
+        style="width: 100%; margin-top:6px;">
+        <app-file-input [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [isDivDisabled]="isDivDisabled" [isCurrentUser]="isCurrentUser"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-file-input>
+    </div>
+    <!------------------------------------------------------------------------ Date    ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='Date'"
+        style="width: 100%;text-align: right;">
+        <app-date [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled" [index]="index"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-date>
+    </div>
+
+    <!------------------------------------------------------------------------ Date Time   ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='DateTime'"
+        style="width: 100%;text-align: right;">
+        <app-date-time [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled" [index]="index"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)">
+        </app-date-time>
+    </div>
+    <!---------------------------onImageError--------------------------------------------- Error Span    ----------------------------------------------------------------------->
+    <span class="alert-danger" *ngIf="genericFormService.returnFormErrors(controlFullName)">
+        {{genericFormService.returnFormErrors(controlFullName)}}
+    </span>
+</div>

@@ -1,0 +1,42 @@
+<p-dialog header="جميع الإشعارات" [(visible)]="display" [modal]="true"
+    [style]="{width: '60vw', minWidth: '400px','direction': 'rtl'}" [contentStyle]="{'overflow':'auto'}" (onHide)="close()">
+    <div class="widget" style="direction: rtl;">
+        <p-table #dt1 [value]="signalRService.Notification" [paginator]="true" [rows]="5" [rowsPerPageOptions]="[5,10,25,50,100 ]"
+            currentPageReportTemplate="عرض {first} إلي {last} من  إجمالي {totalRecords}" dataKey="time"
+            rowExpandMode='single' [showCurrentPageReport]="true" [totalRecords]="signalRService.Notification.length"
+            [globalFilterFields]="['notification', 'type','title','sender','time']" [filterDelay]="0"
+            [responsive]="true" [globalFilter]="search">
+            <ng-template pTemplate="caption">
+                <div class="flex">
+                    <span class="p-input-icon-left mr-auto">
+                        <i class="pi pi-search"></i>
+                        <input pInputText type="text" (input)="onFilterInput($event)" placeholder="بحث" />
+                    </span>
+                </div>
+                <!-- <p-button label=" جديد " icon="pi pi-plus" iconPos="left"> </p-button> -->
+
+            </ng-template>
+            <ng-template pTemplate="header">
+                <tr>
+                    <th pSortableColumn="time">Time <p-sortIcon field="time"></p-sortIcon></th>
+                    <th pSortableColumn="sender">Sender <p-sortIcon field="sender"></p-sortIcon></th>
+                    <th pSortableColumn="title">Title <p-sortIcon field="title"></p-sortIcon></th>
+                    <th>Notification </th>
+                    <th pSortableColumn="type">Type <p-sortIcon field="type"></p-sortIcon></th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-row>
+                <tr>
+                    <td>{{ customDatePipe.transform(row.time,'full') }}</td>
+                    <td>{{ row.sender}}</td>
+                    <td>{{ row.title}}</td>
+                    <td>{{ row.notification}}</td>
+                    <td>{{ row.type}}</td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </div>
+    <ng-template pTemplate="footer">
+        <button pButton type="button" label="Close" (click)="close()" class="p-button-secondary"></button>
+    </ng-template>
+</p-dialog>

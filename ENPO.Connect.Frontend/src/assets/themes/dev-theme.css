@@ -1,0 +1,6 @@
+:root[data-theme="dev"] {
+  --primary-color: #6200ea; /* Deep Purple for Dev */
+  --accent-color: #00e5ff; /* Cyan accent */
+  --surface-color: #f3e5f5; /* Light purple tint background */
+  --text-color: #333;
+}

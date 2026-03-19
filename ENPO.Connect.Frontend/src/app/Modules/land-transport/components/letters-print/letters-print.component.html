@@ -1,0 +1,31 @@
+<div class="container-main">
+
+    <div class="row" style="margin:1rem 1rem 2rem 1rem ;">
+        <div class="col-md-4">
+            <h3><span style="color: green;font-weight: bold;font-style: italic;" *ngIf="IsReprint">إعادة </span>طباعة
+                خطابات المرور :</h3>
+        </div>
+
+        <div class="col-md-6">
+            <div *ngIf="IsReprint" class="form-row">
+                <div class="form-field">
+                    <label>الباكود </label>
+                    <input type="text" placeholder="RLTT Or RLT" class="form-control" [(ngModel)]="barcode">
+                </div>
+                <!-- <div class="form-field">
+                    <label>رقم الرخصة </label>
+                    <input type="text" placeholder="رقم الرخصة" class="form-control" [(ngModel)]="plateNumber">
+                </div> -->
+                <button type="button" class="btn btn-success" [disabled]="barcode.length==0"
+                    (click)="search()" *ngIf="IsReprint" style="padding: 0.5rem 3.5rem;margin: 1.5rem 0 1rem 0">بحث</button>
+            </div>
+        </div>
+        <div class="col-md-2">
+        </div>
+    </div>
+    <div class="row">
+        <div class="widget">
+            <app-ltra-table [vwLtraTransTraficPrint]="vwLtraTransTraficPrint" [IsReprint]="IsReprint"></app-ltra-table>
+        </div>
+    </div>
+</div>

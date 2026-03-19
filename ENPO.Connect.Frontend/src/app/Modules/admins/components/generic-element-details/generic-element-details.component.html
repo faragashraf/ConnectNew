@@ -1,0 +1,229 @@
+<p-dialog class="styled-dialog modern-dialog"
+    [(visible)]="visible"
+    [modal]="true"
+    [style]="style"
+    [closable]="closable"
+    (onHide)="onDialogHide()"
+    appendTo="body"
+    [baseZIndex]="baseZIndex"
+    [dismissableMask]="dismissableMask"
+    [blockScroll]="blockScroll">
+
+    <ng-template pTemplate="header">
+                <div class="dialog-header">
+                    <i [class]="headerIcon + ' dialog-icon'"></i>
+                    <div>
+                        <h3 class="dialog-title">{{ headerTitle }}</h3>
+                        <div class="dialog-subtitle" *ngIf="field">#{{ field.cdmendSql }} - {{ field.cdMendLbl || field.cdmendTxt }}</div>
+                    </div>
+                </div>
+    </ng-template>
+
+    <div class="dialog-body dialog-content" *ngIf="field">
+        <div class="dialog-col dialog-col-left">
+            <!-- reuse existing card/form -->
+            <div class="card">
+                <div class="card-header">
+                    <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h14v-2H3v2zm0-8h14V7H3v2z" />
+                    </svg>
+                    <h2 class="title">Dynamic Fields Manager</h2>
+                </div>
+
+                <form [formGroup]="fieldForm" (ngSubmit)="onSubmit()" class="p-fluid form-card" novalidate>
+                    <p-tabView>
+                        <p-tabPanel header="Basic Information">
+                            <div class="grid-row">
+                                <div class="field">
+                                    <label for="cdmendSql">Field ID</label>
+                                    <input id="cdmendSql" type="number" pInputText class="input" formControlName="cdmendSql" placeholder="Enter field SQL"  />
+                                </div>
+
+                                <div class="field">
+                                    <label for="cdmendType">Field Type</label>
+                                    <p-dropdown id="cdmendType" [options]="fieldTypes" formControlName="cdmendType" placeholder="Select Field Type"></p-dropdown>
+                                </div>
+
+                                <div class="field">
+                                    <label for="cdmendTxt">Field Name</label>
+                                    <input id="cdmendTxt" type="text" pInputText class="input" formControlName="cdmendTxt" placeholder="Enter field cdmendTxt" />
+                                </div>
+
+                                <div class="field">
+                                    <label for="cdMendLbl">Field Label</label>
+                                    <input id="cdMendLbl" type="text" pInputText class="input" formControlName="cdMendLbl" placeholder="Enter field label" />
+                                </div>
+
+                                <div class="field">
+                                    <label for="placeholder">Place Holder</label>
+                                    <input id="placeholder" type="text" pInputText class="input" formControlName="placeholder" placeholder="Enter Placeholder" />
+                                </div>
+
+                                <div class="field">
+                                    <label for="width">Width <span *ngIf="fieldForm.get('cdmendType')?.value == 'Textarea'">(col)</span> <span *ngIf="fieldForm.get('cdmendType')?.value != 'Textarea'"> / rem</span> </label>
+                                    <input id="width" type="number" pInputText class="input" formControlName="width" placeholder="Enter width" />
+                                </div>
+                            </div>
+
+                            <div class="grid-row">
+                                <div class="field">
+                                    <label for="defaultValue">Default Value</label>
+                                    <input id="defaultValue" type="text" pInputText class="input" formControlName="defaultValue" placeholder="Enter Default Value" />
+                                </div>
+                                <div class="field">
+                                    <label for="height">Height <span *ngIf="fieldForm.get('cdmendType')?.value == 'Textarea'">(row)</span> <span *ngIf="fieldForm.get('cdmendType')?.value != 'Textarea'"> / rem</span> </label>
+                                    <input id="height" type="number" pInputText class="input" formControlName="height" placeholder="Enter Height" />
+                                </div>
+                                <div class="field">
+                                    <label for="cdmendType">Application Id</label>
+                                    <input id="cdmendType" type="text" pInputText class="input" formControlName="applicationId" placeholder="Enter Application Id" />
+                                </div>
+                            </div>
+                        </p-tabPanel>
+
+                        <p-tabPanel header="Validations">
+                            <div class="grid-row-validations">
+                                <div class="field">
+                                    <label for="min">Min</label>
+                                    <input id="min" type="number" pInputText class="input" formControlName="min" placeholder="Enter Min Value" />
+                                </div>
+                                <div class="field">
+                                    <label for="max">Max</label>
+                                    <input id="max" type="number" pInputText class="input" formControlName="max" placeholder="Enter Max Value" />
+                                </div>
+                                <div class="field">
+                                    <label for="minxLenght">Min Length</label>
+                                    <input id="minxLenght" type="number" pInputText class="input" formControlName="minxLenght" placeholder="Enter Min Length" />
+                                </div>
+                                <div class="field">
+                                    <label for="maxLenght">Max Length</label>
+                                    <input id="maxLenght" type="number" pInputText class="input" formControlName="maxLenght" placeholder="Enter Max Length" />
+                                </div>
+                                <div class="field">
+                                    <label for="cdmendmask">Mask</label>
+                                    <input id="cdmendmask" type="text" pInputText class="input" formControlName="cdmendmask" placeholder="Enter Mask" />
+                                </div>
+                            </div>
+
+                            <div class="toggle-row" role="group" aria-label="Field validation toggles">
+                                <div class="toggle" role="presentation">
+                                    <label>Required</label>
+                                    <p-toggleButton onLabel="Required" offLabel="Not Required" formControlName="required" aria-label="Required"></p-toggleButton>
+                                </div>
+                                <div class="toggle" role="presentation">
+                                    <label>Required True</label>
+                                    <p-toggleButton onLabel="RequiredTrue" offLabel="Not Required True" formControlName="requiredTrue" aria-label="Required True"></p-toggleButton>
+                                </div>
+                                <div class="toggle" role="presentation">
+                                    <label>Email</label>
+                                    <p-toggleButton onLabel="Email" offLabel="Not Email" formControlName="email" aria-label="Email"></p-toggleButton>
+                                </div>
+                                <div class="toggle" role="presentation">
+                                    <label>Pattern</label>
+                                    <p-toggleButton onLabel="Pattern" offLabel="No Pattern" formControlName="pattern" aria-label="Pattern"></p-toggleButton>
+                                </div>
+                                <div class="toggle" role="presentation">
+                                    <label>Status</label>
+                                    <p-toggleButton onLabel="Active" offLabel="Inactive" formControlName="cdmendStat" aria-label="Active"></p-toggleButton>
+                                </div>
+                                <div class="toggle" role="presentation">
+                                    <label>Disabled on Init</label>
+                                    <p-toggleButton onLabel="Disabled" offLabel="Enabled" formControlName="isDisabledInit" aria-label="Disabled on Init"></p-toggleButton>
+                                </div>
+                                <div class="toggle" role="presentation">
+                                    <label>Is Searchable</label>
+                                    <p-toggleButton onLabel="Displayed" offLabel="Not Displayed" formControlName="isSearchable" aria-label="Is Searchable"></p-toggleButton>
+                                </div>
+                            </div>
+                        </p-tabPanel>
+
+                        <p-tabPanel *ngIf="field && ['Dropdown', 'RadioButton', 'DropdownTree'].includes(fieldForm.get('cdmendType')?.value)" header="Edit cdmendTbl">
+                            <div class="list-container" formArrayName="cdmendTbl">
+                                <h3 class="list-title">Edit Field Selection</h3>
+
+                                <!-- Header row: shown once -->
+                                <div class="list-header" role="row">
+                                    <div class="col col-index" role="columnheader">#</div>
+                                    <div class="col col-key" role="columnheader">Key</div>
+                                    <div class="col col-name" role="columnheader">Name</div>
+                                    <div class="col col-actions" role="columnheader">Actions</div>
+                                </div>
+
+                                <!-- Items rendered as rows with columns -->
+                                <div *ngFor="let item of cdmendTblFormArray.controls; let i = index" [formGroupName]="i" class="list-row" [attr.data-index]="i" role="row">
+                                    <div class="col col-index" role="cell">
+                                        <span class="item-index">{{ i + 1 }}.</span>
+                                    </div>
+                                    <div class="col col-key" role="cell">
+                                        <input pInputText class="input" formControlName="key" placeholder="Enter Key" (blur)="onUpdateControlSelection()" />
+                                    </div>
+                                    <div class="col col-name" role="cell">
+                                        <input pInputText class="input" formControlName="name" placeholder="Enter Name" (blur)="onUpdateControlSelection()" />
+                                    </div>
+                                    <div class="col col-actions" role="cell">
+                                        <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-sm" (click)="onRemoveSelection(i)" aria-label="Remove item"></button>
+                                    </div>
+                                </div>
+
+                                <div class="add-row">
+                                    <button pButton type="button" label="Add New" class="p-button-rounded p-button-primary add-btn" (click)="onAddNewSelection()"></button>
+                                </div>
+                            </div>
+                        </p-tabPanel>
+                    </p-tabView>
+
+                    <div class="actions">
+                        <!-- kept for backward compatibility; parent may project footer buttons instead -->
+                        <ng-content select="[default-actions]"></ng-content>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="dialog-col dialog-col-right">
+            <!-- Internalized preview (moved from parent projection) -->
+            <div dialog-preview *ngIf="field">
+                <div class="preview-card preview-card-animated">
+                    <div class="preview-header">
+                        <h4>Preview</h4>
+                    </div>
+                    <div class="preview-body">
+                        <p><strong>Label:</strong> {{ field.cdMendLbl }}</p>
+                        <p><strong>Name:</strong> {{ field.cdmendTxt }}</p>
+                        <p><strong>Type:</strong> <span class="type-pill">{{ field.cdmendType }}</span></p>
+                        <p *ngIf="field.placeholder"><strong>Placeholder:</strong> {{ field.placeholder }}</p>
+                        <form *ngIf="ticketForm" [formGroup]="ticketForm" style="direction: rtl;">
+                            <div formArrayName="mandFileds_1" class="form-array" [class.disabled-div]="false">
+                                <div *ngFor="let mandFiled of mandFileds_1.controls; let i=index" [formGroupName]="i">
+                                    <div *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)">
+                                        <app-generic-form-array [controlFullName]="ctrlName" [index]="i" [filtered_CategoryMand]="filtered_1_CategoryMand" [isDivDisabled]="false" [ticketForm]="ticketForm" [mandFileds]="mandFileds_1" (genericEvent)="genericFormService.handleGenericEvent($event)"></app-generic-form-array>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                        <div *ngIf="cdmendTblFormArray?.length">
+                            <strong>Options:</strong>
+                            <ul class="preview-options">
+                                <li *ngFor="let o of cdmendTblFormArray.value">{{ optionLabel(o) }}</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+        <div class="dialog-footer">
+            <!-- Render projected footer if parent provided one, otherwise use internal default -->
+            <ng-container *ngIf="hasProjectedFooter; else defaultFooter">
+                <ng-content select="[dialog-footer]"></ng-content>
+            </ng-container>
+            <ng-template #defaultFooter>
+                <button pButton type="button" label="Cancel" class="p-button-text" (click)="close()"></button>
+                <button pButton type="button" label="Save" icon="pi pi-check" class="p-button-primary" (click)="saveAndClose()"></button>
+            </ng-template>
+        </div>
+    </ng-template>
+
+</p-dialog>

@@ -1,0 +1,159 @@
+<div class="container-main" style="width: 95%;"  >
+    <div class="widget">
+        <div class="row" style="direction:rtl;font-family: 'Times New Roman', Times, serif;">
+            <img src="assets/imges/LandTrasport.jpeg" height="100" width="320" class="mr-2" />
+            <table>
+                <tr>
+                    <td style="width: 600px;">
+                        <div class="row" style="margin-right: 40px;font-size: x-large;font-weight: bold;">
+                            السيد اللواء / مدير إدارة
+                        </div>
+                    </td>
+                    <td style="text-align: left;width: 200px">
+                        <table style="width: 100%; border-collapse:collapse; margin: 15px 0; border: 1px solid #000;">
+                            <tr>
+                                <td
+                                    style="border-collapse:collapse; margin: 15px 0; border: 1px solid #000;text-align: center;">
+                                    مزاولة رقم
+                                </td>
+                                <td
+                                    style="border-collapse:collapse; margin: 15px 0; border: 1px solid #000;text-align: center">
+                                    كود الخطاب
+                                </td>
+                            </tr>
+                            <tr>
+                                <td
+                                    style="border-collapse:collapse; margin: 15px 0; border: 1px solid #000;text-align: center;">
+                                    {{vwLtraTransTraficPrint.licensesNum}}
+                                </td>
+                                <td style="border-collapse:collapse; margin: 15px 0; border: 1px solid #000;">
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+            <div style="font-size: x-large;">
+                <div style="margin-right: 200px">
+                    {{vwLtraTransTraficPrint.trafficUnitId}} - {{
+                    vwLtraTransTraficPrint.governorateId}}
+                </div>
+                <div class="row" style="margin-right: 350px;">
+                    تحيه طيبه وبعد،
+                </div>
+            </div>
+            <div style="font-size: large;margin-top: 20px;">
+                <div class="row">
+                    في إطار تفعيل قانون (73) لسنة (2019) بإصدار قانون إنشاء جهاز تنظيم النقل البري الداخلي والدولي
+                    وطبقاً
+                    للمادة (34) التي تنص على "يشترط لإصدار ترخيص تسير سيارات النقل البري للركاب أو شاحنات النقل البري
+                    للبضائع الخاضعة لاحكام هذا القانون، او تجديدها الحصول على موافقة الجهاز".
+                </div>
+                <div class="row">
+                    لذا يرجى التفضل بالتنبية بإتخاذ الإجراءات اللازمة بشأن ترخيص السيارة بصفة
+                    <span style="font-weight: bold;">{{vwLtraTransTraficPrint.carActivity}}</span> وطبقاً للبيانات
+                </div>
+                <table style="width: 100%; border-collapse:separate; margin: 15px 0; border: 1px solid #000;">
+                    <tr>
+                        <td
+                            style="width: 25%; text-align: left; border: 1px solid #000;font-weight: bold;font-size: large">
+                            اســـــم الــشـــركــــة/الــــنـــاقل
+                        </td>
+                        <td style="width: 70%; text-align: right; padding: 8px; border: 1px solid #000;">
+                            {{vwLtraTransTraficPrint.companyName}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="width: 25%; text-align: left; border: 1px solid #000;font-weight: bold;font-size: large">
+                            تاريخ الترخيص مزاولة النشاط
+                        </td>
+                        <td style="width: 70%; text-align: right; padding: 8px; border: 1px solid #000;">
+                            {{vwLtraTransTraficPrint.replyLicenseFrom | date:'dd-MM-yyyy'}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="width: 25%; text-align: left; border: 1px solid #000;font-weight: bold;font-size: large">
+                            رقــم الــلــوحــة الــمــعــدنــيــة
+                        </td>
+                        <td style="width: 70%; text-align: right; padding: 8px; border: 1px solid #000;">
+                            {{vwLtraTransTraficPrint.plateNumber}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="width: 25%; text-align: left; border: 1px solid #000;font-weight: bold;font-size: large">
+                            مـــــــــــــــــاركــــــــــــــــــــــة </td>
+                        <td style="width: 70%; text-align: right; padding: 8px; border: 1px solid #000;">
+                            {{vwLtraTransTraficPrint.vehicleBrand}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="width: 25%; text-align: left; border: 1px solid #000;font-weight: bold;font-size: large">
+                            الـــــــــــــمـــــــــــوديـــــــــــــل </td>
+                        <td style="width: 70%; text-align: right; padding: 8px; border: 1px solid #000;">
+                            {{vwLtraTransTraficPrint.yearOfManufacture}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="width: 25%; text-align: left; border: 1px solid #000;font-weight: bold;font-size: large">
+                            رقــــــــــم الـــــشــــاســـيـــــــة </td>
+                        <td style="width: 70%; text-align: right; padding: 8px; border: 1px solid #000;">
+                            {{vwLtraTransTraficPrint.chassisNumber}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="width: 25%; text-align: left; border: 1px solid #000;font-weight: bold;font-size: large">
+                            رقـــــــــــم الــــــمــــــــوتـــــور </td>
+                        <td style="width: 70%; text-align: right; padding: 8px; border: 1px solid #000;">
+                            {{vwLtraTransTraficPrint.engineNumber}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="width: 25%; text-align: left; border: 1px solid #000;font-weight: bold;font-size: large">
+                            الـــهــيــــكل ونــوع الـخــدمــــة </td>
+                        <td style="width: 70%; text-align: right; padding: 8px; border: 1px solid #000;">
+                            {{vwLtraTransTraficPrint.modelBody}} - {{vwLtraTransTraficPrint.numberOfSeats}} مقعد
+                        </td>
+                    </tr>
+                </table>
+                <!-- <div class="row">
+                    ونحيط سيادتكم علما بأن هذا الترخيص لمدة <span style="font-weight: bold;"
+                        *ngIf="vwLtraTransTraficPrint!=undefined&& vwLtraTransTraficPrint.licenseDuration>1"> {{vwLtraTransTraficPrint.licenseDuration}} </span>
+                    <span
+                        *ngIf="vwLtraTransTraficPrint!=undefined&& vwLtraTransTraficPrint.licenseDuration>1">سنوات</span>
+                    <span *ngIf="vwLtraTransTraficPrint!=undefined&& vwLtraTransTraficPrint.licenseDuration==1">سنة
+                        واحده </span>
+                    فقط ولا يتم التجديد مرة أخرى إلا بموافقة جهاز
+                    تنظيم
+                    النقل البري الداخلي والدولي
+                    علما بأن هذا الخطاب ساري لمدة شهرين من تاريخه.
+                </div> -->
+                <div class="row">
+                    ونحيط سيادتكم علما بأن هذا الترخيص لمدة سنة واحدة فقط ولا يتم التجديد مرة أخرى إلا بموافقة جهاز
+                    تنظيم
+                    النقل البري الداخلي والدولي
+                    علما بأن هذا الخطاب ساري لمدة شهرين من تاريخه.
+                </div>
+            </div>
+            <div class="row" style="margin-right: 310px;font-size: x-large;font-weight: bold;margin-top: 30px;">
+                وتفضلوا بقبول فائق الإحترام ،،،
+            </div>
+            <div class="row" style="margin-right: 440px;margin-top: 25px;;font-size: x-large;font-weight: bold;">
+                الادارة المركزية
+            </div>
+            <div class="row"
+                style="margin-right: 300px;margin-top: 25px;;font-size: x-large;font-weight: bold;text-align: center;">
+                لخدمات النقل البري للركاب
+            </div>
+            <div class="row" style="margin-right: 50px;margin-top: 35px;text-align: right">
+                تاريخ الإصدار {{vwLtraTransTraficPrint.transDate | date:'dd-MM-yyyy'}}
+            </div>
+        </div>
+    </div>
+</div>

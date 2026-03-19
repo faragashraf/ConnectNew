@@ -1,0 +1,25 @@
+.alert-danger{
+    color: red;
+}
+.form-group {
+    margin: 0.5rem;
+    margin-bottom: 1rem;
+    min-width: 18.5rem;
+  }
+label {
+    padding: 0  .5rem 0 .5rem;
+    display: flex ;
+    width: 10rem;
+    min-width: 18.5rem;
+    color: rgb(0, 59, 252);
+    font-size: x-large;
+    font-family: 'Times New Roman', Times, serif;
+    font-weight: bold;
+    // margin-left: .5rem;
+  }
+  input{
+    margin-left: .5rem;
+  }
+  button{
+    border-radius: 50rem;
+  }

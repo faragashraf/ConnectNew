@@ -1,0 +1,67 @@
+<div class="widget">
+    <h3>{{foundRouteInitMap.entryTitle}}</h3>
+    <p-dialog [header]="selectedNode.label +' - تفاصيل عنصر القائمة'" [(visible)]="menuDialogVisible" [modal]="true"
+        [style]="{width: '420px'}" [closable]="false">
+        <form [formGroup]="menuDialogForm" (ngSubmit)="submitMenuDialog()">
+            <div class="p-fluid">
+                <div class="p-field">
+                    <label for="menuName">اسم القائمة</label>
+                    <input id="menuName" type="text" pInputText formControlName="MENU_ITEM_NAME" />
+                </div>
+                <div class="p-field">
+                    <label for="application">التطبيق</label>
+                    <input id="application" type="text" pInputText formControlName="APPLICATION" />
+                </div>
+            </div>
+            <p-footer>
+                <button type="button" class="btn btn-secondary" (click)="cancelMenuDialog()">إلغاء</button>
+                <button type="submit" class="btn btn-primary" [disabled]="menuDialogForm.invalid">تنفيذ</button>
+            </p-footer>
+        </form>
+    </p-dialog>
+    <p-splitter [panelSizes]="panelSizes" styleClass="mb-3">
+        <ng-template pTemplate *ngIf="this.routeEndWith('AddNew')|| this.routeEndWith('FullPublication')">
+            <div class="pane-content sidebar-pane " [class.highlight]="highlightTree">
+                <app-tree-sidebar [tree]="tree" [selectedNode]="selectedNode" [title]="'القائمة الرئيسية'"
+                    [expandedWidth]="100" [scrollHeight]="37" [allExpanded]="true"
+                    [showTreeContextMenu]="authObjectsService.checkAuthFun('AddMenuItemsFunc')"
+                    [contextMenuItems]="contextMenuItems" (onNodeSelect)="onNodeSelect($event)"
+                    (onNodeContextMenuSelect)="onNodeContextMenuSelect($event)"
+                    (onNodeDragStart)="onNodeDragStart($event)" (onNodeDragEnd)="onNodeDragEnd($event)"
+                    (contextMenuItemSelected)="onContextMenuItemSelected($event)">
+                </app-tree-sidebar>
+            </div>
+        </ng-template>
+        <ng-template pTemplate>
+            <!-- {{PublicationForm.value|json}} - {{PublicationForm.valid}} -->
+            <app-choice-hint
+                [isHidden]="(menuItemId != 0 && (foundRouteInitMap.key == 'AddNew') || ( foundRouteInitMap.key != 'AddNew'))"></app-choice-hint>
+
+            <p-splitter layout="vertical" [panelSizes]="[40,10]"
+                [hidden]="(menuItemId == 0  && foundRouteInitMap.key == 'AddNew')">
+                <ng-template pTemplate>
+                    <div style="text-align: center;">
+                        <div class=" pane-content">
+                            <h4>{{path}}</h4>
+                            <app-form-details [config]="config" [categoryTree]="categoryTree" *ngIf="config"
+                                (ticketFormChange)="updateForm($event)" (submitFormChange)="onSubmitPublication()"
+                                [formSubmited]="formSubmited" [messageDto]="messageDto"
+                                (genericEvent)="handleGenericEvent($event)"></app-form-details>
+                        </div>
+                    </div>
+                </ng-template>
+                <ng-template pTemplate style="display: flex;
+                        flex-direction: row;
+                        flex-wrap: nowrap;
+                        justify-content: flex-end;
+                        align-items: center">
+                    <div>
+                        <!-- <button type="button" class="btn btn-primary" (click)="submit()"
+                            [disabled]="foundRouteInitMap.key == 'AddNew' ? 
+                            (menuItemId == 0 || PublicationForm.invalid || fileParameters.length == 0) : (PublicationForm.invalid )">تسجيل</button> -->
+                    </div>
+                </ng-template>
+            </p-splitter>
+        </ng-template>
+    </p-splitter>
+</div>

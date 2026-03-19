@@ -1,0 +1,27 @@
+<div class="form-group file-input-root"  [style.width.rem]="genericFormService.GetWidth(controlFullName) || (genericFormService.GetPropertyValue(controlFullName,'width') | slice:0:-3)" [class.dragging]="dragging" (drop)="onDrop($event)" 
+    (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)">
+    <div *ngIf="fileName" class="file-info">
+        <div class="file-info-row">
+            <div class="file-details" [title]="fileName">
+                <i class="pi pi-file-pdf"></i>
+                <span class="file-name-text">{{ truncateName(fileName, 25) }}</span>
+                <span class="file-size">({{ getFileSize(fileSize) }})</span>
+            </div>
+            <button type="button" class="cust-remove-btn" (click)="removeFile()">
+                <i class="pi pi-trash"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="file-upload" [class.has-file]="fileName">
+        <label for="fileUpload" class="upload-button">
+            <i class="pi pi-cloud-upload"></i>
+            {{ fileName ? 'استبدال الملف' : 'رفع ملف PDF' }}
+        </label>
+        <input type="file" id="fileUpload" name="fileUpload" accept=".pdf" hidden (change)="onFileSelected($event)">
+    </div>
+
+    <div *ngIf="fileError" class="invalid-feedback-err">
+        {{ fileError }}
+    </div>
+</div>

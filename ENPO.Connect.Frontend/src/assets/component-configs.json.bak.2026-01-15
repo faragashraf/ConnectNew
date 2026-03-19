@@ -1,0 +1,158 @@
+[
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل",
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "method": "administrativeCertificateController.getAllRequests",
+        "args": [
+          {
+            "pageNumber": 1,
+            "pageSize": 5,
+            "status": 5,
+            "categoryCd": 0,
+            "type": 1,
+            "requestedData": 0,
+            "search": {
+              "isSearch": false,
+              "searchKind": 0,
+              "searchField": "",
+              "searchText": "",
+              "searchType": ""
+            }
+          }
+        ],
+        "requestsSelectionFields": [],
+        "arr": "this.messageDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      }
+      ,{
+        "method": "dynamicFormController.getMandatoryAll",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arr": "this.genericFormService.cdCategoryMandDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getMandatoryMetaDate",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arr": "this.genericFormService.cdmendDto",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": []
+      },
+      {
+        "method": "dynamicFormController.getAllCategories",
+        "args": [
+          "ADMIN CER"
+        ],
+        "requestsSelectionFields": [],
+        "arr": "this.genericFormService.cdcategoryDtos",
+        "wrapBodyAsArray": false,
+        "populateMethod": "populateTreeGeneric",
+        "populateArgs": [
+          "catId",
+          "catParent",
+          "catName",
+          "this.categoryTree",
+          true,
+          true
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".png",
+        ".jpg",
+        ".pdf"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": false,
+      "maxFileCount": 0,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "pageSizes": [
+      5,
+      10,
+      25,
+      50
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      }
+    ],
+    "showAttachmentSection": true,
+    "AllowedExtensions": [],
+    "maximumFileSize": 2,
+    "routeKey": "AdminCer/AreaRequests",
+    "componentTitle": "الطلبات الواردة من المكاتب",
+    "genericFormName": "ADMIN CER",
+    "menuId": 1,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 1,
+      "requestedData": 0,
+      "search": {
+        "isSearch": false,
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [
+      "messageId",
+      "requestRef",
+      "categoryCd",
+      "inquiryType",
+      "status"
+    ],
+    "isNew": false,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": "وسط و شمال القاهرة - خدمة العملاء"
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": true,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": "2025-12-26T12:45:55.304Z",
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "sticky": true
+    },
+    "deadStatus": [
+      4
+    ],
+    "totalRecords": 129,
+    "tableColumns": [],
+    "selectedNodeKey": ""
+  }
+]

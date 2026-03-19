@@ -1,0 +1,13 @@
+<div class="otp-container" [class.loading]="loading" [class.disabled]="disabled">
+    <form>
+        <div class="inputs-wrapper" dir="ltr">
+            <input *ngFor="let val of otpValues; let i = index; trackBy: trackByIdx" #otpInput type="text"
+                inputmode="numeric" autocomplete="one-time-code" class="otp-digit" [formControl]="getControl(i)"
+                [disabled]="disabled || loading" (input)="onInput($event, i)" (keydown)="onKeyDown($event, i)"
+                (paste)="onPaste($event)" (focus)="handleFocus($event)">
+        </div>
+    </form>
+    <div *ngIf="errorText" class="otp-error">
+        {{ errorText }}
+    </div>
+</div>

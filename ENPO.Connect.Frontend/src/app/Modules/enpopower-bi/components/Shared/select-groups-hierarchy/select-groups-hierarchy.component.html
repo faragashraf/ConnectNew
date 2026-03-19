@@ -1,0 +1,30 @@
+<!-- {{messageDtos|json}} -->
+<div class="row" >
+    <div class="widget">
+        <p-tree [value]="selectGroupService.treeData" selectionMode="single" [(selection)]="selectGroupService.GroupsSelectedNode" [filter]="true"
+            filterMode="lenient" [contextMenu]="!selectGroupService.IsSaveNewSelect?cm:null" (onNodeContextMenuSelect)="ContextMenuSelect($event)"
+            filterPlaceholder="Search" scrollHeight="600px" (onNodeSelect)="nodeSelection($event)"
+            (onNodeUnselect)="nodeUnselection($event)" [validateDrop]="true" [draggableNodes]="true"
+            [droppableNodes]="true" draggableScope="self" droppableScope="self" (onNodeDrop)="onNodeDrop($event)">
+            <ng-template let-node pTemplate="default">
+                <div [class]="node.styleClass"> <!-- Apply the style class from your TreeNode -->
+                    <span [class.filter-highlight]="isFilterMatch(node.label)">
+                        <!-- Add symbols based on node type -->
+                        <span class="node-icon">
+                            {{ getNodeSymbol(node.data?.sbType) }}
+                        </span>
+
+                        <!-- Main label -->
+                        <span class="node-label">{{ node.label }}</span>
+
+                        <!-- Optional badge for PRIV items -->
+                        <span *ngIf="node.data?.sbType === 'PRIV'" class="priv-badge">
+                            (Privilege)
+                        </span>
+                    </span>
+                </div>
+            </ng-template>
+        </p-tree>
+    </div>
+</div>
+<p-contextMenu [style]="{'width':'22.5rem','direction':'ltr'}" #cm [model]="items"></p-contextMenu>

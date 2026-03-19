@@ -1,0 +1,24 @@
+<div class="container-main">
+    <div class="row" style="margin:0rem 0 .25rem 3rem;">
+        <div class="col-md-10">
+            <h4>{{config.componentTitle}} <span style="color: green; font-size: x-large;"
+                    *ngIf="config.listRequestModel && config.listRequestModel.requestedData!== 3"> - {{userArName}} <span *ngIf="unitName"> - {{unitName}}</span>
+                </span></h4>
+        </div>
+
+        <div class="col-md-2" style="text-align: left;">
+            <button id="tour-requests-restart" pButton type="button" 
+            class="p-button-rounded p-button-text p-button-help"
+            (click)="startTour()"
+            style="width: 4rem; height: 4rem;font-size: xx-large"
+            pTooltip="إعادة تشغيل الجولة التعريفية" tooltipPosition="bottom">
+        <i style="font-size: 2.5rem;" class="pi pi-video"></i></button>
+        </div>
+    </div>
+    <div class="row">
+        <app-request-table [messageDtos]="messageDtos" [config]="config" [loading]="loading" [unitTree]="unitTree"
+            [admCertDeptDtos]="admCertDeptDtos" (listRequestModelChange)="onRecievelistRequestModel($event)"
+            [genericFormService]="genericFormService">
+        </app-request-table>
+    </div>
+</div>

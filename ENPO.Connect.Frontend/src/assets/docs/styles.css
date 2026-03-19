@@ -1,0 +1,170 @@
+/* Shared documentation styles (light + dark mode friendly) */
+:root,
+.vscode-light {
+  color-scheme: light dark;
+  --doc-brand: #0ea5e9;
+  --doc-accent: #06b6d4;
+  --doc-text: #0f172a;
+  --doc-muted: #334155;
+  --doc-bg: #ffffff;
+  --doc-card: #f8fafc;
+  --doc-card-alt: #f1f5f9;
+  --doc-border: rgba(15, 23, 42, 0.08);
+  --doc-hero-bg: linear-gradient(90deg, #0f172a, #0b2a4a);
+  --doc-hero-text: #f8fafc;
+  --doc-badge-bg: var(--doc-accent);
+  --doc-badge-text: #04263a;
+  --doc-code-bg: #fff7ed;
+  --doc-code-text: #0f172a;
+  --doc-step-bg: #fff7ed;
+  --doc-step-border: #f59e0b;
+  --doc-link: #0284c7;
+  --doc-list-marker: var(--doc-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --doc-brand: #38bdf8;
+    --doc-accent: #22d3ee;
+    --doc-text: #e2e8f0;
+    --doc-muted: #cbd5f5;
+    --doc-bg: #0b1220;
+    --doc-card: #0f172a;
+    --doc-card-alt: #111827;
+    --doc-border: rgba(148, 163, 184, 0.18);
+    --doc-hero-bg: linear-gradient(90deg, #0b1220, #0f172a);
+    --doc-hero-text: #e2e8f0;
+    --doc-badge-bg: #0ea5e9;
+    --doc-badge-text: #071a2a;
+    --doc-code-bg: #111827;
+    --doc-code-text: #fbbf24;
+    --doc-step-bg: #1f2937;
+    --doc-step-border: #fbbf24;
+    --doc-link: #38bdf8;
+    --doc-list-marker: #22d3ee;
+  }
+}
+
+.vscode-dark,
+.vscode-high-contrast {
+  --doc-brand: #38bdf8;
+  --doc-accent: #22d3ee;
+  --doc-text: #e2e8f0;
+  --doc-muted: #cbd5f5;
+  --doc-bg: #0b1220;
+  --doc-card: #0f172a;
+  --doc-card-alt: #111827;
+  --doc-border: rgba(148, 163, 184, 0.18);
+  --doc-hero-bg: linear-gradient(90deg, #0b1220, #0f172a);
+  --doc-hero-text: #e2e8f0;
+  --doc-badge-bg: #0ea5e9;
+  --doc-badge-text: #071a2a;
+  --doc-code-bg: #111827;
+  --doc-code-text: #fbbf24;
+  --doc-step-bg: #1f2937;
+  --doc-step-border: #fbbf24;
+  --doc-link: #38bdf8;
+  --doc-list-marker: #22d3ee;
+}
+
+body,
+.doc-body {
+  background: var(--doc-bg);
+  color: var(--doc-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.doc-hero {
+    background: var(--doc-hero-bg);
+    color: var(--doc-hero-text);
+    padding: 24px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    direction: rtl; /* Default for existing content, consider making dynamic */
+    text-align: right;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.doc-hero h1 { margin: 0; font-size: 2.25rem; font-weight: 800; letter-spacing: -0.025em; }
+
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--doc-badge-bg);
+  color: var(--doc-badge-text);
+  font-weight: 700;
+  margin-top: 8px;
+  font-size: 0.8rem;
+}
+
+.section {
+  background: linear-gradient(180deg, var(--doc-card), var(--doc-card-alt));
+  padding: 12px;
+  border-radius: 8px;
+  margin: 10px 0;
+  border: 1px solid var(--doc-border);
+  text-align: right;
+}
+
+.k { color: #0b5e4b; font-weight: 700; }
+
+.code-inline {
+  background: var(--doc-code-bg);
+  color: var(--doc-code-text);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: monospace;
+}
+
+.step {
+  background: var(--doc-step-bg);
+  padding: 8px;
+  border-radius: 6px;
+  margin: 8px 0;
+  border-left: 4px solid var(--doc-step-border);
+}
+
+/* Headings */
+.doc-body h2,
+.doc-body h3 {
+  color: var(--doc-text);
+  margin-top: 14px;
+}
+
+.doc-body p { margin: 8px 0; }
+
+.doc-body[dir='rtl'] { text-align: right; direction: rtl; }
+.doc-body[dir='ltr'] { text-align: left; }
+
+/* Bold colored bullet points */
+.doc-body ul { padding-left: 1.95rem; }
+.doc-body ul li {
+  margin: 6px 0;
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--doc-text);
+}
+.doc-body ul li::marker {
+  color: var(--doc-list-marker);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+/* Inline code and blocks */
+.doc-body code,
+.doc-body pre {
+  background: var(--doc-code-bg);
+  color: var(--doc-code-text);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: monospace;
+}
+.doc-body pre { padding: 12px; overflow: auto; direction: ltr; text-align: left; }
+.doc-body code { direction: ltr; unicode-bidi: embed; }
+
+a { color: var(--doc-link); }

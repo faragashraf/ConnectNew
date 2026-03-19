@@ -1,0 +1,262 @@
+<div class="card">
+  <p-steps [model]="steps" [(activeIndex)]="activeIndex" [readonly]="false"></p-steps>
+</div>
+<div style="display: flex; flex-direction: row;justify-content: space-around;margin-top: .5rem;">
+  <button pButton label="Previous" icon="pi pi-chevron-left" (click)="prev()" [disabled]="activeIndex === 0"></button>
+  <button pButton label="Next" icon="pi pi-chevron-right" iconPos="right" (click)="next()"
+    [disabled]="activeIndex === steps.length - 1 || (generateQueryService.selectedColumns.length==0)"></button>
+</div>
+<div class="row" style="direction: ltr;">
+  <!-- Schema Selection -->
+  <div class="col" style="width: 15%" *ngIf="activeIndex === 0">
+    <div class="widget card">
+      <div class="selection-group">
+        <h3 class="section-title">
+          <i class="pi pi-database"></i>
+          1. Select Schema
+        </h3>
+        <p-table #dt1 [value]="generateQueryService.SchemaList" [(selection)]="generateQueryService.selectedSchema"
+          dataKey="schemA_NAME" scrollHeight="400px" selectionMode="single" [scrollDirection]="'vertical'"
+          [globalFilterFields]="['schemA_NAME']" (onRowSelect)="onSchemaSelected()"
+          (onRowUnselect)="onUnSchemaSelected()">
+          <ng-template pTemplate="caption">
+            <div
+              style=" display: flex;flex-direction: row;flex-wrap: nowrap;align-items: center;justify-content: space-between;">
+              <span class="p-input-icon-left">
+                <i class="pi pi-search"></i>
+                <input pInputText type="text" (input)="onFilterInput_dt1($event)" placeholder="Search schemas..."
+                  class="search-input" />
+              </span>
+
+              <div class="radio-group flex gap-3">
+                <p-radioButton name="environment" value="production"
+                  [(ngModel)]="generateQueryService.selectedEnvironment" (ngModelChange)="onEnvironmentChange($event)"
+                  label="Production"></p-radioButton>
+                <p-radioButton name="environment" value="test" [(ngModel)]="generateQueryService.selectedEnvironment"
+                  (ngModelChange)="onEnvironmentChange($event)" label="Test"></p-radioButton>
+              </div>
+            </div>
+          </ng-template>
+
+
+          <ng-template pTemplate="header">
+            <tr>
+              <th style="width: 4rem"><p-tableHeaderCheckbox /></th>
+              <th pSortableColumn="schemA_NAME">SCHEMA NAME
+                <p-sortIcon field="schemA_NAME"></p-sortIcon>
+              </th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-schema let-rowIndex="rowIndex">
+            <tr [pSelectableRow]="schema" [pSelectableRowIndex]="rowIndex">
+              <td>
+                <p-tableCheckbox [value]="schema" />
+              </td>
+              <td>{{ schema.schemA_NAME }}</td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table Selection -->
+  <div class="col" *ngIf="activeIndex === 0">
+    <div class="widget card" *ngIf="generateQueryService.tables.length>0">
+      <div class="selection-group">
+        <h3 class="section-title">
+          <i class="pi pi-table"></i>
+          2. Select tables
+        </h3>
+        <p-table #dt2 [value]="generateQueryService.tables" [(selection)]="generateQueryService.selectedTable"
+          dataKey="TABLE_NAME" selectionMode="multiple" [globalFilterFields]="['SCHEMA','TABLE_NAME']"
+          (onRowSelect)="generateQueryService.onTableSelected()"
+          (onRowUnselect)="generateQueryService.onTableSelected()" scrollHeight="400px" [scrollDirection]="'vertical'">
+          <ng-template pTemplate="caption">
+            <div class="table-controls">
+              <span class="p-input-icon-left">
+                <i class="pi pi-search"></i>
+                <input pInputText type="text" (input)="onFilterInput_dt2($event)" placeholder="Search tables..."
+                  class="search-input" />
+              </span>
+            </div>
+          </ng-template>
+          <ng-template pTemplate="header">
+            <tr>
+              <th style="width: 4rem"><p-tableHeaderCheckbox /></th>
+              <th pSortableColumn="SCHEMA">TABLE NAME
+                <p-sortIcon field="SCHEMA"></p-sortIcon>
+              </th>
+              <th pSortableColumn="TABLE_NAME">TABLE NAME
+                <p-sortIcon field="TABLE_NAME"></p-sortIcon>
+              </th>
+              <th pSortableColumn="OBJECT_TYPE">TYPE <p-sortIcon field="OBJECT_TYPE"></p-sortIcon></th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-table let-rowIndex="rowIndex">
+            <tr [pSelectableRow]="table" [pSelectableRowIndex]="rowIndex">
+              <td>
+                <p-tableCheckbox [value]="table" />
+              </td>
+              <td>{{ table.SCHEMA }}</td>
+              <td>{{ table.TABLE_NAME }}</td>
+              <td><span class="type-badge" [style]="{'color':table.OBJECT_TYPE === 'TABLE'?'green':'blue'}">{{
+                  table.OBJECT_TYPE }}</span></td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column Selection -->
+  <div class="col" *ngIf="activeIndex === 0">
+    <div class="widget card"
+      *ngIf="generateQueryService.selectedTable && generateQueryService.selectedTable.length > 0">
+      <div class="selection-group">
+        <h3 class="section-title">
+          <i class="pi pi-list"></i>
+          3. Select columns
+        </h3>
+        <div class="column-controls">
+          <p-button icon="pi pi-check" label="Select All" (click)="toggleAllColumns(true)"
+            class="p-button-sm p-button-outlined"></p-button>
+          <p-button icon="pi pi-times" label="Deselect All" (click)="toggleAllColumns(false)"
+            class="p-button-sm p-button-outlined"></p-button>
+        </div>
+
+        <p-table #dt3 [value]="generateQueryService.columns" [(selection)]="generateQueryService.selectedColumns"
+          dataKey="COLUMN_NAME" scrollHeight="400px" selectionMode="multiple"
+          [globalFilterFields]="['TABLE_NAME','COLUMN_NAME']" [scrollDirection]="'vertical'"
+          (onRowSelect)="generateQueryService.onTableColumnsSelected()">
+          <ng-template pTemplate="caption">
+            <div class="table-controls">
+              <span class="p-input-icon-left">
+                <i class="pi pi-search"></i>
+                <input pInputText type="text" (input)="onFilterInput_dt3($event)"
+                  placeholder="Search generateQueryService.columns..." class="search-input" />
+              </span>
+            </div>
+          </ng-template>
+          <ng-template pTemplate="header">
+            <tr>
+              <th style="width: 4rem"><p-tableHeaderCheckbox />
+              </th>
+              <th pSortableColumn="TABLE_NAME" *ngIf="generateQueryService.selectedTable.length > 1">TABLE
+                <p-sortIcon field="TABLE_NAME"></p-sortIcon>
+              </th>
+              <th pSortableColumn="COLUMN_ID">ID
+                <p-sortIcon field="COLUMN_ID"></p-sortIcon>
+              </th>
+              <th pSortableColumn="COLUMN_NAME">COLUMN
+                <p-sortIcon field="COLUMN_NAME"></p-sortIcon>
+              </th>
+              <th pSortableColumn="DATA_TYPE">TYPE
+                <p-sortIcon field="DATA_TYPE"></p-sortIcon>
+              </th>
+              <th pSortableColumn="NULLABLE">NULL
+                <p-sortIcon field="NULLABLE"></p-sortIcon>
+              </th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-column let-rowIndex="rowIndex">
+            <tr [pSelectableRow]="column" [pSelectableRowIndex]="rowIndex">
+              <td>
+                <p-tableCheckbox [value]="column" />
+              </td>
+              <td *ngIf="generateQueryService.selectedTable.length > 1">{{ column.TABLE_NAME }}</td>
+              <td>{{ column.COLUMN_ID }}</td>
+              <td><strong>{{ column.COLUMN_NAME }}</strong></td>
+              <td><code>{{ column.DATA_TYPE }}({{ column.DATA_LENGTH }})</code></td>
+              <td [style]="{'color':column.NULLABLE === 'Y'?'green':'red'}"
+                style="font-weight: bold;font-size: medium;">{{ column.NULLABLE === 'Y' ? '✓' : '✗' }}
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conditions Section -->
+  <div class="col-12" *ngIf="activeIndex === 1">
+    <div class="row conditions-section">
+      <!-- Join Conditions -->
+      <div class="col-md-7" *ngIf="generateQueryService.selectedTable && generateQueryService.selectedTable.length > 1">
+        <div class="widget card">
+          <div class="selection-group">
+            <h3 class="section-title">
+              <i class="pi pi-share-alt"></i>
+              4. Define Joins
+            </h3>
+            <div *ngFor="let condition of generateQueryService.joinConditions; let i=index" class="join-condition">
+              <p-dropdown [options]="generateQueryService.selectedTable" optionLabel="TABLE_NAME"
+                [(ngModel)]="condition.leftTable" [panelStyle]="{ 'marginTop': '-200px' }" placeholder="Left Table"
+                class="small-dropdown"></p-dropdown>
+              <p-dropdown [options]="condition.leftTable ? getFilteredColumns(condition.leftTable.TABLE_NAME) : []"
+                optionLabel="COLUMN_NAME" [filter]="true" [(ngModel)]="condition.leftColumn" placeholder="Left Column"
+                [panelStyle]="{ 'marginTop': '-200px' }" class="small-dropdown"></p-dropdown>
+              <p-dropdown [options]="['INNER' , 'LEFT' , 'RIGHT' , 'FULL']" [(ngModel)]="condition.joinType"
+                [panelStyle]="{ 'marginTop': '-200px' }" class="join-type-dropdown"></p-dropdown>
+              <p-dropdown [options]="generateQueryService.selectedTable" optionLabel="TABLE_NAME"
+                [(ngModel)]="condition.rightTable" [panelStyle]="{ 'marginTop': '-200px' }" placeholder="Right Table"
+                class="small-dropdown"></p-dropdown>
+              <p-dropdown [options]="condition.rightTable ? getFilteredColumns(condition.rightTable.TABLE_NAME) : []"
+                optionLabel="COLUMN_NAME" [panelStyle]="{ 'marginTop': '-200px' }" [filter]="true"
+                [(ngModel)]="condition.rightColumn" placeholder="Right Column" class="small-dropdown"></p-dropdown>
+              <button (click)="generateQueryService.removeJoinCondition(i)" class="btn-remove">
+                <i class="pi pi-times"></i>
+              </button>
+            </div>
+            <p-button icon="pi pi-plus" label="Add Join Condition" (click)="generateQueryService.addJoinCondition()"
+              class="p-button-sm p-button-text"></p-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Where Conditions -->
+      <div class="col-md-5">
+        <div class="widget card"
+          *ngIf="generateQueryService.selectedTable && generateQueryService.selectedTable.length > 0">
+          <div class="selection-group">
+            <h3 class="section-title">
+              <i class="pi pi-filter"></i>
+              5. Define Filters
+            </h3>
+            <div *ngFor="let condition of generateQueryService.Conditions; let i=index" class="join-condition">
+              <p-dropdown [options]="generateQueryService.columns" optionLabel="COLUMN_NAME" optionValue="COLUMN_NAME"
+                [filter]="true" [(ngModel)]="condition.col.COLUMN_NAME" placeholder="Column"
+                [panelStyle]="{ 'marginTop': '-200px' }"
+                (onChange)="generateQueryService.onColumnConditionSelected($event, condition)"
+                class="small-dropdown"></p-dropdown>
+              <p-dropdown [options]="['=','<>','>','<','>=','<=','LIKE','IN']" [(ngModel)]="condition.cond"
+                [panelStyle]="{ 'marginTop': '-200px' }" class="operator-dropdown"></p-dropdown>
+              <input type="text" class="form-control value-input" [(ngModel)]="condition.value" placeholder="Value"
+                (input)="generateQueryService.generateSelectStatment()">
+              <button (click)="generateQueryService.removeCondition(i)" class="btn-remove">
+                <i class="pi pi-times"></i>
+              </button>
+            </div>
+            <p-button icon="pi pi-plus" label="Add Filter" (click)="generateQueryService.addCondition()"
+              class="p-button-sm p-button-text"></p-button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Query Output -->
+  <div class="col-12" *ngIf="activeIndex === 2">
+    <div class="widget card">
+      <div class="generate-section">
+        <app-select-statement></app-select-statement>
+        <button class="btn btn-primary" (click)="generateQueryService.parseSqlQuery();activeIndex =0">Segmentate
+        </button>
+
+        <generic-table tableId="itemTable" [tableGenericData]="generateQueryService.tableGenericData" [_columns]="generateQueryService._columns"
+          [showExportButton]="true" [showRemoveColumn]="true" [showDeleteButton]="false" [dataKey]="'ITEM_ID'"
+          [showEditButton]="false"></generic-table>
+      </div>
+    </div>
+  </div>
+</div>

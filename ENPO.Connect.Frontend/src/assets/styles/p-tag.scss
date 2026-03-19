@@ -1,0 +1,35 @@
+$tag-severities: (
+  primary: (bg1: #e3f2fd, bg2: hsla(207, 100%, 50%, 0.466), color: #0d47a1, border: rgba(13,71,161,0.12), weight: 700),
+  secondary: (bg1: #f0f0f0, bg2: hsla(0, 0%, 0%, 0.467), color: #00000077, border: rgba(0,0,0,0.06), weight: 700),
+  info: (bg1: #e0f7fa, bg2: hsla(187, 100%, 50%, 0.466), color: #006064, border: rgba(0,96,100,0.08), weight: 700),
+  warning: (bg1: #fff8e1, bg2: hsla(45, 100%, 50%, 0.466), color: #ff6f00, border: rgba(255,111,0,0.08), weight: 500),
+  danger: (bg1: #ffebee, bg2: hsla(354, 100%, 50%, 0.288), color: #b71c1c, border: rgba(183,28,28,0.08), weight: 700),
+  success: (bg1: #e8f5e9, bg2: hsla(122, 100%, 50%, 0.466), color: #2e7d32, border: rgba(46,125,50,0.08), weight: 700)
+);
+
+// Base p-tag tweaks (keeps tag visually consistent)
+.p-tag {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 1.2rem;
+  line-height: 1;
+  text-align: center;
+  width: 100%;
+}
+
+@each $name, $props in $tag-severities {
+  $bg1: map-get($props, bg1);
+  $bg2: map-get($props, bg2);
+  $color: map-get($props, color);
+  $border: map-get($props, border);
+  $weight: map-get($props, weight);
+
+  .p-tag.p-tag-#{$name} {
+    background: linear-gradient(90deg, $bg1, $bg2);
+    color: $color;
+    border: 1px solid $border;
+    font-weight: $weight;
+    padding: 1rem;
+  }
+}

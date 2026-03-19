@@ -1,0 +1,47 @@
+<!-- {{
+genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') === 'وكيل عنه'
+? 'وكــيلاً عن ' + genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1') + ' / ' +
+genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_NAME')
+: genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE')
+}} -->
+
+<span *ngIf="genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') === 'نفسه'"> -بشخصه- </span>
+
+<span *ngIf="genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') !== 'نفسه'"> بصفته
+
+    <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') === 'ولي طبيعي'"> ولياً عن </span>
+    <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') === 'وكيل عنه'"> وكــيلاً عن </span>
+    <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') === 'مفوض عنه'"> مفوض عن </span>
+    <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') === 'المالك'">مالك - </span>
+    <span>
+        <span
+        *ngIf="genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') !== 'المالك'">{{genericFormService.GetControl(genericFormService.prePrintForm,'TITLE_FIRST_STAKEHOLDER_TYPE|1')?.value}} / </span>
+    </span>
+    <span>{{genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_NAME')}}</span>
+
+    <span
+        *ngIf="genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_VERFICATION_TYPE')!=='اختر'"> {{genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_VERFICATION_TYPE')}}
+        {{genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_ID_NUMBER')}} 
+        {{genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_VERFICATION_NUMBER')}} </span>
+
+        <span
+        *ngIf="genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_VERICATION_TYPE')!=='اختر'"> {{genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_VERICATION_TYPE')}}
+        {{genericFormService.getRequesterFieldTxt(formData,'AUTHORITY_VERICATION_NUMBER')}} </span>
+</span>
+
+
+
+<span *ngIf="genericFormService.getRequesterFieldTxt(formData,'AGENCY_TYPE').length > 0">
+    بموجب
+    <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') === 'مفوض عنه'">
+        التفويض
+    </span>
+    <span *ngIf="genericFormService.getRequesterFieldTxt(formData,'REQUSTER_NATURE') === 'وكيل عنه'">
+        التوكيل
+    </span>
+    "{{genericFormService.getRequesterFieldTxt(formData,'AGENCY_TYPE')}}"
+</span>
+
+<span *ngIf="genericFormService.getRequesterFieldTxt(formData,'AGENCY_NUMBER').length > 0">
+    رقم {{genericFormService.getRequesterFieldTxt(formData,'AGENCY_NUMBER')}}
+</span>

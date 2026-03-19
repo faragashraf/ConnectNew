@@ -1,0 +1,26 @@
+<div class="container-main">
+    <div class="row">
+        <div class="col-md-4">
+            <div style="display: flex;justify-content: center;">
+
+                <!-- File Input -->
+                <input type="file" style="width:250px;font-size: large" class="btn btn-info"
+                    (change)="onFileChange($event)" multiple>
+
+                <button pButton type="button" pTooltip="Upload" iconPos="right" style="margin-right: 1rem;"
+                    icon="pi pi-upload" class="p-button-raised p-button-success"
+                    [disabled]="this.fileParameters.length==0 " (click)="upload()">
+                </button>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div *ngFor="let file of fileParameters; let i = index" style="margin-top: 0.5rem;">
+                <div style="display: flex; align-items: center; color: black;">
+                    <span style="margin-right: 0.5rem;">{{ file.fileName }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+        </div>
+    </div>
+</div>

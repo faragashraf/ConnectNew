@@ -1,0 +1,12 @@
+<textarea type="text" [formControl]="control" [readonly]="isDivDisabled"
+    *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='Textarea'" [id]="controlFullName"
+    [class.disabled-div]="isDivDisabled||genericFormService.GetPropertyValue(controlFullName,'isDisabledInit')=='true'"
+    class="form-control"
+    (blur)="onBlur($event)"
+    (input)="onInput($event)"
+    [placeholder]="genericFormService.GetPropertyValue(controlFullName,'placeholder')"
+    [attr.rows]="genericFormService.GetHeight(controlFullName)"
+    [attr.cols]="genericFormService.GetWidth(controlFullName)"
+    >
+</textarea>
+    <!-- [attr.cols]="genericFormService.GetWidth(controlFullName)" -->

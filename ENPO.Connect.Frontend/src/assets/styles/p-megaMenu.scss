@@ -1,0 +1,423 @@
+/* =========================================================
+   PrimeNG p-megaMenu - Modern RTL + 80vw + Max 2 Rows
+   FULL DROP-IN STYLES (copy/paste as-is)
+   ========================================================= */
+
+/* =======================
+   Main Container (Top Bar)
+   ======================= */
+body .p-megamenu {
+  display: flex;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 0 0 20px 20px;
+  padding: 0.5rem 1.5rem;
+  direction: rtl;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+body .p-megamenu:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* Optional Variant */
+body .p-megaMenu.few-items-blue .p-megamenu {
+  background-color: rgba(50, 247, 66, 0.48);
+}
+
+/* ====================================
+   Root List Items (Top Level Navigation)
+   ==================================== */
+body .p-megamenu .p-megamenu-root-list {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+body .p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link {
+  padding: 0.75rem 1.25rem;
+  color: var(--app-text-secondary, #64748b);
+  font-weight: 600;
+  border-radius: 12px;
+  transition: all 0.25s ease;
+  background: transparent;
+  border: none;
+}
+
+body .p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link:not(.p-disabled):hover {
+  background: var(--app-primary-light, rgba(79, 70, 229, 0.08));
+  color: var(--app-primary, #4f46e5);
+  transform: translateY(-2px);
+}
+
+body .p-megamenu .p-megamenu-root-list>.p-menuitem.p-menuitem-active>.p-menuitem-link {
+  background: linear-gradient(135deg, #4f46e500 0%, #bbed3a96 100% 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35);
+  transform: translateY(-1px);
+}
+
+/* Ensure active item's hover has a subtle, consistent background (matches theme rule) */
+body .p-megamenu .p-megamenu-root-list>.p-menuitem.p-menuitem-active>.p-menuitem-link:not(.p-disabled):hover {
+  background: linear-gradient(135deg, var(--app-primary-hover, #38c0d881) 0%, #28d95463 100%) !important;
+}
+
+.p-megamenu .p-menuitem-link:not(.p-disabled):hover .p-menuitem-text {
+  color: white;
+}
+
+.p-megamenu .p-menuitem-link:not(.p-disabled):hover {
+  background: var(--app-primary, #43dab9);
+  color: white;
+}
+
+body .p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link .p-menuitem-icon {
+  color: var(--app-accent-danger, #dc2626);
+  margin-left: 0.5rem;
+  margin-right: 0;
+}
+
+.p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link:not(.p-disabled):hover .p-menuitem-icon {
+  color: var(--app-accent-success, #059669);
+  font-size: large;
+  transition: all 0.2s ease;
+
+}
+
+body .p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link .p-submenu-icon {
+  color: inherit;
+  font-size: 0.8rem;
+  margin-right: 0.5rem;
+  margin-left: 0;
+}
+
+/* ==========================================
+   Submenu Panel (Dropdown)
+   - Max width: 80vw
+   - Shrinks for few columns
+   - Scroll horizontally if too many columns
+   ========================================== */
+body .p-megamenu .p-megamenu-panel {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12);
+  padding: 1.5rem;
+  background: #ffffff;
+  margin-top: 1rem;
+
+  /* RTL */
+  direction: rtl;
+
+  /* sizing */
+  max-width: 80vw !important;
+  width: fit-content !important;
+  min-width: unset !important;
+
+  /* height + overflow */
+  max-height: 85vh !important;
+  overflow-x: auto !important;
+  /* prefer horizontal scroll over adding rows */
+  overflow-y: auto !important;
+}
+
+/* ==========================================
+   MegaMenu Columns Layout (THE FIX)
+   - HARD RULE: maximum 2 rows
+   - Flow by columns horizontally
+   - Works with PrimeNG .p-megamenu-column
+   ========================================== */
+body .p-megamenu .p-megamenu-grid {
+  display: grid !important;
+
+  /* max 2 rows */
+  //   grid-template-rows: repeat(2, min-content) !important;
+
+  /* horizontal first, then wrap to row 2 */
+  grid-auto-flow: column !important;
+
+  /* each column width */
+  grid-auto-columns: minmax(260px, max-content) !important;
+
+  gap: 1.25rem 2rem !important;
+  align-content: start !important;
+
+  /* shrink to content so small menus don't look wide */
+  width: max-content !important;
+
+  /* scrolling handled by panel */
+  overflow: visible !important;
+}
+
+/* Ensure PrimeNG columns don't force stacking or fixed widths */
+body .p-megamenu .p-megamenu-column {
+  width: auto !important;
+  flex: initial !important;
+  max-width: none !important;
+  min-width: 260px !important;
+}
+
+/* Force consistency in grid items (safety) */
+body .p-megamenu .p-megamenu-grid>div {
+  width: auto !important;
+  max-width: none !important;
+}
+
+/* =======================
+   Submenu Headers
+   ======================= */
+body .p-megamenu .p-megamenu-submenu-header {
+  padding: 0.5rem 0.25rem;
+  margin-bottom: 0.75rem;
+  font-weight: bold;
+  font-size: 1.2rem;
+  background: linear-gradient(135deg, var(--app-primary, #4f46e5) 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+  line-height: 1;
+  border-bottom: 2px solid var(--app-border, #e2e8f0);
+  letter-spacing: -0.01em;
+  box-shadow: -3px -1px 14px 5px rgba(79, 70, 229, 0.12);
+  border-radius: 0.5rem;
+  padding: .5rem 1rem 0.5rem 0.5rem;
+  margin-top: 1rem;
+}
+
+/* Fix: Remove margin-top for the first header in each column */
+body .p-megamenu .p-megamenu-grid>div .p-megamenu-submenu:first-child>.p-megamenu-submenu-header {
+  margin-top: 0 !important;
+}
+
+/* =======================
+   Submenu Lists
+   ======================= */
+body .p-megamenu .p-megamenu-submenu {
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* Optional: If a submenu list is very long, split inside the same section (keeps height smaller)
+   Remove this block if you don't want it. */
+body .p-megamenu .p-megamenu-submenu>.p-submenu-list {
+  columns: 2;
+  column-gap: 1rem;
+}
+
+body .p-megamenu .p-megamenu-submenu>.p-submenu-list>li {
+  break-inside: avoid;
+}
+
+/* =======================
+   Submenu Item Links
+   ======================= */
+body .p-megamenu .p-menuitem-link {
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  color: var(--app-text-secondary, #64748b);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  justify-content: flex-start;
+  width: 100%;
+  position: relative;
+  border: 1px solid transparent;
+}
+
+body .p-megamenu .p-menuitem-link:hover {
+  background: var(--app-surface-hover, #f1f5f9);
+  color: var(--app-text-heading, #0f172a);
+  transform: translateX(-4px);
+}
+
+/* Active State - Clear & Persistent */
+body .p-megamenu .p-menuitem-link.router-link-active,
+body .p-megamenu .p-menuitem-link.router-link-active:hover {
+  background: var(--app-primary-light, rgba(79, 70, 229, 0.08));
+  color: var(--app-primary, #4f46e5);
+  font-weight: 700;
+  border-color: var(--app-primary-border, rgba(79, 70, 229, 0.18));
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.05);
+}
+
+/* Active Indicator (RTL right bar) */
+body .p-megamenu .p-menuitem-link.router-link-active::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 60%;
+  width: 4px;
+  background: var(--app-primary, #4f46e5);
+  border-radius: 4px 0 0 4px;
+}
+
+body .p-megamenu .p-menuitem-link .p-menuitem-text {
+  color: var(--app-text-primary, #1e293b);
+  font-weight: 500;
+  white-space: nowrap;
+  width: 100%;
+}
+
+body .p-megamenu .p-menuitem-link .p-menuitem-icon {
+  color: var(--app-text-muted, #94a3b8);
+  margin-left: 0.5rem;
+}
+
+body .p-megamenu .p-menuitem-link:hover .p-menuitem-icon {
+  color: var(--app-primary, #4f46e5);
+}
+
+/* =======================
+   Layout Slots (Start/Center/End)
+   ======================= */
+body .p-megamenu .p-megamenu-start {
+  display: flex;
+  align-items: center;
+  min-width: 13vw;
+}
+
+body .p-megamenu .p-megamenu-center{
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+body .p-megamenu .p-megamenu-end {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+body .p-megamenu .p-megamenu-start {
+  justify-content: flex-start;
+}
+
+body .p-megamenu .p-megamenu-center {
+  justify-content: center;
+}
+
+body .p-megamenu .p-megamenu-end {
+  justify-content: flex-end;
+}
+
+/* =======================
+   Input Inside MegaMenu (Search)
+   ======================= */
+body .p-megamenu .p-inputtext {
+  background: var(--app-surface-hover, #f1f5f9);
+  border: 1px solid var(--app-border, #e2e8f0);
+  border-radius: 12px;
+  padding: 0.6rem 1.25rem;
+  color: var(--app-text-primary, #1e293b);
+  font-weight: 500;
+  transition: all 0.2s ease;
+  box-shadow: none;
+}
+
+body .p-megamenu .p-inputtext:focus {
+  border-color: var(--app-primary, #4f46e5);
+  box-shadow: 0 0 0 4px var(--app-primary-light, rgba(79, 70, 229, 0.08));
+  background: var(--app-surface, #ffffff);
+}
+
+/* Buttons Inside MegaMenu */
+body .p-megamenu .btn {
+  border-radius: 12px;
+  padding: 0.25rem;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Bell Icon */
+body .p-megamenu .pi-bell {
+  color: var(--app-text-secondary, #64748b);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  background: var(--app-surface-hover, #f1f5f9);
+  padding: 0.6rem;
+  border-radius: 50%;
+  font-size: 1.1rem;
+}
+
+body .p-megamenu .pi-bell:hover {
+  color: var(--app-primary, #4f46e5);
+  background: var(--app-primary-light, rgba(79, 70, 229, 0.08));
+  transform: rotate(15deg);
+}
+
+/* =======================
+   Responsive
+   ======================= */
+@media (max-width: 1200px) {
+  body .p-megamenu {
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 0.75rem;
+    height: auto;
+  }
+
+  body .p-megamenu .p-megamenu-start,
+  body .p-megamenu .p-megamenu-center,
+  body .p-megamenu .p-megamenu-end {
+    flex-basis: 100%;
+    width: 100%;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+  }
+
+  body .p-megamenu .p-megamenu-center {
+    order: 2;
+  }
+
+  body .p-megamenu .p-megamenu-end {
+    order: 3;
+  }
+
+  body .p-megamenu .p-megamenu-root-list {
+    width: 100%;
+  }
+
+  body .p-megamenu .p-megamenu-panel {
+    padding: 1rem;
+  }
+
+  body .p-megamenu .p-megamenu-grid {
+    grid-auto-columns: minmax(200px, max-content) !important;
+    gap: 1rem 1rem !important;
+  }
+
+  body .p-megamenu .p-megamenu-column {
+    min-width: 200px !important;
+  }
+}
+
+/* Optional: nicer scrollbars */
+body .p-megamenu .p-megamenu-panel::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+body .p-megamenu .p-megamenu-panel::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.6);
+  border-radius: 999px;
+}
+
+body .p-megamenu .p-megamenu-panel::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.8);
+  border-radius: 999px;
+}

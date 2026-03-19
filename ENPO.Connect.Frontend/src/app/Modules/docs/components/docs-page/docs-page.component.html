@@ -1,0 +1,5 @@
+<div class="docs-page">
+  <div class="loading" *ngIf="loading">Loading document...</div>
+  <div class="error" *ngIf="!loading && error">{{ error }}</div>
+  <div class="doc-surface doc-body" *ngIf="!loading && !error" [attr.dir]="contentDir" [innerHTML]="contentHtml"></div>
+</div>

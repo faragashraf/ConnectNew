@@ -1,0 +1,36 @@
+ID,Work Item Type,Title,Assigned To,Created Date,Iteration Path,Effort
+03f252a,Task,feat: Enhance AdminCer module with new configuration model and refactor components,Ashraf Farag allah abdelbake,17/12/2025 13:18,CorrespondanceSystem\2025\12,24
+68476ac,Task,feat: Enhance various components with new features &  configurations &  and UI improvements,Ashraf Farag allah abdelbake,20/12/2025 11:20,CorrespondanceSystem\2025\12,12
+4d29b83,Task,feat: Enhance radio option styles with improved hover effects and transitions,Ashraf Farag allah abdelbake,20/12/2025 12:18,CorrespondanceSystem\2025\12,2
+350406b,Task,refactor: Remove unused NgxBarcodeModule and NgxPrintModule imports from various modules,Ashraf Farag allah abdelbake,20/12/2025 19:02,CorrespondanceSystem\2025\12,12
+e667a4d,Task,feat: Add logging for messageDtos in AreaRequestsComponent and improve control key handling in CertificateDetailsComponent,Ashraf Farag allah abdelbake,21/12/2025 23:03,CorrespondanceSystem\2025\12,4
+92177c1,Task,feat: Update AdminCer handling in RequestTableComponent and enhance AddEditSubjectComponent with new messageDto structure,Ashraf Farag allah abdelbake,22/12/2025 14:12,CorrespondanceSystem\2025\12,8
+f066f39,Task,Refactor request table component and related services,Ashraf Farag allah abdelbake,22/12/2025 21:06,CorrespondanceSystem\2025\12,12
+d4bbb3f,Task,Refactor code structure for improved readability and maintainability,Ashraf Farag allah abdelbake,23/12/2025 8:10,CorrespondanceSystem\2025\12,8
+d61cb15,Task,feat: Update fieldsConfiguration in defaultAdminCerAreaConfigs to enable div and adjust date format,Ashraf Farag allah abdelbake,23/12/2025 8:30,CorrespondanceSystem\2025\12,12
+df94a0f,Task,feat: Enhance data fetching in AddEditSubjectComponent and add BuildRequestsFromConfigService for dynamic request handling,Ashraf Farag allah abdelbake,23/12/2025 9:29,CorrespondanceSystem\2025\12,8
+3b321cd,Task,feat: Update RequestTableComponent to use menuId for data metadata retrieval and enhance AddEditSubjectComponent initialization,Ashraf Farag allah abdelbake,23/12/2025 15:37,CorrespondanceSystem\2025\12,8
+3c65aa9,Task,feat: Enhance DateComponent to handle control input changes and improve date parsing logic,Ashraf Farag allah abdelbake,23/12/2025 16:33,CorrespondanceSystem\2025\12,4
+73889ec,Task,fix: update Publications service,Ashraf Farag allah abdelbake,23/12/2025 17:28,CorrespondanceSystem\2025\12,8
+9623295,Task,feat: Update API base URL references to use ConnectApiURL across services and environments,Ashraf Farag allah abdelbake,24/12/2025 10:53,CorrespondanceSystem\2025\12,12
+7a97861,Task,feat: Update AddEditSubjectComponent to use config for form display options and enhance data handling,Ashraf Farag allah abdelbake,24/12/2025 13:29,CorrespondanceSystem\2025\12,8
+7f91017,Task,fix: update button disable logic and restore environment API URLs,Ashraf Farag allah abdelbake,24/12/2025 13:54,CorrespondanceSystem\2025\12,4
+ad2d08e,Task,feat: Refactor AddEditSubjectComponent and related services for improved dynamic form handling and data population,Ashraf Farag allah abdelbake,24/12/2025 19:38,CorrespondanceSystem\2025\12,8
+dfc989a,Task,Refactor: Update component configurations and environment variables,Ashraf Farag allah abdelbake,24/12/2025 19:56,CorrespondanceSystem\2025\12,1
+c5d3454,Task,feat: Update environment configuration and restore API URLs for consistency,Ashraf Farag allah abdelbake,24/12/2025 19:57,CorrespondanceSystem\2025\12,4
+7516bf1,Task,fix: Remove debugger statements and update environment API URLs for consistency,Ashraf Farag allah abdelbake,25/12/2025 8:59,CorrespondanceSystem\2025\12,12
+97b0b62,Task,feat: Enhance top management module and add new functionalities,Ashraf Farag allah abdelbake,26/12/2025 11:24,CorrespondanceSystem\2025\12,24
+a026b36,Task,Save edits: Component.Config.model and related changes,Ashraf Farag allah abdelbake,26/12/2025 14:10,CorrespondanceSystem\2025\12,8
+1a6a936,Task,dev: add save-config-server and push-to-server on config change,Ashraf Farag allah abdelbake,26/12/2025 14:30,CorrespondanceSystem\2025\12,4
+16acdb8,Task,dev: write configs to asset JSON + confirm-before-export flow,Ashraf Farag allah abdelbake,26/12/2025 14:35,CorrespondanceSystem\2025\12,4
+54cc033,Task,Refactor ComponentConfigService to use in-memory caching and load configurations from assets,Ashraf Farag allah abdelbake,26/12/2025 19:31,CorrespondanceSystem\2025\12,12
+ed627c2,Task,feat: Add TestComponent and integrate with AddEditSubject; update component configurations and styles,Ashraf Farag allah abdelbake,26/12/2025 21:24,CorrespondanceSystem\2025\12,12
+fa686da,Task,feat: Add selectedNodeKey input to component config form and update JSON configuration,Ashraf Farag allah abdelbake,27/12/2025 9:59,CorrespondanceSystem\2025\12,8
+c0907c2,Task,feat: Refactor component configuration form to use tabbed layout and add selectedNodeKey to JSON configuration,Ashraf Farag allah abdelbake,27/12/2025 10:41,CorrespondanceSystem\2025\12,4
+53626ac,Task,feat: Enhance component configuration manager with tabbed layout &  add selectedNodeKey & and improve styles & Ashraf Farag allah abdelbake,Ashraf Farag allah abdelbake,27/12/2025 14:19,CorrespondanceSystem\2025\12,12
+88e5438,Task,feat: Enhance component configuration manager with new request handling &  improved styles &  and updated JSON configuration,Ashraf Farag allah abdelbake,27/12/2025 17:33,CorrespondanceSystem\2025\12,12
+7f8a72f,Task,feat: Normalize globalFilterFields and pageSizes to empty arrays in ComponentConfig and JSON configuration,Ashraf Farag allah abdelbake,27/12/2025 22:06,CorrespondanceSystem\2025\12,8
+62695f0,Task,feat: Refactor component configuration manager to improve request handling and update JSON structure,Ashraf Farag allah abdelbake,28/12/2025 18:42,CorrespondanceSystem\2025\12,8
+ce0230f,Task,feat: add tools for generating DTO shapes from Publications API service,Ashraf Farag allah abdelbake,29/12/2025 10:35,CorrespondanceSystem\2025\12,12
+04815f7,Task,feat(tools): add scripts for NSwag service management and DTO shape generation,Ashraf Farag allah abdelbake,30/12/2025 21:18,CorrespondanceSystem\2025\12,24
+,,,,,,323

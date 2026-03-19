@@ -1,0 +1,5 @@
+    <input type="text" [formControl]="control"
+        [readonly]="isDivDisabled || genericFormService.GetPropertyValue(controlFullName, 'isDisabledInit') == 'true'"
+        [class.disabled-div]="isDivDisabled || genericFormService.GetPropertyValue(controlFullName, 'isDisabledInit') == 'true'"
+        [placeholder]="genericFormService.GetPropertyValue(controlFullName, 'placeholder')" [id]="controlFullName"
+        class="form-control" (blur)="onBlur($event)" (input)="onInput($event)" style="width: 100%;" />

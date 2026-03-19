@@ -1,0 +1,59 @@
+<div class="widget">
+    <h4 style="color: blue;" *ngIf="replyDtos.length==0">لم يتم تحديد مسار للطلب حتى الآن</h4>
+    <p-table #dt2 [value]="replyDtos" [rows]="5" [paginator]="true" [rowHover]="true" *ngIf="replyDtos.length>0"
+        [rowsPerPageOptions]="[5,10,25 ]" dataKey="replyId" selectionMode="single" [(selection)]="replyDto"
+        currentPageReportTemplate="عرض {first} إلي {last} من  إجمالي {totalRecords}" [showCurrentPageReport]="true"
+        rowExpandMode='single' [tableStyle]="{ 'min-width': '65rem' }" sortField="replyId" [sortOrder]="-1"
+        (onRowExpand)="handleRowExpand($event)" (onRowUnselect)="onRowUnselect($event)"  (onRowSelect)="onRowSelect($event)">
+        <ng-template pTemplate="header">
+            <tr>
+                <th style="width: 2%;text-align: center;"> </th>
+                <th style="width: 14%;text-align: center;"> التاريخ</th>
+                <th style="width: 40%;text-align: center;"> نص الرسالة</th>
+                <th style="width: 24%;text-align: center;"> بواسطة</th>
+                <th style="width: 16%;text-align: center;"> إلى</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-replyDto let-rowIndex="rowIndex" let-expanded="expanded">
+            <!-- Add class and per-row animation delay (stagger) -->
+            <tr  [pSelectableRow]="replyDto" [pSelectableRowIndex]="rowIndex">
+                <td  >
+                    <button type="button" pButton pRipple [pRowToggler]="replyDto" single="true"
+                        *ngIf="replyDto.attchShipmentDtos.length>0 || calculateRows(replyDto.message)>3"
+                        class="p-button-text p-button-rounded p-button-plain"
+                        [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-left'"></button>
+                </td>
+                <td style="text-align: right"> {{replyDto.createdDate | date:'dd-MM-yyyy @ hh:mm:ss a'}} </td>
+                <td style="text-align: right">
+                    <div class="message-content">
+                        {{replyDto.message}}
+                    </div>
+                </td>
+                <td style="text-align: right"> {{replyDto.authorName}} </td>
+                <td style="text-align: right"
+                    *ngIf="replyDto.authorId != replyDto.nextResponsibleSectorId && replyDto.authorId != 'SYS'">
+                    {{replyDto.nextResponsibleSectorId}} </td>
+                <td style="text-align: right"
+                    *ngIf="replyDto.authorId == replyDto.nextResponsibleSectorId || replyDto.authorId == 'SYS'"> </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="rowexpansion" let-replyDto>
+            <td colspan="4" style="padding: 2rem;">
+                <div class="normal-Reply" *ngIf="calculateRows(replyDto.message)>3">
+                    {{replyDto.message}}
+                </div>
+
+                <div class="row" *ngIf="replyDto.attchShipmentDtos.length > 0">
+                    <div class="col-md-6">
+                        <div class="widget ">
+                            <app-add-attachments [attchShipments]="replyDto.attchShipmentDtos" (AttachIDemit)="downloadAttachment($event)"
+                                [config]="config"></app-add-attachments>
+                        </div>
+                    </div>
+                </div>
+            </td>
+            <td>
+            </td>
+        </ng-template>
+    </p-table>
+</div>
