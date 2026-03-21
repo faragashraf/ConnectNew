@@ -130,7 +130,8 @@ namespace Persistence.Repositories
 
             _logger.AppendLine("Starting CreateRequest method. ---------------------------------------");
 
-            // Early category-based handling: if category belongs to ENPO use SummerRequests; otherwise call AllCategory
+            // Early category-based handling:
+            // route to SummerRequests only for categories that actually contain summer fields.
             var categoryInfo = _helperService.GetType(messageRequest.CategoryCd);
             if (categoryInfo == null)
             {
@@ -138,11 +139,15 @@ namespace Persistence.Repositories
                 return response;
             }
 
-            var parentCategory = categoryInfo.ParentCategory;
+            var isSummerCategory = _connectContext.CdCategoryMands
+                .AsNoTracking()
+                .Any(x => x.MendCategory == messageRequest.CategoryCd
+                    && x.MendField == "SummerCamp"
+                    && x.MendStat == false);
 
             // instantiate handler and dispatch accordingly
             var categoryHandler = new HandleEmployeeCategories(_connectContext, _attach_HeldContext, _gPAContext, _helperService, _mapper, _logger, _messageRequestService, _signalRConnectionManager);
-            if (!string.IsNullOrEmpty(parentCategory.ApplicationId) && parentCategory.ApplicationId.Equals("ENPO", StringComparison.OrdinalIgnoreCase))
+            if (isSummerCategory)
             {
                 await categoryHandler.SummerRequests(messageRequest, categoryInfo, response);
                 _logger.AppendLine("CreateRequest: Handled by SummerRequests path.");

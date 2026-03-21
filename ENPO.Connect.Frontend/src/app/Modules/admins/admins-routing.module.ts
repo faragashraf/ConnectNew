@@ -13,9 +13,28 @@ import { ComponentConfigManagerComponent } from './Managementcomponents/componen
 import { NswagEditorComponent } from './Managementcomponents/nswag-editor/nswag-editor.component';
 import { ModuleChartsComponent } from '../GenericComponents/ConnectComponents/module-charts/module-charts.component';
 import { ApplicationGenericManagerComponent } from './components/application-generic-manager/application-generic-manager.component';
+import { EmployeeSummerRequestsComponent } from '../EmployeeRequests/components/EmployeeSummerRequests/employee-summer-requests.component';
 
 const routes: Routes =
   [
+    {
+      path: 'SummerRequests',
+      component: EmployeeSummerRequestsComponent,
+      canActivate: [AuthNewGuardService],
+      data: {
+        func: 'AllEnpoUsersFunc',
+        configRouteKey: 'EmployeeRequests/SummerRequests'
+      }
+    },
+    {
+      path: 'SummerRequests/edit/:id',
+      component: EmployeeSummerRequestsComponent,
+      canActivate: [AuthNewGuardService],
+      data: {
+        func: 'AllEnpoUsersFunc',
+        configRouteKey: 'EmployeeRequests/SummerRequests'
+      }
+    },
     {
       path: 'ApplicationGenericManager',
       component: ApplicationGenericManagerComponent,

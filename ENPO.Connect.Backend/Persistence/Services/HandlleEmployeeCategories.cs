@@ -54,15 +54,29 @@ namespace Persistence.Services
             if (messageRequest == null) throw new ArgumentNullException(nameof(messageRequest));
             if (response == null) throw new ArgumentNullException(nameof(response));
 
-            if (messageRequest.CreatedBy == null)
+            if (string.IsNullOrWhiteSpace(messageRequest.CreatedBy))
             {
                 response.Errors.Add(new Error { Code = "400", Message = "CreatedBy is required." });
                 return;
             }
 
-            if (messageRequest.Fields!.Where(x => x.FildKind == "Emp_Id").FirstOrDefault()!.FildTxt == null)
+            if (messageRequest.Fields == null || messageRequest.Fields.Count == 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "Request fields are required." });
+                return;
+            }
+
+            var employeeId = GetFieldValue(messageRequest.Fields, "Emp_Id");
+            if (string.IsNullOrWhiteSpace(employeeId))
             {
                 response.Errors.Add(new Error { Code = "400", Message = "Emp Id is required." });
+                return;
+            }
+
+            var summerCamp = GetFieldValue(messageRequest.Fields, "SummerCamp");
+            if (string.IsNullOrWhiteSpace(summerCamp))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "Summer camp is required." });
                 return;
             }
 
@@ -83,7 +97,7 @@ namespace Persistence.Services
             messageRequest.Type = (byte)parentCategory.CatId;
 
 
-            var allowed = await IsWithinCategoryIntervalLimitAsync(categoryInfo.Category, response, parentCategory.CatName, messageRequest.Fields);
+            var allowed = await IsWithinCategoryIntervalLimitAsync(categoryInfo.Category, response, employeeId, summerCamp);
             if (!allowed)
             {
                 // error already added inside IsWithinCategoryIntervalLimitAsync
@@ -129,13 +143,7 @@ namespace Persistence.Services
                 using var trxAttach = _attach_HeldContext.Database.BeginTransaction();
                 try
                 {
-                    List<(int id, string code)> resortCd = new List<(int id, string code)>
-                    {
-                        (147, "M"),
-                        (148, "R"),
-                        (149, "B")
-                                            };
-                    var cd = resortCd.Where(x=> x.id == categoryInfo.Category.CatId).FirstOrDefault().code;
+                    var resortCode = BuildResortCode(categoryInfo.Category.CatId, categoryInfo.Category.CatName);
                     // Generate ids using DB-backed sequences (helperService expected to use atomic DB operations)
                     var messageId = _helperService.GetSequenceNextValue("Seq_Tickets");
                     var requestRefSec = _helperService.GetSequenceNextValue("Seq_Summer2026");
@@ -143,9 +151,13 @@ namespace Persistence.Services
                     messageRequest.MessageId = messageId;
                     messageRequest.RequestRef = string.IsNullOrWhiteSpace(baseRequestRef)
                         ? requestRefSec.ToString()
-                        : $"{baseRequestRef}-{cd}-{requestRefSec}";
+                        : $"{baseRequestRef}-{resortCode}-{requestRefSec}";
                     messageRequest.AssignedSectorId = parentCategory.Stockholder.ToString();
-                    messageRequest.Fields.Where(x => x.FildKind == "RequestRef").FirstOrDefault().FildTxt = messageRequest.RequestRef;
+                    var requestRefField = messageRequest.Fields.FirstOrDefault(x => x.FildKind == "RequestRef");
+                    if (requestRefField != null)
+                    {
+                        requestRefField.FildTxt = messageRequest.RequestRef;
+                    }
                     // Create initial reply
                     var assignedSector = messageRequest.AssignedSectorId ?? messageRequest.CreatedBy;
 
@@ -252,35 +264,82 @@ namespace Persistence.Services
             return lower.Contains("unique") || lower.Contains("duplicate") || lower.Contains("uk_") || lower.Contains("ix_") || lower.Contains("violation of unique");
         }
 
-        // Checks whether the given user has not exceeded the allowed number of messages
-        // for the specified category within the current interval (year, month, week).
-        private async Task<bool> IsWithinCategoryIntervalLimitAsync(Cdcategory category, CommonResponse<MessageDto> response, string parentCategoryName, List<TkmendField>? fields = null)
+        // Checks whether the same employee already has a reservation in the same
+        // summer destination (category) and same wave.
+        private async Task<bool> IsWithinCategoryIntervalLimitAsync(Cdcategory category, CommonResponse<MessageDto> response, string employeeId, string summerCamp)
         {
-            var _user = fields.Where(x => x.FildKind == "Emp_Id").FirstOrDefault()!.FildTxt;
-            var _camp = fields.Where(x => x.FildKind.Contains("SummerCamp")).FirstOrDefault()!.FildTxt;
-
-            var previousReservation = await _connectContext.TkmendFields.Where(x => x.FildTxt == _camp)
+            var sameCampReservationMessageIds = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(x => x.FildKind == "SummerCamp" && x.FildTxt == summerCamp)
                 .Select(s => s.FildRelted)
+                .Distinct()
                 .ToListAsync();
 
-            if (previousReservation.Any())
+            if (!sameCampReservationMessageIds.Any())
             {
-                var users = await _connectContext.TkmendFields.Where(x => previousReservation.Contains(x.FildRelted) && x.FildKind == "Emp_Id")
-                             .Select(s => s.FildTxt)
-                             .ToListAsync();
-                if (!users.Any()) return true;
-                if (users.Any() && users.Contains(_user))
-                {
-                    response.Errors.Add(new Error
-                    {
-                        Code = "429",
-                        Message = $"لقد وصلت إلى الحد الأقصى المسموح به لعدد الحجوزات في '{category.CatName}' في ({_camp})."
-                    });
-                    return false;
-                }
-                else return true;
+                return true;
             }
-            else return true;
+
+            var sameCategoryMessageIds = await _connectContext.Messages
+                .AsNoTracking()
+                .Where(m => sameCampReservationMessageIds.Contains(m.MessageId) && m.CategoryCd == category.CatId)
+                .Select(m => m.MessageId)
+                .ToListAsync();
+
+            if (!sameCategoryMessageIds.Any())
+            {
+                return true;
+            }
+
+            var hasPreviousReservation = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    sameCategoryMessageIds.Contains(x.FildRelted)
+                    && x.FildKind == "Emp_Id"
+                    && x.FildTxt == employeeId);
+
+            if (hasPreviousReservation)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "429",
+                    Message = $"You cannot book more than one apartment in the same wave for summer destination '{category.CatName}'."
+                });
+                return false;
+            }
+
+            return true;
+        }
+
+        private static string? GetFieldValue(IEnumerable<TkmendField>? fields, string fieldKind)
+        {
+            return fields?
+                .FirstOrDefault(x => x.FildKind == fieldKind)?
+                .FildTxt?
+                .Trim();
+        }
+
+        private static string BuildResortCode(int categoryId, string? categoryName)
+        {
+            return categoryId switch
+            {
+                147 => "M",
+                148 => "R",
+                149 => "B",
+                _ => BuildCategoryInitial(categoryName)
+            };
+        }
+
+        private static string BuildCategoryInitial(string? categoryName)
+        {
+            if (string.IsNullOrWhiteSpace(categoryName))
+            {
+                return "S";
+            }
+
+            var first = categoryName.Trim().ToUpperInvariant()[0];
+            return char.IsLetterOrDigit(first) ? first.ToString() : "S";
         }
     }
 }
+

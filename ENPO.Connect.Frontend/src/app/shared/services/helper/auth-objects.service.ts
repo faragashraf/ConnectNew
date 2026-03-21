@@ -115,7 +115,7 @@ export class AuthObjectsService {
   {
     label: 'طلب جديد',
     icon: 'pi pi-pencil',
-    routerLink: '/EmployeeRequests/SummerRequests',
+    routerLink: '/Admin/SummerRequests',
   }
   ]
   currentUser: string = ''
@@ -522,7 +522,8 @@ export class AuthObjectsService {
       'Docs': { icon: 'pi pi-fw pi-book', color: '#0ea5a4' },
       'TopManagement/Chart': { icon: 'pi pi-fw pi-chart-bar', color: '#06b6d4' },
       'EmployeeRequests/Summer2026Management': { icon: 'pi pi-fw pi-plus-circle', color: '#16a34a' },
-      'EmployeeRequests/Chart': { icon: 'pi pi-fw pi-chart-bar', color: '#06b6d4' }
+      'EmployeeRequests/Chart': { icon: 'pi pi-fw pi-chart-bar', color: '#06b6d4' },
+      'Admin/SummerRequests': { icon: 'pi pi-fw pi-plus-circle', color: '#16a34a' }
     };
 
     const entry = mapByRoute[key as string];
