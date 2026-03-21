@@ -1,30 +1,39 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Persistence.Data;
 
 namespace Persistence.Migrations
 {
+    [DbContext(typeof(ConnectContext))]
+    [Migration("20260317_AddRequestTokens")]
     public partial class AddRequestTokens : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "RequestTokens",
-                columns: table => new
-                {
-                    Token = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    MessageID = table.Column<int>(type: "int", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime", nullable: false, defaultValueSql: "GETUTCDATE()"),
-                    ExpiresAt = table.Column<DateTime>(type: "datetime", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_RequestTokens", x => x.Token);
-                });
+            // Idempotent create to support environments where table exists but migration history is missing.
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[RequestTokens]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[RequestTokens](
+        [Token] [nvarchar](200) NOT NULL,
+        [MessageID] [int] NOT NULL,
+        [CreatedAt] [datetime] NOT NULL CONSTRAINT [DF_RequestTokens_CreatedAt] DEFAULT (GETUTCDATE()),
+        [ExpiresAt] [datetime] NULL,
+        CONSTRAINT [PK_RequestTokens] PRIMARY KEY CLUSTERED ([Token] ASC)
+    );
+END
+");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(name: "RequestTokens");
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'[dbo].[RequestTokens]', N'U') IS NOT NULL
+BEGIN
+    DROP TABLE [dbo].[RequestTokens];
+END
+");
         }
     }
 }

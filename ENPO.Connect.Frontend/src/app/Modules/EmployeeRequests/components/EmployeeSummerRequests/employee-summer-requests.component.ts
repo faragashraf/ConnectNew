@@ -19,6 +19,12 @@ import { AuthObjectsService } from 'src/app/shared/services/helper/auth-objects.
 import { FormDetailsComponent } from 'src/app/Modules/GenericComponents/ConnectComponents/form-details/form-details.component';
 import { environment } from 'src/environments/environment';
 
+type SummerPolicyConfig = {
+    apartments: { count: number; apts: number }[];
+    maxFamilyMembers: number;
+    maxExtraMembers: number;
+};
+
 @Component({
     selector: 'app-employee-summer-requests',
     templateUrl: './employee-summer-requests.component.html',
@@ -156,24 +162,71 @@ export class EmployeeSummerRequestsComponent {
         this.router.navigate(['/EmployeeRequests/MyRequests']);
     }
 
+    private forEachNamedControl(root: AbstractControl | null | undefined, visitor: (name: string, control: AbstractControl) => void): void {
+        if (!root) return;
+        if (root instanceof FormGroup) {
+            Object.keys(root.controls).forEach(name => {
+                const ctrl = root.controls[name];
+                if (ctrl instanceof FormGroup || ctrl instanceof FormArray) {
+                    this.forEachNamedControl(ctrl, visitor);
+                } else {
+                    visitor(name, ctrl);
+                }
+            });
+            return;
+        }
+        if (root instanceof FormArray) {
+            root.controls.forEach(ctrl => this.forEachNamedControl(ctrl, visitor));
+        }
+    }
+
+    private findNamedControl(predicate: (name: string) => boolean): { name: string; control: AbstractControl } | null {
+        let found: { name: string; control: AbstractControl } | null = null;
+        this.forEachNamedControl(this.ticketForm, (name, control) => {
+            if (!found && predicate(name)) {
+                found = { name, control };
+            }
+        });
+        return found;
+    }
+
     private findControlAnyIndex(baseName: string): AbstractControl | null {
         if (!this.ticketForm) return null;
-        for (let i = 0; i <= 8; i++) {
+        for (let i = 0; i <= 20; i++) {
             try {
                 const ctrl = this.genericFormService.GetControl(this.ticketForm, `${baseName}|${i}`);
                 if (ctrl) return ctrl;
             } catch (e) { }
         }
-        // try index 1 as common fallback
+
+        const startsWith = this.findNamedControl(name => name.startsWith(`${baseName}|`));
+        if (startsWith) return startsWith.control;
+
         try {
-            const ctrl1 = this.genericFormService.GetControl(this.ticketForm, `${baseName}|1`);
-            if (ctrl1) return ctrl1;
-        } catch (e) { }
-        try {
-            const ctrl0 = this.genericFormService.GetControl(this.ticketForm, `${baseName}|0`);
-            if (ctrl0) return ctrl0;
-        } catch (e) { }
-        return null;
+            return this.genericFormService.GetControlContaining(this.ticketForm, `${baseName}|`);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    private findAgeControlByRelationControl(controlFullName: string): { name: string; control: AbstractControl } | null {
+        const indexPart = (controlFullName.split('|')[1] || '').trim();
+        const candidates: string[] = [];
+        if (indexPart.length > 0) {
+            candidates.push(`FamilyMember_Age|${indexPart}`);
+            const prefix = indexPart.includes('_') ? indexPart.split('_')[0] : '';
+            if (prefix) {
+                candidates.push(`FamilyMember_Age|${prefix}_`);
+            }
+        }
+
+        for (const candidate of candidates) {
+            const isPrefixSearch = candidate.endsWith('_');
+            const match = this.findNamedControl(name => isPrefixSearch ? name.startsWith(candidate) : name === candidate);
+            if (match) return match;
+        }
+
+        return this.findNamedControl(name => name.startsWith('FamilyMember_Age|'));
     }
 
     private applyResortValidators(rules: { maxFamilyMembers: number; maxExtraMembers: number } | null): void {
@@ -316,11 +369,10 @@ export class EmployeeSummerRequestsComponent {
     private onFamilyRelationChanged(controlFullName: string, value: any): void {
         if (!this.ticketForm) return;
         try {
-            // Extract the index from controlFullName like 'FamilyRelation|2'
-            const parts = controlFullName.split('|');
-            const ageCtrlName = `FamilyMember_Age|2`;
-            const ageCtrl = this.genericFormService.GetControl(this.ticketForm, ageCtrlName);
-            if (!ageCtrl) return;
+            const ageTarget = this.findAgeControlByRelationControl(controlFullName);
+            if (!ageTarget) return;
+            const ageCtrlName = ageTarget.name;
+            const ageCtrl = ageTarget.control;
 
             const requiresAge = value === 'ابن' || value === 'ابنة';
             this.genericFormService.EnableDisableControl(ageCtrl, requiresAge);
@@ -369,22 +421,49 @@ export class EmployeeSummerRequestsComponent {
         } catch (e) { }
         // Clear age validators on all FamilyMember_Age controls
         try {
-            for (let i = 0; i <= 20; i++) {
-                const ageCtrl = this.genericFormService.GetControl(this.ticketForm, `FamilyMember_Age|${i}`);
-                if (ageCtrl) { ageCtrl.clearValidators(); ageCtrl.updateValueAndValidity(); }
-            }
+            this.forEachNamedControl(this.ticketForm, (name, control) => {
+                if (name.startsWith('FamilyMember_Age|')) {
+                    control.clearValidators();
+                    control.updateValueAndValidity();
+                }
+            });
         } catch (e) { }
     }
     formChanges($event: FormGroup<any>) {
         this.ticketForm = $event;
         this.setResortRulesByCategory();
     }
+
+    private refreshFamilyCountSelection(categoryValue: any): void {
+        if (categoryValue === null || categoryValue === undefined || String(categoryValue).trim().length === 0) return;
+        this.powerBiController.getGenericDataById(51, categoryValue).subscribe(res => {
+            if (res.isSuccess && res.data) {
+                const _selection = this.genericFormService.mapArrayToSelectionArray('FamilyCount', res.data);
+                if (this.resortRules?.apartments?.length) {
+                    const allowed = this.resortRules.apartments.map((a: any) => a.count.toString());
+                    _selection.items = _selection.items.filter((item: any) => allowed.includes(item.key));
+                }
+                try {
+                    const existingIdx = this.genericFormService.selectionArrays.findIndex(a => a.nameProp === _selection.nameProp);
+                    if (existingIdx >= 0) {
+                        this.genericFormService.selectionArrays[existingIdx].items = [];
+                        this.genericFormService.selectionArrays[existingIdx].items.push(..._selection.items);
+                    } else {
+                        this.genericFormService.selectionArrays.push(_selection);
+                    }
+                } catch (e) {
+                    this.genericFormService.selectionArrays.push(_selection);
+                }
+            }
+        });
+    }
+
     setResortRulesByCategory(): void {
-        const _Resort = this.ticketForm.get('tkCategoryCd')?.value || this.messageDto.categoryCd;
-        const rules = EmployeeSummerRequestsComponent.RESORT_RULES[_Resort] ?? null;
+        const categoryValue = this.ticketForm?.get('tkCategoryCd')?.value ?? this.messageDto.categoryCd;
+        this.refreshFamilyCountSelection(categoryValue);
+        const rules = EmployeeSummerRequestsComponent.RESORT_RULES[String(categoryValue)] as SummerPolicyConfig | undefined;
         if (rules) {
-            this.resortRules = { ...rules, resortName: _Resort };
-            // Update Resort_Info LABLE with capacity breakdown
+            this.resortRules = { ...rules, resortName: String(categoryValue) };
             try {
                 const infoItem = this.genericFormService.cdmendDto.find(
                     (f: any) => f.cdmendTxt === 'Resort_Info'
@@ -397,13 +476,13 @@ export class EmployeeSummerRequestsComponent {
                         ? ` (+ ${rules.maxExtraMembers} أفراد إضافيين عند الحد الأقصى)`
                         : '';
                     (infoItem as any).defaultValue =
-                        `${_Resort} — ` + lines.join(' | ') + extra;
+                        `${categoryValue} — ` + lines.join(' | ') + extra;
                 }
             } catch (e) { }
+            try { this.applyResortValidators(this.resortRules); } catch (e) { }
         } else {
             this.resortRules = null;
             try { this.clearResortValidators(); } catch (e) { }
-            // Clear Resort_Info LABLE
             try {
                 const infoItem = this.genericFormService.cdmendDto.find(
                     (f: any) => f.cdmendTxt === 'Resort_Info'
@@ -411,30 +490,7 @@ export class EmployeeSummerRequestsComponent {
                 if (infoItem) { (infoItem as any).defaultValue = ''; }
             } catch (e) { }
         }
-
-        this.powerBiController.getGenericDataById(51, _Resort).subscribe(res => {
-            if (res.isSuccess && res.data) {
-                const _selection = this.genericFormService.mapArrayToSelectionArray('FamilyCount', res.data)
-                // Filter by apartments – only show FamilyCount values that exist in apartments[].count
-                if (this.resortRules?.apartments?.length) {
-                    const allowed = this.resortRules.apartments.map((a: any) => a.count.toString());
-                    _selection.items = _selection.items.filter((item: any) => allowed.includes(item.key));
-                }
-                try {
-                    const existingIdx = this.genericFormService.selectionArrays.findIndex(a => a.nameProp === _selection.nameProp);
-                    if (existingIdx >= 0) {
-                        this.genericFormService.selectionArrays[existingIdx].items = [];
-                        this.genericFormService.selectionArrays[existingIdx].items.push(..._selection.items)
-                    } else {
-                        this.genericFormService.selectionArrays.push(_selection)
-                    }
-                } catch (e) {
-                    this.genericFormService.selectionArrays.push(_selection)
-                }
-            }
-        })
     }
-
     generateMessageID(fieldsOrStockholder?: string[] | string, separator: '-' | '/' = '-') {
         try {
             const safeGet = (ctrlName?: string) => {
@@ -580,7 +636,7 @@ export class EmployeeSummerRequestsComponent {
         // Normalize event shapes from child components: top-level object
         // is usually { event, controlFullName, eventType, control }
         const controlFullName: string = event?.controlFullName ?? event?.event?.controlFullName ?? '';
-        let selectedValue: any = event?.event.event.value ?? null;
+        let selectedValue: any = event?.event?.event?.value ?? event?.event?.value ?? event?.control?.value ?? null;
         // Apply dynamic validators (disables Over_Count by default)
         try { this.applyResortValidators(this.resortRules); } catch (e) { }
 
@@ -605,6 +661,54 @@ export class EmployeeSummerRequestsComponent {
         }
     }
 
+    private getNumericFieldValue(fields: TkmendField[], fieldKind: string, fallback: number = 0): number {
+        const parsed = fields
+            .filter(f => f.fildKind === fieldKind)
+            .map(f => parseInt((f.fildTxt ?? '').toString(), 10))
+            .find(v => !isNaN(v));
+        return parsed ?? fallback;
+    }
+
+    private validateSummerBusinessRules(fields: TkmendField[] | undefined): string | null {
+        if (!Array.isArray(fields)) return null;
+        const categoryId = Number(this.ticketForm?.get('tkCategoryCd')?.value ?? this.messageDto?.categoryCd ?? 0);
+        if (!this.resortRules) {
+            try { this.setResortRulesByCategory(); } catch (e) { }
+        }
+        if (!this.resortRules) {
+            const isSummerCategory = Array.isArray(this.config?.tkCategoryCds)
+                && this.config.tkCategoryCds.some(c => Number(c.key) === categoryId);
+            if (isSummerCategory) {
+                return 'تعذر تحميل قواعد الحجز الخاصة بالمصيف. يرجى تحديث الصفحة والمحاولة مرة أخرى.';
+            }
+            return null;
+        }
+
+        const familyMembersCount = fields.filter(f =>
+            f.fildKind === 'FamilyMember_Name' &&
+            (f.fildTxt ?? '').toString().trim().length > 0
+        ).length;
+
+        if (this.resortRules.maxFamilyMembers > 0 && familyMembersCount > this.resortRules.maxFamilyMembers) {
+            return `الحد الأقصى لعدد أفراد الأسرة في ${this.resortRules.resortName} هو ${this.resortRules.maxFamilyMembers} فقط`;
+        }
+
+        const overCount = this.getNumericFieldValue(fields, 'Over_Count', 0);
+        if (this.resortRules.maxExtraMembers >= 0 && overCount > this.resortRules.maxExtraMembers) {
+            return `الحد الأقصى لعدد الأفراد الإضافيين في ${this.resortRules.resortName} هو ${this.resortRules.maxExtraMembers} فقط`;
+        }
+
+        const familyCount = this.getNumericFieldValue(fields, 'FamilyCount', 0);
+        if (familyCount > 0 && this.resortRules.apartments?.length) {
+            const allowedCounts = this.resortRules.apartments.map(a => Number(a.count));
+            if (!allowedCounts.includes(familyCount)) {
+                return `عدد أفراد الأسرة المختار (${familyCount}) غير متاح في ${this.resortRules.resortName}`;
+            }
+        }
+
+        return null;
+    }
+
     messageDto: MessageDto = {} as MessageDto;
     onFileUpload(event: FileParameter[]) {
         this.fileParameters = event;
@@ -621,25 +725,10 @@ export class EmployeeSummerRequestsComponent {
         this.mapRequestFromForm();
         console.log(this.messageRequest.fields)
 
-        // Validate resort-specific rules before submission
-        if (this.resortRules && this.messageRequest.fields) {
-            // Validate family member count
-            if (this.resortRules.maxFamilyMembers > 0) {
-                const familyCount = this.messageRequest.fields.filter(f => f.fildKind === 'FamilyMember_Name' && f.fildTxt).length;
-                if (familyCount > this.resortRules.maxFamilyMembers) {
-                    this.msg.msgError('خطأ', `<h5>الحد الأقصى لعدد أفراد الأسرة في ${this.resortRules.resortName} هو ${this.resortRules.maxFamilyMembers} فقط</h5>`, true);
-                    return;
-                }
-            }
-            // Validate extra members count
-            if (this.resortRules.maxExtraMembers >= 0) {
-                const overField = this.messageRequest.fields.find(f => f.fildKind === 'Over_Count');
-                const overCount = overField ? parseInt(overField.fildTxt || '0', 10) : 6;
-                if (overCount > this.resortRules.maxExtraMembers) {
-                    this.msg.msgError('خطأ', `<h5>الحد الأقصى لعدد الأفراد الإضافيين في ${this.resortRules.resortName} هو ${this.resortRules.maxExtraMembers} فقط</h5>`, true);
-                    return;
-                }
-            }
+        const validationError = this.validateSummerBusinessRules(this.messageRequest.fields);
+        if (validationError) {
+            this.msg.msgError('خطأ', `<h5>${validationError}</h5>`, true);
+            return;
         }
 
         this.spinner.show('جاري تسجيل الطلب ... ');
@@ -817,3 +906,4 @@ export class EmployeeSummerRequestsComponent {
         } catch { }
     }
 }
+

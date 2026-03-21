@@ -195,8 +195,33 @@ builder.Services.AddSingleton<RedisConnectionManager>(serviceProvider =>
 
 var app = builder.Build();
 
-// Use the RedisConnectionManager service
-var redisManager = app.Services.GetRequiredService<RedisConnectionManager>();
+// Ensure pending EF Core migrations are applied for ConnectContext on startup (idempotent)
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var connectContext = services.GetRequiredService<ConnectContext>();
+        // Apply migrations if any pending. If already applied, this is a no-op.
+        var configuration = services.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
+        var conn = configuration?.GetConnectionString("ConnectConnectingString");
+        Console.WriteLine($"[StartupMigrations] Target connection: {conn}");
+
+        var pending = connectContext.Database.GetPendingMigrations();
+        var pendingList = pending?.ToList() ?? new System.Collections.Generic.List<string>();
+        Console.WriteLine($"[StartupMigrations] Pending migrations: {(pendingList.Count > 0 ? string.Join(",", pendingList) : "<none>")}");
+
+        connectContext.Database.Migrate();
+        Console.WriteLine("[StartupMigrations] Database.Migrate() completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        var loggerFactory = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
+        var logger = loggerFactory?.CreateLogger("StartupMigrations");
+        logger?.LogError(ex, "Error applying database migrations for ConnectContext.");
+        throw;
+    }
+}
 
 // Use the custom middleware
 //app.UseMiddleware<RequestValidationMiddleware>();
@@ -242,42 +267,6 @@ app.UseEndpoints(endpoints =>
 {
     endpoints.MapControllers();
 });
-// Ensure pending EF Core migrations are applied for ConnectContext on startup (idempotent)
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    try
-    {
-        var connectContext = services.GetRequiredService<ConnectContext>();
-        // Apply migrations if any pending. If already applied, this is a no-op.
-        try
-        {
-            var configuration = services.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
-            var conn = configuration?.GetConnectionString("ConnectConnectingString");
-            Console.WriteLine($"[StartupMigrations] Target connection: {conn}");
-
-            var pending = connectContext.Database.GetPendingMigrations();
-            var pendingList = pending?.ToList() ?? new System.Collections.Generic.List<string>();
-            Console.WriteLine($"[StartupMigrations] Pending migrations: {(pendingList.Count > 0 ? string.Join(",", pendingList) : "<none>")}");
-
-            connectContext.Database.Migrate();
-            Console.WriteLine("[StartupMigrations] Database.Migrate() completed successfully.");
-        }
-        catch (Exception mex)
-        {
-            Console.WriteLine("[StartupMigrations] Exception while applying migrations:");
-            Console.WriteLine(mex.ToString());
-            throw; // rethrow so it appears in the host logs
-        }
-    }
-    catch (Exception ex)
-    {
-        var loggerFactory = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
-        var logger = loggerFactory?.CreateLogger("StartupMigrations");
-        logger?.LogError(ex, "Error applying database migrations for ConnectContext.");
-        // Do not rethrow: allow the app to start even if migrations failed; operator can check logs.
-    }
-}
 
 app.MapControllers();
 app.Run();

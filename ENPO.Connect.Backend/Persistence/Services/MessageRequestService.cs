@@ -70,7 +70,8 @@ namespace Persistence.Services
                     {
                         f.FildRelted = msgId;
                         f.FildSql = 0;
-                        f.InstanceGroupId = (f.InstanceGroupId + 1);
+                        // Keep the client-provided instance id as-is.
+                        // Frontend sends stable instance numbering and edits rely on exact matching.
 
                         if (_mataData.Where(x => x.CdmendType!.Equals("date", StringComparison.OrdinalIgnoreCase)).DefaultIfEmpty().Any())
                         {
