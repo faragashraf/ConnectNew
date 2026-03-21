@@ -9,6 +9,7 @@ using Models.Attachment;
 using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.Correspondance;
+using Models.DTO.Correspondance.Enums;
 using NPOI.SS.Formula.Functions;
 using Persistence.Data;
 using Persistence.HelperServices;
@@ -158,6 +159,11 @@ namespace Persistence.Services
                     {
                         requestRefField.FildTxt = messageRequest.RequestRef;
                     }
+
+                    var paymentDueAtUtc = DateTime.UtcNow.AddDays(1);
+                    UpsertRequestField(messageRequest.Fields, "Summer_PaymentDueAtUtc", paymentDueAtUtc.ToString("o"));
+                    UpsertRequestField(messageRequest.Fields, "Summer_PaymentStatus", "PENDING_PAYMENT");
+                    UpsertRequestField(messageRequest.Fields, "Summer_TransferCount", "0");
                     // Create initial reply
                     var assignedSector = messageRequest.AssignedSectorId ?? messageRequest.CreatedBy;
 
@@ -282,7 +288,9 @@ namespace Persistence.Services
 
             var sameCategoryMessageIds = await _connectContext.Messages
                 .AsNoTracking()
-                .Where(m => sameCampReservationMessageIds.Contains(m.MessageId) && m.CategoryCd == category.CatId)
+                .Where(m => sameCampReservationMessageIds.Contains(m.MessageId)
+                            && m.CategoryCd == category.CatId
+                            && m.Status != MessageStatus.Rejected)
                 .Select(m => m.MessageId)
                 .ToListAsync();
 
@@ -339,6 +347,29 @@ namespace Persistence.Services
 
             var first = categoryName.Trim().ToUpperInvariant()[0];
             return char.IsLetterOrDigit(first) ? first.ToString() : "S";
+        }
+
+        private static void UpsertRequestField(List<TkmendField>? fields, string kind, string value)
+        {
+            if (fields == null)
+            {
+                return;
+            }
+
+            var existing = fields.FirstOrDefault(f => string.Equals(f.FildKind, kind, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                fields.Add(new TkmendField
+                {
+                    FildKind = kind,
+                    FildTxt = value,
+                    InstanceGroupId = 1
+                });
+            }
+            else
+            {
+                existing.FildTxt = value;
+            }
         }
     }
 }

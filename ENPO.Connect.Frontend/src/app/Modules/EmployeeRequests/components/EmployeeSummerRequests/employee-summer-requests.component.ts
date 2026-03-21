@@ -25,6 +25,20 @@ type SummerPolicyConfig = {
     maxExtraMembers: number;
 };
 
+type SummerRequestSummary = {
+    messageId: number;
+    requestRef: string;
+    categoryId: number;
+    categoryName: string;
+    waveCode: string;
+    employeeId: string;
+    status: string;
+    createdAt?: string;
+    paymentDueAtUtc?: string;
+    paidAtUtc?: string;
+    transferUsed: boolean;
+};
+
 @Component({
     selector: 'app-employee-summer-requests',
     templateUrl: './employee-summer-requests.component.html',
@@ -76,6 +90,22 @@ export class EmployeeSummerRequestsComponent {
         maxExtraMembers: number;
         resortName: string;
     } | null = null;
+
+    workflowLoading: boolean = false;
+    workflowRequests: SummerRequestSummary[] = [];
+    selectedWorkflowMessageId: number | null = null;
+    cancelReason: string = '';
+    payDateUtc: string = '';
+    payForceOverride: boolean = false;
+    payNotes: string = '';
+    transferToCategoryId: number | null = null;
+    transferToWaveCode: string = '';
+    transferFamilyCount: number | null = null;
+    transferExtraCount: number | null = null;
+    transferNotes: string = '';
+    cancelFiles: File[] = [];
+    payFiles: File[] = [];
+    transferFiles: File[] = [];
 
     constructor(public genericFormService: GenericFormsService, private dynamicFormController: DynamicFormController,
         private router: Router, private route: ActivatedRoute, private powerBiController: PowerBiController, private conditionalDate: ConditionalDate,
@@ -148,6 +178,7 @@ export class EmployeeSummerRequestsComponent {
                             this.setResortRulesByCategory();
                         }
                     }
+                    this.loadWorkflowRequests();
                 }
             });
 
@@ -740,6 +771,7 @@ export class EmployeeSummerRequestsComponent {
                             this.messageDto = res.data
                             this.ticketForm.get('messageID')?.patchValue(res.data.messageId)
                             this.config.fieldsConfiguration.isDivDisabled = true
+                            this.loadWorkflowRequests();
                         }
                         else {
                             let errors = "";
@@ -757,6 +789,137 @@ export class EmployeeSummerRequestsComponent {
                     }
                 })
         }
+    }
+
+    loadWorkflowRequests(): void {
+        this.workflowLoading = true;
+        const seasonYear = new Date().getFullYear();
+        const url = `${environment.ConnectApiURL}/api/SummerWorkflow/GetMyRequests?seasonYear=${seasonYear}`;
+        this.http.get<any>(url).subscribe({
+            next: (res) => {
+                if (res?.isSuccess && Array.isArray(res.data)) {
+                    this.workflowRequests = res.data as SummerRequestSummary[];
+                    if (this.selectedWorkflowMessageId === null && this.workflowRequests.length > 0) {
+                        this.selectedWorkflowMessageId = this.workflowRequests[0].messageId;
+                    }
+                } else {
+                    this.workflowRequests = [];
+                }
+            },
+            error: () => {
+                this.workflowRequests = [];
+            },
+            complete: () => {
+                this.workflowLoading = false;
+            }
+        });
+    }
+
+    onActionFilesChange(event: Event, action: 'cancel' | 'pay' | 'transfer'): void {
+        const input = event.target as HTMLInputElement | null;
+        const files = input?.files ? Array.from(input.files) : [];
+        if (action === 'cancel') this.cancelFiles = files;
+        if (action === 'pay') this.payFiles = files;
+        if (action === 'transfer') this.transferFiles = files;
+    }
+
+    submitCancel(): void {
+        if (!this.selectedWorkflowMessageId) {
+            this.msg.msgError('Error', '<h5>Please select a request first.</h5>', true);
+            return;
+        }
+        const formData = new FormData();
+        formData.append('MessageId', String(this.selectedWorkflowMessageId));
+        formData.append('Reason', this.cancelReason ?? '');
+        this.cancelFiles.forEach(file => formData.append('files', file, file.name));
+
+        this.http.post<any>(`${environment.ConnectApiURL}/api/SummerWorkflow/Cancel`, formData).subscribe({
+            next: (res) => {
+                if (res?.isSuccess) {
+                    this.msg.msgSuccess('Cancellation completed');
+                    this.cancelReason = '';
+                    this.cancelFiles = [];
+                    this.loadWorkflowRequests();
+                } else {
+                    const errors = res?.errors?.map((e: any) => e.message).join('\n') || 'Failed to cancel';
+                    this.msg.msgError('Error', `<h5>${errors}</h5>`, true);
+                }
+            },
+            error: () => this.msg.msgError('Error', '<h5>Failed to cancel request</h5>', true)
+        });
+    }
+
+    submitPay(): void {
+        if (!this.selectedWorkflowMessageId) {
+            this.msg.msgError('Error', '<h5>Please select a request first.</h5>', true);
+            return;
+        }
+        const formData = new FormData();
+        formData.append('MessageId', String(this.selectedWorkflowMessageId));
+        if (this.payDateUtc) formData.append('PaidAtUtc', new Date(this.payDateUtc).toISOString());
+        formData.append('ForceOverride', String(this.payForceOverride));
+        formData.append('Notes', this.payNotes ?? '');
+        this.payFiles.forEach(file => formData.append('files', file, file.name));
+
+        this.http.post<any>(`${environment.ConnectApiURL}/api/SummerWorkflow/Pay`, formData).subscribe({
+            next: (res) => {
+                if (res?.isSuccess) {
+                    this.msg.msgSuccess('Payment recorded');
+                    this.payNotes = '';
+                    this.payDateUtc = '';
+                    this.payForceOverride = false;
+                    this.payFiles = [];
+                    this.loadWorkflowRequests();
+                } else {
+                    const errors = res?.errors?.map((e: any) => e.message).join('\n') || 'Failed to record payment';
+                    this.msg.msgError('Error', `<h5>${errors}</h5>`, true);
+                }
+            },
+            error: () => this.msg.msgError('Error', '<h5>Failed to record payment</h5>', true)
+        });
+    }
+
+    submitTransfer(): void {
+        if (!this.selectedWorkflowMessageId) {
+            this.msg.msgError('Error', '<h5>Please select a request first.</h5>', true);
+            return;
+        }
+        if (!this.transferToCategoryId || !this.transferToWaveCode) {
+            this.msg.msgError('Error', '<h5>Target destination and wave are required.</h5>', true);
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('MessageId', String(this.selectedWorkflowMessageId));
+        formData.append('ToCategoryId', String(this.transferToCategoryId));
+        formData.append('ToWaveCode', this.transferToWaveCode.trim());
+        if (this.transferFamilyCount !== null && this.transferFamilyCount !== undefined) {
+            formData.append('NewFamilyCount', String(this.transferFamilyCount));
+        }
+        if (this.transferExtraCount !== null && this.transferExtraCount !== undefined) {
+            formData.append('NewExtraCount', String(this.transferExtraCount));
+        }
+        formData.append('Notes', this.transferNotes ?? '');
+        this.transferFiles.forEach(file => formData.append('files', file, file.name));
+
+        this.http.post<any>(`${environment.ConnectApiURL}/api/SummerWorkflow/Transfer`, formData).subscribe({
+            next: (res) => {
+                if (res?.isSuccess) {
+                    this.msg.msgSuccess('Transfer completed');
+                    this.transferToCategoryId = null;
+                    this.transferToWaveCode = '';
+                    this.transferFamilyCount = null;
+                    this.transferExtraCount = null;
+                    this.transferNotes = '';
+                    this.transferFiles = [];
+                    this.loadWorkflowRequests();
+                } else {
+                    const errors = res?.errors?.map((e: any) => e.message).join('\n') || 'Failed to transfer';
+                    this.msg.msgError('Error', `<h5>${errors}</h5>`, true);
+                }
+            },
+            error: () => this.msg.msgError('Error', '<h5>Failed to transfer request</h5>', true)
+        });
     }
 
     private prepareRequestModel(): Array<{ formId: string; fieldName: string; fieldValue: any }> {

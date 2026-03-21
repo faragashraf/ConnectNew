@@ -5,6 +5,71 @@
     <app-form-details [config]="config" [messageDto]="messageDto" [categoryTree]="categoryTree" [unitTree]="unitTree" *ngIf="config"
         (ticketFormChange)="formChanges($event)" (submitFormChange)="onSubmit()"
         (genericEvent)="handleGenericEvent($event)" (fileUploadEvent)="onFileUpload($event)"></app-form-details>
+
+    <div class="workflow-panel">
+        <div class="workflow-head">
+            <h3>Summer Workflow</h3>
+            <button type="button" class="btn-refresh" (click)="loadWorkflowRequests()">Refresh</button>
+        </div>
+
+        <div class="workflow-row">
+            <label>My Summer Requests</label>
+            <select [(ngModel)]="selectedWorkflowMessageId">
+                <option [ngValue]="null">Select request</option>
+                <option *ngFor="let req of workflowRequests" [ngValue]="req.messageId">
+                    #{{req.messageId}} - {{req.requestRef}} - {{req.categoryName}} - {{req.waveCode}} - {{req.status}}
+                </option>
+            </select>
+        </div>
+
+        <p-tabView>
+            <p-tabPanel header="Cancel">
+                <div class="workflow-grid">
+                    <textarea [(ngModel)]="cancelReason" rows="3" placeholder="Reason (optional)"></textarea>
+                    <input type="file" multiple (change)="onActionFilesChange($event, 'cancel')" />
+                    <button type="button" class="btn-action danger" (click)="submitCancel()">Submit Cancel</button>
+                </div>
+            </p-tabPanel>
+
+            <p-tabPanel header="Payment">
+                <div class="workflow-grid">
+                    <label>Paid At (UTC)</label>
+                    <input type="datetime-local" [(ngModel)]="payDateUtc" />
+                    <label class="inline-check">
+                        <input type="checkbox" [(ngModel)]="payForceOverride" />
+                        Force overdue payment
+                    </label>
+                    <textarea [(ngModel)]="payNotes" rows="3" placeholder="Payment notes"></textarea>
+                    <input type="file" multiple (change)="onActionFilesChange($event, 'pay')" />
+                    <button type="button" class="btn-action" (click)="submitPay()">Submit Payment</button>
+                </div>
+            </p-tabPanel>
+
+            <p-tabPanel header="Transfer">
+                <div class="workflow-grid">
+                    <label>Target Destination</label>
+                    <select [(ngModel)]="transferToCategoryId">
+                        <option [ngValue]="null">Select destination</option>
+                        <option *ngFor="let cat of config?.tkCategoryCds" [ngValue]="cat.key">{{cat.value}}</option>
+                    </select>
+
+                    <label>Target Wave Code</label>
+                    <input type="text" [(ngModel)]="transferToWaveCode" placeholder="Example: W01" />
+
+                    <label>New Family Count (optional)</label>
+                    <input type="number" [(ngModel)]="transferFamilyCount" />
+
+                    <label>New Extra Count (optional)</label>
+                    <input type="number" [(ngModel)]="transferExtraCount" />
+
+                    <textarea [(ngModel)]="transferNotes" rows="3" placeholder="Transfer notes"></textarea>
+                    <input type="file" multiple (change)="onActionFilesChange($event, 'transfer')" />
+                    <button type="button" class="btn-action" (click)="submitTransfer()">Submit Transfer</button>
+                </div>
+            </p-tabPanel>
+        </p-tabView>
+    </div>
+
     <div class="row">
         <!-- <div class="col-12" style="display:flex;justify-content:flex-end;margin-bottom:12px">
             <button class="compose-btn" type="button" (click)="showMailDialog = true">✉️ Compose Mail</button>

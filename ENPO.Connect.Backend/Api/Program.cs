@@ -14,6 +14,7 @@ using Models.AutoMapping;
 using Models.DTO.Common;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services;
 using Persistence.UnitOfWorks;
 using SignalR.Notification;
 using System.Reflection;
@@ -63,6 +64,7 @@ builder.Services.AddSingleton<ApplicationConfig>(sp =>
        sp.GetRequiredService<IOptions<ApplicationConfig>>().Value);
 
 builder.Services.AddScoped<helperService>();
+builder.Services.AddScoped<SummerWorkflowService>();
 builder.Services.AddSingleton<ENPOCreateLogFile>(provider => new ENPOCreateLogFile("YourStringValue", "YourSecondStringValue", FileExtension.txt));
 
 builder.Services.AddHttpContextAccessor();
