@@ -1,4 +1,5 @@
 using Core;
+using Api.HostedServices;
 using ENPO.CreateLogFile;
 using ENPO.CustomSwagger;
 using ENPO.Dto.Utilities;
@@ -65,6 +66,7 @@ builder.Services.AddSingleton<ApplicationConfig>(sp =>
 
 builder.Services.AddScoped<helperService>();
 builder.Services.AddScoped<SummerWorkflowService>();
+builder.Services.AddHostedService<SummerPaymentAutoCancellationHostedService>();
 builder.Services.AddSingleton<ENPOCreateLogFile>(provider => new ENPOCreateLogFile("YourStringValue", "YourSecondStringValue", FileExtension.txt));
 
 builder.Services.AddHttpContextAccessor();

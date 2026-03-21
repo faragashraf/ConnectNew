@@ -1,8 +1,6 @@
 import { ChangeDetectorRef, Component, OnDestroy, OnInit, AfterViewInit } from '@angular/core';
 import { WindowsNotificationService } from './shared/services/helper/windowsNotification.service';
 import { SpinnerService } from './shared/services/helper/spinner.service';
-import { Router } from '@angular/router';
-import { JwtHelperService } from '@auth0/angular-jwt';
 import { animate, state, style, transition, trigger } from '@angular/animations';
 import { AuthObjectsService } from './shared/services/helper/auth-objects.service';
 import { SignalRService } from './shared/services/SignalRServices/SignalR.service';
@@ -30,13 +28,17 @@ import { BroadcastService } from './shared/services/helper/broadcast.service';
 })
 export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   currentYear: number = 0;
-  _sticky: boolean = true
-  spinnerLoading: string = 'Loading ...'
+  _sticky: boolean = true;
+  spinnerLoading: string = 'Loading ...';
   IndexedDBCompatibility: boolean = false;
   instructionVisible: boolean = false;
-  // isAuth: boolean = false;
   connectionLifetimeTooltip: string = '';
   private lifetimeInterval: any;
+  signalRBannerVisible = false;
+  signalRBannerMessage = '';
+  signalRBannerType: 'offline' | 'online' = 'offline';
+  private signalRRecoveredTimer: any;
+  private wasSignalROnline = false;
 
   constructor(
     public authService: AuthObjectsService,
@@ -48,6 +50,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private broadcastService: BroadcastService
   ) {
   }
+
   ngOnDestroy(): void {
     if (this.authObjectSubscription) this.authObjectSubscription.unsubscribe();
     if (this.authOfflineSubscription) this.authOfflineSubscription.unsubscribe();
@@ -56,47 +59,45 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.notificationSubscription) this.notificationSubscription.unsubscribe();
     if (this.fixNotificationSubscription) this.fixNotificationSubscription.unsubscribe();
     if (this.hubConnectionStateSubscription) this.hubConnectionStateSubscription.unsubscribe();
+    if (this.signalRRecoveredTimer) clearTimeout(this.signalRRecoveredTimer);
     if (this.lifetimeInterval) {
       clearInterval(this.lifetimeInterval);
       this.lifetimeInterval = null;
     }
   }
+
   isRamadan = false;
   private isRamadanDate = false;
-  authObjectSubscription!: Subscription
-  authOfflineSubscription!: Subscription
-  DomainSubscription!: Subscription
-  spinnerLoadingSubscription!: Subscription
-  notificationSubscription!: Subscription
-  gropNameSubscription!: Subscription
-  fixNotificationSubscription!: Subscription
+  authObjectSubscription!: Subscription;
+  authOfflineSubscription!: Subscription;
+  DomainSubscription!: Subscription;
+  spinnerLoadingSubscription!: Subscription;
+  notificationSubscription!: Subscription;
+  gropNameSubscription!: Subscription;
+  fixNotificationSubscription!: Subscription;
   hubConnectionStateSubscription!: Subscription;
   ramadanPrefSubscription!: Subscription;
 
-  gropName: any; // Add this if not already present
-  gropName$ = new Subject<string>();//s if not already present
+  gropName: any;
+  gropName$ = new Subject<string>();
 
-  // jnjhjj
   ngOnInit(): void {
-
     window.onblur = () => {
       document.title = '🔴 بوابتك للخدمات الداخلية';
-    }
+    };
 
     window.onfocus = () => {
       document.title = 'Connect | بوابتك للخدمات الداخلية';
-    }
+    };
 
     this.checkRamadanDate();
     this.currentYear = new Date().getFullYear();
 
-    // Subscribe to Ramadan Preference
     this.ramadanPrefSubscription = this.authService.isRamadanCelebrationEnabled$.subscribe(enabled => {
-        this.isRamadan = this.isRamadanDate && enabled;
-        this.cdr.detectChanges();
+      this.isRamadan = this.isRamadanDate && enabled;
+      this.cdr.detectChanges();
     });
 
-    // component snippet
     this.broadcastService.onMessage().subscribe(msg => {
       if (msg.type === 'USER_SIGNOUT') {
         this.authService.authObject$.next(false);
@@ -105,28 +106,25 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       else if (msg.type === 'USER_SIGNIN') {
         this.authService.authObject$.next(true);
         this.authService.populateNaBarItems();
-        this.spinnerService.show('جاري الإتصال بالـ HubSync');
+        this.spinnerService.show('جاري الاتصال بالـ HubSync');
         this.signalRService.startConnection();
       }
     });
-
 
     this.hubConnectionStateSubscription = assignSubscription(
       this.hubConnectionStateSubscription,
       this.signalRService.hubConnectionState$,
       (state: string) => {
         this.signalRService.hubConnectionState = state;
+        this.updateSignalRBannerState(state);
       }
     );
 
-
-
     this.authObjectSubscription = assignSubscription(this.authObjectSubscription, this.authService.authObject$, auth => {
-      this.authService.isAuthenticated = auth
+      this.authService.isAuthenticated = auth;
 
-      // To Close HubServer Connection when isAuthenticated == false
       if (!this.authService.isAuthenticated && this.signalRService.hubConnection.state == signalR.HubConnectionState.Connected) {
-        this.signalRService.hubConnection ? this.signalRService.hubConnection.stop().catch(error => console.log(error)) : null
+        this.signalRService.hubConnection ? this.signalRService.hubConnection.stop().catch(error => console.log(error)) : null;
       }
     });
 
@@ -135,29 +133,22 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.DomainSubscription = assignSubscription(this.DomainSubscription, this.authService.DomainAuthenticated$, auth => {
-      this.authService.isDomainAuthenticated = auth
+      this.authService.isDomainAuthenticated = auth;
     });
 
-
     this.spinnerLoadingSubscription = assignSubscription(this.spinnerLoadingSubscription, this.spinnerService.spinnerLoading$, spinnerLoading => {
-      this.spinnerLoading = spinnerLoading
-    })
+      this.spinnerLoading = spinnerLoading;
+    });
 
     const token = localStorage.getItem('ConnectToken');
-    const ConnectFunctions = localStorage.getItem('ConnectFunctions');
-    const UserId = localStorage.getItem('UserId');
-    const Picture = localStorage.getItem('Picture');
-    const AuthObject = this.authService.getAuthObject();
+    const connectFunctions = localStorage.getItem('ConnectFunctions');
+    const userId = localStorage.getItem('UserId');
+    const authObject = this.authService.getAuthObject();
 
-    if (token != null && token.length > 0
-      // && !this.jwtHelper.isTokenExpired(token)
-      && ConnectFunctions && UserId && AuthObject
-    ) {
-      // this.authService.offlineAuthenticatedt$.next(false);
-      // this.authService.DomainAuthenticated$.next(true);
+    if (token != null && token.length > 0 && connectFunctions && userId && authObject) {
       this.authService.authObject$.next(true);
       this.authService.populateNaBarItems();
-      this.spinnerService.show('جاري الإتصال بالـ HubSync');
+      this.spinnerService.show('جاري الاتصال بالـ HubSync');
       this.signalRService.startConnection();
     }
     else {
@@ -167,7 +158,6 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       this.authService.SignOut();
     }
 
-
     if ('Notification' in window) {
       Notification.requestPermission().then((permission) => {
         if (permission !== 'granted') {
@@ -175,25 +165,41 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
             this.instructionVisible = true;
           }
         }
-      })
+      });
     }
     this.NotificationService.requestNotificationPermission();
 
     this.notificationSubscription = assignSubscription(this.notificationSubscription, this.signalRService.Notification$, (notification: any) => {
-      let sev = notification.type == 1 ? 'info' : notification.type == 2 ? 'success' : 'warn'
-      this.signalRService.Notification.push(notification)
+      const notificationBody = String(notification?.notification ?? notification?.Notification ?? '');
+      const notificationTitle = String(notification?.title ?? notification?.Title ?? '');
+      const notificationSender = String(notification?.sender ?? 'Connect');
+      const isCapacitySignal = `${notificationTitle} ${notificationBody}`.toUpperCase().includes('SUMMER_CAPACITY_UPDATED|');
+
+      if (isCapacitySignal) {
+        const capacityNotification = {
+          ...notification,
+          title: 'تحديث سعات المصايف',
+          notification: 'تم تحديث السعات المتاحة للحجز.'
+        };
+        this.signalRService.Notification.push(capacityNotification);
+        this.signalRService.primMsgCount++;
+        this.cdr.detectChanges();
+        return;
+      }
+
+      const sev = notification.type == 1 ? 'info' : notification.type == 2 ? 'success' : 'warn';
+      this.signalRService.Notification.push(notification);
 
       this.signalRService.primMsg.add({
         severity: sev,
-        summary: `${notification.sender} - ${notification.title}`,
-        detail: ` ${this.conditionalDate.transform(notification.time, "full")} :  ${notification.notification}`,
+        summary: `${notificationSender} - ${notificationTitle}`,
+        detail: ` ${this.conditionalDate.transform(notification.time, 'full')} :  ${notificationBody}`,
         sticky: false,
-        life: 5000 // notification will disappear after 5 seconds
-      })
-      this.signalRService.primMsgCount++
-      this.NotificationService.showNotification(notification.notification, 'assets/imges/Online.jpg', notification.title);
-      this.cdr.detectChanges(); // Manually trigger change detection
-
+        life: 5000
+      });
+      this.signalRService.primMsgCount++;
+      this.NotificationService.showNotification(notificationBody, 'assets/imges/Online.jpg', notificationTitle);
+      this.cdr.detectChanges();
     });
 
     this.gropNameSubscription = assignSubscription(this.gropNameSubscription, this.gropName$, (group: string) => {
@@ -203,17 +209,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     });
 
-    this.fixNotificationSubscription = assignSubscription(this.fixNotificationSubscription, this.signalRService.fixNotificationOnRecieve$, (Isfix) => {
-      this._sticky = Isfix;
+    this.fixNotificationSubscription = assignSubscription(this.fixNotificationSubscription, this.signalRService.fixNotificationOnRecieve$, (isFix) => {
+      this._sticky = isFix;
     });
   }
-  
+
   ngAfterViewInit(): void {
     this.lifetimeInterval = setInterval(() => {
       this.connectionLifetimeTooltip = this.signalRService.getConnectionLifetime();
       try {
         this.cdr.detectChanges();
-      } catch (e) {
+      } catch {
         // ignore if view already destroyed
       }
     }, 1000);
@@ -226,25 +232,50 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }, 1000);
   }
 
-
-  // Add this to your component class
-
   checkRamadanDate() {
     const today = new Date();
-    // Set actual Ramadan start/end dates for current year
     const ramadanStart = new Date('2026-02-14');
     const ramadanEnd = new Date('2026-03-20');
-    // Using instance variable isRamadanDate
     this.isRamadanDate = today >= ramadanStart && today <= ramadanEnd;
-    
-    // Initial sync
+
     const enabled = this.authService.isRamadanCelebrationEnabled$.value;
     this.isRamadan = this.isRamadanDate && enabled;
   }
 
   onMascotClose() {
-      // Logic per user request: "Confirmation that closing the character also hides Ramadan vibes"
-      // We disable the global setting.
-      this.authService.setRamadanPreference(false);
+    this.authService.setRamadanPreference(false);
+  }
+
+  private updateSignalRBannerState(state: string): void {
+    const normalized = String(state ?? '').trim().toLowerCase();
+    const isOnline = normalized === 'online' || normalized === 'connection started';
+    const shouldTrack = this.authService.isAuthenticated && !this.authService.isOfflineAuthenticated;
+
+    if (!shouldTrack) {
+      this.signalRBannerVisible = false;
+      this.wasSignalROnline = false;
+      return;
+    }
+
+    if (!isOnline) {
+      this.signalRBannerType = 'offline';
+      this.signalRBannerMessage = 'اتصال التحديث اللحظي (SignalR) غير مستقر أو مقطوع حالياً. قد تتأخر التحديثات حتى عودة الاتصال.';
+      this.signalRBannerVisible = true;
+      this.wasSignalROnline = false;
+      if (this.signalRRecoveredTimer) clearTimeout(this.signalRRecoveredTimer);
+      return;
+    }
+
+    if (!this.wasSignalROnline) {
+      this.signalRBannerType = 'online';
+      this.signalRBannerMessage = 'تمت إعادة اتصال التحديث اللحظي (SignalR) بنجاح.';
+      this.signalRBannerVisible = true;
+      if (this.signalRRecoveredTimer) clearTimeout(this.signalRRecoveredTimer);
+      this.signalRRecoveredTimer = setTimeout(() => {
+        this.signalRBannerVisible = false;
+      }, 5000);
+    }
+
+    this.wasSignalROnline = true;
   }
 }

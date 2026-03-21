@@ -10,11 +10,26 @@ public class SummerRequestSummaryDto
     public string CategoryName { get; set; } = string.Empty;
     public string WaveCode { get; set; } = string.Empty;
     public string EmployeeId { get; set; } = string.Empty;
+    public string EmployeeName { get; set; } = string.Empty;
+    public string EmployeeNationalId { get; set; } = string.Empty;
+    public string EmployeePhone { get; set; } = string.Empty;
+    public string EmployeeExtraPhone { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public string StatusLabel { get; set; } = string.Empty;
     public DateTime? CreatedAt { get; set; }
     public DateTime? PaymentDueAtUtc { get; set; }
     public DateTime? PaidAtUtc { get; set; }
     public bool TransferUsed { get; set; }
+}
+
+public class SummerWaveCapacityDto
+{
+    public int CategoryId { get; set; }
+    public string WaveCode { get; set; } = string.Empty;
+    public int FamilyCount { get; set; }
+    public int TotalUnits { get; set; }
+    public int UsedUnits { get; set; }
+    public int AvailableUnits { get; set; }
 }
 
 public class SummerCancelRequest
@@ -44,3 +59,60 @@ public class SummerTransferRequest
     public List<IFormFile>? files { get; set; } = new();
 }
 
+public class SummerAdminRequestsQuery
+{
+    public int SeasonYear { get; set; } = 2026;
+    public int? CategoryId { get; set; }
+    public string? WaveCode { get; set; }
+    public string? Status { get; set; }
+    public string? PaymentState { get; set; }
+    public string? EmployeeId { get; set; }
+    public string? Search { get; set; }
+    public int PageNumber { get; set; } = 1;
+    public int PageSize { get; set; } = 50;
+}
+
+public class SummerAdminDashboardDto
+{
+    public int? ScopeCategoryId { get; set; }
+    public string ScopeWaveCode { get; set; } = string.Empty;
+    public string ScopeLabel { get; set; } = string.Empty;
+    public int TotalRequests { get; set; }
+    public int NewCount { get; set; }
+    public int InProgressCount { get; set; }
+    public int RepliedCount { get; set; }
+    public int RejectedCount { get; set; }
+    public int PaidCount { get; set; }
+    public int UnpaidCount { get; set; }
+    public int OverdueUnpaidCount { get; set; }
+    public List<SummerDashboardBucketDto> ByDestination { get; set; } = new();
+    public List<SummerDashboardBucketDto> ByWave { get; set; } = new();
+    public List<SummerDashboardStatusBucketDto> ByStatus { get; set; } = new();
+}
+
+public class SummerDashboardBucketDto
+{
+    public int? Id { get; set; }
+    public string Key { get; set; } = string.Empty;
+    public int Count { get; set; }
+}
+
+public class SummerDashboardStatusBucketDto
+{
+    public string StatusCode { get; set; } = string.Empty;
+    public string StatusLabel { get; set; } = string.Empty;
+    public int Count { get; set; }
+}
+
+public class SummerAdminActionRequest
+{
+    public int MessageId { get; set; }
+    public string ActionCode { get; set; } = string.Empty;
+    public string? Comment { get; set; }
+    public bool Force { get; set; }
+    public int? ToCategoryId { get; set; }
+    public string? ToWaveCode { get; set; }
+    public int? NewFamilyCount { get; set; }
+    public int? NewExtraCount { get; set; }
+    public List<IFormFile>? files { get; set; } = new();
+}

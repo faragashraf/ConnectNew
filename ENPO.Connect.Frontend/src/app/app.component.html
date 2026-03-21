@@ -1,65 +1,59 @@
 <div class="env-center-watermark"></div>
 <p-toast></p-toast>
 <p-toast position="top-right" key="center"></p-toast>
-<p-confirmDialog 
-    #cd
-    position="bottom-right"
-    [style]="{width: '400px', direction: 'rtl'}" 
-    [baseZIndex]="10000"
-    rejectButtonStyleClass="p-button-text p-button-secondary" 
-    acceptButtonStyleClass="p-button-raised p-button-success">
-    
-    <ng-template pTemplate="header" let-confirmation>
-        <div style="display: flex; align-items: center; width: 100%; gap: 0.5rem;">
-            <i [class]="confirmation?.icon || 'pi pi-exclamation-triangle'" style="font-size: 1.5rem; color: #F59E0B;"></i>
-            <span style="font-size: 1.25rem; font-weight: 600;">{{confirmation?.header || 'تنبيه'}}</span>
-        </div>
-    </ng-template>
+<p-confirmDialog
+  #cd
+  position="bottom-right"
+  [style]="{width: '400px', direction: 'rtl'}"
+  [baseZIndex]="10000"
+  rejectButtonStyleClass="p-button-text p-button-secondary"
+  acceptButtonStyleClass="p-button-raised p-button-success">
 
-    <ng-template pTemplate="message" let-message>
-        <div style="width: 100%; text-align: right; display: flex; flex-direction: column; gap: 10px;">
-             <!-- We rely on direction:rtl in the parent for the icon/text layout if default is used. 
-                  However, since we are templating 'message', we only control the text part 
-                  (the icon is outside this template in default PrimeNG).
-                  If default layout fails RTL, we can optionally hide default icon via CSS and custom render here. 
-                  For now, direction: rtl on the dialog usually fixes the default flex order. -->
-            <div [innerHTML]="message.message" style="font-size: 1.05rem; line-height: 1.5; color: #4b5563;"></div>
-        </div>
-    </ng-template>
-    
-    <ng-template pTemplate="footer" let-confirmation>
-        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; direction: rtl;">
-             <!-- Explicit Footer Control -->
-            <button type="button" pButton label="نعم" (click)="cd.accept()" class="p-button-success p-button-raised"></button>
-            <button type="button" pButton label="إلغاء" (click)="cd.reject()" class="p-button-text p-button-secondary"></button>
-        </div>
-    </ng-template>
+  <ng-template pTemplate="header" let-confirmation>
+    <div style="display: flex; align-items: center; width: 100%; gap: 0.5rem;">
+      <i [class]="confirmation?.icon || 'pi pi-exclamation-triangle'" style="font-size: 1.5rem; color: #F59E0B;"></i>
+      <span style="font-size: 1.25rem; font-weight: 600;">{{confirmation?.header || 'تنبيه'}}</span>
+    </div>
+  </ng-template>
+
+  <ng-template pTemplate="message" let-message>
+    <div style="width: 100%; text-align: right; display: flex; flex-direction: column; gap: 10px;">
+      <div [innerHTML]="message.message" style="font-size: 1.05rem; line-height: 1.5; color: #4b5563;"></div>
+    </div>
+  </ng-template>
+
+  <ng-template pTemplate="footer" let-confirmation>
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem; direction: rtl;">
+      <button type="button" pButton label="نعم" (click)="cd.accept()" class="p-button-success p-button-raised"></button>
+      <button type="button" pButton label="إلغاء" (click)="cd.reject()" class="p-button-text p-button-secondary"></button>
+    </div>
+  </ng-template>
 
 </p-confirmDialog>
 
-<app-nav-bar 
-  [class.ramadan-nav]="isRamadan"></app-nav-bar>
-<!-- Add Ramadan Header Banner -->
+<app-nav-bar [class.ramadan-nav]="isRamadan"></app-nav-bar>
+<div
+  class="signalr-global-banner"
+  *ngIf="signalRBannerVisible"
+  [class.signalr-global-banner-offline]="signalRBannerType === 'offline'"
+  [class.signalr-global-banner-online]="signalRBannerType === 'online'">
+  {{ signalRBannerMessage }}
+</div>
+
 <div class="ramadan-banner" *ngIf="isRamadan">
   <h1>رمضان كريم</h1>
   <div class="banner-decoration" *ngIf="isRamadan"></div>
 </div>
-<!-- Add Ramadan Decorative Elements -->
+
 <div class="ramadan-decorations" *ngIf="isRamadan">
   <div class="stars"></div>
   <div class="crescent-moon"></div>
-  <!-- <div class="lanterns"></div> -->
 </div>
+
 <div class="content">
   <router-outlet></router-outlet>
 </div>
 
-
-<!-- <app-nav-bar *ngIf="isAuth"></app-nav-bar>
-
-<div class="content">
-  <router-outlet></router-outlet>
-</div> -->
 <ngx-spinner bdOpacity="0.8" bdColor="rgba(255, 255, 255, 0.667)">
   <div class="image-container" [@shadowAnimation]="shadowState">
     <img src="assets/imges/connect-Small.png" alt="Image">
@@ -67,42 +61,41 @@
   <br> <br> <br> <br> <br><br> <br><br><br> <br> <br><br> <br> <br>
   <p style="font-size: 20px; color: rgb(0, 0, 0); direction: rtl;">{{spinnerLoading}}</p>
 </ngx-spinner>
+
 <footer class="app-footer" [class.app-footer-ramadan]="isRamadan">
   <div class="footer-content">
-    
-    <!-- Connection Status Section -->
     <div class="footer-section connection-status">
       <div class="status-icon-wrapper">
         <img
           *ngIf="authService.isAuthenticated && signalRService.hubConnectionState!='Connecting' && !authService.isOfflineAuthenticated"
-          src="assets/imges/HubSyncOnline.png" 
-          alt="Online" 
+          src="assets/imges/HubSyncOnline.png"
+          alt="Online"
           [pTooltip]="connectionLifetimeTooltip">
-        
-        <img *ngIf="signalRService.hubConnectionState=='Connecting'" 
-          [pTooltip]="'جاري الإتصال'" 
+
+        <img
+          *ngIf="signalRService.hubConnectionState=='Connecting'"
+          [pTooltip]="'جاري الاتصال'"
           src="assets/imges/HubSyncConnecting.gif"
           alt="Connecting">
-        
-        <img *ngIf="authService.isOfflineAuthenticated" 
-          src="assets/imges/HubSyncOffline.png" 
-          alt="Offline" 
+
+        <img
+          *ngIf="authService.isOfflineAuthenticated"
+          src="assets/imges/HubSyncOffline.png"
+          alt="Offline"
           [pTooltip]="'غير متصل'">
       </div>
     </div>
 
-    <!-- Copyright Section -->
     <div class="footer-section copyright">
       <span>© {{ currentYear }} البريد المصري. جميع الحقوق محفوظة</span>
     </div>
 
-    <!-- Support Section -->
     <div class="footer-section support-info">
       <p>الدعم الفني: <a href="mailto:postal-support&#64;egyptpost.org">postal-support&#64;egyptpost.org</a></p>
     </div>
-
   </div>
 </footer>
+
 <img src="assets/imges/lanterns.png" class="lanterns" *ngIf="isRamadan">
 <p-toast>
   <ng-template let-message pTemplate="message" class="p-toast-message">
@@ -114,7 +107,8 @@
     </div>
   </ng-template>
 </p-toast>
-<app-mascot-peek 
-    [enabled]="isRamadan" 
-    (close)="onMascotClose()">
+
+<app-mascot-peek
+  [enabled]="isRamadan"
+  (close)="onMascotClose()">
 </app-mascot-peek>

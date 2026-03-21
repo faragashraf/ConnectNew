@@ -1,0 +1,437 @@
+﻿<div class="admin-summer-shell">
+  <section class="hero">
+    <div>
+      <h1>إدارة طلبات المصايف - لوحة إدارة المصيف</h1>
+      <p>لوحة تشغيل متكاملة للإجراءات الإدارية مع رؤية لحظية تفاعلية (عام - مصيف - فوج - نوع الطلب).</p>
+      <small class="scope-label">النطاق الحالي: {{ dashboardScopeLabel }}</small>
+    </div>
+    <div class="hero-badges">
+      <span class="badge">موسم {{ seasonYear }}</span>
+      <span class="badge">إدارة كاملة للطلبات</span>
+      <span class="badge">Dashboard تفاعلي</span>
+    </div>
+  </section>
+
+  <section class="scope-panel" *ngIf="dashboard">
+    <div class="scope-row">
+      <button type="button" class="chip" [class.active]="!dashboardScopeCategoryId" (click)="applyGeneralScope()">
+        رؤية عامة
+      </button>
+      <button
+        type="button"
+        class="chip"
+        *ngFor="let destination of dashboardDestinationChips"
+        [class.active]="dashboardScopeCategoryId === destination.categoryId"
+        (click)="applyDestinationScope(destination.categoryId)">
+        {{ destination.name }}
+        <strong>{{ destination.count }}</strong>
+      </button>
+    </div>
+
+    <div class="scope-row" *ngIf="dashboardWaveChips.length > 0">
+      <button
+        type="button"
+        class="chip wave"
+        [class.active]="dashboardScopeWaveCode === ''"
+        (click)="clearWaveScope()">
+        كل الأفواج
+      </button>
+      <button
+        type="button"
+        class="chip wave"
+        *ngFor="let wave of dashboardWaveChips"
+        [class.active]="dashboardScopeWaveCode === wave.waveCode"
+        (click)="applyWaveScope(wave.waveCode)">
+        {{ wave.waveCode }}
+        <strong>{{ wave.count }}</strong>
+      </button>
+    </div>
+  </section>
+
+  <section class="dashboard-grid" *ngIf="dashboard as stats; else dashboardLoading">
+    <article class="metric-card clickable" [class.active]="!activeDashboardStatus && !activeDashboardPaymentState" (click)="applyStatusQuickFilter('')">
+      <span>إجمالي الطلبات</span>
+      <strong>{{ stats.totalRequests }}</strong>
+    </article>
+
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('New')" (click)="applyStatusQuickFilter('New')">
+      <span>جديد</span>
+      <strong>{{ stats.newCount }}</strong>
+    </article>
+
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('InProgress')" (click)="applyStatusQuickFilter('InProgress')">
+      <span>جاري التنفيذ</span>
+      <strong>{{ stats.inProgressCount }}</strong>
+    </article>
+
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('Replied')" (click)="applyStatusQuickFilter('Replied')">
+      <span>تم الرد/اعتماد</span>
+      <strong>{{ stats.repliedCount }}</strong>
+    </article>
+
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('Rejected')" (click)="applyStatusQuickFilter('Rejected')">
+      <span>مرفوض/ملغي</span>
+      <strong>{{ stats.rejectedCount }}</strong>
+    </article>
+
+    <article class="metric-card clickable" [class.active]="isPaymentQuickFilterActive('Paid')" (click)="applyPaymentQuickFilter('Paid')">
+      <span>مسدد</span>
+      <strong>{{ stats.paidCount }}</strong>
+    </article>
+
+    <article class="metric-card clickable" [class.active]="isPaymentQuickFilterActive('Unpaid')" (click)="applyPaymentQuickFilter('Unpaid')">
+      <span>غير مسدد</span>
+      <strong>{{ stats.unpaidCount }}</strong>
+    </article>
+
+    <article class="metric-card warn clickable" [class.active]="isPaymentQuickFilterActive('OverdueUnpaid')" (click)="applyPaymentQuickFilter('OverdueUnpaid')">
+      <span>متأخر وغير مسدد</span>
+      <strong>{{ stats.overdueUnpaidCount }}</strong>
+    </article>
+  </section>
+
+  <ng-template #dashboardLoading>
+    <section class="dashboard-grid">
+      <article class="metric-card"><span>جاري تحميل الإحصاءات...</span><strong>{{ loadingDashboard ? '...' : '-' }}</strong></article>
+    </section>
+  </ng-template>
+
+  <section class="breakdown-grid" *ngIf="dashboard as stats">
+    <article class="breakdown-card">
+      <h4>توزيع الطلبات حسب المصيف</h4>
+      <ul>
+        <li *ngFor="let item of stats.byDestination">
+          <button type="button" class="break-btn" (click)="selectDestinationFromDashboardBucket(item)">{{ item.key }}</button>
+          <strong>{{ item.count }}</strong>
+        </li>
+      </ul>
+    </article>
+
+    <article class="breakdown-card">
+      <h4>توزيع الطلبات حسب الفوج</h4>
+      <ul>
+        <li *ngFor="let item of dashboardWaveBreakdownSorted">
+          <button type="button" class="break-btn" (click)="selectWaveFromDashboardBucket(item)">{{ item.key }}</button>
+          <strong>{{ item.count }}</strong>
+        </li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="filters-panel">
+    <form [formGroup]="filtersForm" class="filters-grid" (ngSubmit)="onSearch()">
+      <label>
+        <span>المصيف</span>
+        <select formControlName="categoryId">
+          <option [ngValue]="null">الكل</option>
+          <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">{{ destination.name }}</option>
+        </select>
+      </label>
+
+      <label>
+        <span>الفوج</span>
+        <select formControlName="waveCode">
+          <option [ngValue]="''">الكل</option>
+          <option *ngFor="let wave of filterWaveOptions" [ngValue]="wave.code">{{ wave.code }} - {{ wave.startsAtLabel }}</option>
+        </select>
+        <button
+          type="button"
+          class="ghost capacity-trigger"
+          (click)="openWaveCapacityDialog()"
+          [disabled]="!canOpenWaveCapacityDialog">
+          بيان إتاحة هذا الفوج
+        </button>
+      </label>
+
+      <label>
+        <span>الحالة</span>
+        <select formControlName="status">
+          <option *ngFor="let option of statusOptions" [ngValue]="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+
+      <label>
+        <span>السداد</span>
+        <select formControlName="paymentState">
+          <option *ngFor="let option of paymentStateOptions" [ngValue]="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+
+      <label>
+        <span>رقم ملف الموظف</span>
+        <input type="text" formControlName="employeeId" />
+      </label>
+
+      <label class="search-wide">
+        <span>بحث عام</span>
+        <input type="text" formControlName="search" placeholder="اسم الموظف / المرجع / القومي / الهاتف" />
+      </label>
+
+      <div class="filter-actions">
+        <button type="submit" class="primary" [disabled]="loadingRequests">بحث</button>
+        <button type="button" class="ghost" (click)="clearFilters()" [disabled]="loadingRequests">مسح الفلاتر</button>
+      </div>
+    </form>
+  </section>
+
+  <p-dialog
+    header="بيان الإتاحة اللحظي"
+    [(visible)]="capacityDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [style]="{ width: '760px', maxWidth: '95vw' }"
+    (onHide)="onCapacityDialogHide()">
+    <div class="capacity-dialog-shell">
+      <div class="capacity-dialog-header">
+        <div>
+          <h4>{{ capacityDialogTitle }}</h4>
+          <small *ngIf="capacityLastUpdatedAt">آخر تحديث: {{ formatDate(capacityLastUpdatedAt) }}</small>
+        </div>
+        <button type="button" class="ghost" (click)="refreshWaveCapacity()" [disabled]="loadingWaveCapacity">
+          {{ loadingWaveCapacity ? 'جاري التحديث...' : 'تحديث الآن' }}
+        </button>
+      </div>
+
+      <div class="capacity-kpis" *ngIf="!loadingWaveCapacity">
+        <article>
+          <span>إجمالي الوحدات</span>
+          <strong>{{ capacityTotalUnits }}</strong>
+        </article>
+        <article>
+          <span>الوحدات المستخدمة</span>
+          <strong>{{ capacityUsedUnits }}</strong>
+        </article>
+        <article>
+          <span>الوحدات المتاحة</span>
+          <strong>{{ capacityAvailableUnits }}</strong>
+        </article>
+      </div>
+
+      <p class="capacity-error" *ngIf="capacityErrorText.length > 0">{{ capacityErrorText }}</p>
+
+      <div class="capacity-loading" *ngIf="loadingWaveCapacity">جاري تحميل بيان الإتاحة...</div>
+
+      <div class="capacity-table-wrap" *ngIf="!loadingWaveCapacity && capacityRows.length > 0">
+        <table class="capacity-table">
+          <thead>
+            <tr>
+              <th>السعة (عدد الأفراد)</th>
+              <th>إجمالي الوحدات</th>
+              <th>المستخدمة</th>
+              <th>المتاحة</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of capacityRows">
+              <td>{{ row.familyCount }}</td>
+              <td>{{ row.totalUnits }}</td>
+              <td>{{ row.usedUnits }}</td>
+              <td>{{ row.availableUnits }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="empty" *ngIf="!loadingWaveCapacity && capacityRows.length === 0 && capacityErrorText.length === 0">
+        لا توجد بيانات إتاحة حالياً للفوج المختار.
+      </p>
+    </div>
+  </p-dialog>
+
+  <section class="workspace">
+    <div class="requests-panel">
+      <header>
+        <h3>قائمة الطلبات</h3>
+        <small>{{ loadingRequests ? 'جاري التحميل...' : (requestRangeStart + ' - ' + requestRangeEnd + ' من ' + requestsTotalCount) }}</small>
+      </header>
+
+      <div class="table-wrap">
+        <table class="requests-table">
+          <thead>
+            <tr>
+              <th>رقم الطلب</th>
+              <th>الموظف</th>
+              <th>المصيف/الفوج</th>
+              <th>الحالة</th>
+              <th>استحقاق السداد</th>
+              <th>سداد</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let request of requests" (click)="selectRequest(request.messageId)" [class.active]="selectedRequestId === request.messageId">
+              <td>#{{ request.messageId }}<br><small>{{ request.requestRef }}</small></td>
+              <td>
+                <div>{{ request.employeeName || '-' }}</div>
+                <small>{{ request.employeeId || '-' }}</small>
+              </td>
+              <td>
+                <div>{{ request.categoryName }}</div>
+                <small>{{ request.waveCode }}</small>
+              </td>
+              <td><span class="status-pill" [ngClass]="getStatusClass(request)">{{ request.statusLabel || request.status }}</span></td>
+              <td>{{ formatDate(request.paymentDueAtUtc) }}</td>
+              <td>{{ request.paidAtUtc ? 'مسدد' : 'غير مسدد' }}</td>
+            </tr>
+            <tr *ngIf="!loadingRequests && requests.length === 0">
+              <td colspan="6" class="empty">لا توجد بيانات مطابقة للفلاتر.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pager" *ngIf="!loadingRequests">
+        <div class="pager-info">
+          <span>عرض {{ requestRangeStart }} - {{ requestRangeEnd }} من {{ requestsTotalCount }}</span>
+        </div>
+
+        <div class="pager-controls">
+          <label class="page-size">
+            <span>عدد السطور</span>
+            <select [value]="requestsPageSize" (change)="onPageSizeChanged($any($event.target).value)">
+              <option *ngFor="let size of pageSizeOptions" [value]="size">{{ size }}</option>
+            </select>
+          </label>
+
+          <div class="page-buttons">
+            <button type="button" class="ghost" (click)="goToPage(1)" [disabled]="requestsPageNumber <= 1">الأولى</button>
+            <button type="button" class="ghost" (click)="goToPreviousPage()" [disabled]="requestsPageNumber <= 1">السابق</button>
+            <span class="page-index">صفحة {{ requestsPageNumber }} من {{ requestsTotalPages }}</span>
+            <button type="button" class="ghost" (click)="goToNextPage()" [disabled]="requestsPageNumber >= requestsTotalPages">التالي</button>
+            <button type="button" class="ghost" (click)="goToPage(requestsTotalPages)" [disabled]="requestsPageNumber >= requestsTotalPages">الأخيرة</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="details-panel" *ngIf="selectedRequest as request; else noSelection">
+      <header>
+        <h3>تفاصيل الطلب #{{ request.messageId }}</h3>
+        <small>{{ request.requestRef }}</small>
+      </header>
+
+      <section class="owner-card">
+        <h4>بيانات صاحب الطلب</h4>
+        <div class="owner-grid">
+          <div><span>الاسم</span><strong>{{ request.employeeName || '-' }}</strong></div>
+          <div><span>رقم الملف</span><strong>{{ request.employeeId || '-' }}</strong></div>
+          <div><span>الرقم القومي</span><strong>{{ request.employeeNationalId || '-' }}</strong></div>
+          <div><span>الهاتف</span><strong>{{ request.employeePhone || '-' }}</strong></div>
+          <div><span>هاتف إضافي</span><strong>{{ request.employeeExtraPhone || '-' }}</strong></div>
+        </div>
+      </section>
+
+      <section class="fields-card">
+        <h4>حقول الطلب</h4>
+        <small *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
+        <div class="fields-grid" *ngIf="!loadingDetails">
+          <div class="field-row" *ngFor="let field of selectedRequestFields">
+            <span>{{ field.key }}</span>
+            <strong>{{ field.value }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="attachments-card" *ngIf="selectedRequestAttachments.length > 0">
+        <h4>مرفقات الطلب</h4>
+        <ul>
+          <li *ngFor="let attachment of selectedRequestAttachments">
+            <button type="button" class="link" [disabled]="attachment.id <= 0" (click)="downloadAttachment(attachment.id, attachment.name)">{{ attachment.name }}</button>
+          </li>
+        </ul>
+      </section>
+
+      <section class="updates-card" *ngIf="selectedRequestReplies.length > 0">
+        <h4>سجل التحديثات</h4>
+        <article class="update" *ngFor="let reply of selectedRequestReplies">
+          <header>
+            <strong>{{ reply.author }}</strong>
+            <small>{{ formatDate(reply.created) }}</small>
+          </header>
+          <p>{{ reply.message || '-' }}</p>
+          <ul *ngIf="reply.attachments.length > 0">
+            <li *ngFor="let attachment of reply.attachments">
+              <button type="button" class="link" [disabled]="attachment.id <= 0" (click)="downloadAttachment(attachment.id, attachment.name)">{{ attachment.name }}</button>
+            </li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="action-card">
+        <h4>تنفيذ إجراء إداري</h4>
+        <form [formGroup]="actionForm" (ngSubmit)="submitAdminAction()" class="action-form">
+          <label>
+            <span>نوع الإجراء</span>
+            <select formControlName="actionCode">
+              <option *ngFor="let action of actionOptions" [ngValue]="action.value">{{ action.label }}</option>
+            </select>
+          </label>
+
+          <label>
+            <span>تعليق الإدارة</span>
+            <textarea rows="3" formControlName="comment" placeholder="أدخل رد/تعليق الإدارة"></textarea>
+          </label>
+
+          <label class="checkbox-row">
+            <input type="checkbox" formControlName="force" />
+            <span>تنفيذ إجباري (عند الحاجة)</span>
+          </label>
+
+          <ng-container *ngIf="actionForm.get('actionCode')?.value === 'APPROVE_TRANSFER'">
+            <label>
+              <span>المصيف المستهدف</span>
+              <select formControlName="toCategoryId">
+                <option [ngValue]="null">اختر</option>
+                <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">{{ destination.name }}</option>
+              </select>
+            </label>
+
+            <label>
+              <span>الفوج المستهدف</span>
+              <select formControlName="toWaveCode">
+                <option [ngValue]="''">اختر</option>
+                <option *ngFor="let wave of transferWaves" [ngValue]="wave.code">{{ wave.code }} - {{ wave.startsAtLabel }}</option>
+              </select>
+            </label>
+
+            <label>
+              <span>عدد الأفراد</span>
+              <select formControlName="newFamilyCount">
+                <option [ngValue]="null">اختر</option>
+                <option *ngFor="let option of transferFamilyOptions" [ngValue]="option">{{ option }}</option>
+              </select>
+            </label>
+
+            <label>
+              <span>عدد الأفراد الإضافيين</span>
+              <input type="number" min="0" formControlName="newExtraCount" />
+            </label>
+          </ng-container>
+
+          <label class="file-picker">
+            <span>مرفقات الإجراء</span>
+            <input type="file" multiple accept=".pdf,image/*" (change)="addActionFiles($event)" />
+          </label>
+
+          <div class="files" *ngIf="actionAttachments.length > 0">
+            <div class="file" *ngFor="let file of actionAttachments; let i = index">
+              <span>{{ file.name }}</span>
+              <button type="button" (click)="removeActionFile(i)">حذف</button>
+            </div>
+          </div>
+
+          <button type="submit" class="primary" [disabled]="submittingAction || actionForm.invalid">
+            {{ submittingAction ? 'جاري التنفيذ...' : 'تنفيذ الإجراء' }}
+          </button>
+        </form>
+      </section>
+    </div>
+
+    <ng-template #noSelection>
+      <div class="details-panel empty-state">
+        <h3>اختر طلبًا من القائمة</h3>
+        <p>بعد اختيار الطلب ستظهر تفاصيله الكاملة وإجراءات الإدارة المتاحة.</p>
+      </div>
+    </ng-template>
+  </section>
+</div>

@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Dapper;
 using DocumentFormat.OpenXml.Wordprocessing;
 using ENPO.CreateLogFile;
@@ -187,9 +187,43 @@ namespace Persistence.HelperServices
             using (SqlConnection connection = new SqlConnection(_connectContext.Database.GetConnectionString()))
             {
                 connection.Open();
+
+                if (string.Equals(SeqName, "Seq_Tickets", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Self-heal sequence drift to avoid PK collisions when MessageID max is ahead of sequence.
+                    int nextValue;
+                    using (SqlCommand nextCommand = new SqlCommand($"SELECT NEXT VALUE FOR {SeqName}", connection))
+                    {
+                        var nextResult = nextCommand.ExecuteScalar();
+                        nextValue = Convert.ToInt32(nextResult);
+                    }
+
+                    using (SqlCommand maxCommand = new SqlCommand("SELECT ISNULL(MAX(MessageID), 0) FROM Messages", connection))
+                    {
+                        var maxResult = maxCommand.ExecuteScalar();
+                        var maxMessageId = Convert.ToInt32(maxResult);
+                        if (nextValue <= maxMessageId)
+                        {
+                            var restartWith = maxMessageId + 1;
+                            using (SqlCommand resetCommand = new SqlCommand($"ALTER SEQUENCE {SeqName} RESTART WITH {restartWith}", connection))
+                            {
+                                resetCommand.ExecuteNonQuery();
+                            }
+
+                            using (SqlCommand retryCommand = new SqlCommand($"SELECT NEXT VALUE FOR {SeqName}", connection))
+                            {
+                                var retried = retryCommand.ExecuteScalar();
+                                return Convert.ToInt32(retried);
+                            }
+                        }
+                    }
+
+                    return nextValue;
+                }
+
                 using (SqlCommand command = new SqlCommand($"SELECT NEXT VALUE FOR {SeqName}", connection))
                 {
-                    object result = command.ExecuteScalar();
+                    var result = command.ExecuteScalar();
                     return Convert.ToInt32(result);
                 }
             }
@@ -484,7 +518,7 @@ namespace Persistence.HelperServices
 
                 if (message == null)
                 {
-                    response.Errors.Add(new Error { Code = "404", Message = "Message not found" });
+                    response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
                     return response;
                 }
 
@@ -495,6 +529,68 @@ namespace Persistence.HelperServices
                 var attachments = await _attach_HeldContext.AttchShipments
                     .Where(attachment => attachment.AttchId == message.MessageId)
                     .ToListAsync();
+
+                var replies = await _connectContext.Replies
+                    .Where(reply => reply.MessageId == message.MessageId)
+                    .OrderBy(reply => reply.ReplyId)
+                    .ToListAsync();
+
+                var replyIds = replies
+                    .Select(reply => reply.ReplyId)
+                    .ToList();
+
+                var replyAttachments = replyIds.Count > 0
+                    ? await _attach_HeldContext.AttchShipments
+                        .Where(attachment => replyIds.Contains(attachment.AttchId))
+                        .ToListAsync()
+                    : new List<AttchShipment>();
+
+                var authorIds = replies
+                    .Select(reply => (reply.AuthorId ?? string.Empty).Trim())
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var authorNameById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (authorIds.Count > 0)
+                {
+                    var normalizedAuthorIds = authorIds
+                        .Select(id => id.ToUpper())
+                        .Distinct()
+                        .ToList();
+
+                    authorNameById = await _gPAContext.PosUsers
+                        .Where(user => normalizedAuthorIds.Contains(user.UserId.ToUpper()))
+                        .Where(user => !string.IsNullOrWhiteSpace(user.UserId))
+                        .GroupBy(user => user.UserId.Trim())
+                        .ToDictionaryAsync(
+                            group => group.Key,
+                            group => group.Select(user => user.ArabicName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ?? group.Key,
+                            StringComparer.OrdinalIgnoreCase);
+                }
+
+                var replyDtos = replies.Select(reply =>
+                {
+                    var authorId = (reply.AuthorId ?? string.Empty).Trim();
+                    var authorName = authorId;
+                    if (!string.IsNullOrWhiteSpace(authorId) && authorNameById.TryGetValue(authorId, out var resolved))
+                    {
+                        authorName = resolved;
+                    }
+
+                    return new ReplyDto
+                    {
+                        ReplyId = reply.ReplyId,
+                        MessageId = reply.MessageId,
+                        Message = reply.Message,
+                        AuthorId = authorId,
+                        AuthorName = authorName,
+                        NextResponsibleSectorId = reply.NextResponsibleSectorId,
+                        CreatedDate = reply.CreatedDate,
+                        AttchShipmentDtos = _mapper.Map<List<AttchShipmentDto>>(
+                            replyAttachments.Where(attachment => attachment.AttchId == reply.ReplyId).ToList())
+                    };
+                }).ToList();
 
                 // Enrich fields with metadata from CdCategoryMand and MandGroups
                 var categories = _connectContext.CdCategoryMands
@@ -547,6 +643,7 @@ namespace Persistence.HelperServices
                     Subject = message.Subject,
                     Type = message.Type,
                     Fields = fields,
+                    Replies = replyDtos,
                     Attachments = attachments
                 };
 

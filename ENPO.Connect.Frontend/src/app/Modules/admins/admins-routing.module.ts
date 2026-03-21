@@ -13,13 +13,23 @@ import { ComponentConfigManagerComponent } from './Managementcomponents/componen
 import { NswagEditorComponent } from './Managementcomponents/nswag-editor/nswag-editor.component';
 import { ModuleChartsComponent } from '../GenericComponents/ConnectComponents/module-charts/module-charts.component';
 import { ApplicationGenericManagerComponent } from './components/application-generic-manager/application-generic-manager.component';
-import { EmployeeSummerRequestsComponent } from '../EmployeeRequests/components/EmployeeSummerRequests/employee-summer-requests.component';
+import { SummerRequestsWorkspaceComponent } from './components/summer-requests-workspace/summer-requests-workspace.component';
+import { SummerRequestsAdminConsoleComponent } from './components/summer-requests-admin-console/summer-requests-admin-console.component';
 
 const routes: Routes =
   [
     {
+      path: 'SummerRequestsManagement',
+      component: SummerRequestsAdminConsoleComponent,
+      canActivate: [AuthNewGuardService],
+      data: {
+        func: 'ConnectAdminFunc',
+        configRouteKey: 'Admin/SummerRequestsManagement'
+      }
+    },
+    {
       path: 'SummerRequests',
-      component: EmployeeSummerRequestsComponent,
+      component: SummerRequestsWorkspaceComponent,
       canActivate: [AuthNewGuardService],
       data: {
         func: 'AllEnpoUsersFunc',
@@ -28,7 +38,7 @@ const routes: Routes =
     },
     {
       path: 'SummerRequests/edit/:id',
-      component: EmployeeSummerRequestsComponent,
+      component: SummerRequestsWorkspaceComponent,
       canActivate: [AuthNewGuardService],
       data: {
         func: 'AllEnpoUsersFunc',

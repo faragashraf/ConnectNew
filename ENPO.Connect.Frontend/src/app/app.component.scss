@@ -22,6 +22,29 @@
   justify-content: space-around !important;
 }
 
+.signalr-global-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1200;
+  padding: 10px 14px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+  border-bottom: 1px solid transparent;
+}
+
+.signalr-global-banner-offline {
+  background: #ffe7e7;
+  color: #7f1d1d;
+  border-bottom-color: #f3b4b4;
+}
+
+.signalr-global-banner-online {
+  background: #e8f9ef;
+  color: #0f5132;
+  border-bottom-color: #bde4cb;
+}
+
 
 /* spinner.component.css */
 .image-container {

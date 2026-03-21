@@ -23,6 +23,24 @@ namespace Api.Controllers
             return _summerWorkflowService.GetMyRequestsAsync(userId, seasonYear);
         }
 
+        [HttpGet(nameof(GetWaveCapacity))]
+        public Task<CommonResponse<IEnumerable<SummerWaveCapacityDto>>> GetWaveCapacity(int categoryId, string waveCode)
+        {
+            return _summerWorkflowService.GetWaveCapacityAsync(categoryId, waveCode);
+        }
+
+        [HttpGet(nameof(GetAdminRequests))]
+        public Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetAdminRequests([FromQuery] SummerAdminRequestsQuery query)
+        {
+            return _summerWorkflowService.GetAdminRequestsAsync(query);
+        }
+
+        [HttpGet(nameof(GetAdminDashboard))]
+        public Task<CommonResponse<SummerAdminDashboardDto>> GetAdminDashboard(int seasonYear = 2026, int? categoryId = null, string? waveCode = null)
+        {
+            return _summerWorkflowService.GetAdminDashboardAsync(seasonYear, categoryId, waveCode);
+        }
+
         [HttpPost(nameof(Cancel))]
         [Consumes("multipart/form-data")]
         public Task<CommonResponse<SummerRequestSummaryDto>> Cancel([FromForm] SummerCancelRequest request)
@@ -49,6 +67,14 @@ namespace Api.Controllers
             var ip = HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "0.0.0.0";
             return _summerWorkflowService.TransferAsync(request, userId, ip);
         }
+
+        [HttpPost(nameof(ExecuteAdminAction))]
+        [Consumes("multipart/form-data")]
+        public Task<CommonResponse<SummerRequestSummaryDto>> ExecuteAdminAction([FromForm] SummerAdminActionRequest request)
+        {
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            var ip = HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "0.0.0.0";
+            return _summerWorkflowService.ExecuteAdminActionAsync(request, userId, ip);
+        }
     }
 }
-
