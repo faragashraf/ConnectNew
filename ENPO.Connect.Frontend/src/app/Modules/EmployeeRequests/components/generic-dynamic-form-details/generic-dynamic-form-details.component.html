@@ -93,7 +93,7 @@
         pButton
         type="submit"
         class="save-btn"
-        [disabled]="ticketForm.invalid">
+        [disabled]="ticketForm.invalid || submitDisabled">
         {{ config.submitButtonText || 'تسجيل الطلب' }}
       </button>
     </div>

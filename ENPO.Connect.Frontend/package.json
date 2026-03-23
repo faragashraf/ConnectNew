@@ -14,7 +14,8 @@
     "generate:backend-index": "node tools/generate-backendservices-index.js",
     "generate:dto-shapes": "node tools/generate-dto-shapes.js",
     "save-config-server": "node tools/save-config-server.js",
-    "save-nswag-server": "node tools/save-nswag-server.js"
+    "save-nswag-server": "node tools/save-nswag-server.js",
+    "check:text-encoding": "node tools/check-text-encoding.js"
   },
   "private": true,
   "dependencies": {

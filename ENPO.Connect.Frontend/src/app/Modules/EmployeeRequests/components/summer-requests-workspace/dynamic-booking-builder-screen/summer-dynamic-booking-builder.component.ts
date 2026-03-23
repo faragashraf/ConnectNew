@@ -1,9 +1,9 @@
-﻿import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { GenericFormsIsolationProvider, GenericFormsService, GroupInfo } from 'src/app/Modules/GenericComponents/GenericForms.service';
 import { GenericDynamicFormDetailsComponent } from '../../generic-dynamic-form-details/generic-dynamic-form-details.component';
-import { CdCategoryMandDto, MessageDto, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
+import { CdCategoryMandDto, ListRequestModel, MessageDto, RequestedData, SearchKind, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import {
@@ -59,6 +59,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   isEditMode = false;
   loadingEditRequest = false;
   editRequestError = '';
+  hasEditChanges = false;
 
   bookingCapacityLoading = false;
   bookingWaveCapacities: SummerWaveCapacityDto[] = [];
@@ -68,6 +69,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private baseFormConfig: ComponentConfig;
   private pendingEditRequestId: number | null = null;
   private loadedEditRequestId: number | null = null;
+  private initialEditSignature = '';
 
   constructor(
     private readonly fb: FormBuilder,
@@ -124,6 +126,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return [...this.bookingWaveCapacities].sort((a, b) => a.familyCount - b.familyCount);
   }
 
+  get submitDisabled(): boolean {
+    return this.isEditMode && !this.hasEditChanges;
+  }
+
   onDestinationChanged(
     value: string | number | null,
     options?: { preserveMessageFields?: boolean; resetFiles?: boolean }
@@ -138,6 +144,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.ticketForm = this.fb.group({});
     this.genericFormService.dynamicGroups = [];
     this.editRequestError = '';
+    if (!this.isEditMode) {
+      this.hasEditChanges = false;
+      this.initialEditSignature = '';
+    }
 
     const destination = this.selectedDestination;
     if (!destination) {
@@ -204,6 +214,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.applyDestinationFieldDefaults();
     this.applyOwnerDefaultMode(this.isEditMode);
     this.applySummerBusinessRules();
+    this.updateEditChangeState();
   }
 
   onGenericEvent(event: { controlFullName?: string }): void {
@@ -226,7 +237,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     if (this.matchesAlias(baseName, this.engine.aliases.proxyMode)) {
-      this.applyOwnerDefaultMode();
+      this.applyOwnerDefaultMode(this.isEditMode);
       return;
     }
 
@@ -238,6 +249,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
   onFileUpload(files: FileParameter[]): void {
     this.fileParameters = [...(files ?? [])];
+    this.updateEditChangeState();
   }
 
   submitDynamicBooking(form: FormGroup): void {
@@ -255,6 +267,11 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     const currentMessageId = this.resolveCurrentMessageId();
     if (this.isEditMode && currentMessageId <= 0) {
       this.msg.msgError('خطأ', '<h5>تعذر تحديد رقم الطلب المراد تعديله.</h5>', true);
+      return;
+    }
+
+    if (this.isEditMode && !this.hasEditChanges) {
+      this.msg.msgError('تنبيه', '<h5>لا توجد أي تغييرات لحفظها.</h5>', true);
       return;
     }
 
@@ -364,6 +381,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
             : 'تم تسجيل الطلب الديناميكي بنجاح');
           this.bookingValidationAlerts = [];
           this.fileParameters = [];
+          this.hasEditChanges = false;
           this.loadMyRequests();
           this.bookingCreated.emit(Number.isFinite(savedMessageId) && savedMessageId > 0 ? savedMessageId : 0);
 
@@ -889,9 +907,11 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.isEditMode = nextEditRequestId !== null;
     this.pendingEditRequestId = nextEditRequestId;
     this.editRequestError = '';
+    this.hasEditChanges = false;
 
     if (!this.isEditMode) {
       this.loadedEditRequestId = null;
+      this.initialEditSignature = '';
       if (wasEditMode) {
         this.messageDto = {} as MessageDto;
         if (this.selectedDestinationId) {
@@ -903,6 +923,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
     if (this.loadedEditRequestId !== nextEditRequestId) {
       this.loadedEditRequestId = null;
+      this.initialEditSignature = '';
     }
   }
 
@@ -938,6 +959,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private loadRequestForEdit(requestId: number): void {
     this.loadingEditRequest = true;
     this.editRequestError = '';
+    let fallbackTriggered = false;
     this.dynamicFormController.getRequestById(requestId).subscribe({
       next: response => {
         if (response?.isSuccess && response.data) {
@@ -946,31 +968,93 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         }
 
         const errors = (response?.errors ?? [])
-          .map(item => String(item?.message ?? '').trim())
-          .filter(item => item.length > 0)
-          .join('<br/>');
-        this.editRequestError = errors || 'تعذر تحميل بيانات الطلب المطلوب للتعديل.';
+          .map(item => ({ message: String(item?.message ?? '').trim() }))
+          .filter(item => item.message.length > 0);
+        fallbackTriggered = true;
+        this.tryLoadRequestForEditFromMyRequestsFeed(requestId, errors);
       },
       error: () => {
-        this.editRequestError = 'تعذر تحميل بيانات الطلب المطلوب للتعديل.';
+        fallbackTriggered = true;
+        this.tryLoadRequestForEditFromMyRequestsFeed(requestId);
       },
       complete: () => {
-        this.loadingEditRequest = false;
+        if (!fallbackTriggered) {
+          this.loadingEditRequest = false;
+        }
       }
     });
   }
 
-  private applyMessageToEditForm(message: MessageDto): void {
-    const messageId = Number(message?.messageId ?? this.pendingEditRequestId ?? 0);
-    if (!Number.isFinite(messageId) || messageId <= 0) {
-      this.editRequestError = 'معرف الطلب المراد تعديله غير صالح.';
+  private tryLoadRequestForEditFromMyRequestsFeed(
+    requestId: number,
+    primaryErrors?: Array<{ message?: string }>
+  ): void {
+    this.loadingEditRequest = true;
+    const collectedErrors: Array<{ message?: string }> = [...(primaryErrors ?? [])];
+    const queries = this.buildDynamicMyRequestsQueries(requestId);
+    let resolved = false;
+
+    const runAttempt = (index: number): void => {
+      if (resolved) {
+        return;
+      }
+
+      if (index >= queries.length) {
+        this.editRequestError = this.resolveRequestDetailsErrorMessage(
+          collectedErrors,
+          'تعذر تحميل بيانات الطلب المطلوب للتعديل.'
+        );
+        this.loadingEditRequest = false;
+        return;
+      }
+
+      this.dynamicFormController.getCorrMyRequest(queries[index]).subscribe({
+        next: response => {
+          const responseErrors = (response?.errors ?? [])
+            .map(item => ({ message: String(item?.message ?? '').trim() }))
+            .filter(item => String(item?.message ?? '').length > 0);
+          if (responseErrors.length > 0) {
+            collectedErrors.push(...responseErrors);
+          }
+
+          const rawItems = Array.isArray(response?.data) ? response.data : [];
+          const normalizedMessages = rawItems
+            .map(item => this.normalizeLoadedRequestDetails(item))
+            .filter((item): item is MessageDto => !!item);
+
+          const matched = normalizedMessages.find(item => Number(item.messageId ?? 0) === requestId);
+          if (matched) {
+            resolved = true;
+            this.editRequestError = '';
+            this.applyMessageToEditForm(matched);
+          }
+        },
+        error: () => {
+          collectedErrors.push({ message: 'تعذر الوصول لخدمة الطلبات أثناء محاولة التحميل البديلة.' });
+        },
+        complete: () => {
+          if (resolved) {
+            this.loadingEditRequest = false;
+            return;
+          }
+          runAttempt(index + 1);
+        }
+      });
+    };
+
+    runAttempt(0);
+  }
+
+  private applyMessageToEditForm(rawMessage: unknown): void {
+    const message = this.normalizeLoadedRequestDetails(rawMessage);
+    if (!message) {
+      this.editRequestError = 'تعذر تحميل بيانات الطلب المطلوب للتعديل.';
       return;
     }
 
-    const destinationId = Number(message?.categoryCd ?? 0);
-    const destination = this.destinations.find(item => item.categoryId === destinationId);
-    if (!destination) {
-      this.editRequestError = 'الطلب لا يرتبط بمصيف متاح داخل إعدادات الموسم الحالي.';
+    const messageId = Number(message?.messageId ?? this.pendingEditRequestId ?? 0);
+    if (!Number.isFinite(messageId) || messageId <= 0) {
+      this.editRequestError = 'معرف الطلب المراد تعديله غير صالح.';
       return;
     }
 
@@ -980,17 +1064,100 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return;
     }
 
+    const destinationId = this.resolveEditDestinationId(message, summary);
+    const destination = this.destinations.find(item => item.categoryId === destinationId);
+    if (!destination) {
+      this.editRequestError = 'الطلب لا يرتبط بمصيف متاح داخل إعدادات الموسم الحالي.';
+      return;
+    }
+
     this.messageDto = {
       ...(message ?? ({} as MessageDto)),
+      categoryCd: destinationId,
       fields: [...(message?.fields ?? [])]
     } as MessageDto;
 
     this.loadedEditRequestId = messageId;
+    this.initialEditSignature = '';
+    this.hasEditChanges = false;
     this.selectedDestinationId = destinationId;
     this.onDestinationChanged(destinationId, {
       preserveMessageFields: true,
       resetFiles: true
     });
+    setTimeout(() => this.updateEditChangeState(), 0);
+  }
+
+  private updateEditChangeState(): void {
+    if (!this.isEditMode) {
+      this.hasEditChanges = false;
+      return;
+    }
+
+    const hasForm = !!this.ticketForm && Object.keys(this.ticketForm.controls ?? {}).length > 0;
+    if (!hasForm) {
+      this.hasEditChanges = false;
+      return;
+    }
+
+    const currentSignature = this.buildEditSignature();
+    if (!this.initialEditSignature && this.loadedEditRequestId && !this.loadingEditRequest) {
+      this.initialEditSignature = currentSignature;
+      this.markFormPristine(this.ticketForm);
+      this.hasEditChanges = false;
+      return;
+    }
+
+    if (!this.initialEditSignature) {
+      this.hasEditChanges = false;
+      return;
+    }
+
+    this.hasEditChanges = currentSignature !== this.initialEditSignature;
+  }
+
+  private buildEditSignature(): string {
+    const rawFormValue = this.ticketForm?.getRawValue?.() ?? {};
+    const files = (this.fileParameters ?? []).map(item => ({
+      fileName: String(item?.fileName ?? '').trim(),
+      size: Number(item?.originalSize ?? (item?.data as File | undefined)?.size ?? 0) || 0
+    }));
+
+    try {
+      return JSON.stringify({
+        form: rawFormValue,
+        files
+      });
+    } catch {
+      return `${Date.now()}-${Math.random()}`;
+    }
+  }
+
+  private markFormPristine(group: FormGroup): void {
+    Object.keys(group.controls).forEach(key => {
+      const control = group.controls[key];
+      control.markAsPristine({ onlySelf: true });
+      control.markAsUntouched({ onlySelf: true });
+
+      if (control instanceof FormGroup) {
+        this.markFormPristine(control);
+        return;
+      }
+
+      if (control instanceof FormArray) {
+        control.controls.forEach(item => {
+          if (item instanceof FormGroup) {
+            this.markFormPristine(item);
+          } else {
+            item.markAsPristine({ onlySelf: true });
+            item.markAsUntouched({ onlySelf: true });
+          }
+        });
+      }
+    });
+
+    group.markAsPristine();
+    group.markAsUntouched();
   }
 
   private resolveCurrentMessageId(): number {
@@ -1030,6 +1197,382 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     return 'لا يمكن تعديل هذا الطلب.';
+  }
+
+  private resolveEditDestinationId(message: MessageDto, summary?: SummerRequestSummaryDto): number {
+    const directCategoryId = this.parsePositiveInt(message?.categoryCd);
+    if (directCategoryId) {
+      return directCategoryId;
+    }
+
+    const destinationFromField = this.parsePositiveInt(
+      this.getFieldTextByAliases(message?.fields ?? [], this.engine.aliases.destinationId)
+    );
+    if (destinationFromField) {
+      return destinationFromField;
+    }
+
+    const summaryCategoryId = this.parsePositiveInt(summary?.categoryId);
+    if (summaryCategoryId) {
+      return summaryCategoryId;
+    }
+
+    return 0;
+  }
+
+  private getFieldTextByAliases(fields: TkmendField[], aliases: string[]): string {
+    if (!Array.isArray(fields) || fields.length === 0 || !Array.isArray(aliases) || aliases.length === 0) {
+      return '';
+    }
+
+    const normalizedAliases = aliases
+      .map(alias => this.normalizeObjectLookupKey(alias))
+      .filter(alias => alias.length > 0);
+
+    for (const field of fields) {
+      const key = this.normalizeObjectLookupKey(String(field?.fildKind ?? ''));
+      if (!key || !normalizedAliases.includes(key)) {
+        continue;
+      }
+
+      const value = String(field?.fildTxt ?? '').trim();
+      if (value.length > 0) {
+        return value;
+      }
+    }
+
+    return '';
+  }
+
+  private parsePositiveInt(value: unknown): number | null {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null;
+    }
+    return Math.floor(parsed);
+  }
+
+  private normalizeLoadedRequestDetails(raw: unknown): MessageDto | null {
+    const source = this.extractMessagePayload(raw);
+    if (!source) {
+      return null;
+    }
+
+    const normalized: Record<string, unknown> = {
+      ...(source as Record<string, unknown>)
+    };
+
+    const messageId = this.parsePositiveInt(this.readValue(source, [
+      'messageId',
+      'MessageId',
+      'id',
+      'Id',
+      'requestId',
+      'RequestId'
+    ])) ?? this.parsePositiveInt(this.pendingEditRequestId);
+    if (messageId) {
+      normalized['messageId'] = messageId;
+    }
+
+    const fields = this.normalizeLoadedFields(this.readValue(source, [
+      'fields',
+      'Fields',
+      'tkmendFields',
+      'TkmendFields',
+      'tkMendFields',
+      'TkMendFields',
+      'messageFields',
+      'MessageFields',
+      'mendFields',
+      'MendFields'
+    ]));
+    normalized['fields'] = fields;
+
+    let categoryCd = this.parsePositiveInt(this.readValue(source, [
+      'categoryCd',
+      'CategoryCd',
+      'categoryID',
+      'CategoryID',
+      'categoryId',
+      'CategoryId',
+      'catId',
+      'CatId'
+    ]));
+    if (!categoryCd) {
+      categoryCd = this.parsePositiveInt(this.getFieldTextByAliases(fields, this.engine.aliases.destinationId));
+    }
+
+    if (!categoryCd && messageId) {
+      const summary = this.myRequests.find(item => item.messageId === messageId);
+      categoryCd = this.parsePositiveInt(summary?.categoryId);
+    }
+
+    if (categoryCd) {
+      normalized['categoryCd'] = categoryCd;
+    }
+
+    const attachments = this.extractArray(this.readValue(source, [
+      'attachments',
+      'Attachments',
+      'attchShipments',
+      'AttchShipments',
+      'attchShipmentDtos',
+      'AttchShipmentDtos'
+    ]));
+    normalized['attachments'] = attachments;
+
+    const replies = this.extractArray(this.readValue(source, [
+      'replies',
+      'Replies',
+      'replyDtos',
+      'ReplyDtos'
+    ]));
+    normalized['replies'] = replies;
+
+    return normalized as unknown as MessageDto;
+  }
+
+  private normalizeLoadedFields(rawFields: unknown): TkmendField[] {
+    return this.extractArray(rawFields).map(item => {
+      if (!item || typeof item !== 'object') {
+        return {
+          fildSql: 0,
+          fildRelted: 0,
+          fildKind: '',
+          fildTxt: '',
+          instanceGroupId: 1,
+          mendSql: 0,
+          mendCategory: 0,
+          mendStat: false,
+          mendGroup: 0,
+          applicationId: '',
+          groupName: '',
+          isExtendable: false,
+          groupWithInRow: 0
+        } as TkmendField;
+      }
+
+      const row = item as Record<string, unknown>;
+      const fildSql = Number(this.readValue(row, ['fildSql', 'FildSql', 'fieldSql', 'FieldSql', 'id', 'Id']) ?? 0);
+      const fildRelted = Number(this.readValue(row, ['fildRelted', 'FildRelted', 'fieldRelated', 'FieldRelated']) ?? 0);
+      const instanceGroupId = Number(
+        this.readValue(row, ['instanceGroupId', 'InstanceGroupId', 'instance_group_id', 'Instance_Group_Id']) ?? 1
+      );
+      const mendSql = Number(this.readValue(row, ['mendSql', 'MendSql']) ?? 0);
+      const mendCategory = Number(this.readValue(row, ['mendCategory', 'MendCategory']) ?? 0);
+      const mendGroup = Number(this.readValue(row, ['mendGroup', 'MendGroup', 'groupId', 'GroupId', 'mend_group']) ?? 0);
+      const groupWithInRow = Number(this.readValue(row, ['groupWithInRow', 'GroupWithInRow']) ?? 0);
+
+      return {
+        ...(row as unknown as TkmendField),
+        fildSql: Number.isFinite(fildSql) ? Math.floor(fildSql) : 0,
+        fildRelted: Number.isFinite(fildRelted) ? Math.floor(fildRelted) : 0,
+        fildKind: String(this.readValue(row, [
+          'fildKind',
+          'FildKind',
+          'fieldKind',
+          'FieldKind',
+          'mendField',
+          'MendField',
+          'field_name',
+          'Field_Name'
+        ]) ?? '').trim(),
+        fildTxt: String(this.readValue(row, [
+          'fildTxt',
+          'FildTxt',
+          'fieldTxt',
+          'FieldTxt',
+          'fieldValue',
+          'FieldValue',
+          'fildValue',
+          'FildValue',
+          'value',
+          'Value',
+          'txt',
+          'Txt'
+        ]) ?? '').trim(),
+        instanceGroupId: Number.isFinite(instanceGroupId) && instanceGroupId > 0 ? Math.floor(instanceGroupId) : 1,
+        mendSql: Number.isFinite(mendSql) ? Math.floor(mendSql) : 0,
+        mendCategory: Number.isFinite(mendCategory) ? Math.floor(mendCategory) : 0,
+        mendGroup: Number.isFinite(mendGroup) ? Math.floor(mendGroup) : 0,
+        groupWithInRow: Number.isFinite(groupWithInRow) ? Math.floor(groupWithInRow) : 0
+      } as TkmendField;
+    });
+  }
+
+  private extractMessagePayload(raw: unknown): Record<string, unknown> | null {
+    if (raw === null || raw === undefined) {
+      return null;
+    }
+
+    if (typeof raw === 'string') {
+      const text = raw.trim();
+      if (!text) {
+        return null;
+      }
+
+      try {
+        return this.extractMessagePayload(JSON.parse(text));
+      } catch {
+        return null;
+      }
+    }
+
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        const nested = this.extractMessagePayload(item);
+        if (nested) {
+          return nested;
+        }
+      }
+      return null;
+    }
+
+    if (typeof raw !== 'object') {
+      return null;
+    }
+
+    const source = raw as Record<string, unknown>;
+    const nested = this.readValue(source, [
+      'message',
+      'Message',
+      'messageDto',
+      'MessageDto',
+      'request',
+      'Request',
+      'item',
+      'Item'
+    ]);
+    const nestedRecord = this.extractMessagePayload(nested);
+    if (nestedRecord) {
+      return nestedRecord;
+    }
+
+    return source;
+  }
+
+  private extractArray(value: unknown): unknown[] {
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (!value || typeof value !== 'object') {
+      return [];
+    }
+
+    const record = value as Record<string, unknown>;
+    const nested = this.readValue(record, [
+      '$values',
+      'values',
+      'Values',
+      'items',
+      'Items',
+      'list',
+      'List',
+      'data',
+      'Data',
+      'rows',
+      'Rows'
+    ]);
+    if (Array.isArray(nested)) {
+      return nested;
+    }
+
+    const numericKeys = Object.keys(record)
+      .filter(key => /^[0-9]+$/.test(key))
+      .sort((a, b) => Number(a) - Number(b));
+
+    if (numericKeys.length > 0) {
+      return numericKeys.map(key => record[key]);
+    }
+
+    return [];
+  }
+
+  private readValue(source: Record<string, unknown>, keys: string[]): unknown {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        return source[key];
+      }
+    }
+
+    const normalizedLookup = new Map<string, unknown>();
+    Object.keys(source).forEach(key => {
+      normalizedLookup.set(this.normalizeObjectLookupKey(key), source[key]);
+    });
+
+    for (const key of keys) {
+      const normalized = this.normalizeObjectLookupKey(key);
+      if (normalizedLookup.has(normalized)) {
+        return normalizedLookup.get(normalized);
+      }
+    }
+
+    return undefined;
+  }
+
+  private normalizeObjectLookupKey(value: string): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+  }
+
+  private buildDynamicMyRequestsQueries(requestId: number): ListRequestModel[] {
+    const summary = this.myRequests.find(item => item.messageId === requestId);
+    const summaryCategoryId = this.parsePositiveInt(summary?.categoryId) ?? 0;
+    const categoryCandidates = summaryCategoryId > 0 ? [summaryCategoryId, 0] : [0];
+    const typeCandidates = [0, 1, 2, 4];
+    const seen = new Set<string>();
+    const queries: ListRequestModel[] = [];
+
+    categoryCandidates.forEach(categoryCd => {
+      typeCandidates.forEach(type => {
+        const key = `${type}|${categoryCd}`;
+        if (seen.has(key)) {
+          return;
+        }
+        seen.add(key);
+        queries.push(this.buildDynamicMyRequestsQuery(type, categoryCd));
+      });
+    });
+
+    return queries;
+  }
+
+  private buildDynamicMyRequestsQuery(type = 0, categoryCd = 0): ListRequestModel {
+    return {
+      pageNumber: 1,
+      pageSize: 5000,
+      status: 5,
+      categoryCd,
+      type,
+      requestedData: RequestedData.MyRequest,
+      search: {
+        isSearch: false,
+        searchKind: SearchKind.NoSearch,
+        searchField: '',
+        searchText: '',
+        searchType: ''
+      }
+    };
+  }
+
+  private resolveRequestDetailsErrorMessage(
+    errors: Array<{ message?: string }> | undefined,
+    fallback: string
+  ): string {
+    const combined = (errors ?? [])
+      .map(item => String(item?.message ?? '').trim())
+      .filter(item => item.length > 0)
+      .join(' | ');
+
+    const normalized = combined.toLowerCase();
+    if (normalized.includes('attch_shipment') && normalized.includes('invalid object name')) {
+      return 'تعذر تحميل بيانات الطلب للتعديل بسبب مشكلة بجدول المرفقات في قاعدة البيانات (Attch_shipment). برجاء مراجعة الـ Backend.';
+    }
+
+    return combined || fallback;
   }
 
   private coalesceText(...values: unknown[]): string {

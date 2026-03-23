@@ -117,11 +117,14 @@
               <div class="request-details-head">
                 <h4>تفاصيل الطلب المختار</h4>
                 <small *ngIf="loadingSelectedRequestDetails">جاري تحميل التفاصيل...</small>
+                <small class="warn" *ngIf="!loadingSelectedRequestDetails && selectedRequestDetailsError.length > 0">
+                  {{ selectedRequestDetailsError }}
+                </small>
               </div>
               <button
                 *ngIf="selectedRequest as request"
                 type="button"
-                class="ghost"
+                class="ghost edit-request-btn"
                 [disabled]="!canEditRequest(request)"
                 (click)="openEditRequest(request)">
                 {{ canEditRequest(request) ? 'تعديل الطلب' : 'التعديل غير متاح' }}

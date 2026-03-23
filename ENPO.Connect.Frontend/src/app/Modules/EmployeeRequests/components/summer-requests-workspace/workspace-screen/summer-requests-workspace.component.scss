@@ -536,6 +536,26 @@ button.ghost:hover:not(:disabled) {
   gap: 4px;
 }
 
+.edit-request-btn {
+  min-width: 150px;
+  border-color: #86bddd;
+  background: linear-gradient(180deg, #f3fbff, #e6f4fd);
+  color: #0d5177;
+}
+
+.edit-request-btn:hover:not(:disabled) {
+  border-color: #5ea2cd;
+  background: linear-gradient(180deg, #e8f6ff, #d8ecfa);
+  box-shadow: 0 4px 12px rgba(22, 91, 131, 0.12);
+}
+
+.edit-request-btn:disabled {
+  opacity: 0.65;
+  border-color: #d2dbe2;
+  background: #f6f9fc;
+  color: #8699a7;
+}
+
 .request-details h4 {
   margin: 0;
   font-size: 16px;
