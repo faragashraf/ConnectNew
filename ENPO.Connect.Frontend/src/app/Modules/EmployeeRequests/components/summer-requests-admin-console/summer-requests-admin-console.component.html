@@ -32,11 +32,12 @@
       <button
         type="button"
         class="chip"
-        *ngFor="let destination of dashboardDestinationChips"
+        [class.chip-arabic]="isArabicText(destination.name)"
+        *ngFor="let destination of dashboardDestinationChips; trackBy: trackByDestinationChip"
         [class.active]="dashboardScopeCategoryId === destination.categoryId"
         (click)="applyDestinationScope(destination.categoryId)">
-        {{ destination.name }}
-        <strong>{{ destination.count }}</strong>
+        <span class="chip-label">{{ destination.name }}</span>
+        <strong class="chip-count-badge">{{ destination.count }}</strong>
       </button>
     </div>
 
@@ -51,11 +52,12 @@
       <button
         type="button"
         class="chip wave"
-        *ngFor="let wave of dashboardWaveChips"
+        [class.chip-arabic]="isArabicText(wave.waveCode)"
+        *ngFor="let wave of dashboardWaveChips; trackBy: trackByWaveChip"
         [class.active]="dashboardScopeWaveCode === wave.waveCode"
         (click)="applyWaveScope(wave.waveCode)">
-        {{ wave.waveCode }}
-        <strong>{{ wave.count }}</strong>
+        <span class="chip-label chip-wave-code">{{ wave.waveCode }}</span>
+        <strong class="chip-count-badge">{{ wave.count }}</strong>
       </button>
     </div>
   </section>
@@ -112,9 +114,11 @@
     <article class="breakdown-card">
       <h4>توزيع الطلبات حسب المصيف</h4>
       <ul>
-        <li *ngFor="let item of stats.byDestination">
-          <button type="button" class="break-btn" (click)="selectDestinationFromDashboardBucket(item)">{{ item.key }}</button>
-          <strong>{{ item.count }}</strong>
+        <li *ngFor="let item of stats.byDestination; trackBy: trackByDashboardBucket" [class.item-arabic]="isArabicText(item.key)">
+          <button type="button" class="break-btn break-btn-destination" (click)="selectDestinationFromDashboardBucket(item)">
+            <span class="break-key">{{ item.key }}</span>
+          </button>
+          <span class="break-count-badge">{{ item.count }}</span>
         </li>
       </ul>
     </article>
@@ -122,15 +126,21 @@
     <article class="breakdown-card">
       <h4>توزيع الطلبات حسب الفوج</h4>
       <ul>
-        <li *ngFor="let item of dashboardWaveBreakdownSorted">
-          <button type="button" class="break-btn" (click)="selectWaveFromDashboardBucket(item)">{{ item.key }}</button>
-          <strong>{{ item.count }}</strong>
+        <li *ngFor="let item of dashboardWaveBreakdownSorted; trackBy: trackByDashboardBucket" [class.item-arabic]="isArabicText(item.key)">
+          <button type="button" class="break-btn break-btn-wave" (click)="selectWaveFromDashboardBucket(item)">
+            <span class="break-key break-key-wave">{{ item.key }}</span>
+          </button>
+          <span class="break-count-badge">{{ item.count }}</span>
         </li>
       </ul>
     </article>
   </section>
 
   <section class="filters-panel">
+    <header class="filters-header">
+      <h3 class="filters-title"><i class="pi pi-filter"></i> الفلاتر الذكية</h3>
+      <span class="filters-hint">استخدم الفلاتر للبحث في الطلبات بدقة</span>
+    </header>
     <form [formGroup]="filtersForm" class="filters-grid" (ngSubmit)="onSearch()">
       <label>
         <span>المصيف</span>
@@ -140,19 +150,21 @@
         </select>
       </label>
 
-      <label>
+      <label class="wave-field">
         <span>الفوج</span>
-        <select formControlName="waveCode">
-          <option [ngValue]="''">الكل</option>
-          <option *ngFor="let wave of filterWaveOptions" [ngValue]="wave.code">{{ wave.code }} - {{ wave.startsAtLabel }}</option>
-        </select>
-        <button
-          type="button"
-          class="ghost capacity-trigger"
-          (click)="openWaveCapacityDialog()"
-          [disabled]="!canOpenWaveCapacityDialog">
-          بيان إتاحة هذا الفوج
-        </button>
+        <div class="wave-row">
+          <select formControlName="waveCode">
+            <option [ngValue]="''">الكل</option>
+            <option *ngFor="let wave of filterWaveOptions" [ngValue]="wave.code">{{ wave.code }} - {{ wave.startsAtLabel }}</option>
+          </select>
+          <button
+            type="button"
+            class="ghost capacity-trigger"
+            (click)="openWaveCapacityDialog()"
+            [disabled]="!canOpenWaveCapacityDialog">
+            بيان إتاحة هذا الفوج
+          </button>
+        </div>
       </label>
 
       <label>
@@ -261,7 +273,7 @@
       </header>
 
       <app-summer-requests-list
-        [variant]="'employee'"
+        [variant]="'admin'"
         [loading]="loadingRequests"
         [requests]="requests"
         [selectedRequestId]="selectedRequestId"
@@ -272,7 +284,7 @@
         [paymentOverdueResolver]="isPaymentOverdue.bind(this)"
         [transferStateLabelResolver]="getTransferStateLabel.bind(this)"
         [transferStateClassResolver]="getTransferStateClass.bind(this)"
-        [pageMode]="'client'"
+        [pageMode]="'server'"
         [pageData]="requestsPageData"
         (requestSelected)="selectRequest($event)"
         (pageChange)="onRequestsPageChange($event)">

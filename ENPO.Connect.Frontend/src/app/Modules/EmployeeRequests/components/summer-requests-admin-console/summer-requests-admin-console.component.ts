@@ -1033,6 +1033,32 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return Number(item?.count ?? 0) || 0;
   }
 
+  isArabicText(value: string | null | undefined): boolean {
+    const text = String(value ?? '').trim();
+    if (!text) {
+      return false;
+    }
+
+    return /[\u0600-\u06FF]/.test(text);
+  }
+
+  trackByDestinationChip(_index: number, item: { categoryId: number }): number {
+    return Number(item?.categoryId ?? 0);
+  }
+
+  trackByWaveChip(_index: number, item: { waveCode: string }): string {
+    return String(item?.waveCode ?? '');
+  }
+
+  trackByDashboardBucket(_index: number, item: SummerDashboardBucketDto): string {
+    const id = Number((item as any)?.id ?? 0);
+    if (id > 0) {
+      return `id:${id}`;
+    }
+
+    return `key:${String(item?.key ?? '')}`;
+  }
+
   private bindActionRules(): void {
     const actionCodeSub = this.actionForm.get('actionCode')?.valueChanges.subscribe(value => {
       const normalized = String(value ?? '').trim().toUpperCase();

@@ -94,8 +94,11 @@
     <div class="pager-controls">
       <label class="page-size">
         <span>عدد السطور</span>
-        <select [value]="resolvedPageSize" (change)="onServerPageSizeChanged($any($event.target).value)">
-          <option *ngFor="let size of resolvedRowsPerPageOptions" [value]="size">{{ size }}</option>
+        <select
+          [ngModel]="resolvedPageSize"
+          [ngModelOptions]="{ standalone: true }"
+          (ngModelChange)="onServerPageSizeChanged($event)">
+          <option *ngFor="let size of resolvedRowsPerPageOptions" [ngValue]="size">{{ size }}</option>
         </select>
       </label>
 
