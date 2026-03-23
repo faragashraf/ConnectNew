@@ -1,0 +1,70 @@
+<section class="dynamic-booking-shell" dir="rtl">
+  <div class="dynamic-head">
+    <div class="head-content">
+      <h3>إنشاء طلب جديد (ديناميكي)</h3>
+      <p>المكوّن مبني على بيانات تعريف من الجداول الديناميكية مع الحفاظ على قواعد المصايف.</p>
+    </div>
+    <div class="app-id-pill">
+      <span>معرّف التطبيق</span>
+      <strong>{{ resolvedApplicationId }}</strong>
+    </div>
+  </div>
+
+  <div class="top-controls">
+    <label>
+      <span class="required-label">المصيف</span>
+      <select
+        [ngModel]="selectedDestinationId"
+        (ngModelChange)="onDestinationChanged($event)"
+        [disabled]="loadingMetadata || submitting">
+        <option [ngValue]="null">اختر</option>
+        <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">
+          {{ destination.name }}
+        </option>
+      </select>
+    </label>
+    <small class="meta-error" *ngIf="metadataError.length > 0">{{ metadataError }}</small>
+  </div>
+
+  <div class="danger-alert" *ngIf="bookingValidationAlerts.length > 0">
+    <h4>يرجى مراجعة النقاط التالية</h4>
+    <ul>
+      <li *ngFor="let alert of bookingValidationAlerts">{{ alert }}</li>
+    </ul>
+  </div>
+
+  <section class="capacity-overview" *ngIf="selectedDestination">
+    <h4>الإتاحة اللحظية للفوج المختار</h4>
+    <small *ngIf="bookingCapacityLoading">جاري تحديث الإتاحة...</small>
+    <div class="capacity-grid" *ngIf="bookingCapacitySummary.length > 0">
+      <article class="capacity-card" *ngFor="let row of bookingCapacitySummary">
+        <span>سعة {{ row.familyCount }}</span>
+        <strong>{{ row.availableUnits }}</strong>
+        <small>متاح من {{ row.totalUnits }} (المستخدم {{ row.usedUnits }})</small>
+      </article>
+    </div>
+    <p class="muted" *ngIf="!bookingCapacityLoading && bookingCapacitySummary.length === 0">
+      اختر فوجًا لعرض الإتاحة.
+    </p>
+  </section>
+
+  <div class="loading" *ngIf="loadingMetadata">جاري تحميل بيانات التعريف الديناميكية...</div>
+
+  <app-generic-dynamic-form-details
+    *ngIf="selectedDestination && customFilteredCategoryMand.length > 0"
+    [config]="formConfig"
+    [messageDto]="messageDto"
+    [customFilteredCategoryMand]="customFilteredCategoryMand"
+    [unitTree]="[]"
+    [fileParameters]="fileParameters"
+    [isCurrentUser]="true"
+    (ticketFormChange)="onTicketFormChange($event)"
+    (submitFormChange)="submitDynamicBooking($event)"
+    (genericEvent)="onGenericEvent($event)"
+    (fileUploadEvent)="onFileUpload($event)">
+  </app-generic-dynamic-form-details>
+
+  <div class="empty-state" *ngIf="!loadingMetadata && selectedDestination && customFilteredCategoryMand.length === 0">
+    لا توجد حقول ديناميكية مرتبطة بالمصيف المختار ضمن معرّف التطبيق الحالي.
+  </div>
+</section>

@@ -1,0 +1,49 @@
+:host {
+  display: block;
+}
+
+.owner-info {
+  margin-top: 10px;
+  border: 1px solid #d8e7f2;
+  border-radius: 10px;
+  background: #f8fcff;
+  padding: 10px;
+}
+
+.owner-info h5 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.owner-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.owner-grid div {
+  border: 1px solid #e2ecf5;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #fff;
+  display: grid;
+  gap: 4px;
+}
+
+.owner-grid span {
+  color: #5b7386;
+  font-size: 12px;
+}
+
+.owner-grid strong {
+  font-size: 13px;
+  color: #123a54;
+  word-break: break-word;
+}
+
+@media (max-width: 860px) {
+  .owner-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

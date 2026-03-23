@@ -32,6 +32,37 @@ public class SummerWaveCapacityDto
     public int AvailableUnits { get; set; }
 }
 
+public class SummerDestinationConfigDto
+{
+    public int CategoryId { get; set; }
+    public string Slug { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int MaxExtraMembers { get; set; }
+    public List<SummerStayModeDefinitionDto> StayModes { get; set; } = new();
+    public List<int> FamilyOptions { get; set; } = new();
+    public List<SummerApartmentDefinitionDto> Apartments { get; set; } = new();
+    public List<SummerWaveDefinitionDto> Waves { get; set; } = new();
+}
+
+public class SummerStayModeDefinitionDto
+{
+    public string Code { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+}
+
+public class SummerApartmentDefinitionDto
+{
+    public int FamilyCount { get; set; }
+    public int Apartments { get; set; }
+}
+
+public class SummerWaveDefinitionDto
+{
+    public string Code { get; set; } = string.Empty;
+    public string StartsAtLabel { get; set; } = string.Empty;
+    public string? StartsAtIso { get; set; }
+}
+
 public class SummerCancelRequest
 {
     public int MessageId { get; set; }

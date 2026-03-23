@@ -1,0 +1,28 @@
+<section class="companions-table-wrap">
+  <h5>{{ title }}</h5>
+
+  <table class="companions-table" *ngIf="companions.length > 0; else emptyState">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>اسم المرافق</th>
+        <th>درجة القرابة</th>
+        <th>الرقم القومي</th>
+        <th>السن (للأطفال)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let companion of companions; let idx = index">
+        <td>{{ resolveIndex(companion.index, idx + 1) }}</td>
+        <td>{{ resolveText(companion.name) }}</td>
+        <td>{{ resolveText(companion.relation) }}</td>
+        <td>{{ resolveText(companion.nationalId) }}</td>
+        <td>{{ resolveText(companion.age) }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <ng-template #emptyState>
+    <p class="empty-sub">{{ emptyMessage }}</p>
+  </ng-template>
+</section>

@@ -38,6 +38,7 @@ import { GenericChartComponent } from './GenericComponent/generic-chart/generic-
 import { ModuleChartsComponent } from './ConnectComponents/module-charts/module-charts.component';
 import { InViewportDirective } from 'src/app/shared/directives/in-viewport.directive';
 import { DateTimeComponent } from './GenericComponent/date-time/date-time.component';
+import { ToggleSwitchComponent } from './GenericComponent/toggle-switch/toggle-switch.component';
 import { PrePrintFormComponent } from '../AdminCertificates/components/PrintForms/pre-print-form/pre-print-form.component';
 import { AwbPrintComponent } from '../AdminCertificates/components/PrintForms/awb-print/awb-print.component';
 import { MainFormComponent } from '../AdminCertificates/components/PrintForms/main-form/main-form.component';
@@ -98,7 +99,8 @@ import { CompleteRequestComponent } from '../EmployeeRequests/complete-request/c
     GenericChartComponent,
     ModuleChartsComponent,
     InViewportDirective,
-    DateTimeComponent
+    DateTimeComponent,
+    ToggleSwitchComponent
   ],
   imports: [
     CommonModule,
@@ -155,6 +157,7 @@ OtpCodeInputComponent,
     ModuleChartsComponent,
     GenericChartComponent,
     InViewportDirective,
+    ToggleSwitchComponent,
 
     NgxPrintModule,
     NgxBarcodeModule

@@ -10,6 +10,25 @@ export interface SummerWorkflowCommonResponse<T> {
   readonly totalPages: number;
 }
 
+export interface SummerRequestsPageData {
+  pageNumber: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  rangeStart: number;
+  rangeEnd: number;
+  first: number;
+  rows: number;
+  rowsPerPageOptions: number[];
+}
+
+export interface SummerRequestsPageChange {
+  pageNumber: number;
+  pageSize: number;
+  first: number;
+  rows: number;
+}
+
 export interface SummerRequestSummaryDto {
   messageId: number;
   requestRef: string;
@@ -36,6 +55,33 @@ export interface SummerWaveCapacityDto {
   totalUnits: number;
   usedUnits: number;
   availableUnits: number;
+}
+
+export interface SummerStayModeDefinitionDto {
+  code: string;
+  label: string;
+}
+
+export interface SummerApartmentDefinitionDto {
+  familyCount: number;
+  apartments: number;
+}
+
+export interface SummerWaveDefinitionDto {
+  code: string;
+  startsAtLabel: string;
+  startsAtIso?: string;
+}
+
+export interface SummerDestinationConfigDto {
+  categoryId: number;
+  slug: string;
+  name: string;
+  stayModes: SummerStayModeDefinitionDto[];
+  familyOptions: number[];
+  maxExtraMembers: number;
+  apartments: SummerApartmentDefinitionDto[];
+  waves: SummerWaveDefinitionDto[];
 }
 
 export interface SummerCancelFormRequest {

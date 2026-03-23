@@ -1,0 +1,48 @@
+:host {
+  display: block;
+}
+
+.attachments {
+  margin-top: 10px;
+}
+
+.attachments h5 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.attachments ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.attachments li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #deebf5;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #f8fcff;
+}
+
+.attachment-link {
+  border: none;
+  background: transparent;
+  color: #125f93;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: right;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.attachment-link:disabled {
+  color: #8aa1b2;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+

@@ -8,20 +8,28 @@ import { FileParameter } from 'src/app/shared/services/BackendServices/dto-share
 import {
   SummerAdminDashboardDto,
   SummerDashboardBucketDto,
+  SummerRequestsPageChange,
+  SummerRequestsPageData,
   SummerRequestSummaryDto,
   SummerWaveCapacityDto
 } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.dto';
 import { SummerWorkflowController } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.service';
 import { AttchedObjectService } from 'src/app/shared/services/helper/attched-object.service';
+import { DynamicMetadataService } from 'src/app/shared/services/helper/dynamic-metadata.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
 import { SignalRService } from 'src/app/shared/services/SignalRServices/SignalR.service';
 import {
-  SUMMER_DESTINATIONS_2026,
+  parseSummerDestinationCatalog,
   SUMMER_SEASON_YEAR,
   SummerDestinationConfig,
   SummerWaveDefinition
 } from '../summer-requests-workspace/summer-requests-workspace.config';
+import {
+  formatRequestFieldValue,
+  resolveFieldLabel,
+  SUMMER_FIELD_LABEL_MAP
+} from '../summer-requests-workspace/summer-requests-workspace.utils';
 
 @Component({
   selector: 'app-summer-requests-admin-console',
@@ -30,7 +38,10 @@ import {
 })
 export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   readonly seasonYear = SUMMER_SEASON_YEAR;
-  readonly destinations = SUMMER_DESTINATIONS_2026;
+  readonly dynamicSummerApplicationId = 'SUM2026DYN';
+  destinations: SummerDestinationConfig[] = [];
+  loadingDestinations = false;
+  destinationsError = '';
 
   readonly statusOptions = [
     { value: '', label: 'الكل' },
@@ -71,10 +82,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   activeDashboardPaymentState = '';
   requestsTotalCount = 0;
   requestsPageNumber = 1;
-  requestsPageSize = 50;
+  requestsPageSize = 5;
   requestsTotalPages = 1;
 
-  readonly pageSizeOptions = [25, 50, 100, 250, 500];
+  readonly pageSizeOptions = [5, 10, 25, 50];
 
   capacityDialogVisible = false;
   loadingWaveCapacity = false;
@@ -87,11 +98,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   actionAttachments: File[] = [];
   private readonly allowedAttachmentExtensions = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
   private readonly subscriptions = new Subscription();
+  private requestsLoadVersion = 0;
 
   constructor(
     private readonly fb: FormBuilder,
     private readonly summerWorkflowController: SummerWorkflowController,
     private readonly dynamicFormController: DynamicFormController,
+    private readonly dynamicMetadataService: DynamicMetadataService,
     private readonly attachmentsController: AttachmentsController,
     private readonly attchedObjectService: AttchedObjectService,
     private readonly msg: MsgsService,
@@ -106,7 +119,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       employeeId: [''],
       search: [''],
       pageNumber: [1],
-      pageSize: [50]
+      pageSize: [5]
     });
 
     this.actionForm = this.fb.group({
@@ -124,12 +137,45 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.bindActionRules();
     this.bindFilterDependencies();
     this.bindSignalRefresh();
-    this.loadDashboard();
-    this.loadRequests();
+    this.loadDestinationCatalog();
   }
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
+  }
+
+  loadDestinationCatalog(): void {
+    this.loadingDestinations = true;
+    this.destinationsError = '';
+    this.dynamicMetadataService.getMendJson<unknown>(this.dynamicSummerApplicationId, 'SUM2026_DestinationCatalog').subscribe({
+      next: response => {
+        if (response?.isSuccess) {
+          this.destinations = parseSummerDestinationCatalog(response.data, this.seasonYear);
+          if (this.destinations.length > 0) {
+            this.loadDashboard();
+            this.loadRequests();
+            return;
+          }
+        }
+
+        this.destinations = [];
+        const errors = Array.isArray(response?.errors) ? response.errors : [];
+        this.destinationsError = errors.length > 0
+          ? errors.join('<br/>')
+          : 'تعذر تحميل إعدادات المصايف الديناميكية من CDMendTbl.';
+        this.loadDashboard();
+        this.loadRequests();
+      },
+      error: () => {
+        this.destinations = [];
+        this.destinationsError = 'تعذر تحميل إعدادات المصايف الديناميكية من الخدمة العامة.';
+        this.loadDashboard();
+        this.loadRequests();
+      },
+      complete: () => {
+        this.loadingDestinations = false;
+      }
+    });
   }
 
   get selectedRequest(): SummerRequestSummaryDto | undefined {
@@ -178,6 +224,25 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return 0;
     }
     return Math.min(this.requestsPageNumber * this.requestsPageSize, this.requestsTotalCount);
+  }
+
+  get requestsPageData(): SummerRequestsPageData {
+    const totalCount = Math.max(0, Number(this.requestsTotalCount) || 0);
+    const pageSize = Math.max(1, Number(this.requestsPageSize) || 1);
+    const totalPages = Math.max(1, Number(this.requestsTotalPages) || Math.ceil(totalCount / pageSize));
+    const pageNumber = Math.max(1, Math.min(Number(this.requestsPageNumber) || 1, totalPages));
+
+    return {
+      pageNumber,
+      pageSize,
+      totalCount,
+      totalPages,
+      rangeStart: this.requestRangeStart,
+      rangeEnd: this.requestRangeEnd,
+      first: (pageNumber - 1) * pageSize,
+      rows: pageSize,
+      rowsPerPageOptions: this.pageSizeOptions
+    };
   }
 
   get selectedFilterCategoryId(): number {
@@ -288,16 +353,98 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       .sort((a, b) => this.getWaveOrder(a.code) - this.getWaveOrder(b.code));
   }
 
-  get selectedRequestFields(): Array<{ key: string; value: string; groupId: number }> {
+  get selectedRequestFields(): Array<{ label: string; value: string; groupId: number }> {
     const fields = this.selectedRequestDetails?.fields ?? [];
+    const currentRequest = this.selectedRequest;
     return fields
       .filter(field => String(field.fildTxt ?? '').trim().length > 0)
-      .map(field => ({
-        key: String(field.fildKind ?? '').trim(),
-        value: String(field.fildTxt ?? '').trim(),
-        groupId: Number(field.instanceGroupId ?? 1) || 1
+      .filter(field => !this.isCompanionFieldKey(String(field.fildKind ?? '').trim()))
+      .map(field => {
+        const fieldKey = String(field.fildKind ?? '').trim();
+        const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
+        let value = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
+
+        if (currentRequest && normalizedFieldKey === 'summercamplabel') {
+          const expectedWaveLabel = this.getWaveLabelByCategoryAndCode(currentRequest.categoryId, currentRequest.waveCode);
+          if (expectedWaveLabel) {
+            value = expectedWaveLabel;
+          }
+        }
+
+        return {
+          label: resolveFieldLabel(fieldKey, SUMMER_FIELD_LABEL_MAP),
+          value,
+          groupId: Number(field.instanceGroupId ?? 1) || 1
+        };
+      })
+      .sort((a, b) => a.groupId - b.groupId || a.label.localeCompare(b.label));
+  }
+
+  get selectedRequestCompanions(): Array<{ index: number; name: string; relation: string; nationalId: string; age: string }> {
+    const fields = this.selectedRequestDetails?.fields ?? [];
+    const grouped = new Map<number, { groupId: number; name: string; relation: string; nationalId: string; age: string }>();
+
+    fields.forEach((field, rowIndex) => {
+      const fieldKey = String(field.fildKind ?? '').trim();
+      if (!this.isCompanionFieldKey(fieldKey)) {
+        return;
+      }
+
+      const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
+      const formattedValue = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
+      const rawGroupId = Number(field.instanceGroupId ?? 0);
+      const groupId = Number.isFinite(rawGroupId) && rawGroupId > 0 ? rawGroupId : (10000 + rowIndex);
+
+      if (!grouped.has(groupId)) {
+        grouped.set(groupId, {
+          groupId,
+          name: '',
+          relation: '',
+          nationalId: '',
+          age: ''
+        });
+      }
+
+      const row = grouped.get(groupId);
+      if (!row) {
+        return;
+      }
+
+      if (normalizedFieldKey.includes('familymembername')) {
+        row.name = formattedValue;
+        return;
+      }
+
+      if (normalizedFieldKey === 'familyrelation') {
+        row.relation = formattedValue;
+        return;
+      }
+
+      if (normalizedFieldKey.includes('familymembernationalid')) {
+        row.nationalId = formattedValue;
+        return;
+      }
+
+      if (normalizedFieldKey.includes('familymemberage')) {
+        row.age = formattedValue;
+      }
+    });
+
+    const toDisplay = (value: string): string => {
+      const normalized = String(value ?? '').trim();
+      return normalized.length > 0 ? normalized : '-';
+    };
+
+    return [...grouped.values()]
+      .sort((a, b) => a.groupId - b.groupId)
+      .map((row, index) => ({
+        index: index + 1,
+        name: toDisplay(row.name),
+        relation: toDisplay(row.relation),
+        nationalId: toDisplay(row.nationalId),
+        age: toDisplay(row.age)
       }))
-      .sort((a, b) => a.groupId - b.groupId || a.key.localeCompare(b.key));
+      .filter(row => row.name !== '-' || row.relation !== '-' || row.nationalId !== '-' || row.age !== '-');
   }
 
   get selectedRequestReplies(): Array<{ id: number; author: string; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
@@ -309,7 +456,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         message: String(reply.message ?? '').trim(),
         created: reply.createdDate as unknown as string,
         attachments: (reply.attchShipmentDtos ?? []).map(item => ({
-          id: Number(item.attchId ?? 0) || Number((item as unknown as { id?: number }).id ?? 0) || 0,
+          id: this.resolveAttachmentId(item),
           name: String(item.attchNm ?? '-').trim() || '-'
         }))
       }))
@@ -319,9 +466,29 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   get selectedRequestAttachments(): Array<{ id: number; name: string }> {
     const attachments = this.selectedRequestDetails?.attachments ?? [];
     return attachments.map(item => ({
-      id: Number(item.attchId ?? 0) || Number((item as unknown as { id?: number }).id ?? 0) || 0,
+      id: this.resolveAttachmentId(item),
       name: String(item.attchNm ?? '-').trim() || '-'
     }));
+  }
+
+  get selectedRequestOwnerInfo(): { name: string; fileNumber: string; nationalId: string; phone: string; extraPhone: string } | null {
+    const request = this.selectedRequest;
+    if (!request) {
+      return null;
+    }
+
+    const normalize = (value: unknown): string => {
+      const text = String(value ?? '').trim();
+      return text.length > 0 ? text : '-';
+    };
+
+    return {
+      name: normalize(request.employeeName),
+      fileNumber: normalize(request.employeeId),
+      nationalId: normalize(request.employeeNationalId),
+      phone: normalize(request.employeePhone),
+      extraPhone: normalize(request.employeeExtraPhone)
+    };
   }
 
   onSearch(): void {
@@ -340,7 +507,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       employeeId: '',
       search: '',
       pageNumber: 1,
-      pageSize: 50
+      pageSize: 5
     });
     this.activeDashboardStatus = '';
     this.activeDashboardPaymentState = '';
@@ -447,15 +614,40 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
   }
 
+  onRequestsPageChange(event: SummerRequestsPageChange): void {
+    const pageSize = Number(event?.pageSize ?? event?.rows ?? this.requestsPageSize);
+    if (!Number.isFinite(pageSize) || pageSize <= 0) {
+      return;
+    }
+
+    const normalizedPageSize = Math.max(1, Math.floor(pageSize));
+    if (normalizedPageSize !== this.requestsPageSize) {
+      this.onPageSizeChanged(normalizedPageSize);
+      return;
+    }
+
+    const explicitPageNumber = Number(event?.pageNumber);
+    const first = Number(event?.first);
+    const inferredPage = Number.isFinite(first) && first >= 0
+      ? Math.floor(first / normalizedPageSize) + 1
+      : this.requestsPageNumber;
+    const targetPage = Number.isFinite(explicitPageNumber) && explicitPageNumber > 0
+      ? Math.floor(explicitPageNumber)
+      : inferredPage;
+
+    this.goToPage(targetPage);
+  }
+
   onPageSizeChanged(value: string | number): void {
     const pageSize = Number(value);
     if (!Number.isFinite(pageSize) || pageSize <= 0) {
       return;
     }
 
-    this.requestsPageSize = pageSize;
+    const normalizedPageSize = Math.max(1, Math.floor(pageSize));
+    this.requestsPageSize = normalizedPageSize;
     this.filtersForm.patchValue({
-      pageSize,
+      pageSize: normalizedPageSize,
       pageNumber: 1
     }, { emitEvent: false });
     this.loadRequests();
@@ -550,10 +742,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   loadRequests(): void {
+    const loadVersion = ++this.requestsLoadVersion;
     this.loadingRequests = true;
     const raw = this.filtersForm.getRawValue();
     const requestedPageNumber = Number(raw.pageNumber ?? 1) || 1;
-    const requestedPageSize = Number(raw.pageSize ?? this.requestsPageSize) || this.requestsPageSize;
+    const requestedPageSizeRaw = Number(raw.pageSize ?? this.requestsPageSize) || this.requestsPageSize;
+    const requestedPageSize = Math.max(1, Math.floor(requestedPageSizeRaw));
     this.summerWorkflowController.getAdminRequests({
       seasonYear: this.seasonYear,
       categoryId: raw.categoryId,
@@ -566,19 +760,25 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       pageSize: requestedPageSize
     }).subscribe({
       next: response => {
+        if (loadVersion !== this.requestsLoadVersion) {
+          return;
+        }
+
         const isSuccess = Boolean(response?.isSuccess);
         this.requests = isSuccess && Array.isArray(response?.data) ? response.data : [];
 
         const totalCount = Number(response?.totalCount ?? this.requests.length) || 0;
-        const pageSize = Number(response?.pageSize ?? requestedPageSize) || requestedPageSize;
+        const responsePageSize = Number(response?.pageSize ?? requestedPageSize) || requestedPageSize;
+        const pageSize = Math.max(1, Math.floor(responsePageSize));
         const pageNumber = Number(response?.pageNumber ?? requestedPageNumber) || requestedPageNumber;
         const computedTotalPages = Math.max(1, Math.ceil(totalCount / Math.max(1, pageSize)));
-        const responseTotalPages = Number(response?.totalPages ?? computedTotalPages) || computedTotalPages;
+        const responseTotalPages = Math.max(1, Number(response?.totalPages ?? computedTotalPages) || computedTotalPages);
 
         this.requestsTotalCount = Math.max(0, totalCount);
-        this.requestsPageSize = Math.max(1, pageSize);
-        this.requestsTotalPages = Math.max(1, responseTotalPages);
+        this.requestsPageSize = pageSize;
+        this.requestsTotalPages = Math.max(computedTotalPages, responseTotalPages);
         this.requestsPageNumber = Math.max(1, Math.min(pageNumber, this.requestsTotalPages));
+        this.filtersForm.patchValue({ pageSize: this.requestsPageSize }, { emitEvent: false });
 
         if (this.requestsTotalCount > 0 && pageNumber > this.requestsTotalPages) {
           this.filtersForm.patchValue({ pageNumber: this.requestsTotalPages }, { emitEvent: false });
@@ -592,12 +792,20 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         }
       },
       error: () => {
+        if (loadVersion !== this.requestsLoadVersion) {
+          return;
+        }
+
         this.requests = [];
         this.requestsTotalCount = 0;
         this.requestsPageNumber = 1;
         this.requestsTotalPages = 1;
       },
       complete: () => {
+        if (loadVersion !== this.requestsLoadVersion) {
+          return;
+        }
+
         this.loadingRequests = false;
       }
     });
@@ -738,6 +946,39 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return `${day}/${month}/${year} ${hour}:00`;
   }
 
+  isPaymentOverdue(request: SummerRequestSummaryDto): boolean {
+    if (!request?.paymentDueAtUtc || request?.paidAtUtc) {
+      return false;
+    }
+
+    const due = new Date(request.paymentDueAtUtc);
+    if (Number.isNaN(due.getTime())) {
+      return false;
+    }
+
+    return Date.now() > due.getTime();
+  }
+
+  getTransferStateLabel(request: SummerRequestSummaryDto): string {
+    if (request?.transferUsed) {
+      return 'تم استخدام التحويل';
+    }
+
+    if (this.isRejectedStatus(request?.status)) {
+      return 'غير متاح (الطلب ملغي/مرفوض)';
+    }
+
+    return 'متاح التحويل';
+  }
+
+  getTransferStateClass(request: SummerRequestSummaryDto): string {
+    if (request?.transferUsed || this.isRejectedStatus(request?.status)) {
+      return 'warn';
+    }
+
+    return 'ok';
+  }
+
   getStatusClass(item: SummerRequestSummaryDto): string {
     const status = String(item.status ?? '').toLowerCase();
     if (status.includes('rejected')) {
@@ -750,6 +991,16 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return 'status-mid';
     }
     return 'status-neutral';
+  }
+
+  getRequestStatusLabel(item: SummerRequestSummaryDto): string {
+    const statusLabel = String(item?.statusLabel ?? '').trim();
+    if (statusLabel.length > 0) {
+      return statusLabel;
+    }
+
+    const status = String(item?.status ?? '').trim();
+    return status.length > 0 ? status : '-';
   }
 
   getDestinationCount(categoryId: number): number {
@@ -971,6 +1222,20 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.allowedAttachmentExtensions.has(name.substring(dot));
   }
 
+  private resolveAttachmentId(item: { id?: unknown; attchId?: unknown } | undefined): number {
+    const id = Number(item?.id);
+    if (Number.isFinite(id) && id > 0) {
+      return id;
+    }
+
+    const attchId = Number(item?.attchId);
+    if (Number.isFinite(attchId) && attchId > 0) {
+      return attchId;
+    }
+
+    return 0;
+  }
+
   private toEpoch(value?: string): number {
     if (!value) {
       return 0;
@@ -983,6 +1248,31 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     const normalized = String(code ?? '').trim().toUpperCase();
     const numeric = Number(normalized.replace(/[^0-9]/g, ''));
     return Number.isFinite(numeric) && numeric > 0 ? numeric : Number.MAX_SAFE_INTEGER;
+  }
+
+  private getWaveLabelByCategoryAndCode(categoryId: number, waveCode: string): string {
+    const destination = this.destinations.find(item => item.categoryId === categoryId);
+    const wave = destination?.waves.find(item => item.code === String(waveCode ?? '').trim());
+    return String(wave?.startsAtLabel ?? '').trim();
+  }
+
+  private normalizeDynamicFieldKey(fieldKey: string): string {
+    return String(fieldKey ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+  }
+
+  private isCompanionFieldKey(fieldKey: string): boolean {
+    const normalized = this.normalizeDynamicFieldKey(fieldKey);
+    return normalized.includes('familymembername')
+      || normalized === 'familyrelation'
+      || normalized.includes('familymembernationalid')
+      || normalized.includes('familymemberage');
+  }
+
+  private isRejectedStatus(status: string | undefined): boolean {
+    return String(status ?? '').trim().toLowerCase().includes('rejected');
   }
 
   private syncQuickFiltersFromForm(): void {

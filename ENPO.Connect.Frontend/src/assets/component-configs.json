@@ -2917,5 +2917,99 @@
     "unitId": [
       0
     ]
+  },
+  {
+    "showFormSignature": false,
+    "submitButtonText": "تسجيل طلب المصيف",
+    "submissionLabel": "تسجيل ديناميكي",
+    "showViewToggle": false,
+    "formDisplayOption": "tabs",
+    "requestsarray": [],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".pdf",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".bmp",
+        ".webp"
+      ],
+      "maximumFileSize": 10,
+      "isMandatory": false,
+      "maxFileCount": 0,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [],
+    "tkCategoryCds": [],
+    "routeKey": "admins/summer-requests/dynamic-booking",
+    "componentTitle": "إنشاء طلب مصيف ديناميكي",
+    "genericFormName": "SUM2026DYN",
+    "menuId": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 0,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": true,
+    "userConfiguration": {
+      "currentUser": "",
+      "currentUserName": "",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "dateFormat": "yy/mm/dd",
+      "showTime": false,
+      "timeOnly": false,
+      "maxDate": "",
+      "useDefaultRadioView": true,
+      "isNotRequired": false
+    },
+    "dynamicFormSettings": {
+      "applicationId": "SUM2026DYN",
+      "aliases": {
+        "waveCode": ["SUM2026_WaveCode"],
+        "waveLabel": ["SUM2026_WaveLabel"],
+        "stayMode": ["SUM2026_StayMode"],
+        "familyCount": ["SUM2026_FamilyCount"],
+        "extraCount": ["SUM2026_ExtraCount"],
+        "proxyMode": ["SUM2026_ProxyMode"],
+        "ownerName": ["SUM2026_OwnerName"],
+        "ownerFileNumber": ["SUM2026_OwnerFileNumber"],
+        "ownerNationalId": ["SUM2026_OwnerNationalId"],
+        "ownerPhone": ["SUM2026_OwnerPhone"],
+        "ownerExtraPhone": ["SUM2026_OwnerExtraPhone"],
+        "notes": ["SUM2026_Notes"],
+        "companionName": ["SUM2026_CompanionName"],
+        "companionRelation": ["SUM2026_CompanionRelation"],
+        "companionNationalId": ["SUM2026_CompanionNationalId"],
+        "companionAge": ["SUM2026_CompanionAge"],
+        "seasonYear": ["SUM2026_SeasonYear"],
+        "destinationId": ["SUM2026_DestinationId"],
+        "destinationName": ["SUM2026_DestinationName"]
+      }
+    },
+    "deadStatus": [],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [],
+    "unitId": []
   }
 ]

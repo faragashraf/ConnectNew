@@ -123,7 +123,7 @@ namespace Persistence.Repositories
         public async Task<CommonResponse<byte[]>> DownloadDocument(int id)
         {
             var res = new CommonResponse<byte[]>();
-            var _ittachments = await _attach_HeldContext.AttchShipments.Where(x => x.Id == id && x.ApplicationName == "Correspondance").FirstOrDefaultAsync();
+            var _ittachments = await _attach_HeldContext.AttchShipments.Where(x => x.Id == id && x.ApplicationName == "Connect" || x.ApplicationName == "Connect - Test").FirstOrDefaultAsync();
             if (_ittachments == null)
             {
                 res.Errors.Add(new Error

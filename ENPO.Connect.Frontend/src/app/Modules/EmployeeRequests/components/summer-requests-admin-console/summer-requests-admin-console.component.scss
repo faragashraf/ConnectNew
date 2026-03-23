@@ -309,6 +309,27 @@ button.ghost {
   margin: 0;
 }
 
+.request-details {
+  margin-top: 12px;
+  border: 1px solid #d6e5f1;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fcfeff;
+}
+
+.request-details header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.request-details h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
 .table-wrap {
   overflow: auto;
 }

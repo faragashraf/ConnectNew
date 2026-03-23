@@ -55,6 +55,11 @@ export interface UserConfiguration {
     userGroup: string;
 }
 
+export interface DynamicFormSettings {
+    applicationId?: string;
+    aliases?: Record<string, string[]>;
+}
+
 export class ComponentConfig {
     routeKey!: string;
     componentTitle?: string;
@@ -78,6 +83,7 @@ export class ComponentConfig {
 
     userConfiguration!: UserConfiguration;
     fieldsConfiguration!: FieldsConfiguration;
+    dynamicFormSettings?: DynamicFormSettings;
     requestsarray: RequestArrayItem[] = [];
 
     // Attachment configuration grouped under one object
@@ -180,6 +186,21 @@ export class ComponentConfig {
         }
         if (init && Object.prototype.hasOwnProperty.call(init, 'allowDefaultNextResponsibleSectorID')) {
             this.allowDefaultNextResponsibleSectorID = !!(init as any).allowDefaultNextResponsibleSectorID;
+        }
+        if (init && Object.prototype.hasOwnProperty.call(init, 'dynamicFormSettings')) {
+            const dfs = (init as any).dynamicFormSettings || {};
+            const aliasesRaw = dfs.aliases && typeof dfs.aliases === 'object' ? dfs.aliases : {};
+            const aliases: Record<string, string[]> = {};
+            Object.keys(aliasesRaw || {}).forEach(key => {
+                const arr = aliasesRaw[key];
+                if (Array.isArray(arr)) {
+                    aliases[key] = arr.map((x: any) => String(x ?? '').trim()).filter((x: string) => x.length > 0);
+                }
+            });
+            this.dynamicFormSettings = {
+                applicationId: String(dfs.applicationId ?? '').trim() || undefined,
+                aliases
+            };
         }
         if (init && Object.prototype.hasOwnProperty.call(init, 'statusChangeOptions')) {
             const options = (init as any).statusChangeOptions;

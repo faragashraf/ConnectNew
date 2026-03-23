@@ -1,0 +1,31 @@
+<section class="updates">
+  <h5>{{ title }}</h5>
+
+  <ng-container *ngIf="updates.length > 0; else emptyState">
+    <article class="update-card" *ngFor="let update of updates">
+      <header>
+        <strong>{{ resolveAuthor(update) }}</strong>
+        <small>{{ formatDate(resolveCreatedDate(update)) }}</small>
+      </header>
+      <p>{{ resolveMessage(update) }}</p>
+
+      <ul *ngIf="resolveAttachments(update).length > 0">
+        <li *ngFor="let attachment of resolveAttachments(update)">
+          <button
+            type="button"
+            class="attachment-link"
+            [disabled]="resolveAttachmentId(attachment) <= 0"
+            (click)="onDownload(attachment)">
+            {{ resolveAttachmentName(attachment) }}
+          </button>
+          <small *ngIf="showSize">{{ formatSize(resolveAttachmentSize(attachment)) }}</small>
+        </li>
+      </ul>
+    </article>
+  </ng-container>
+
+  <ng-template #emptyState>
+    <p class="empty-sub">{{ emptyMessage }}</p>
+  </ng-template>
+</section>
+

@@ -1,0 +1,11 @@
+<section class="owner-info" *ngIf="owner as currentOwner">
+  <h5>{{ title }}</h5>
+  <div class="owner-grid">
+    <div><span>الاسم</span><strong>{{ currentOwner.name }}</strong></div>
+    <div><span>رقم الملف</span><strong>{{ currentOwner.fileNumber }}</strong></div>
+    <div><span>الرقم القومي</span><strong>{{ currentOwner.nationalId }}</strong></div>
+    <div><span>الهاتف</span><strong>{{ currentOwner.phone }}</strong></div>
+    <div><span>هاتف إضافي</span><strong>{{ currentOwner.extraPhone }}</strong></div>
+  </div>
+</section>
+

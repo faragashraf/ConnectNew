@@ -12,21 +12,21 @@ namespace Persistence.Services.Summer
         private static readonly Dictionary<string, DateOnly> SharedWaveDates2026 = new(StringComparer.OrdinalIgnoreCase)
         {
             { "W01", new DateOnly(2026, 6, 7) },
-            { "W02", new DateOnly(2026, 6, 11) },
+            { "W02", new DateOnly(2026, 6, 14) },
             { "W03", new DateOnly(2026, 6, 21) },
-            { "W04", new DateOnly(2026, 6, 22) },
+            { "W04", new DateOnly(2026, 6, 28) },
             { "W05", new DateOnly(2026, 7, 5) },
             { "W06", new DateOnly(2026, 7, 12) },
-            { "W07", new DateOnly(2026, 7, 11) },
+            { "W07", new DateOnly(2026, 7, 19) },
             { "W08", new DateOnly(2026, 7, 26) },
-            { "W09", new DateOnly(2026, 2, 2) },
-            { "W10", new DateOnly(2026, 2, 1) },
-            { "W11", new DateOnly(2026, 2, 16) },
-            { "W12", new DateOnly(2026, 2, 22) },
-            { "W13", new DateOnly(2026, 2, 20) },
-            { "W14", new DateOnly(2026, 1, 6) },
-            { "W15", new DateOnly(2026, 1, 12) },
-            { "W16", new DateOnly(2026, 1, 20) }
+            { "W09", new DateOnly(2026, 8, 2) },
+            { "W10", new DateOnly(2026, 8, 9) },
+            { "W11", new DateOnly(2026, 8, 16) },
+            { "W12", new DateOnly(2026, 8, 23) },
+            { "W13", new DateOnly(2026, 8, 30) },
+            { "W14", new DateOnly(2026, 9, 6) },
+            { "W15", new DateOnly(2026, 9, 13) },
+            { "W16", new DateOnly(2026, 9, 20) }
         };
 
         private static readonly Dictionary<int, Dictionary<string, DateOnly>> WaveDatesByCategory2026 = new()
@@ -35,22 +35,22 @@ namespace Persistence.Services.Summer
                 147,
                 new Dictionary<string, DateOnly>(StringComparer.OrdinalIgnoreCase)
                 {
-                    { "W01", new DateOnly(2026, 6, 1) },
+                    { "W01", new DateOnly(2026, 6, 4) },
                     { "W02", new DateOnly(2026, 6, 11) },
-                    { "W03", new DateOnly(2026, 6, 12) },
+                    { "W03", new DateOnly(2026, 6, 18) },
                     { "W04", new DateOnly(2026, 6, 25) },
                     { "W05", new DateOnly(2026, 7, 2) },
-                    { "W06", new DateOnly(2026, 7, 1) },
+                    { "W06", new DateOnly(2026, 7, 9) },
                     { "W07", new DateOnly(2026, 7, 16) },
-                    { "W08", new DateOnly(2026, 7, 22) },
-                    { "W09", new DateOnly(2026, 7, 20) },
-                    { "W10", new DateOnly(2026, 2, 6) },
-                    { "W11", new DateOnly(2026, 2, 12) },
-                    { "W12", new DateOnly(2026, 2, 20) },
-                    { "W13", new DateOnly(2026, 2, 27) },
-                    { "W14", new DateOnly(2026, 1, 2) },
-                    { "W15", new DateOnly(2026, 1, 10) },
-                    { "W16", new DateOnly(2026, 1, 17) }
+                    { "W08", new DateOnly(2026, 7, 23) },
+                    { "W09", new DateOnly(2026, 7, 30) },
+                    { "W10", new DateOnly(2026, 8, 6) },
+                    { "W11", new DateOnly(2026, 8, 13) },
+                    { "W12", new DateOnly(2026, 8, 20) },
+                    { "W13", new DateOnly(2026, 8, 27) },
+                    { "W14", new DateOnly(2026, 9, 3) },
+                    { "W15", new DateOnly(2026, 9, 10) },
+                    { "W16", new DateOnly(2026, 9, 17) }
                 }
             },
             { 148, new Dictionary<string, DateOnly>(SharedWaveDates2026, StringComparer.OrdinalIgnoreCase) },
@@ -96,12 +96,12 @@ namespace Persistence.Services.Summer
 
         public static bool TryResolveWaveStartUtc(int categoryId, int seasonYear, string waveCode, string? waveLabel, out DateTime waveStartUtc)
         {
-            if (TryParseWaveLabelDateUtc(waveLabel, out waveStartUtc))
+            if (TryResolveFromCategoryCatalog(categoryId, seasonYear, waveCode, out waveStartUtc))
             {
                 return true;
             }
 
-            if (TryResolveFromCategoryCatalog(categoryId, seasonYear, waveCode, out waveStartUtc))
+            if (TryParseWaveLabelDateUtc(waveLabel, out waveStartUtc))
             {
                 return true;
             }

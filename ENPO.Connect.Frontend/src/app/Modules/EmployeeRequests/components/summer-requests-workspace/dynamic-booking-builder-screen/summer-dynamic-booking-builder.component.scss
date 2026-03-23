@@ -1,0 +1,140 @@
+.dynamic-booking-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.dynamic-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid #d1deea;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f7fbff 0%, #eef6ff 100%);
+}
+
+.head-content h3 {
+  margin: 0;
+  color: #0a3d62;
+}
+
+.head-content p {
+  margin: 0.35rem 0 0;
+  color: #4a6175;
+  font-size: 0.95rem;
+}
+
+.app-id-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px dashed #c4d3e4;
+}
+
+.app-id-pill span {
+  font-size: 0.75rem;
+  color: #526c83;
+}
+
+.app-id-pill strong {
+  color: #0b4f88;
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+.top-controls {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.top-controls label {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 320px;
+}
+
+.top-controls select {
+  border: 1px solid #c5d4e3;
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  background: #fff;
+}
+
+.required-label {
+  color: #8b1e1e;
+  font-weight: 700;
+}
+
+.danger-alert {
+  border: 1px solid #f1c0c0;
+  border-radius: 10px;
+  background: #fff5f5;
+  padding: 0.75rem 1rem;
+}
+
+.danger-alert h4 {
+  margin: 0 0 0.35rem;
+  color: #8b1e1e;
+  font-size: 0.95rem;
+}
+
+.danger-alert ul {
+  margin: 0;
+  padding-right: 1rem;
+}
+
+.capacity-overview {
+  border: 1px solid #d5e3f1;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 0.75rem;
+}
+
+.capacity-overview h4 {
+  margin: 0;
+  color: #1c4d7b;
+}
+
+.capacity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.capacity-card {
+  background: #fff;
+  border: 1px solid #d7e6f4;
+  border-radius: 10px;
+  padding: 0.6rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.capacity-card span {
+  color: #375d80;
+  font-size: 0.85rem;
+}
+
+.capacity-card strong {
+  color: #0c4d85;
+  font-size: 1.2rem;
+}
+
+.capacity-card small {
+  color: #5d7388;
+}
+
+.meta-error {
+  color: #b33131;
+}
+
+.loading,
+.empty-state,
+.muted {
+  color: #526c83;
+}

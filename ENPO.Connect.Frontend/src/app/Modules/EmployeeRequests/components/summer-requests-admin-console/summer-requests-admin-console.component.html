@@ -12,6 +12,18 @@
     </div>
   </section>
 
+  <section class="scope-panel" *ngIf="loadingDestinations">
+    <div class="scope-row">
+      <small>جاري تحميل إعدادات المصايف...</small>
+    </div>
+  </section>
+
+  <section class="scope-panel" *ngIf="!loadingDestinations && destinationsError.length > 0">
+    <div class="scope-row">
+      <small>{{ destinationsError }}</small>
+    </div>
+  </section>
+
   <section class="scope-panel" *ngIf="dashboard">
     <div class="scope-row">
       <button type="button" class="chip" [class.active]="!dashboardScopeCategoryId" (click)="applyGeneralScope()">
@@ -242,119 +254,73 @@
   <section class="workspace">
     <div class="requests-panel">
       <header>
-        <h3>قائمة الطلبات</h3>
-        <small>{{ loadingRequests ? 'جاري التحميل...' : (requestRangeStart + ' - ' + requestRangeEnd + ' من ' + requestsTotalCount) }}</small>
+        <h3>طلبات الموسم {{ seasonYear }}</h3>
+        <button type="button" class="ghost" (click)="loadRequests()" [disabled]="loadingRequests">
+          {{ loadingRequests ? 'جاري التحديث...' : 'تحديث' }}
+        </button>
       </header>
 
-      <div class="table-wrap">
-        <table class="requests-table">
-          <thead>
-            <tr>
-              <th>رقم الطلب</th>
-              <th>الموظف</th>
-              <th>المصيف/الفوج</th>
-              <th>الحالة</th>
-              <th>استحقاق السداد</th>
-              <th>سداد</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let request of requests" (click)="selectRequest(request.messageId)" [class.active]="selectedRequestId === request.messageId">
-              <td>#{{ request.messageId }}<br><small>{{ request.requestRef }}</small></td>
-              <td>
-                <div>{{ request.employeeName || '-' }}</div>
-                <small>{{ request.employeeId || '-' }}</small>
-              </td>
-              <td>
-                <div>{{ request.categoryName }}</div>
-                <small>{{ request.waveCode }}</small>
-              </td>
-              <td><span class="status-pill" [ngClass]="getStatusClass(request)">{{ request.statusLabel || request.status }}</span></td>
-              <td>{{ formatDate(request.paymentDueAtUtc) }}</td>
-              <td>{{ request.paidAtUtc ? 'مسدد' : 'غير مسدد' }}</td>
-            </tr>
-            <tr *ngIf="!loadingRequests && requests.length === 0">
-              <td colspan="6" class="empty">لا توجد بيانات مطابقة للفلاتر.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="pager" *ngIf="!loadingRequests">
-        <div class="pager-info">
-          <span>عرض {{ requestRangeStart }} - {{ requestRangeEnd }} من {{ requestsTotalCount }}</span>
-        </div>
-
-        <div class="pager-controls">
-          <label class="page-size">
-            <span>عدد السطور</span>
-            <select [value]="requestsPageSize" (change)="onPageSizeChanged($any($event.target).value)">
-              <option *ngFor="let size of pageSizeOptions" [value]="size">{{ size }}</option>
-            </select>
-          </label>
-
-          <div class="page-buttons">
-            <button type="button" class="ghost" (click)="goToPage(1)" [disabled]="requestsPageNumber <= 1">الأولى</button>
-            <button type="button" class="ghost" (click)="goToPreviousPage()" [disabled]="requestsPageNumber <= 1">السابق</button>
-            <span class="page-index">صفحة {{ requestsPageNumber }} من {{ requestsTotalPages }}</span>
-            <button type="button" class="ghost" (click)="goToNextPage()" [disabled]="requestsPageNumber >= requestsTotalPages">التالي</button>
-            <button type="button" class="ghost" (click)="goToPage(requestsTotalPages)" [disabled]="requestsPageNumber >= requestsTotalPages">الأخيرة</button>
-          </div>
-        </div>
-      </div>
+      <app-summer-requests-list
+        [variant]="'employee'"
+        [loading]="loadingRequests"
+        [requests]="requests"
+        [selectedRequestId]="selectedRequestId"
+        [emptyMessage]="'لا توجد بيانات مطابقة للفلاتر.'"
+        [statusClassResolver]="getStatusClass.bind(this)"
+        [statusTextResolver]="getRequestStatusLabel.bind(this)"
+        [formatDateResolver]="formatDate.bind(this)"
+        [paymentOverdueResolver]="isPaymentOverdue.bind(this)"
+        [transferStateLabelResolver]="getTransferStateLabel.bind(this)"
+        [transferStateClassResolver]="getTransferStateClass.bind(this)"
+        [pageMode]="'client'"
+        [pageData]="requestsPageData"
+        (requestSelected)="selectRequest($event)"
+        (pageChange)="onRequestsPageChange($event)">
+      </app-summer-requests-list>
     </div>
 
-    <div class="details-panel" *ngIf="selectedRequest as request; else noSelection">
-      <header>
-        <h3>تفاصيل الطلب #{{ request.messageId }}</h3>
-        <small>{{ request.requestRef }}</small>
-      </header>
+    <div class="details-panel" *ngIf="selectedRequest; else noSelection">
+      <section class="request-details">
+        <header>
+          <h4>تفاصيل الطلب المختار</h4>
+          <small *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
+        </header>
 
-      <section class="owner-card">
-        <h4>بيانات صاحب الطلب</h4>
-        <div class="owner-grid">
-          <div><span>الاسم</span><strong>{{ request.employeeName || '-' }}</strong></div>
-          <div><span>رقم الملف</span><strong>{{ request.employeeId || '-' }}</strong></div>
-          <div><span>الرقم القومي</span><strong>{{ request.employeeNationalId || '-' }}</strong></div>
-          <div><span>الهاتف</span><strong>{{ request.employeePhone || '-' }}</strong></div>
-          <div><span>هاتف إضافي</span><strong>{{ request.employeeExtraPhone || '-' }}</strong></div>
-        </div>
-      </section>
+        <ng-container *ngIf="!loadingDetails">
+          <app-summer-request-fields-grid
+            [title]="'تفاصيل الطلب'"
+            [rows]="selectedRequestFields"
+            [emptyMessage]="'لا توجد تفاصيل إضافية معروضة للطلب المختار.'">
+          </app-summer-request-fields-grid>
 
-      <section class="fields-card">
-        <h4>حقول الطلب</h4>
-        <small *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
-        <div class="fields-grid" *ngIf="!loadingDetails">
-          <div class="field-row" *ngFor="let field of selectedRequestFields">
-            <span>{{ field.key }}</span>
-            <strong>{{ field.value }}</strong>
-          </div>
-        </div>
-      </section>
+          <app-summer-request-owner-card
+            *ngIf="selectedRequestOwnerInfo as owner"
+            [owner]="owner">
+          </app-summer-request-owner-card>
 
-      <section class="attachments-card" *ngIf="selectedRequestAttachments.length > 0">
-        <h4>مرفقات الطلب</h4>
-        <ul>
-          <li *ngFor="let attachment of selectedRequestAttachments">
-            <button type="button" class="link" [disabled]="attachment.id <= 0" (click)="downloadAttachment(attachment.id, attachment.name)">{{ attachment.name }}</button>
-          </li>
-        </ul>
-      </section>
+          <app-summer-request-companions-table
+            *ngIf="selectedRequestCompanions.length > 0"
+            [title]="'بيانات المرافقين'"
+            [companions]="selectedRequestCompanions">
+          </app-summer-request-companions-table>
 
-      <section class="updates-card" *ngIf="selectedRequestReplies.length > 0">
-        <h4>سجل التحديثات</h4>
-        <article class="update" *ngFor="let reply of selectedRequestReplies">
-          <header>
-            <strong>{{ reply.author }}</strong>
-            <small>{{ formatDate(reply.created) }}</small>
-          </header>
-          <p>{{ reply.message || '-' }}</p>
-          <ul *ngIf="reply.attachments.length > 0">
-            <li *ngFor="let attachment of reply.attachments">
-              <button type="button" class="link" [disabled]="attachment.id <= 0" (click)="downloadAttachment(attachment.id, attachment.name)">{{ attachment.name }}</button>
-            </li>
-          </ul>
-        </article>
+          <app-summer-attachments-list
+            *ngIf="selectedRequestAttachments.length > 0"
+            [title]="'مرفقات الطلب'"
+            [items]="selectedRequestAttachments"
+            [showSize]="true"
+            (download)="downloadAttachment($event.id, $event.name)">
+          </app-summer-attachments-list>
+
+          <app-summer-updates-timeline
+            [title]="'سجل التحديثات'"
+            [updates]="selectedRequestReplies"
+            [showSize]="true"
+            [dateFormatter]="formatDate.bind(this)"
+            [emptyMessage]="'لا توجد تحديثات مسجلة حتى الآن.'"
+            (download)="downloadAttachment($event.id, $event.name)">
+          </app-summer-updates-timeline>
+        </ng-container>
       </section>
 
       <section class="action-card">

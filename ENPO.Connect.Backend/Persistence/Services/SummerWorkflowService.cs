@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using System.Text.Json;
 using ENPO.Dto.HubSync;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -23,17 +24,12 @@ namespace Persistence.Services
         private readonly SignalRConnectionManager _signalRConnectionManager;
 
         private const int CapacityLockTimeoutMs = 15000;
+        private const string SummerDynamicApplicationId = "SUM2026DYN";
+        private const string SummerDestinationCatalogMend = "SUM2026_DestinationCatalog";
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"
-        };
-
-        private static readonly Dictionary<int, SummerRule> SummerRules = new()
-        {
-            { 147, new SummerRule(maxExtra: 2, capacityByFamily: new Dictionary<int, int> { { 5, 5 }, { 6, 5 }, { 8, 8 }, { 9, 5 } }) },
-            { 148, new SummerRule(maxExtra: 1, capacityByFamily: new Dictionary<int, int> { { 2, 2 }, { 4, 6 }, { 6, 2 } }) },
-            { 149, new SummerRule(maxExtra: 2, capacityByFamily: new Dictionary<int, int> { { 4, 24 }, { 6, 23 }, { 7, 24 } }) }
         };
 
         public SummerWorkflowService(
@@ -55,7 +51,7 @@ namespace Persistence.Services
             {
                 if (string.IsNullOrWhiteSpace(userId))
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ù…Ø¹Ø±Ù Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ù…Ø·Ù„ÙˆØ¨." });
+                    response.Errors.Add(new Error { Code = "400", Message = "معرف المستخدم مطلوب." });
                     return response;
                 }
 
@@ -64,7 +60,13 @@ namespace Persistence.Services
                     seasonYear = DateTime.UtcNow.Year;
                 }
 
-                var summerCategoryIds = SummerRules.Keys.ToList();
+                var summerRules = await GetSummerRulesAsync(seasonYear);
+                var summerCategoryIds = summerRules.Keys.ToList();
+                if (!summerCategoryIds.Any())
+                {
+                    response.Data = Array.Empty<SummerRequestSummaryDto>();
+                    return response;
+                }
 
                 var messages = await _connectContext.Messages
                     .AsNoTracking()
@@ -148,7 +150,16 @@ namespace Persistence.Services
                 var pageNumber = query.PageNumber <= 0 ? 1 : query.PageNumber;
                 var pageSize = query.PageSize <= 0 ? 50 : query.PageSize;
 
-                var summerCategoryIds = SummerRules.Keys.ToList();
+                var summerRules = await GetSummerRulesAsync(seasonYear);
+                var summerCategoryIds = summerRules.Keys.ToList();
+                if (!summerCategoryIds.Any())
+                {
+                    response.Data = Array.Empty<SummerRequestSummaryDto>();
+                    response.TotalCount = 0;
+                    response.PageNumber = pageNumber;
+                    response.PageSize = pageSize;
+                    return response;
+                }
                 var messages = await _connectContext.Messages
                     .AsNoTracking()
                     .Where(m => summerCategoryIds.Contains(m.CategoryCd))
@@ -416,14 +427,14 @@ namespace Persistence.Services
             {
                 if (request.MessageId <= 0)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø±Ù‚Ù… Ø§Ù„Ø·Ù„Ø¨ Ù…Ø·Ù„ÙˆØ¨." });
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم الطلب مطلوب." });
                     return response;
                 }
 
                 var actionCode = NormalizeActionCode(request.ActionCode);
                 if (string.IsNullOrWhiteSpace(actionCode))
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ù†ÙˆØ¹ Ø§Ù„Ø¥Ø¬Ø±Ø§Ø¡ Ø§Ù„Ø¥Ø¯Ø§Ø±ÙŠ Ù…Ø·Ù„ÙˆØ¨." });
+                    response.Errors.Add(new Error { Code = "400", Message = "نوع الإجراء الإداري مطلوب." });
                     return response;
                 }
 
@@ -441,7 +452,7 @@ namespace Persistence.Services
                 {
                     if (!request.ToCategoryId.HasValue || string.IsNullOrWhiteSpace(request.ToWaveCode))
                     {
-                        response.Errors.Add(new Error { Code = "400", Message = "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ØªØ­ÙˆÙŠÙ„ ØºÙŠØ± Ù…ÙƒØªÙ…Ù„Ø© (Ø§Ù„Ù…ØµÙŠÙ ÙˆØ§Ù„ÙÙˆØ¬ Ø§Ù„Ù…Ø³ØªÙ‡Ø¯ÙØ§Ù† Ù…Ø·Ù„ÙˆØ¨Ø§Ù†)." });
+                        response.Errors.Add(new Error { Code = "400", Message = "بيانات التحويل غير مكتملة (المصيف والفوج المستهدفان مطلوبان)." });
                         return response;
                     }
 
@@ -469,10 +480,11 @@ namespace Persistence.Services
                     return response;
                 }
 
+                var summerRules = await GetSummerRulesAsync();
                 var message = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
-                if (message == null || !SummerRules.ContainsKey(message.CategoryCd))
+                if (message == null || !summerRules.ContainsKey(message.CategoryCd))
                 {
-                    response.Errors.Add(new Error { Code = "404", Message = "Ø·Ù„Ø¨ Ø§Ù„Ù…ØµÙŠÙ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯." });
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
                     return response;
                 }
 
@@ -488,7 +500,7 @@ namespace Persistence.Services
                     {
                         if (message.Status == MessageStatus.Rejected && !request.Force)
                         {
-                            response.Errors.Add(new Error { Code = "400", Message = "Ø§Ù„Ø·Ù„Ø¨ Ù…Ø±ÙÙˆØ¶ Ø¨Ø§Ù„ÙØ¹Ù„. Ø§Ø³ØªØ®Ø¯Ù… Ø®ÙŠØ§Ø± Ø§Ù„Ù‚ÙˆØ© Ø¥Ø°Ø§ Ù„Ø²Ù…." });
+                            response.Errors.Add(new Error { Code = "400", Message = "الطلب مرفوض بالفعل. استخدم خيار القوة إذا لزم." });
                             await attachTx.RollbackAsync();
                             await connectTx.RollbackAsync();
                             return response;
@@ -503,33 +515,33 @@ namespace Persistence.Services
                         }
 
                         replyMessage = string.IsNullOrWhiteSpace(comment)
-                            ? "ØªÙ… Ø§Ø¹ØªÙ…Ø§Ø¯ Ø§Ù„Ø·Ù„Ø¨ Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹ Ù…Ù† Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ù…ØµØ§ÙŠÙ."
-                            : $"ØªÙ… Ø§Ø¹ØªÙ…Ø§Ø¯ Ø§Ù„Ø·Ù„Ø¨ Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹ Ù…Ù† Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ù…ØµØ§ÙŠÙ. ØªØ¹Ù„ÙŠÙ‚ Ø§Ù„Ø¥Ø¯Ø§Ø±Ø©: {comment}";
+                            ? "تم اعتماد الطلب نهائياً من إدارة المصايف."
+                            : $"تم اعتماد الطلب نهائياً من إدارة المصايف. تعليق الإدارة: {comment}";
                     }
                     else if (actionCode == "MANUAL_CANCEL")
                     {
                         message.Status = MessageStatus.Rejected;
                         UpsertField(fields, message.MessageId, "Summer_AdminLastAction", "MANUAL_CANCEL");
                         UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
-                        UpsertField(fields, message.MessageId, "Summer_CancelReason", string.IsNullOrWhiteSpace(comment) ? "Ø¥Ù„ØºØ§Ø¡ ÙŠØ¯ÙˆÙŠ Ù…Ù† Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ù…ØµØ§ÙŠÙ." : comment);
+                        UpsertField(fields, message.MessageId, "Summer_CancelReason", string.IsNullOrWhiteSpace(comment) ? "إلغاء يدوي من إدارة المصايف." : comment);
                         UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "CANCELLED_ADMIN");
 
                         replyMessage = string.IsNullOrWhiteSpace(comment)
-                            ? "ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø·Ù„Ø¨ ÙŠØ¯ÙˆÙŠÙ‹Ø§ Ù…Ù† Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ù…ØµØ§ÙŠÙ."
-                            : $"ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø·Ù„Ø¨ ÙŠØ¯ÙˆÙŠÙ‹Ø§ Ù…Ù† Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ù…ØµØ§ÙŠÙ. Ø§Ù„Ø³Ø¨Ø¨: {comment}";
+                            ? "تم إلغاء الطلب يدويًا من إدارة المصايف."
+                            : $"تم إلغاء الطلب يدويًا من إدارة المصايف. السبب: {comment}";
                     }
                     else if (actionCode == "COMMENT")
                     {
                         UpsertField(fields, message.MessageId, "Summer_AdminLastAction", "COMMENT");
                         UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         replyMessage = string.IsNullOrWhiteSpace(comment)
-                            ? "ØªÙ… ØªØ³Ø¬ÙŠÙ„ ØªØ¹Ù„ÙŠÙ‚ Ø¥Ø¯Ø§Ø±ÙŠ Ø¹Ù„Ù‰ Ø§Ù„Ø·Ù„Ø¨."
+                            ? "تم تسجيل تعليق إداري على الطلب."
                             : comment;
                     }
                     else
                     {
-                        response.Errors.Add(new Error { Code = "400", Message = "Ù†ÙˆØ¹ Ø§Ù„Ø¥Ø¬Ø±Ø§Ø¡ ØºÙŠØ± Ù…Ø¯Ø¹ÙˆÙ…." });
+                        response.Errors.Add(new Error { Code = "400", Message = "نوع الإجراء غير مدعوم." });
                         await attachTx.RollbackAsync();
                         await connectTx.RollbackAsync();
                         return response;
@@ -556,9 +568,9 @@ namespace Persistence.Services
                 {
                     await _signalRConnectionManager.SendNotificationToUser(employeeId, new NotificationDto
                     {
-                        Notification = "ØªÙ… ØªÙ†ÙÙŠØ° Ø¥Ø¬Ø±Ø§Ø¡ Ø¥Ø¯Ø§Ø±ÙŠ Ø¹Ù„Ù‰ Ø·Ù„Ø¨ Ø§Ù„Ù…ØµÙŠÙ Ø§Ù„Ø®Ø§Øµ Ø¨Ùƒ.",
+                        Notification = "تم تنفيذ إجراء إداري على طلب المصيف الخاص بك.",
                         type = NotificationType.info,
-                        Title = "Ø¥Ø¯Ø§Ø±Ø© Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ù…ØµØ§ÙŠÙ",
+                        Title = "إدارة طلبات المصايف",
                         time = DateTime.Now,
                         sender = "Connect",
                         Category = NotificationCategory.Business
@@ -585,13 +597,14 @@ namespace Persistence.Services
             {
                 if (categoryId <= 0 || string.IsNullOrWhiteSpace(waveCode))
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø§Ù„Ù…ØµÙŠÙ ÙˆØ§Ù„ÙÙˆØ¬ Ù…Ø·Ù„ÙˆØ¨Ø§Ù†." });
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف والفوج مطلوبان." });
                     return response;
                 }
 
-                if (!SummerRules.TryGetValue(categoryId, out var rule))
+                var summerRules = await GetSummerRulesAsync();
+                if (!summerRules.TryGetValue(categoryId, out var rule))
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø§Ù„Ù…ØµÙŠÙ ØºÙŠØ± Ù…ÙØ¹Ø¯ ÙÙŠ Ø§Ù„Ù†Ø¸Ø§Ù…." });
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف غير مُعد في النظام." });
                     return response;
                 }
 
@@ -644,7 +657,7 @@ namespace Persistence.Services
             {
                 if (request.MessageId <= 0)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø±Ù‚Ù… Ø§Ù„Ø·Ù„Ø¨ Ù…Ø·Ù„ÙˆØ¨." });
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم الطلب مطلوب." });
                     return response;
                 }
 
@@ -661,28 +674,30 @@ namespace Persistence.Services
                 var message = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
                 if (message == null)
                 {
-                    response.Errors.Add(new Error { Code = "404", Message = "Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯." });
+                    response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
                     return response;
                 }
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
                 if (message.Status == MessageStatus.Rejected || ParseDate(GetFieldValue(fields, "Summer_CancelledAtUtc")).HasValue)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ø¹ØªØ°Ø§Ø± Ø³Ø§Ø¨Ù‚ Ø¹Ù„Ù‰ Ù‡Ø°Ø§ Ø§Ù„Ø­Ø¬Ø²." });
+                    response.Errors.Add(new Error { Code = "400", Message = "تم تسجيل اعتذار سابق على هذا الحجز." });
                     return response;
                 }
 
                 var waveCode = GetFieldValue(fields, "SummerCamp") ?? string.Empty;
                 var waveLabel = GetFieldValue(fields, "SummerCampLabel");
                 var seasonYear = ParseInt(GetFieldValue(fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
-                if (SummerCalendarRules.TryResolveWaveStartUtc(message.CategoryCd, seasonYear, waveCode, waveLabel, out var waveStartUtc)
+                var summerRules = await GetSummerRulesAsync(seasonYear);
+                summerRules.TryGetValue(message.CategoryCd, out var categoryRule);
+                if (TryResolveWaveStartUtc(categoryRule, message.CategoryCd, seasonYear, waveCode, waveLabel, out var waveStartUtc)
                     && !SummerCalendarRules.CanCancel(DateTime.UtcNow, waveStartUtc))
                 {
                     var lastAllowedUtc = waveStartUtc.AddDays(-14);
                     response.Errors.Add(new Error
                     {
                         Code = "400",
-                        Message = $"Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ù‚Ø¨Ù„ Ù…ÙˆØ¹Ø¯ Ø§Ù„ÙÙˆØ¬ Ø¨Ø£Ù‚Ù„ Ù…Ù† 14 ÙŠÙˆÙ…. Ø¢Ø®Ø± Ù…ÙˆØ¹Ø¯ Ù…ØªØ§Ø­ Ù„Ù„Ø§Ø¹ØªØ°Ø§Ø± Ù‡Ùˆ {lastAllowedUtc:yyyy-MM-dd HH:mm} (UTC)."
+                        Message = $"لا يمكن تسجيل الاعتذار قبل موعد الفوج بأقل من 14 يوم. آخر موعد متاح للاعتذار هو {lastAllowedUtc:yyyy-MM-dd HH:mm} (UTC)."
                     });
                     return response;
                 }
@@ -700,8 +715,8 @@ namespace Persistence.Services
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
                         string.IsNullOrWhiteSpace(request.Reason)
-                            ? "ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ø¹Ù† Ø§Ù„Ø­Ø¬Ø²."
-                            : $"ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ø¹Ù† Ø§Ù„Ø­Ø¬Ø². Ø§Ù„Ø³Ø¨Ø¨: {request.Reason.Trim()}",
+                            ? "تم تسجيل الاعتذار عن الحجز."
+                            : $"تم تسجيل الاعتذار عن الحجز. السبب: {request.Reason.Trim()}",
                         userId,
                         ip,
                         request.files);
@@ -725,9 +740,9 @@ namespace Persistence.Services
                 {
                     await _signalRConnectionManager.SendNotificationToUser(summary.EmployeeId, new NotificationDto
                     {
-                        Notification = "ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ø¹Ù† Ø§Ù„Ø­Ø¬Ø² Ø¨Ù†Ø¬Ø§Ø­.",
+                        Notification = "تم تسجيل الاعتذار عن الحجز بنجاح.",
                         type = NotificationType.info,
-                        Title = "ØªØ­Ø¯ÙŠØ« Ø·Ù„Ø¨ Ø§Ù„Ù…ØµÙŠÙ",
+                        Title = "تحديث طلب المصيف",
                         time = DateTime.Now,
                         sender = "Connect",
                         Category = NotificationCategory.Business
@@ -752,7 +767,7 @@ namespace Persistence.Services
             {
                 if (request.MessageId <= 0)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø±Ù‚Ù… Ø§Ù„Ø·Ù„Ø¨ Ù…Ø·Ù„ÙˆØ¨." });
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم الطلب مطلوب." });
                     return response;
                 }
 
@@ -768,26 +783,26 @@ namespace Persistence.Services
 
                 if (request.files == null || request.files.Count == 0)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø¨Ø¯ÙˆÙ† Ù…Ø±ÙÙ‚Ø§Øª. ÙŠØ¬Ø¨ Ø¥Ø±ÙØ§Ù‚ Ù…Ø³ØªÙ†Ø¯ ÙˆØ§Ø­Ø¯ Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„." });
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تسجيل السداد بدون مرفقات. يجب إرفاق مستند واحد على الأقل." });
                     return response;
                 }
 
                 if (request.ForceOverride)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "ØºÙŠØ± Ù…Ø³Ù…ÙˆØ­ Ø¨Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø¨Ø¹Ø¯ Ø§Ù†ØªÙ‡Ø§Ø¡ Ù…Ù‡Ù„Ø© Ø§Ù„ÙŠÙˆÙ… Ø§Ù„ÙˆØ§Ø­Ø¯." });
+                    response.Errors.Add(new Error { Code = "400", Message = "غير مسموح بالسداد بعد انتهاء مهلة اليوم الواحد." });
                     return response;
                 }
 
                 var message = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
                 if (message == null)
                 {
-                    response.Errors.Add(new Error { Code = "404", Message = "Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯." });
+                    response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
                     return response;
                 }
 
                 if (message.Status == MessageStatus.Rejected)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø³Ø¯Ø§Ø¯ Ù„Ø·Ù„Ø¨ ØªÙ… Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ø¹Ù†Ù‡." });
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تسجيل السداد لطلب تم الاعتذار عنه." });
                     return response;
                 }
 
@@ -800,7 +815,7 @@ namespace Persistence.Services
                     response.Errors.Add(new Error
                     {
                         Code = "400",
-                        Message = $"Ø§Ù†ØªÙ‡Øª Ù…Ù‡Ù„Ø© Ø§Ù„Ø³Ø¯Ø§Ø¯. ÙƒØ§Ù† Ø§Ù„Ù…ÙˆØ¹Ø¯ Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ {dueAt:yyyy-MM-dd HH:mm} (UTC)."
+                        Message = $"انتهت مهلة السداد. كان الموعد النهائي {dueAt:yyyy-MM-dd HH:mm} (UTC)."
                     });
                     return response;
                 }
@@ -821,8 +836,8 @@ namespace Persistence.Services
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
                         string.IsNullOrWhiteSpace(request.Notes)
-                            ? "ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø¨Ù†Ø¬Ø§Ø­."
-                            : $"ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø¨Ù†Ø¬Ø§Ø­. Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª: {request.Notes.Trim()}",
+                            ? "تم تسجيل السداد بنجاح."
+                            : $"تم تسجيل السداد بنجاح. الملاحظات: {request.Notes.Trim()}",
                         userId,
                         ip,
                         request.files);
@@ -857,7 +872,7 @@ namespace Persistence.Services
             {
                 if (request.MessageId <= 0 || request.ToCategoryId <= 0 || string.IsNullOrWhiteSpace(request.ToWaveCode))
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø±Ù‚Ù… Ø§Ù„Ø·Ù„Ø¨ ÙˆØ§Ù„Ù…ØµÙŠÙ Ø§Ù„Ù…Ø³ØªÙ‡Ø¯Ù ÙˆØ§Ù„ÙÙˆØ¬ Ø§Ù„Ù…Ø³ØªÙ‡Ø¯Ù Ø­Ù‚ÙˆÙ„ Ù…Ø·Ù„ÙˆØ¨Ø©." });
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم الطلب والمصيف المستهدف والفوج المستهدف حقول مطلوبة." });
                     return response;
                 }
 
@@ -874,13 +889,13 @@ namespace Persistence.Services
                 var message = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
                 if (message == null)
                 {
-                    response.Errors.Add(new Error { Code = "404", Message = "Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯." });
+                    response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
                     return response;
                 }
 
                 if (message.Status == MessageStatus.Rejected)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ­ÙˆÙŠÙ„ Ø·Ù„Ø¨ ØªÙ… Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ø¹Ù†Ù‡." });
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تحويل طلب تم الاعتذار عنه." });
                     return response;
                 }
 
@@ -890,49 +905,50 @@ namespace Persistence.Services
                 var transferCount = ParseInt(GetFieldValue(fields, "Summer_TransferCount"), 0);
                 if (transferCount > 0)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø§Ù„ØªØ­ÙˆÙŠÙ„ Ù…Ø³Ù…ÙˆØ­ Ù…Ø±Ø© ÙˆØ§Ø­Ø¯Ø© ÙÙ‚Ø· Ø®Ù„Ø§Ù„ Ø§Ù„Ù…ÙˆØ³Ù…." });
+                    response.Errors.Add(new Error { Code = "400", Message = "التحويل مسموح مرة واحدة فقط خلال الموسم." });
                     return response;
                 }
 
                 var employeeId = GetFieldValue(fields, "Emp_Id") ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(employeeId))
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø±Ù‚Ù… Ù…Ù„Ù Ø§Ù„Ù…ÙˆØ¸Ù Ù…Ø·Ù„ÙˆØ¨." });
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم ملف الموظف مطلوب." });
                     return response;
                 }
 
                 var seasonYear = ParseInt(GetFieldValue(fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
-                if (await HasEmployeeUsedTransferInSeasonAsync(employeeId, seasonYear, message.MessageId))
+                var summerRules = await GetSummerRulesAsync(seasonYear);
+                if (await HasEmployeeUsedTransferInSeasonAsync(employeeId, seasonYear, message.MessageId, summerRules.Keys))
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "ØªÙ… Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„ØªØ­ÙˆÙŠÙ„ Ø¨Ø§Ù„ÙØ¹Ù„ Ø®Ù„Ø§Ù„ Ù‡Ø°Ø§ Ø§Ù„Ù…ÙˆØ³Ù…." });
+                    response.Errors.Add(new Error { Code = "400", Message = "تم استخدام التحويل بالفعل خلال هذا الموسم." });
                     return response;
                 }
 
                 var newFamilyCount = request.NewFamilyCount ?? ParseInt(GetFieldValue(fields, "FamilyCount"), 0);
                 var newExtraCount = request.NewExtraCount ?? ParseInt(GetFieldValue(fields, "Over_Count"), 0);
 
-                if (!SummerRules.TryGetValue(request.ToCategoryId, out var rule))
+                if (!summerRules.TryGetValue(request.ToCategoryId, out var rule))
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø§Ù„Ù…ØµÙŠÙ Ø§Ù„Ù…Ø³ØªÙ‡Ø¯Ù ØºÙŠØ± Ù…ÙØ¹Ø¯ ÙÙŠ Ø§Ù„Ù†Ø¸Ø§Ù…." });
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف المستهدف غير مُعد في النظام." });
                     return response;
                 }
 
                 if (newFamilyCount <= 0 || !rule.CapacityByFamily.ContainsKey(newFamilyCount))
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø¹Ø¯Ø¯ Ø§Ù„Ø£ÙØ±Ø§Ø¯ ØºÙŠØ± Ù…ØªØ§Ø­ Ù„Ù„Ø­Ø¬Ø² ÙÙŠ Ø§Ù„Ù…ØµÙŠÙ Ø§Ù„Ù…Ø³ØªÙ‡Ø¯Ù." });
+                    response.Errors.Add(new Error { Code = "400", Message = "عدد الأفراد غير متاح للحجز في المصيف المستهدف." });
                     return response;
                 }
 
                 if (newExtraCount < 0 || newExtraCount > rule.MaxExtra)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = $"Ø¹Ø¯Ø¯ Ø§Ù„Ø£ÙØ±Ø§Ø¯ Ø§Ù„Ø¥Ø¶Ø§ÙÙŠÙŠÙ† ØªØ¬Ø§ÙˆØ² Ø§Ù„Ø­Ø¯ Ø§Ù„Ù…Ø³Ù…ÙˆØ­ ({rule.MaxExtra})." });
+                    response.Errors.Add(new Error { Code = "400", Message = $"عدد الأفراد الإضافيين تجاوز الحد المسموح ({rule.MaxExtra})." });
                     return response;
                 }
 
                 var maxFamily = rule.CapacityByFamily.Keys.Max();
                 if (newFamilyCount != maxFamily && newExtraCount > 0)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "Ø§Ù„Ø£ÙØ±Ø§Ø¯ Ø§Ù„Ø¥Ø¶Ø§ÙÙŠÙˆÙ† Ù…Ø³Ù…ÙˆØ­ Ø¨Ù‡Ù… ÙÙ‚Ø· Ø¹Ù†Ø¯ Ø§Ø®ØªÙŠØ§Ø± Ø£ÙƒØ¨Ø± Ø³Ø¹Ø© Ø´Ù‚Ø©." });
+                    response.Errors.Add(new Error { Code = "400", Message = "الأفراد الإضافيون مسموح بهم فقط عند اختيار أكبر سعة شقة." });
                     return response;
                 }
 
@@ -945,7 +961,7 @@ namespace Persistence.Services
                         response.Errors.Add(new Error
                         {
                             Code = "409",
-                            Message = "ØªØ¹Ø°Ø± Ø­Ø¬Ø² Ø§Ù„Ø³Ø¹Ø© Ø­Ø§Ù„ÙŠØ§Ù‹ Ø¨Ø³Ø¨Ø¨ Ø­ÙØ¸ Ù…ØªØ²Ø§Ù…Ù†. Ø¨Ø±Ø¬Ø§Ø¡ Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø© Ø¨Ø¹Ø¯ Ø«ÙˆØ§Ù†Ù."
+                            Message = "تعذر حجز السعة حالياً بسبب حفظ متزامن. برجاء إعادة المحاولة بعد ثوانٍ."
                         });
                         await attachTx.RollbackAsync();
                         await connectTx.RollbackAsync();
@@ -955,16 +971,16 @@ namespace Persistence.Services
                     var existsSameWave = await ExistsEmployeeBookingInWaveAsync(request.ToCategoryId, normalizedTargetWave, employeeId, message.MessageId);
                     if (existsSameWave)
                     {
-                        response.Errors.Add(new Error { Code = "400", Message = "Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ù„Ø­Ø¬Ø² Ù„Ù†ÙØ³ Ø§Ù„Ù…ÙˆØ¸Ù Ø£ÙƒØ«Ø± Ù…Ù† Ù…Ø±Ø© ÙÙŠ Ù†ÙØ³ Ø§Ù„Ù…ØµÙŠÙ ÙˆÙ†ÙØ³ Ø§Ù„ÙÙˆØ¬." });
+                        response.Errors.Add(new Error { Code = "400", Message = "لا يمكن الحجز لنفس الموظف أكثر من مرة في نفس المصيف ونفس الفوج." });
                         await attachTx.RollbackAsync();
                         await connectTx.RollbackAsync();
                         return response;
                     }
 
-                    var hasCapacity = await HasCapacityAsync(request.ToCategoryId, normalizedTargetWave, newFamilyCount, message.MessageId);
+                    var hasCapacity = await HasCapacityAsync(request.ToCategoryId, normalizedTargetWave, newFamilyCount, rule, message.MessageId);
                     if (!hasCapacity)
                     {
-                        response.Errors.Add(new Error { Code = "429", Message = "Ù„Ø§ ØªÙˆØ¬Ø¯ ÙˆØ­Ø¯Ø§Øª Ù…ØªØ§Ø­Ø© Ø­Ø§Ù„ÙŠØ§Ù‹ Ù„Ù„Ø¹Ø¯Ø¯ Ø§Ù„Ù…Ø®ØªØ§Ø± ÙÙŠ Ø§Ù„ÙÙˆØ¬ Ø§Ù„Ù…Ø­Ø¯Ø¯." });
+                        response.Errors.Add(new Error { Code = "429", Message = "لا توجد وحدات متاحة حالياً للعدد المختار في الفوج المحدد." });
                         await attachTx.RollbackAsync();
                         await connectTx.RollbackAsync();
                         return response;
@@ -989,8 +1005,8 @@ namespace Persistence.Services
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
                         string.IsNullOrWhiteSpace(request.Notes)
-                            ? $"ØªÙ… ØªØ­ÙˆÙŠÙ„ Ø§Ù„Ø·Ù„Ø¨ Ø¥Ù„Ù‰ Ø§Ù„Ù…ØµÙŠÙ {request.ToCategoryId} ÙˆØ§Ù„ÙÙˆØ¬ {normalizedTargetWave}."
-                            : $"ØªÙ… ØªØ­ÙˆÙŠÙ„ Ø§Ù„Ø·Ù„Ø¨ Ø¥Ù„Ù‰ Ø§Ù„Ù…ØµÙŠÙ {request.ToCategoryId} ÙˆØ§Ù„ÙÙˆØ¬ {normalizedTargetWave}. Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª: {request.Notes.Trim()}",
+                            ? $"تم تحويل الطلب إلى المصيف {request.ToCategoryId} والفوج {normalizedTargetWave}."
+                            : $"تم تحويل الطلب إلى المصيف {request.ToCategoryId} والفوج {normalizedTargetWave}. الملاحظات: {request.Notes.Trim()}",
                         userId,
                         ip,
                         request.files);
@@ -1023,7 +1039,12 @@ namespace Persistence.Services
         {
             var autoCancelledCount = 0;
             var nowUtc = DateTime.UtcNow;
-            var summerCategoryIds = SummerRules.Keys.ToList();
+            var summerRules = await GetSummerRulesAsync();
+            var summerCategoryIds = summerRules.Keys.ToList();
+            if (!summerCategoryIds.Any())
+            {
+                return 0;
+            }
 
             var candidateMessages = await _connectContext.Messages
                 .AsNoTracking()
@@ -1074,7 +1095,7 @@ namespace Persistence.Services
                         continue;
                     }
 
-                    var autoCancelReason = "ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø·Ù„Ø¨ ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹ Ù„Ø¹Ø¯Ù… Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø®Ù„Ø§Ù„ Ù…Ù‡Ù„Ø© ÙŠÙˆÙ… Ø§Ù„Ø¹Ù…Ù„.";
+                    var autoCancelReason = "تم إلغاء الطلب تلقائياً لعدم السداد خلال مهلة يوم العمل.";
                     message.Status = MessageStatus.Rejected;
                     UpsertField(fields, message.MessageId, "Summer_ActionType", "AUTO_CANCEL_PAYMENT_TIMEOUT");
                     UpsertField(fields, message.MessageId, "Summer_CancelReason", autoCancelReason);
@@ -1112,9 +1133,9 @@ namespace Persistence.Services
                 {
                     await _signalRConnectionManager.SendNotificationToUser(notifyEmployeeId, new NotificationDto
                     {
-                        Notification = "ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø·Ù„Ø¨ ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹ Ø¨Ø³Ø¨Ø¨ Ø¹Ø¯Ù… Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø®Ù„Ø§Ù„ Ù…Ù‡Ù„Ø© ÙŠÙˆÙ… Ø§Ù„Ø¹Ù…Ù„.",
+                        Notification = "تم إلغاء الطلب تلقائياً بسبب عدم السداد خلال مهلة يوم العمل.",
                         type = NotificationType.info,
-                        Title = "Ø¥Ù„ØºØ§Ø¡ ØªÙ„Ù‚Ø§Ø¦ÙŠ Ù„Ø·Ù„Ø¨ Ø§Ù„Ù…ØµÙŠÙ",
+                        Title = "إلغاء تلقائي لطلب المصيف",
                         time = DateTime.Now,
                         sender = "Connect",
                         Category = NotificationCategory.Business
@@ -1127,12 +1148,23 @@ namespace Persistence.Services
             return autoCancelledCount;
         }
 
-        private async Task<bool> HasEmployeeUsedTransferInSeasonAsync(string employeeId, int seasonYear, int excludedMessageId)
+        private async Task<bool> HasEmployeeUsedTransferInSeasonAsync(
+            string employeeId,
+            int seasonYear,
+            int excludedMessageId,
+            IEnumerable<int> summerCategoryIds)
         {
-            var summerCategoryIds = SummerRules.Keys.ToList();
+            var categoryIds = (summerCategoryIds ?? Enumerable.Empty<int>())
+                .Distinct()
+                .ToList();
+            if (!categoryIds.Any())
+            {
+                return false;
+            }
+
             var messageIds = await _connectContext.Messages
                 .AsNoTracking()
-                .Where(m => summerCategoryIds.Contains(m.CategoryCd) && m.MessageId != excludedMessageId)
+                .Where(m => categoryIds.Contains(m.CategoryCd) && m.MessageId != excludedMessageId)
                 .Select(m => m.MessageId)
                 .ToListAsync();
 
@@ -1221,9 +1253,14 @@ namespace Persistence.Services
                 .ToListAsync();
         }
 
-        private async Task<bool> HasCapacityAsync(int categoryId, string waveCode, int familyCount, int? excludedMessageId = null)
+        private async Task<bool> HasCapacityAsync(
+            int categoryId,
+            string waveCode,
+            int familyCount,
+            SummerRule? rule,
+            int? excludedMessageId = null)
         {
-            if (!SummerRules.TryGetValue(categoryId, out var rule))
+            if (rule == null)
             {
                 return true;
             }
@@ -1258,7 +1295,7 @@ namespace Persistence.Services
             var currentTransaction = _connectContext.Database.CurrentTransaction;
             if (currentTransaction == null)
             {
-                throw new InvalidOperationException("ÙŠÙ„Ø²Ù… ÙˆØ¬ÙˆØ¯ Ù…Ø¹Ø§Ù…Ù„Ø© ÙØ¹Ø§Ù„Ø© Ù‚Ø¨Ù„ Ø­Ø¬Ø² Ù‚ÙÙ„ Ø§Ù„Ø³Ø¹Ø©.");
+                throw new InvalidOperationException("يلزم وجود معاملة فعالة قبل حجز قفل السعة.");
             }
 
             var connection = _connectContext.Database.GetDbConnection();
@@ -1306,7 +1343,7 @@ SELECT @result;
             {
                 Notification = messageText,
                 type = NotificationType.info,
-                Title = "ØªØ­Ø¯ÙŠØ« Ø³Ø¹Ø§Øª Ø§Ù„Ù…ØµØ§ÙŠÙ",
+                Title = "تحديث سعات المصايف",
                 time = DateTime.Now,
                 sender = "Connect",
                 Category = NotificationCategory.Business
@@ -1379,6 +1416,189 @@ SELECT @result;
             };
         }
 
+        private async Task<Dictionary<int, SummerRule>> GetSummerRulesAsync(int seasonYear = 2026, string? applicationId = null)
+        {
+            var destinations = await GetSummerDestinationConfigsAsync(seasonYear, applicationId);
+            var rules = new Dictionary<int, SummerRule>();
+
+            foreach (var destination in destinations)
+            {
+                if (destination.CategoryId <= 0)
+                {
+                    continue;
+                }
+
+                var capacityByFamily = destination.Apartments
+                    .Where(item => item.FamilyCount > 0 && item.Apartments > 0)
+                    .GroupBy(item => item.FamilyCount)
+                    .ToDictionary(group => group.Key, group => group.Sum(item => item.Apartments));
+
+                if (!capacityByFamily.Any())
+                {
+                    continue;
+                }
+
+                var waveStartByCode = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+                foreach (var wave in destination.Waves ?? new List<SummerWaveDefinitionDto>())
+                {
+                    var waveCode = Convert.ToString(wave?.Code ?? string.Empty).Trim();
+                    if (waveCode.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    if (SummerCalendarRules.TryParseWaveLabelDateUtc(wave?.StartsAtLabel, out var waveStartUtc))
+                    {
+                        waveStartByCode[waveCode] = waveStartUtc;
+                    }
+                }
+
+                rules[destination.CategoryId] = new SummerRule(
+                    destination.MaxExtraMembers,
+                    capacityByFamily,
+                    waveStartByCode);
+            }
+
+            return rules;
+        }
+
+        private async Task<List<SummerDestinationConfigDto>> GetSummerDestinationConfigsAsync(int seasonYear, string? applicationId = null)
+        {
+            var normalizedAppId = string.IsNullOrWhiteSpace(applicationId)
+                ? SummerDynamicApplicationId
+                : applicationId.Trim();
+
+            var metadataRow = await _connectContext.Cdmends
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item =>
+                    item.ApplicationId == normalizedAppId
+                    && item.CdmendTxt == SummerDestinationCatalogMend
+                    && item.CdmendStat == false);
+
+            var payload = (metadataRow?.CdmendTbl ?? string.Empty).Trim();
+            if (payload.Length == 0)
+            {
+                return new List<SummerDestinationConfigDto>();
+            }
+
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            SummerDestinationCatalogPayload? catalogPayload = null;
+            if (payload.StartsWith("{", StringComparison.Ordinal))
+            {
+                catalogPayload = JsonSerializer.Deserialize<SummerDestinationCatalogPayload>(payload, options);
+            }
+            else if (payload.StartsWith("[", StringComparison.Ordinal))
+            {
+                catalogPayload = new SummerDestinationCatalogPayload
+                {
+                    Destinations = JsonSerializer.Deserialize<List<SummerDestinationConfigDto>>(payload, options)
+                };
+            }
+
+            if (catalogPayload == null)
+            {
+                return new List<SummerDestinationConfigDto>();
+            }
+
+            var destinations = catalogPayload.Destinations ?? new List<SummerDestinationConfigDto>();
+            var filteredDestinations = seasonYear > 0 && catalogPayload.SeasonYear > 0 && catalogPayload.SeasonYear != seasonYear
+                ? new List<SummerDestinationConfigDto>()
+                : destinations;
+
+            return filteredDestinations
+                .Where(item => item.CategoryId > 0)
+                .GroupBy(item => item.CategoryId)
+                .Select(group =>
+                {
+                    var destination = group.First();
+                    destination.Name = Convert.ToString(destination.Name ?? string.Empty).Trim();
+                    destination.Slug = Convert.ToString(destination.Slug ?? string.Empty).Trim();
+
+                    destination.StayModes = (destination.StayModes ?? new List<SummerStayModeDefinitionDto>())
+                        .Where(mode => !string.IsNullOrWhiteSpace(mode.Code))
+                        .Select(mode => new SummerStayModeDefinitionDto
+                        {
+                            Code = Convert.ToString(mode.Code ?? string.Empty).Trim(),
+                            Label = Convert.ToString(mode.Label ?? string.Empty).Trim()
+                        })
+                        .GroupBy(mode => mode.Code, StringComparer.OrdinalIgnoreCase)
+                        .Select(mode => mode.First())
+                        .ToList();
+
+                    destination.Apartments = (destination.Apartments ?? new List<SummerApartmentDefinitionDto>())
+                        .Where(item => item.FamilyCount > 0 && item.Apartments > 0)
+                        .GroupBy(item => item.FamilyCount)
+                        .Select(grouped => new SummerApartmentDefinitionDto
+                        {
+                            FamilyCount = grouped.Key,
+                            Apartments = grouped.Sum(item => item.Apartments)
+                        })
+                        .OrderBy(item => item.FamilyCount)
+                        .ToList();
+
+                    destination.FamilyOptions = destination.Apartments
+                        .Select(item => item.FamilyCount)
+                        .Distinct()
+                        .OrderBy(item => item)
+                        .ToList();
+
+                    destination.Waves = (destination.Waves ?? new List<SummerWaveDefinitionDto>())
+                        .Where(wave => !string.IsNullOrWhiteSpace(wave.Code))
+                        .Select(wave => new SummerWaveDefinitionDto
+                        {
+                            Code = Convert.ToString(wave.Code ?? string.Empty).Trim(),
+                            StartsAtLabel = Convert.ToString(wave.StartsAtLabel ?? string.Empty).Trim(),
+                            StartsAtIso = Convert.ToString(wave.StartsAtIso ?? string.Empty).Trim()
+                        })
+                        .GroupBy(wave => wave.Code, StringComparer.OrdinalIgnoreCase)
+                        .Select(wave => wave.First())
+                        .OrderBy(wave => GetWaveOrder(wave.Code))
+                        .ToList();
+
+                    return destination;
+                })
+                .OrderBy(item => item.CategoryId)
+                .ToList();
+        }
+
+        private static bool TryResolveWaveStartUtc(
+            SummerRule? categoryRule,
+            int categoryId,
+            int seasonYear,
+            string waveCode,
+            string? waveLabel,
+            out DateTime waveStartUtc)
+        {
+            if (categoryRule != null
+                && categoryRule.TryGetWaveStartUtc(waveCode, out waveStartUtc))
+            {
+                return true;
+            }
+
+            return SummerCalendarRules.TryResolveWaveStartUtc(categoryId, seasonYear, waveCode, waveLabel, out waveStartUtc);
+        }
+
+        private static int GetWaveOrder(string? waveCode)
+        {
+            var normalized = Convert.ToString(waveCode ?? string.Empty).Trim().ToUpperInvariant();
+            if (normalized.Length == 0)
+            {
+                return int.MaxValue;
+            }
+
+            var digits = new string(normalized.Where(char.IsDigit).ToArray());
+            if (int.TryParse(digits, out var order) && order > 0)
+            {
+                return order;
+            }
+
+            return int.MaxValue;
+        }
+
         private void UpsertField(List<TkmendField> fields, int messageId, string kind, string value)
         {
             var existing = fields.FirstOrDefault(f => string.Equals(f.FildKind, kind, StringComparison.OrdinalIgnoreCase));
@@ -1421,7 +1641,7 @@ SELECT @result;
             response.Errors.Add(new Error
             {
                 Code = "400",
-                Message = $"Ù†ÙˆØ¹ Ù…Ø±ÙÙ‚ ØºÙŠØ± Ù…Ø¯Ø¹ÙˆÙ…: {string.Join("ØŒ ", invalidFiles)}. Ø§Ù„Ù…Ø³Ù…ÙˆØ­ ÙÙ‚Ø·: PDF ÙˆØ§Ù„ØµÙˆØ±."
+                Message = $"نوع مرفق غير مدعوم: {string.Join("، ", invalidFiles)}. المسموح فقط: PDF والصور."
             });
             return false;
         }
@@ -1467,10 +1687,10 @@ SELECT @result;
             var token = NormalizeSearchToken(actionCode);
             return token switch
             {
-                "finalapprove" or "approve" or "Ø§Ø¹ØªÙ…Ø§Ø¯Ù†Ù‡Ø§Ø¦ÙŠ" or "Ø§Ø¹ØªÙ…Ø§Ø¯" => "FINAL_APPROVE",
-                "manualcancel" or "cancel" or "Ø§Ù„ØºØ§Ø¡ÙŠØ¯ÙˆÙŠ" or "Ø§Ù„ØºØ§Ø¡" => "MANUAL_CANCEL",
-                "comment" or "reply" or "ØªØ¹Ù„ÙŠÙ‚" or "Ø±Ø¯" => "COMMENT",
-                "approvetransfer" or "transferapprove" or "Ø§Ø¹ØªÙ…Ø§Ø¯Ø§Ù„ØªØ­ÙˆÙŠÙ„" => "APPROVE_TRANSFER",
+                "finalapprove" or "approve" or "اعتمادنهائي" or "اعتماد" => "FINAL_APPROVE",
+                "manualcancel" or "cancel" or "الغاءيدوي" or "الغاء" => "MANUAL_CANCEL",
+                "comment" or "reply" or "تعليق" or "رد" => "COMMENT",
+                "approvetransfer" or "transferapprove" or "اعتمادالتحويل" => "APPROVE_TRANSFER",
                 _ => string.Empty
             };
         }
@@ -1519,18 +1739,36 @@ SELECT @result;
                 : DateTime.SpecifyKind(parsed, DateTimeKind.Utc).ToUniversalTime();
         }
 
+        private sealed class SummerDestinationCatalogPayload
+        {
+            public int SeasonYear { get; set; }
+            public List<SummerDestinationConfigDto>? Destinations { get; set; }
+        }
+
         private sealed class SummerRule
         {
-            public SummerRule(int maxExtra, Dictionary<int, int> capacityByFamily)
+            public SummerRule(
+                int maxExtra,
+                Dictionary<int, int> capacityByFamily,
+                Dictionary<string, DateTime> waveStartByCode)
             {
                 MaxExtra = maxExtra;
                 CapacityByFamily = capacityByFamily;
+                WaveStartByCode = waveStartByCode;
             }
 
             public int MaxExtra { get; }
             public Dictionary<int, int> CapacityByFamily { get; }
+            public Dictionary<string, DateTime> WaveStartByCode { get; }
+
+            public bool TryGetWaveStartUtc(string waveCode, out DateTime waveStartUtc)
+            {
+                return WaveStartByCode.TryGetValue((waveCode ?? string.Empty).Trim(), out waveStartUtc);
+            }
         }
     }
 }
+
+
 
 

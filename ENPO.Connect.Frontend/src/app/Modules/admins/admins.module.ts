@@ -23,8 +23,6 @@ import { ChartConfigManagerComponent } from './Managementcomponents/chart-config
 import { NswagEditorComponent } from './Managementcomponents/nswag-editor/nswag-editor.component';
 import { ComponentConfigManagerComponent } from './Managementcomponents/component-config-manager/component-config-manager.component';
 import { ApplicationGenericManagerComponent } from './components/application-generic-manager/application-generic-manager.component';
-import { SummerRequestsWorkspaceComponent } from './components/summer-requests-workspace/summer-requests-workspace.component';
-import { SummerRequestsAdminConsoleComponent } from './components/summer-requests-admin-console/summer-requests-admin-console.component';
 // SidebarComponent is provided by GenericModuleModule now
 
 
@@ -42,9 +40,7 @@ import { SummerRequestsAdminConsoleComponent } from './components/summer-request
     ChartConfigManagerComponent,
     ComponentConfigManagerComponent,
     NswagEditorComponent,
-    ApplicationGenericManagerComponent,
-    SummerRequestsWorkspaceComponent,
-    SummerRequestsAdminConsoleComponent
+    ApplicationGenericManagerComponent
   ],
   imports: [
     CommonModule,

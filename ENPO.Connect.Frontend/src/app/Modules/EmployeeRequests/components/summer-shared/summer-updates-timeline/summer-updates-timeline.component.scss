@@ -1,0 +1,78 @@
+:host {
+  display: block;
+}
+
+.updates {
+  margin-top: 10px;
+}
+
+.updates h5 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.update-card {
+  border: 1px solid #d9e7f2;
+  border-radius: 10px;
+  padding: 8px;
+  background: #fbfdff;
+  margin-bottom: 8px;
+}
+
+.update-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.update-card header small {
+  color: #5f798d;
+}
+
+.update-card p {
+  margin: 0 0 6px;
+  color: #27485f;
+  white-space: pre-wrap;
+}
+
+.update-card ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.update-card li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid #e3edf5;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.attachment-link {
+  border: none;
+  background: transparent;
+  color: #125f93;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: right;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.attachment-link:disabled {
+  color: #8aa1b2;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.empty-sub {
+  margin: 0;
+  color: #60798b;
+}
+

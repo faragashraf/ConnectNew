@@ -1,0 +1,282 @@
+﻿<div class="summer-shell">
+  <section class="hero">
+    <div>
+      <h1>إدارة طلبات المصايف - موسم {{ seasonYear }}</h1>
+    </div>
+  </section>
+
+  <section class="layout-grid">
+    <aside class="policy-panel">
+      <h2 style="margin-bottom: 1rem;">قواعد المصايف</h2>
+      <p class="rule-alert">
+        قاعدة السداد: مهلة السداد هي يوم عمل واحد من وقت تسجيل الطلب.
+      </p>
+      <p class="rule-alert">
+        قاعدة الاعتذار: لا يمكن الاعتذار عن أي حجز قبل موعد الفوج بأقل من 14 يوم.
+      </p>
+
+      <article class="destination-card" *ngFor="let destination of destinations; trackBy: destinationTrackBy">
+        <header>
+          <h3>{{ destination.name }}</h3>
+          <span class="pill">{{ destination.waves.length }} فوج</span>
+        </header>
+
+        <div class="inline-info">
+          <span>خيارات الأفراد:</span>
+          <strong>{{ destination.familyOptions.join(' / ') }}</strong>
+        </div>
+        <div class="inline-info">
+          <span>أقصى أفراد إضافيين:</span>
+          <strong>{{ destination.maxExtraMembers }}</strong>
+        </div>
+
+        <div class="apt-grid">
+          <div class="apt-item" *ngFor="let apt of destination.apartments">
+            <span>سعة {{ apt.familyCount }}</span>
+            <strong>{{ apt.apartments }} شقة</strong>
+          </div>
+        </div>
+
+        <details>
+          <summary>عرض مواعيد الأفواج</summary>
+          <ul>
+            <li *ngFor="let wave of destination.waves">
+              <strong>{{ wave.code }}</strong>
+              <span>{{ wave.startsAtLabel }}</span>
+            </li>
+          </ul>
+        </details>
+      </article>
+    </aside>
+
+    <main class="workspace-panel">
+      <p-tabView>
+        <p-tabPanel header="إنشاء طلب جديد">
+          <ng-container *ngIf="destinations.length > 0; else destinationCatalogState">
+            <app-summer-dynamic-booking-builder
+              [destinations]="destinations"
+              [seasonYear]="seasonYear"
+              [applicationId]="dynamicSummerApplicationId"
+              [configRouteKey]="dynamicSummerConfigRouteKey"
+              (bookingCreated)="onDynamicBookingCreated()">
+            </app-summer-dynamic-booking-builder>
+          </ng-container>
+          <ng-template #destinationCatalogState>
+            <div class="empty-state">
+              <h3 *ngIf="loadingDestinations">جاري تحميل إعدادات المصايف...</h3>
+              <h3 *ngIf="!loadingDestinations && destinationsError.length > 0">تعذر تحميل إعدادات المصايف</h3>
+              <p *ngIf="!loadingDestinations && destinationsError.length > 0">{{ destinationsError }}</p>
+            </div>
+          </ng-template>
+        </p-tabPanel>
+
+        <p-tabPanel header="طلباتي بالموسم">
+          <div class="requests-head">
+            <h3>طلبات الموسم {{ seasonYear }}</h3>
+            <button type="button" class="ghost" (click)="loadMyRequests()" [disabled]="loadingRequests">
+              {{ loadingRequests ? 'جاري التحديث...' : 'تحديث' }}
+            </button>
+          </div>
+
+          <app-summer-requests-list
+            [variant]="'employee'"
+            [loading]="loadingRequests"
+            [requests]="pagedRequests"
+            [selectedRequestId]="selectedRequestId"
+            [emptyMessage]="'لا توجد طلبات حالياً.'"
+            [statusClassResolver]="getStatusClass.bind(this)"
+            [statusTextResolver]="getRequestStatusLabel.bind(this)"
+            [formatDateResolver]="formatUtcDate.bind(this)"
+            [paymentOverdueResolver]="isPaymentOverdue.bind(this)"
+            [transferStateLabelResolver]="getTransferStateLabel.bind(this)"
+            [transferStateClassResolver]="getTransferStateClass.bind(this)"
+            [pageMode]="'client'"
+            [pageData]="requestsPageData"
+            (requestSelected)="selectRequest($event)"
+            (pageChange)="onRequestsPageChange($event)">
+          </app-summer-requests-list>
+
+          <section class="request-details" *ngIf="selectedRequestId">
+            <header>
+              <h4>تفاصيل الطلب المختار</h4>
+              <small *ngIf="loadingSelectedRequestDetails">جاري تحميل التفاصيل...</small>
+            </header>
+
+            <ng-container *ngIf="!loadingSelectedRequestDetails">
+              <app-summer-request-fields-grid
+                [title]="'تفاصيل الطلب'"
+                [rows]="selectedRequestDetailFields"
+                [emptyMessage]="'لا توجد تفاصيل إضافية معروضة للطلب المختار.'">
+              </app-summer-request-fields-grid>
+
+              <app-summer-request-owner-card
+                *ngIf="selectedRequestOwnerInfo as owner"
+                [owner]="owner">
+              </app-summer-request-owner-card>
+
+              <app-summer-request-companions-table
+                *ngIf="selectedRequestCompanions.length > 0"
+                [title]="'بيانات المرافقين'"
+                [companions]="selectedRequestCompanions">
+              </app-summer-request-companions-table>
+
+              <app-summer-attachments-list
+                *ngIf="selectedRequestAttachments.length > 0"
+                [title]="'مرفقات الطلب'"
+                [items]="selectedRequestAttachments"
+                [showSize]="true"
+                (download)="downloadAttachment($event.id, $event.name)">
+              </app-summer-attachments-list>
+
+              <app-summer-updates-timeline
+                [title]="'سجل التحديثات'"
+                [updates]="selectedRequestReplies"
+                [showSize]="true"
+                [dateFormatter]="formatUtcDate.bind(this)"
+                [emptyMessage]="'لا توجد تحديثات مسجلة حتى الآن.'"
+                (download)="downloadAttachment($event.id, $event.name)">
+              </app-summer-updates-timeline>
+            </ng-container>
+          </section>
+        </p-tabPanel>
+
+        <p-tabPanel header="الاعتذار / السداد / التحويل">
+          <ng-container *ngIf="selectedRequest as request; else emptyRequestState">
+            <div class="selected-request">
+              <h3>الطلب المحدد: #{{ request.messageId }} - {{ request.requestRef }}</h3>
+              <p>
+                {{ request.categoryName }} | {{ request.waveCode }}
+                | استحقاق السداد: {{ formatUtcDate(request.paymentDueAtUtc) }}
+              </p>
+            </div>
+
+            <div class="workflow-grid">
+              <form [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
+                <h4>الاعتذار عن الحجز</h4>
+                <p class="warn" *ngIf="!isCancelActionClosed(request)">{{ getCancelWindowNote() }}</p>
+                <label>
+                  <span class="optional-label">سبب الاعتذار</span>
+                  <textarea rows="3" formControlName="reason" placeholder="سبب الاعتذار (اختياري)"></textarea>
+                </label>
+                <label class="file-picker compact">
+                  <span>إرفاق مستندات الاعتذار</span>
+                  <input type="file" accept=".pdf,image/*" multiple (change)="addFiles($event, 'cancel')" />
+                </label>
+                <div class="file-list" *ngIf="cancelAttachments.length > 0">
+                  <div class="file-chip" *ngFor="let file of cancelAttachments; let i = index">
+                    <span>{{ file.name }}</span>
+                    <button type="button" (click)="removeFile('cancel', i)">حذف</button>
+                  </div>
+                </div>
+                <p class="warn" *ngIf="getCancelClosedMessage(request) as cancelClosedMessage">
+                  <ng-container *ngIf="cancelClosedMessage.length > 0">{{ cancelClosedMessage }}</ng-container>
+                </p>
+                <button type="submit" class="danger" [disabled]="submittingCancel || isCancelActionClosed(request) || isCancelBlockedByWindow()">
+                  {{ isCancelActionClosed(request)
+                    ? 'الاعتذار غير متاح'
+                    : (isCancelBlockedByWindow()
+                      ? 'انتهت مهلة الاعتذار لهذا الفوج'
+                      : (submittingCancel ? 'جاري التنفيذ...' : 'تنفيذ الاعتذار')) }}
+                </button>
+              </form>
+
+              <form [formGroup]="paymentForm" class="workflow-card" (ngSubmit)="submitPayment()">
+                <h4>تسجيل السداد</h4>
+                <label>
+                  <span class="required-label">تاريخ ووقت السداد</span>
+                  <input type="datetime-local" step="3600" formControlName="paidAtLocal" />
+                </label>
+                <label>
+                  <span class="optional-label">ملاحظات السداد</span>
+                  <textarea rows="3" formControlName="notes" placeholder="ملاحظات السداد"></textarea>
+                </label>
+                <label class="file-picker compact">
+                  <span class="required-label">إرفاق مستندات السداد</span>
+                  <input type="file" accept=".pdf,image/*" multiple (change)="addFiles($event, 'payment')" />
+                </label>
+                <div class="file-list" *ngIf="paymentAttachments.length > 0">
+                  <div class="file-chip" *ngFor="let file of paymentAttachments; let i = index">
+                    <span>{{ file.name }}</span>
+                    <button type="button" (click)="removeFile('payment', i)">حذف</button>
+                  </div>
+                </div>
+                <p class="warn" *ngIf="paymentAttachments.length === 0">يلزم مرفق واحد على الأقل لتسجيل السداد.</p>
+                <button type="submit" class="primary" [disabled]="submittingPayment || paymentForm.invalid || paymentAttachments.length === 0">
+                  {{ submittingPayment ? 'جاري التنفيذ...' : 'تسجيل السداد' }}
+                </button>
+              </form>
+
+              <form [formGroup]="transferForm" class="workflow-card" (ngSubmit)="submitTransfer()">
+                <h4>التحويل (مرة واحدة)</h4>
+                <small *ngIf="transferCapacityLoading">جاري تحديث السعة...</small>
+                <div class="mini-capacity-grid" *ngIf="transferCapacitySummary.length > 0">
+                  <span *ngFor="let item of transferCapacitySummary">
+                    {{ item.familyCount }} أفراد: {{ item.availableUnits }}/{{ item.totalUnits }}
+                  </span>
+                </div>
+                <label>
+                  <span class="required-label">المصيف المستهدف</span>
+                  <select formControlName="toCategoryId">
+                    <option [ngValue]="null">اختر</option>
+                    <option *ngFor="let destination of destinations; trackBy: destinationTrackBy" [ngValue]="destination.categoryId">
+                      {{ destination.name }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  <span class="required-label">الفوج المستهدف</span>
+                  <select formControlName="toWaveCode">
+                    <option [ngValue]="''">اختر</option>
+                    <option *ngFor="let wave of transferWaves" [ngValue]="wave.code">
+                      {{ wave.code }} - {{ wave.startsAtLabel }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  <span class="required-label">عدد الأفراد الجديد</span>
+                  <select formControlName="newFamilyCount">
+                    <option [ngValue]="null">اختر</option>
+                    <option *ngFor="let option of transferFamilyOptions" [ngValue]="option" [disabled]="isTransferFamilyOptionDisabled(option)">
+                      {{ getTransferFamilyOptionLabel(option) }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  <span class="optional-label">عدد الأفراد الإضافيين</span>
+                  <input type="number" min="0" formControlName="newExtraCount" />
+                </label>
+                <label>
+                  <span class="optional-label">ملاحظات التحويل</span>
+                  <textarea rows="3" formControlName="notes" placeholder="ملاحظات التحويل"></textarea>
+                </label>
+                <label class="file-picker compact">
+                  <span>إرفاق مستندات التحويل</span>
+                  <input type="file" accept=".pdf,image/*" multiple (change)="addFiles($event, 'transfer')" />
+                </label>
+                <div class="file-list" *ngIf="transferAttachments.length > 0">
+                  <div class="file-chip" *ngFor="let file of transferAttachments; let i = index">
+                    <span>{{ file.name }}</span>
+                    <button type="button" (click)="removeFile('transfer', i)">حذف</button>
+                  </div>
+                </div>
+                <p class="warn" *ngIf="getSelectedTransferBlockNote(request) as transferBlockNote">
+                  <ng-container *ngIf="transferBlockNote.length > 0">{{ transferBlockNote }}</ng-container>
+                </p>
+                <button type="submit" class="primary" [disabled]="submittingTransfer || transferForm.invalid || !isTransferAvailable(request)">
+                  {{ !isTransferAvailable(request) ? 'التحويل غير متاح' : (submittingTransfer ? 'جاري التنفيذ...' : 'تنفيذ التحويل') }}
+                </button>
+              </form>
+            </div>
+          </ng-container>
+
+          <ng-template #emptyRequestState>
+            <div class="empty-state">
+              <h3>اختر طلباً من تبويب "طلباتي" أولاً</h3>
+              <p>بعد اختيار الطلب ستظهر لك كل إجراءات الاعتذار والسداد والتحويل.</p>
+            </div>
+          </ng-template>
+        </p-tabPanel>
+      </p-tabView>
+    </main>
+  </section>
+</div>

@@ -1,0 +1,111 @@
+﻿<section class="summer-requests-list">
+  <div class="table-wrap">
+    <table class="requests-table" [class.admin-table]="isAdminVariant">
+      <thead>
+        <tr *ngIf="isAdminVariant">
+          <th>رقم الطلب</th>
+          <th>الموظف</th>
+          <th>المصيف/الفوج</th>
+          <th>الحالة</th>
+          <th>استحقاق السداد</th>
+          <th>سداد</th>
+        </tr>
+        <tr *ngIf="!isAdminVariant">
+          <th>رقم الطلب</th>
+          <th>المصيف</th>
+          <th>الفوج</th>
+          <th>الحالة</th>
+          <th>استحقاق السداد</th>
+          <th>حالة التحويل</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <tr
+          *ngFor="let request of requests; trackBy: trackByRequest"
+          (click)="onSelectRequest(request.messageId)"
+          [class.active]="selectedRequestId === request.messageId">
+
+          <ng-container *ngIf="isAdminVariant; else employeeRow">
+            <td>
+              #{{ request.messageId }}
+              <br>
+              <small>{{ request.requestRef || '-' }}</small>
+            </td>
+            <td>
+              <div>{{ request.employeeName || '-' }}</div>
+              <small>{{ request.employeeId || '-' }}</small>
+            </td>
+            <td>
+              <div>{{ request.categoryName || '-' }}</div>
+              <small>{{ request.waveCode || '-' }}</small>
+            </td>
+            <td>
+              <span class="status-pill" [ngClass]="resolveStatusClass(request)">
+                {{ resolveStatusText(request) }}
+              </span>
+            </td>
+            <td>{{ resolveDate(request.paymentDueAtUtc) }}</td>
+            <td>{{ request.paidAtUtc ? 'مسدد' : 'غير مسدد' }}</td>
+          </ng-container>
+
+          <ng-template #employeeRow>
+            <td>#{{ request.messageId }} - {{ request.requestRef || '-' }}</td>
+            <td>{{ request.categoryName || '-' }}</td>
+            <td>{{ request.waveCode || '-' }}</td>
+            <td>
+              <span class="status-pill" [ngClass]="resolveStatusClass(request)">
+                {{ resolveStatusText(request) }}
+              </span>
+            </td>
+            <td>
+              <div>{{ resolveDate(request.paymentDueAtUtc) }}</div>
+              <small class="warn" *ngIf="isPaymentOverdue(request)">متأخر عن السداد</small>
+            </td>
+            <td>
+              <span [ngClass]="resolveTransferStateClass(request)">
+                {{ resolveTransferStateLabel(request) }}
+              </span>
+            </td>
+          </ng-template>
+        </tr>
+
+        <tr *ngIf="!loading && requests.length === 0">
+          <td [attr.colspan]="6" class="empty">{{ emptyMessage }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p-paginator
+    *ngIf="pageMode === 'client' && !loading && resolvedTotalCount > 0"
+    [first]="resolvedFirst"
+    [rows]="resolvedPageSize"
+    [totalRecords]="resolvedTotalCount"
+    [rowsPerPageOptions]="resolvedRowsPerPageOptions"
+    (onPageChange)="onClientPageChange($event)">
+  </p-paginator>
+
+  <div class="pager" *ngIf="pageMode === 'server' && !loading">
+    <div class="pager-info">
+      <span>عرض {{ resolvedRangeStart }} - {{ resolvedRangeEnd }} من {{ resolvedTotalCount }}</span>
+    </div>
+
+    <div class="pager-controls">
+      <label class="page-size">
+        <span>عدد السطور</span>
+        <select [value]="resolvedPageSize" (change)="onServerPageSizeChanged($any($event.target).value)">
+          <option *ngFor="let size of resolvedRowsPerPageOptions" [value]="size">{{ size }}</option>
+        </select>
+      </label>
+
+      <div class="page-buttons">
+        <button type="button" class="ghost" (click)="goToServerPage(1)" [disabled]="resolvedPageNumber <= 1">الأولى</button>
+        <button type="button" class="ghost" (click)="goToServerPage(resolvedPageNumber - 1)" [disabled]="resolvedPageNumber <= 1">السابق</button>
+        <span class="page-index">صفحة {{ resolvedPageNumber }} من {{ resolvedTotalPages }}</span>
+        <button type="button" class="ghost" (click)="goToServerPage(resolvedPageNumber + 1)" [disabled]="resolvedPageNumber >= resolvedTotalPages">التالي</button>
+        <button type="button" class="ghost" (click)="goToServerPage(resolvedTotalPages)" [disabled]="resolvedPageNumber >= resolvedTotalPages">الأخيرة</button>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,23 @@
+.toggle-switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  border-radius: 12px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.78rem;
+  background: #eef2f7;
+  color: #455869;
+}
+
+.state-chip.on {
+  background: #dff5e7;
+  color: #1f6f3f;
+}
+

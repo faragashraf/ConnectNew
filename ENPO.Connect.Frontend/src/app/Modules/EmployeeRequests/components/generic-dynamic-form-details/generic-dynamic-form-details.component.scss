@@ -1,0 +1,102 @@
+.summer-form-lite {
+  display: grid;
+  gap: 1rem;
+}
+
+.groups-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.group-card {
+  border: 1px solid #d3dfeb;
+  border-radius: 12px;
+  background: #fff;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.group-head,
+.instance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.group-head h4 {
+  margin: 0;
+  color: #0f3f6b;
+  font-size: 1.05rem;
+}
+
+.instance-head span {
+  font-weight: 700;
+  color: #295272;
+}
+
+.group-instance {
+  border: 1px solid #e2ebf3;
+  border-radius: 10px;
+  padding: 0.65rem;
+  background: #fbfdff;
+}
+
+.group-instance.nested {
+  background: #f6f9fc;
+}
+
+.form-array-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.65rem;
+}
+
+.group-row {
+  display: contents;
+}
+
+.mini-btn {
+  border: 1px solid #c5d6e6;
+  background: #f1f7ff;
+  color: #174f80;
+  border-radius: 8px;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  font-size: 0.84rem;
+}
+
+.mini-btn:hover {
+  background: #e8f1fb;
+}
+
+.mini-btn.danger {
+  border-color: #efc0c0;
+  color: #8f2222;
+  background: #fff3f3;
+}
+
+.attachments-block {
+  border: 1px solid #d7e3ee;
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: #fafcff;
+}
+
+.submit-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.save-btn {
+  min-width: 170px;
+}
+
+.empty-state {
+  border: 1px dashed #c9d8e7;
+  border-radius: 12px;
+  padding: 0.9rem;
+  color: #4d6780;
+  background: #f8fbff;
+}

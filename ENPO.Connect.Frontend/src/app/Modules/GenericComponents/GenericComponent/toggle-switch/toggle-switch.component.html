@@ -1,0 +1,12 @@
+<div class="toggle-switch-wrap">
+  <p-inputSwitch
+    [formControl]="control"
+    [disabled]="isDivDisabled || genericFormService.GetPropertyValue(controlFullName,'isDisabledInit')=='true'"
+    (onChange)="onChange($event)">
+  </p-inputSwitch>
+
+  <span class="state-chip" [class.on]="control?.value === true">
+    {{ control?.value ? 'نعم' : 'لا' }}
+  </span>
+</div>
+

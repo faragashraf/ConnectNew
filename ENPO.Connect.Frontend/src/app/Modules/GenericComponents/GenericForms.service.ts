@@ -36,7 +36,7 @@ export class GenericFormsService {
   validationMessages: ValidationMessage[] = [
     {
       key: 'tkCategoryCd',
-      validators: [{ key: 'required', value: 'Please Select Category' }]
+      validators: [{ key: 'required', value: 'برجاء اختيار الفئة' }]
     }
   ];
   formErrors: formErrors[] = []
@@ -114,6 +114,52 @@ export class GenericFormsService {
     this.cdmendDto = [];
     this.cdcategoryDtos = [];
     this.filteredCdcategoryDtos = [];
+  }
+
+  /**
+   * Clears runtime-only state used while rendering a dynamic form instance
+   * without touching loaded metadata from the backend.
+   */
+  resetDynamicRuntimeState(clearSelections: boolean = false): void {
+    this.dynamicGroups = [];
+    this.formErrors = [];
+    this.validationMessages = [];
+    if (clearSelections) {
+      this.selectionArrays = [];
+    }
+  }
+
+  /**
+   * Creates the shell FormGroup for dynamic forms with fixed system controls
+   * and optional attachments control.
+   */
+  createDynamicFormShell(
+    groups: GroupInfo[],
+    options?: {
+      includeAttachments?: boolean;
+      attachmentsMandatory?: boolean;
+      createdBy?: string;
+    }
+  ): FormGroup {
+    const formConfig: Record<string, any> = {
+      tkCategoryCd: [null],
+      messageID: [null],
+      subject: [null],
+      createdBy: [options?.createdBy ?? '']
+    };
+
+    (groups ?? []).forEach(group => {
+      formConfig[group.formArrayName] = this.fb.array([]);
+      (group.instances ?? []).forEach(instance => {
+        formConfig[instance.formArrayName] = this.fb.array([]);
+      });
+    });
+
+    if (options?.includeAttachments) {
+      formConfig['attachments'] = [[], options.attachmentsMandatory ? Validators.required : null];
+    }
+
+    return this.fb.group(formConfig);
   }
 
   //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX       HTML Methods    XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -653,12 +699,12 @@ export class GenericFormsService {
           res[1].errors?.forEach(e => {
             errors += e.message + '\n';
           });
-          this.msg.msgError('Error', '<h5>' + errors + '</h5>', true);
+          this.msg.msgError('خطأ', '<h5>' + errors + '</h5>', true);
           return false;
         }
       }),
       catchError((error) => {
-        this.msg.msgError('Error', '<h5>' + error + '</h5>', true);
+        this.msg.msgError('خطأ', '<h5>' + error + '</h5>', true);
         return of(false);
       }),
       finalize(() => {

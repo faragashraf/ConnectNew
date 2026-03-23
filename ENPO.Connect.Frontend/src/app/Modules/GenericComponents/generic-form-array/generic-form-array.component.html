@@ -87,6 +87,14 @@
             (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)">
         </app-date-time>
     </div>
+    <!------------------------------------------------------------------------ Toggle Switch   ----------------------------------------------------------------------->
+    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='ToggleSwitch'"
+        style="width: 100%;text-align: right;">
+        <app-toggle-switch [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+            [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled"
+            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)">
+        </app-toggle-switch>
+    </div>
     <!---------------------------onImageError--------------------------------------------- Error Span    ----------------------------------------------------------------------->
     <span class="alert-danger" *ngIf="genericFormService.returnFormErrors(controlFullName)">
         {{genericFormService.returnFormErrors(controlFullName)}}

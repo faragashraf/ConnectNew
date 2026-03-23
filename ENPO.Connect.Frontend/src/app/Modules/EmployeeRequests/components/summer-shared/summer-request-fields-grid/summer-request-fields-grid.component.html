@@ -1,0 +1,15 @@
+<section class="fields-card">
+  <h5>{{ title }}</h5>
+
+  <div class="details-grid" *ngIf="rows.length > 0; else emptyState">
+    <div class="detail-row" *ngFor="let row of rows">
+      <span class="k">{{ resolveLabel(row) }}</span>
+      <span class="v">{{ resolveValue(row) }}</span>
+    </div>
+  </div>
+
+  <ng-template #emptyState>
+    <p class="empty-sub">{{ emptyMessage }}</p>
+  </ng-template>
+</section>
+

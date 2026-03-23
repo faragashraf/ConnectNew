@@ -1,0 +1,16 @@
+<section class="attachments" *ngIf="items.length > 0">
+  <h5>{{ title }}</h5>
+  <ul>
+    <li *ngFor="let item of items">
+      <button
+        type="button"
+        class="attachment-link"
+        [disabled]="resolveId(item) <= 0"
+        (click)="onDownload(item)">
+        {{ resolveName(item) }}
+      </button>
+      <small *ngIf="showSize">{{ formatSize(resolveSize(item)) }}</small>
+    </li>
+  </ul>
+</section>
+
