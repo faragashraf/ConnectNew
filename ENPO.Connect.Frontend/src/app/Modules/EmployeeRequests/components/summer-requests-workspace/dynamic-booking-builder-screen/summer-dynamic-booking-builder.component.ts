@@ -445,6 +445,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
 
     this.engine.ensureExtraCountRule(this.ticketForm, this.genericFormService, destination);
     this.syncCompanionInstances();
+    this.applyCompanionAgeRules();
     this.syncWaveLabel();
     this.loadBookingCapacity();
   }
@@ -483,6 +484,27 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
           break;
         }
         this.formDetailsRef.deleteGroup(last.groupId);
+      }
+    }
+  }
+
+  private applyCompanionAgeRules(): void {
+    if (!this.ticketForm) {
+      return;
+    }
+
+    for (const control of Object.values(this.ticketForm.controls)) {
+      if (!(control instanceof FormArray)) {
+        continue;
+      }
+
+      for (const rowControl of control.controls) {
+        const row = rowControl as FormGroup;
+        const controlName = Object.keys(row.controls)[0];
+        const base = this.engine.parseControlName(controlName).base.toLowerCase();
+        if (this.matchesAlias(base, this.engine.aliases.companionRelation)) {
+          this.engine.ensureAgeRule(this.ticketForm, this.genericFormService, controlName);
+        }
       }
     }
   }
@@ -588,7 +610,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
           }
         });
 
-        if ((relation === 'ابن' || relation === 'ابنة') && age.length === 0) {
+        if (this.engine.isChildRelation(relation) && age.length === 0) {
           alerts.push(`سن المرافق رقم ${index + 1} مطلوب عند اختيار درجة القرابة ابن/ابنة.`);
         }
       });

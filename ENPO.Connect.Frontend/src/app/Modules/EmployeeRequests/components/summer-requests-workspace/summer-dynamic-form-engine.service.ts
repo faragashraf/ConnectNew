@@ -29,6 +29,8 @@ export type SummerFieldAliasMap = {
 
 @Injectable()
 export class SummerDynamicFormEngineService {
+  private readonly childRelationTokens = new Set<string>(['ابن', 'ابنة', 'SON', 'DAUGHTER']);
+
   aliases: SummerFieldAliasMap = {
     waveCode: ['SummerCamp', 'WaveCode'],
     waveLabel: ['SummerCampLabel', 'WaveLabel'],
@@ -242,22 +244,14 @@ export class SummerDynamicFormEngineService {
   }
 
   ensureAgeRule(form: FormGroup, genericFormService: GenericFormsService, relationControlName: string): void {
-    const relation = this.resolveControlByName(form, relationControlName);
-    if (!relation) {
+    const relationContext = this.resolveControlByName(form, relationControlName);
+    if (!relationContext) {
       return;
     }
 
-    const relationValue = String(relation.value ?? '').trim();
-    const requiresAge = relationValue === 'ابن' || relationValue === 'ابنة';
-    const relationIndex = this.parseControlName(relationControlName).index;
-
-    let ageControl: AbstractControl | null = null;
-    for (const alias of this.aliases.companionAge) {
-      ageControl = this.resolveControlByName(form, `${alias}|${relationIndex}`);
-      if (ageControl) {
-        break;
-      }
-    }
+    const requiresAge = this.isChildRelation(relationContext.control.value);
+    let ageControl = this.resolveCompanionAgeControl(relationContext.formArray);
+    ageControl ??= this.resolveControl(form, genericFormService, this.aliases.companionAge);
 
     if (!ageControl) {
       return;
@@ -267,10 +261,16 @@ export class SummerDynamicFormEngineService {
       ageControl.enable({ emitEvent: false });
       ageControl.setValidators([Validators.required, Validators.min(0)]);
     } else {
+      ageControl.setValue(null, { emitEvent: false });
       ageControl.clearValidators();
+      ageControl.disable({ emitEvent: false });
     }
 
     ageControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  isChildRelation(value: unknown): boolean {
+    return this.childRelationTokens.has(this.normalizeRelationValue(value));
   }
 
   collectRequestFields(form: FormGroup, genericFormService: GenericFormsService, groups: GroupInfo[], categoryId: number, applicationId: string): TkmendField[] {
@@ -340,7 +340,7 @@ export class SummerDynamicFormEngineService {
     );
   }
 
-  private resolveControlByName(form: FormGroup, controlName: string): AbstractControl | null {
+  private resolveControlByName(form: FormGroup, controlName: string): { control: AbstractControl; formArray: FormArray } | null {
     for (const key of Object.keys(form.controls)) {
       const control = form.controls[key];
       if (!(control instanceof FormArray)) {
@@ -350,14 +350,34 @@ export class SummerDynamicFormEngineService {
       for (const rowControl of control.controls) {
         const row = rowControl as FormGroup;
         if (row.contains(controlName)) {
-          return row.get(controlName);
+          const resolved = row.get(controlName);
+          if (resolved) {
+            return { control: resolved, formArray: control };
+          }
         }
       }
     }
 
     return null;
   }
+  private resolveCompanionAgeControl(formArray: FormArray): AbstractControl | null {
+    for (const rowControl of formArray.controls) {
+      const row = rowControl as FormGroup;
+      const controlName = Object.keys(row.controls)[0];
+      const base = this.parseControlName(controlName).base.toLowerCase();
+      if (this.aliases.companionAge.some(alias => alias.toLowerCase() === base)) {
+        return row.get(controlName);
+      }
+    }
+    return null;
+  }
 
+  private normalizeRelationValue(value: unknown): string {
+    return String(value ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+  }
   private toSafeString(value: unknown): string {
     if (value === null || value === undefined) {
       return '';
@@ -407,3 +427,4 @@ export class SummerDynamicFormEngineService {
     });
   }
 }
+
