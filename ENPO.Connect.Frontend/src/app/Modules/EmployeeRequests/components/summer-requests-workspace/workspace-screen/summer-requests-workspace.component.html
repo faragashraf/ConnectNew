@@ -50,15 +50,26 @@
     </aside>
 
     <main class="workspace-panel">
-      <p-tabView>
-        <p-tabPanel header="إنشاء طلب جديد">
+      <p-tabView [activeIndex]="activeTabIndex" (onChange)="onTabChange($event)">
+        <p-tabPanel [header]="isEditMode ? ('تعديل الطلب #' + editRequestId) : 'إنشاء طلب جديد'">
+          <div class="edit-banner" *ngIf="isEditMode">
+            <div>
+              <h4>وضع تعديل الطلب</h4>
+              <p>يتم الآن تعديل الطلب رقم #{{ editRequestId }}.</p>
+            </div>
+            <button type="button" class="ghost" (click)="exitEditMode()">
+              العودة لإنشاء طلب جديد
+            </button>
+          </div>
+
           <ng-container *ngIf="destinations.length > 0; else destinationCatalogState">
             <app-summer-dynamic-booking-builder
               [destinations]="destinations"
               [seasonYear]="seasonYear"
               [applicationId]="dynamicSummerApplicationId"
               [configRouteKey]="dynamicSummerConfigRouteKey"
-              (bookingCreated)="onDynamicBookingCreated()">
+              [editRequestId]="editRequestId"
+              (bookingCreated)="onDynamicBookingCreated($event)">
             </app-summer-dynamic-booking-builder>
           </ng-container>
           <ng-template #destinationCatalogState>
@@ -73,9 +84,14 @@
         <p-tabPanel header="طلباتي بالموسم">
           <div class="requests-head">
             <h3>طلبات الموسم {{ seasonYear }}</h3>
-            <button type="button" class="ghost" (click)="loadMyRequests()" [disabled]="loadingRequests">
-              {{ loadingRequests ? 'جاري التحديث...' : 'تحديث' }}
-            </button>
+            <div class="requests-head-actions">
+              <button type="button" class="ghost" (click)="loadMyRequests()" [disabled]="loadingRequests">
+                {{ loadingRequests ? 'جاري التحديث...' : 'تحديث' }}
+              </button>
+              <button *ngIf="isEditMode" type="button" class="ghost" (click)="exitEditMode(true)">
+                إلغاء وضع التعديل
+              </button>
+            </div>
           </div>
 
           <app-summer-requests-list
@@ -98,9 +114,24 @@
 
           <section class="request-details" *ngIf="selectedRequestId">
             <header>
-              <h4>تفاصيل الطلب المختار</h4>
-              <small *ngIf="loadingSelectedRequestDetails">جاري تحميل التفاصيل...</small>
+              <div class="request-details-head">
+                <h4>تفاصيل الطلب المختار</h4>
+                <small *ngIf="loadingSelectedRequestDetails">جاري تحميل التفاصيل...</small>
+              </div>
+              <button
+                *ngIf="selectedRequest as request"
+                type="button"
+                class="ghost"
+                [disabled]="!canEditRequest(request)"
+                (click)="openEditRequest(request)">
+                {{ canEditRequest(request) ? 'تعديل الطلب' : 'التعديل غير متاح' }}
+              </button>
             </header>
+            <p class="warn" *ngIf="selectedRequest as request">
+              <ng-container *ngIf="!canEditRequest(request) && getEditBlockedReason(request).length > 0">
+                {{ getEditBlockedReason(request) }}
+              </ng-container>
+            </p>
 
             <ng-container *ngIf="!loadingSelectedRequestDetails">
               <app-summer-request-fields-grid

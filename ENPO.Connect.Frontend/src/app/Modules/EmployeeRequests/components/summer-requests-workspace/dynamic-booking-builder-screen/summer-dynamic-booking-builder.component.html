@@ -1,8 +1,9 @@
-<section class="dynamic-booking-shell" dir="rtl">
+﻿<section class="dynamic-booking-shell" dir="rtl">
   <div class="dynamic-head">
     <div class="head-content">
-      <h3>إنشاء طلب جديد (ديناميكي)</h3>
-      <p>المكوّن مبني على بيانات تعريف من الجداول الديناميكية مع الحفاظ على قواعد المصايف.</p>
+      <h3>{{ isEditMode ? ('تعديل طلب المصيف #' + editRequestId) : 'إنشاء طلب جديد (ديناميكي)' }}</h3>
+      <p *ngIf="!isEditMode">المكوّن مبني على بيانات تعريف من الجداول الديناميكية مع الحفاظ على قواعد المصايف.</p>
+      <p *ngIf="isEditMode">يتم تحميل بيانات الطلب الحالي لتعديلها ثم حفظ التغييرات.</p>
     </div>
     <div class="app-id-pill">
       <span>معرّف التطبيق</span>
@@ -16,7 +17,7 @@
       <select
         [ngModel]="selectedDestinationId"
         (ngModelChange)="onDestinationChanged($event)"
-        [disabled]="loadingMetadata || submitting">
+        [disabled]="loadingMetadata || submitting || isEditMode">
         <option [ngValue]="null">اختر</option>
         <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">
           {{ destination.name }}
@@ -24,6 +25,10 @@
       </select>
     </label>
     <small class="meta-error" *ngIf="metadataError.length > 0">{{ metadataError }}</small>
+    <small class="meta-error" *ngIf="editRequestError.length > 0">{{ editRequestError }}</small>
+    <small class="mode-note" *ngIf="isEditMode && editRequestError.length === 0 && !loadingEditRequest">
+      يتم تعديل الطلب رقم #{{ editRequestId }}.
+    </small>
   </div>
 
   <div class="danger-alert" *ngIf="bookingValidationAlerts.length > 0">
@@ -49,9 +54,10 @@
   </section>
 
   <div class="loading" *ngIf="loadingMetadata">جاري تحميل بيانات التعريف الديناميكية...</div>
+  <div class="loading" *ngIf="loadingEditRequest">جاري تحميل بيانات الطلب للتعديل...</div>
 
   <app-generic-dynamic-form-details
-    *ngIf="selectedDestination && customFilteredCategoryMand.length > 0"
+    *ngIf="!loadingEditRequest && selectedDestination && customFilteredCategoryMand.length > 0"
     [config]="formConfig"
     [messageDto]="messageDto"
     [customFilteredCategoryMand]="customFilteredCategoryMand"
@@ -64,7 +70,7 @@
     (fileUploadEvent)="onFileUpload($event)">
   </app-generic-dynamic-form-details>
 
-  <div class="empty-state" *ngIf="!loadingMetadata && selectedDestination && customFilteredCategoryMand.length === 0">
+  <div class="empty-state" *ngIf="!loadingMetadata && !loadingEditRequest && selectedDestination && customFilteredCategoryMand.length === 0">
     لا توجد حقول ديناميكية مرتبطة بالمصيف المختار ضمن معرّف التطبيق الحالي.
   </div>
 </section>

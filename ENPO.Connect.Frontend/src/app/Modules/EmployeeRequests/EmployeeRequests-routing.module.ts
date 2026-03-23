@@ -7,7 +7,14 @@ import { SummerRequestsWorkspaceComponent } from './components/summer-requests-w
 import { SummerRequestsAdminConsoleComponent } from './components/summer-requests-admin-console/summer-requests-admin-console.component';
 
 const routes: Routes = [
-  { path: 'edit/:id', redirectTo: '/EmployeeRequests/SummerRequests/edit/:id', pathMatch: 'full' },
+  {
+    path: 'edit/:id',
+    component: SummerRequestsWorkspaceComponent,
+    canActivate: [AuthNewGuardService], data: {
+      func: 'AllEnpoUsersFunc',
+      configRouteKey: 'EmployeeRequests/SummerRequests'
+    }
+  },
   {
     path: 'SummerRequests',
     component: SummerRequestsWorkspaceComponent,

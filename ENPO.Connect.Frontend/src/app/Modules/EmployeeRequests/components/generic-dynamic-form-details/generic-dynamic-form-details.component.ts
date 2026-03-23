@@ -78,6 +78,7 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
     this.ticketForm.get('createdBy')?.patchValue((this.messageDto as any)?.createdBy ?? this.resolveCreatedBy(), { emitEvent: false });
 
     this.buildBaseGroupControls();
+    this.buildDynamicInstancesFromMessage();
     this.populateValuesFromMessage();
     this.syncAttachmentsControl();
     this.syncAttachmentValidators();
@@ -258,6 +259,67 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
       }
 
       this.addControlsToArray(group, formArray, group.instanceGroupId, false);
+    });
+  }
+
+  private buildDynamicInstancesFromMessage(): void {
+    const messageFields = this.messageDto?.fields ?? [];
+    if (!Array.isArray(messageFields) || messageFields.length === 0) {
+      return;
+    }
+
+    const targetInstancesByGroup = new Map<number, number[]>();
+    messageFields.forEach(field => {
+      const groupId = Number((field as any)?.mendGroup ?? 0);
+      const instanceGroupId = Number((field as any)?.instanceGroupId ?? 1);
+      const normalizedGroupId = Number.isFinite(groupId) ? Math.floor(groupId) : 0;
+      const normalizedInstanceId = Number.isFinite(instanceGroupId) ? Math.floor(instanceGroupId) : 1;
+
+      if (normalizedGroupId <= 0 || normalizedInstanceId <= 1) {
+        return;
+      }
+
+      const current = targetInstancesByGroup.get(normalizedGroupId) ?? [];
+      if (!current.includes(normalizedInstanceId)) {
+        current.push(normalizedInstanceId);
+        targetInstancesByGroup.set(normalizedGroupId, current);
+      }
+    });
+
+    targetInstancesByGroup.forEach((instanceIds, groupId) => {
+      const parentGroup = this.genericFormService.dynamicGroups.find(item =>
+        item.groupId === groupId && item.isExtendable
+      );
+      if (!parentGroup) {
+        return;
+      }
+
+      const orderedInstanceIds = [...instanceIds].sort((a, b) => a - b);
+      orderedInstanceIds.forEach(instanceId => {
+        const exists = (parentGroup.instances ?? []).some(item =>
+          Number(item.instanceGroupId ?? 0) === instanceId
+        );
+        if (exists) {
+          return;
+        }
+
+        const created = this.groupsFacade.createDuplicateInstance(
+          this.genericFormService.dynamicGroups,
+          parentGroup.groupId,
+          parentGroup.fields.length,
+          0,
+          instanceId
+        );
+        if (!created) {
+          return;
+        }
+
+        const newInstance = created.newInstance;
+        const assignedInstanceId = Number(newInstance.instanceGroupId ?? instanceId) || instanceId;
+        const formArray = this.fb.array([]);
+        this.ticketForm.addControl(newInstance.formArrayName, formArray);
+        this.addControlsToArray(newInstance, formArray, assignedInstanceId, true);
+      });
     });
   }
 

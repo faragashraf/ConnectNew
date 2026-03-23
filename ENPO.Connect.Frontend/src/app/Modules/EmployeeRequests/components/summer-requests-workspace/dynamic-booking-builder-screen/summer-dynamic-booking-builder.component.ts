@@ -1,9 +1,9 @@
-﻿import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild } from '@angular/core';
+﻿import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { GenericFormsIsolationProvider, GenericFormsService, GroupInfo } from 'src/app/Modules/GenericComponents/GenericForms.service';
 import { GenericDynamicFormDetailsComponent } from '../../generic-dynamic-form-details/generic-dynamic-form-details.component';
-import { CdCategoryMandDto, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
+import { CdCategoryMandDto, MessageDto, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import {
@@ -33,17 +33,18 @@ type OwnerDefaults = {
   styleUrls: ['./summer-dynamic-booking-builder.component.scss'],
   providers: [GenericFormsIsolationProvider, SummerDynamicFormEngineService]
 })
-export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
+export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, OnDestroy {
   @Input() destinations: SummerDestinationConfig[] = [];
   @Input() seasonYear = 2026;
   @Input() applicationId = 'SUM2026DYN';
   @Input() configRouteKey = 'admins/summer-requests/dynamic-booking';
-  @Output() bookingCreated = new EventEmitter<void>();
+  @Input() editRequestId: number | null = null;
+  @Output() bookingCreated = new EventEmitter<number>();
 
   @ViewChild(GenericDynamicFormDetailsComponent) formDetailsRef?: GenericDynamicFormDetailsComponent;
 
   formConfig: ComponentConfig;
-  messageDto: any = {};
+  messageDto: MessageDto = {} as MessageDto;
   ticketForm: FormGroup;
   customFilteredCategoryMand: CdCategoryMandDto[] = [];
   fileParameters: FileParameter[] = [];
@@ -55,12 +56,18 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
   metadataLoaded = false;
   metadataError = '';
   submitting = false;
+  isEditMode = false;
+  loadingEditRequest = false;
+  editRequestError = '';
 
   bookingCapacityLoading = false;
   bookingWaveCapacities: SummerWaveCapacityDto[] = [];
   myRequests: SummerRequestSummaryDto[] = [];
 
   private readonly subscriptions = new Subscription();
+  private baseFormConfig: ComponentConfig;
+  private pendingEditRequestId: number | null = null;
+  private loadedEditRequestId: number | null = null;
 
   constructor(
     private readonly fb: FormBuilder,
@@ -73,13 +80,33 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     private readonly spinner: SpinnerService,
     private readonly engine: SummerDynamicFormEngineService
   ) {
-    this.formConfig = this.engine.createFormConfig();
+    this.baseFormConfig = this.engine.createFormConfig();
+    this.formConfig = new ComponentConfig({
+      ...this.baseFormConfig
+    });
     this.ticketForm = this.fb.group({});
   }
 
   ngOnInit(): void {
     this.resolvedApplicationId = this.applicationId;
+    this.resolveEditMode();
+    this.applyFormModeConfig();
     this.initializeFromComponentConfig();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['applicationId']) {
+      this.resolvedApplicationId = this.applicationId;
+    }
+
+    if (changes['editRequestId']) {
+      this.resolveEditMode();
+      this.applyFormModeConfig();
+    }
+
+    if (changes['destinations'] || changes['editRequestId']) {
+      this.tryLoadEditRequest();
+    }
   }
 
   ngOnDestroy(): void {
@@ -97,14 +124,20 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     return [...this.bookingWaveCapacities].sort((a, b) => a.familyCount - b.familyCount);
   }
 
-  onDestinationChanged(value: string | number | null): void {
+  onDestinationChanged(
+    value: string | number | null,
+    options?: { preserveMessageFields?: boolean; resetFiles?: boolean }
+  ): void {
     const categoryId = Number(value);
     this.selectedDestinationId = Number.isFinite(categoryId) && categoryId > 0 ? categoryId : null;
     this.bookingValidationAlerts = [];
     this.bookingWaveCapacities = [];
-    this.fileParameters = [];
+    if (options?.resetFiles !== false) {
+      this.fileParameters = [];
+    }
     this.ticketForm = this.fb.group({});
     this.genericFormService.dynamicGroups = [];
+    this.editRequestError = '';
 
     const destination = this.selectedDestination;
     if (!destination) {
@@ -156,11 +189,12 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const preserveMessageFields = options?.preserveMessageFields === true;
     this.messageDto = {
       ...(this.messageDto ?? {}),
-      fields: [],
+      fields: preserveMessageFields ? [...(this.messageDto?.fields ?? [])] : [],
       categoryCd: destination.categoryId
-    };
+    } as MessageDto;
 
     setTimeout(() => this.formDetailsRef?.populateForm(), 0);
   }
@@ -168,7 +202,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
   onTicketFormChange(form: FormGroup): void {
     this.ticketForm = form;
     this.applyDestinationFieldDefaults();
-    this.applyOwnerDefaultMode();
+    this.applyOwnerDefaultMode(this.isEditMode);
     this.applySummerBusinessRules();
   }
 
@@ -218,6 +252,21 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const currentMessageId = this.resolveCurrentMessageId();
+    if (this.isEditMode && currentMessageId <= 0) {
+      this.msg.msgError('خطأ', '<h5>تعذر تحديد رقم الطلب المراد تعديله.</h5>', true);
+      return;
+    }
+
+    const summary = currentMessageId > 0
+      ? this.myRequests.find(item => item.messageId === currentMessageId)
+      : undefined;
+    if (this.isEditMode && summary && !this.canEditRequest(summary)) {
+      const blockedReason = this.getEditBlockedReason(summary);
+      this.msg.msgError('غير متاح', `<h5>${blockedReason || 'لا يمكن تعديل هذا الطلب.'}</h5>`, true);
+      return;
+    }
+
     const validationAlerts = this.validateBookingRules(destination);
     if (this.ticketForm.invalid || validationAlerts.length > 0) {
       this.bookingValidationAlerts = validationAlerts.length > 0 ? validationAlerts : ['يرجى استكمال الحقول الإلزامية بشكل صحيح.'];
@@ -238,9 +287,26 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     const stayMode = this.getStringValue(this.engine.aliases.stayMode);
     const proxyMode = this.getStringValue(this.engine.aliases.proxyMode);
     const destinationSlug = String(destination.slug ?? '').trim() || `CAT${destination.categoryId}`;
-    const requestRef = `SUMMER-${destinationSlug}-${employeeFileNumber}-${Date.now()}`;
-    const subject = `طلب حجز ${destination.name} - ${waveCode}`;
-    const createdBy = this.authObjectsService.returnCurrentUser() || localStorage.getItem('UserId') || '';
+    const generatedRequestRef = `SUMMER-${destinationSlug}-${employeeFileNumber}-${Date.now()}`;
+    const requestRef = this.isEditMode
+      ? (String(this.messageDto?.requestRef ?? '').trim() || generatedRequestRef)
+      : generatedRequestRef;
+    const generatedSubject = `طلب حجز ${destination.name} - ${waveCode}`;
+    const subject = this.isEditMode
+      ? (String(this.messageDto?.subject ?? '').trim() || generatedSubject)
+      : generatedSubject;
+    const createdBy = this.isEditMode
+      ? (String(this.messageDto?.createdBy ?? '').trim() || this.authObjectsService.returnCurrentUser() || localStorage.getItem('UserId') || '')
+      : (this.authObjectsService.returnCurrentUser() || localStorage.getItem('UserId') || '');
+    const assignedSectorId = this.isEditMode
+      ? String(this.messageDto?.assignedSectorId ?? '').trim()
+      : '';
+    const currentResponsibleSectorId = this.isEditMode
+      ? String(this.messageDto?.currentResponsibleSectorId ?? '').trim()
+      : '';
+    const requestType = this.isEditMode
+      ? (Number(this.messageDto?.type ?? 0) || 0)
+      : 0;
 
     this.syncWaveLabel();
 
@@ -273,40 +339,51 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     const unitIds = this.resolveUnitIds();
 
     this.submitting = true;
-    this.spinner.show('جاري تسجيل طلب المصيف الديناميكي ...');
+    this.spinner.show(this.isEditMode
+      ? 'جاري حفظ تعديلات طلب المصيف ...'
+      : 'جاري تسجيل طلب المصيف الديناميكي ...');
     this.dynamicFormController.createRequest(
-      0,
+      this.isEditMode ? currentMessageId : 0,
       requestRef,
       subject,
       notes,
       createdBy,
-      '',
+      assignedSectorId,
       unitIds,
-      '',
-      0,
+      currentResponsibleSectorId,
+      requestType,
       destination.categoryId,
       fields as TkmendField[],
       this.fileParameters
     ).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تسجيل الطلب الديناميكي بنجاح');
+          const savedMessageId = Number(response?.data?.messageId ?? currentMessageId);
+          this.msg.msgSuccess(this.isEditMode
+            ? 'تم حفظ تعديلات الطلب بنجاح'
+            : 'تم تسجيل الطلب الديناميكي بنجاح');
           this.bookingValidationAlerts = [];
           this.fileParameters = [];
           this.loadMyRequests();
-          this.bookingCreated.emit();
-          const selected = this.selectedDestinationId;
-          this.onDestinationChanged(selected);
+          this.bookingCreated.emit(Number.isFinite(savedMessageId) && savedMessageId > 0 ? savedMessageId : 0);
+
+          if (this.isEditMode) {
+            this.loadedEditRequestId = null;
+            this.tryLoadEditRequest();
+          } else {
+            const selected = this.selectedDestinationId;
+            this.onDestinationChanged(selected);
+          }
         } else {
           const errors = (response?.errors ?? [])
             .map(item => String(item?.message ?? '').trim())
             .filter(item => item.length > 0)
             .join('<br/>');
-          this.msg.msgError('خطأ', `<h5>${errors || 'تعذر تسجيل الطلب.'}</h5>`, true);
+          this.msg.msgError('خطأ', `<h5>${errors || (this.isEditMode ? 'تعذر حفظ التعديلات.' : 'تعذر تسجيل الطلب.')}</h5>`, true);
         }
       },
       error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تسجيل طلب المصيف حاليًا.</h5>', true);
+        this.msg.msgError('خطأ', `<h5>${this.isEditMode ? 'تعذر حفظ تعديلات الطلب حاليًا.' : 'تعذر تسجيل طلب المصيف حاليًا.'}</h5>`, true);
       },
       complete: () => {
         this.spinner.hide();
@@ -326,6 +403,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
           return;
         }
         this.metadataLoaded = true;
+        this.tryLoadEditRequest();
       },
       error: () => {
         this.loadMetadataFallback();
@@ -343,6 +421,8 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
         this.metadataLoaded = !!success && this.hasSummerMetadata();
         if (!this.metadataLoaded) {
           this.metadataError = 'تعذر تحميل الحقول الديناميكية للمصايف. راجع معرّف التطبيق (ApplicationID) وربط الحقول.';
+        } else {
+          this.tryLoadEditRequest();
         }
       },
       error: () => {
@@ -369,9 +449,11 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     this.summerWorkflowController.getMyRequests(this.seasonYear).subscribe({
       next: response => {
         this.myRequests = response?.isSuccess && Array.isArray(response.data) ? response.data : [];
+        this.tryLoadEditRequest();
       },
       error: () => {
         this.myRequests = [];
+        this.tryLoadEditRequest();
       }
     });
   }
@@ -393,7 +475,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     }
   }
 
-  private applyOwnerDefaultMode(): void {
+  private applyOwnerDefaultMode(preserveExistingValues = false): void {
     if (!this.ticketForm) {
       return;
     }
@@ -420,17 +502,22 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
         return;
       }
 
+      const hasCurrentValue = String(control.value ?? '').trim().length > 0;
+      const shouldPreserveCurrentValue = preserveExistingValues && hasCurrentValue;
+
       const alwaysEnabled = item.alwaysEnabled ?? false;
       if (proxyEnabled || alwaysEnabled) {
         control.enable({ emitEvent: false });
         if (item.required) {
           control.addValidators(Validators.required);
         }
-        if (!proxyEnabled && alwaysEnabled) {
+        if (!proxyEnabled && alwaysEnabled && !shouldPreserveCurrentValue) {
           control.setValue(item.value, { emitEvent: false });
         }
       } else {
-        control.setValue(item.value, { emitEvent: false });
+        if (!shouldPreserveCurrentValue) {
+          control.setValue(item.value, { emitEvent: false });
+        }
         control.disable({ emitEvent: false });
       }
       control.updateValueAndValidity({ emitEvent: false });
@@ -558,6 +645,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     const familyCount = Number(this.getStringValue(this.engine.aliases.familyCount) || 0) || 0;
     const extraCount = Number(this.getStringValue(this.engine.aliases.extraCount) || 0) || 0;
     const employeeId = this.getStringValue(this.engine.aliases.ownerFileNumber);
+    const currentMessageId = this.resolveCurrentMessageId();
 
     if (!waveCode) {
       alerts.push('اختيار الفوج مطلوب.');
@@ -577,6 +665,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     }
 
     const duplicateActive = this.myRequests.some(request =>
+      request.messageId !== currentMessageId &&
       request.categoryId === destination.categoryId &&
       String(request.waveCode ?? '').trim() === waveCode &&
       String(request.employeeId ?? '').trim() === employeeId &&
@@ -740,7 +829,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
         this.loadMetadata();
         this.loadMyRequests();
         const authSub = this.authObjectsService.authObject$.subscribe(() => {
-          this.applyOwnerDefaultMode();
+          this.applyOwnerDefaultMode(this.isEditMode);
         });
         this.subscriptions.add(authSub);
       },
@@ -753,20 +842,17 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
 
   private applyComponentConfig(config: ComponentConfig): void {
     const merged = new ComponentConfig({
-      ...this.formConfig,
+      ...this.baseFormConfig,
       ...config
     });
 
-    merged.isNew = true;
     merged.showViewToggle = false;
     merged.formDisplayOption = merged.formDisplayOption || 'fullscreen';
-    merged.submitButtonText = (merged.submitButtonText || '').trim() || 'تسجيل طلب المصيف';
     merged.attachmentConfig = {
-      ...this.formConfig.attachmentConfig,
+      ...this.baseFormConfig.attachmentConfig,
       ...(config.attachmentConfig || {})
     };
-
-    this.formConfig = merged;
+    this.baseFormConfig = merged;
 
     const dynamicSettings = merged.dynamicFormSettings || {};
     const appIdFromConfig = String(dynamicSettings.applicationId ?? merged.genericFormName ?? '').trim();
@@ -775,6 +861,175 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     }
 
     this.engine.applyAliasOverrides(dynamicSettings.aliases);
+    this.applyFormModeConfig();
+  }
+
+  private applyFormModeConfig(): void {
+    const submitText = this.isEditMode
+      ? 'حفظ التعديلات'
+      : ((this.baseFormConfig.submitButtonText || '').trim() || 'تسجيل طلب المصيف');
+
+    this.formConfig = new ComponentConfig({
+      ...this.baseFormConfig,
+      isNew: !this.isEditMode,
+      showViewToggle: false,
+      formDisplayOption: this.baseFormConfig.formDisplayOption || 'fullscreen',
+      submitButtonText: submitText,
+      attachmentConfig: {
+        ...(this.baseFormConfig.attachmentConfig || {})
+      }
+    });
+  }
+
+  private resolveEditMode(): void {
+    const parsed = Number(this.editRequestId ?? 0);
+    const nextEditRequestId = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+    const wasEditMode = this.isEditMode;
+
+    this.isEditMode = nextEditRequestId !== null;
+    this.pendingEditRequestId = nextEditRequestId;
+    this.editRequestError = '';
+
+    if (!this.isEditMode) {
+      this.loadedEditRequestId = null;
+      if (wasEditMode) {
+        this.messageDto = {} as MessageDto;
+        if (this.selectedDestinationId) {
+          this.onDestinationChanged(this.selectedDestinationId);
+        }
+      }
+      return;
+    }
+
+    if (this.loadedEditRequestId !== nextEditRequestId) {
+      this.loadedEditRequestId = null;
+    }
+  }
+
+  private tryLoadEditRequest(): void {
+    if (!this.isEditMode) {
+      return;
+    }
+
+    const requestId = Number(this.pendingEditRequestId ?? 0);
+    if (!Number.isFinite(requestId) || requestId <= 0) {
+      return;
+    }
+
+    if (this.loadingMetadata || !this.metadataLoaded) {
+      return;
+    }
+
+    if (!Array.isArray(this.destinations) || this.destinations.length === 0) {
+      return;
+    }
+
+    if (this.loadingEditRequest) {
+      return;
+    }
+
+    if (this.loadedEditRequestId === requestId) {
+      return;
+    }
+
+    this.loadRequestForEdit(requestId);
+  }
+
+  private loadRequestForEdit(requestId: number): void {
+    this.loadingEditRequest = true;
+    this.editRequestError = '';
+    this.dynamicFormController.getRequestById(requestId).subscribe({
+      next: response => {
+        if (response?.isSuccess && response.data) {
+          this.applyMessageToEditForm(response.data);
+          return;
+        }
+
+        const errors = (response?.errors ?? [])
+          .map(item => String(item?.message ?? '').trim())
+          .filter(item => item.length > 0)
+          .join('<br/>');
+        this.editRequestError = errors || 'تعذر تحميل بيانات الطلب المطلوب للتعديل.';
+      },
+      error: () => {
+        this.editRequestError = 'تعذر تحميل بيانات الطلب المطلوب للتعديل.';
+      },
+      complete: () => {
+        this.loadingEditRequest = false;
+      }
+    });
+  }
+
+  private applyMessageToEditForm(message: MessageDto): void {
+    const messageId = Number(message?.messageId ?? this.pendingEditRequestId ?? 0);
+    if (!Number.isFinite(messageId) || messageId <= 0) {
+      this.editRequestError = 'معرف الطلب المراد تعديله غير صالح.';
+      return;
+    }
+
+    const destinationId = Number(message?.categoryCd ?? 0);
+    const destination = this.destinations.find(item => item.categoryId === destinationId);
+    if (!destination) {
+      this.editRequestError = 'الطلب لا يرتبط بمصيف متاح داخل إعدادات الموسم الحالي.';
+      return;
+    }
+
+    const summary = this.myRequests.find(item => item.messageId === messageId);
+    if (summary && !this.canEditRequest(summary)) {
+      this.editRequestError = this.getEditBlockedReason(summary);
+      return;
+    }
+
+    this.messageDto = {
+      ...(message ?? ({} as MessageDto)),
+      fields: [...(message?.fields ?? [])]
+    } as MessageDto;
+
+    this.loadedEditRequestId = messageId;
+    this.selectedDestinationId = destinationId;
+    this.onDestinationChanged(destinationId, {
+      preserveMessageFields: true,
+      resetFiles: true
+    });
+  }
+
+  private resolveCurrentMessageId(): number {
+    const value = Number(this.messageDto?.messageId ?? this.pendingEditRequestId ?? this.editRequestId ?? 0);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  }
+
+  private canEditRequest(request: SummerRequestSummaryDto | undefined): boolean {
+    if (!request) {
+      return false;
+    }
+
+    if (String(request.paidAtUtc ?? '').trim().length > 0) {
+      return false;
+    }
+
+    const normalizedStatus = String(request.status ?? '').trim().toLowerCase();
+    if (normalizedStatus.includes('rejected') || normalizedStatus.includes('مرفوض') || normalizedStatus.includes('ملغي')) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private getEditBlockedReason(request: SummerRequestSummaryDto | undefined): string {
+    if (!request) {
+      return 'لا يمكن تعديل الطلب.';
+    }
+
+    if (String(request.paidAtUtc ?? '').trim().length > 0) {
+      return 'لا يمكن تعديل الطلب بعد تسجيل السداد.';
+    }
+
+    const normalizedStatus = String(request.status ?? '').trim().toLowerCase();
+    if (normalizedStatus.includes('rejected') || normalizedStatus.includes('مرفوض') || normalizedStatus.includes('ملغي')) {
+      return 'لا يمكن تعديل طلب ملغي/مرفوض.';
+    }
+
+    return 'لا يمكن تعديل هذا الطلب.';
   }
 
   private coalesceText(...values: unknown[]): string {
@@ -787,4 +1042,5 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     return '';
   }
 }
+
 

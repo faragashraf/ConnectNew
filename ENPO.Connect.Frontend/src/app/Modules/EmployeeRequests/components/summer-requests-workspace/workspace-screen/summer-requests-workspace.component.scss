@@ -223,6 +223,30 @@
   padding: 16px;
 }
 
+.edit-banner {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #b9d9ee;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f4fbff, #eaf5ff);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.edit-banner h4 {
+  margin: 0;
+  font-size: 15px;
+  color: #0f4d72;
+}
+
+.edit-banner p {
+  margin: 4px 0 0;
+  color: #3f6077;
+  font-size: 13px;
+}
+
 /* ── PrimeNG TabView modernization ── */
 ::ng-deep .workspace-panel .p-tabview {
   .p-tabview-nav-container {
@@ -431,6 +455,13 @@ button.ghost:hover:not(:disabled) {
   border-bottom: 2px solid #e8f0f8;
 }
 
+.requests-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .requests-head h3 {
   margin: 0;
   font-size: 18px;
@@ -498,6 +529,11 @@ button.ghost:hover:not(:disabled) {
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.request-details-head {
+  display: grid;
+  gap: 4px;
 }
 
 .request-details h4 {
@@ -859,6 +895,11 @@ button.ghost:hover:not(:disabled) {
 
   .hero h1 {
     font-size: 24px;
+  }
+
+  .edit-banner {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .workflow-grid,

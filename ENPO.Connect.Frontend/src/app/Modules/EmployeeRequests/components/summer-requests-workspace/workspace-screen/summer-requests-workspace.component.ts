@@ -1,5 +1,6 @@
 ﻿import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { MessageDto, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
@@ -88,11 +89,15 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   seasonTransferAlreadyUsed = false;
   transferWaveCapacities: SummerWaveCapacityDto[] = [];
+  activeTabIndex = 0;
+  editRequestId: number | null = null;
 
   private readonly subscriptions = new Subscription();
 
   constructor(
     private readonly fb: FormBuilder,
+    private readonly route: ActivatedRoute,
+    private readonly router: Router,
     private readonly dynamicFormController: DynamicFormController,
     private readonly summerWorkflowController: SummerWorkflowController,
     private readonly dynamicMetadataService: DynamicMetadataService,
@@ -121,6 +126,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.bindRouteMode();
     this.bindTransferRules();
     this.bindSignalRRefresh();
     this.loadDestinationCatalog();
@@ -136,6 +142,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return undefined;
     }
     return this.myRequests.find(item => item.messageId === this.selectedRequestId);
+  }
+
+  get isEditMode(): boolean {
+    return Number(this.editRequestId ?? 0) > 0;
   }
 
   get transferDestination(): SummerDestinationConfig | undefined {
@@ -431,8 +441,79 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     this.requestsFirst = (normalizedPage - 1) * this.requestsRows;
   }
 
-  onDynamicBookingCreated(): void {
+  onTabChange(event: { index?: number }): void {
+    const index = Number(event?.index ?? 0);
+    this.activeTabIndex = Number.isFinite(index) && index >= 0 ? Math.floor(index) : 0;
+  }
+
+  onDynamicBookingCreated(savedMessageId?: number): void {
+    const messageId = Number(savedMessageId ?? 0);
+    if (Number.isFinite(messageId) && messageId > 0) {
+      this.selectedRequestId = Math.floor(messageId);
+      this.loadSelectedRequestDetails(this.selectedRequestId);
+    }
+
+    if (this.isEditMode) {
+      this.exitEditMode(true);
+    } else {
+      this.activeTabIndex = 1;
+    }
     this.loadMyRequests();
+  }
+
+  canEditRequest(request: SummerRequestSummaryDto | undefined | null): boolean {
+    if (!request) {
+      return false;
+    }
+
+    if (this.isRejectedStatus(request.status)) {
+      return false;
+    }
+
+    if (String(request.paidAtUtc ?? '').trim().length > 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  getEditBlockedReason(request: SummerRequestSummaryDto | undefined | null): string {
+    if (!request) {
+      return 'لا يمكن تعديل الطلب.';
+    }
+
+    if (this.isRejectedStatus(request.status)) {
+      return 'لا يمكن تعديل طلب ملغي/مرفوض.';
+    }
+
+    if (String(request.paidAtUtc ?? '').trim().length > 0) {
+      return 'لا يمكن تعديل الطلب بعد تسجيل السداد.';
+    }
+
+    return '';
+  }
+
+  openEditRequest(request: SummerRequestSummaryDto | undefined | null): void {
+    if (!request) {
+      return;
+    }
+
+    if (!this.canEditRequest(request)) {
+      const reason = this.getEditBlockedReason(request) || 'لا يمكن تعديل هذا الطلب.';
+      this.msg.msgError('غير متاح', `<h5>${reason}</h5>`, true);
+      return;
+    }
+
+    this.activeTabIndex = 0;
+    this.router.navigate(['/EmployeeRequests/SummerRequests/edit', request.messageId]);
+  }
+
+  exitEditMode(openMyRequestsTab = false): void {
+    this.editRequestId = null;
+    if (openMyRequestsTab) {
+      this.activeTabIndex = 1;
+    }
+    this.router.navigate(['/EmployeeRequests/SummerRequests']);
   }
 
   addFiles(event: Event, bucket: FileBucket): void {
@@ -694,6 +775,27 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
             this.requestsFirst = 0;
           }
 
+          if (this.isEditMode && this.editRequestId) {
+            const editRequest = this.myRequests.find(item => item.messageId === this.editRequestId);
+            if (!editRequest) {
+              this.msg.msgError('خطأ', '<h5>تعذر العثور على الطلب المطلوب للتعديل ضمن طلباتك الحالية.</h5>', true);
+              this.exitEditMode(true);
+              return;
+            }
+
+            if (!this.canEditRequest(editRequest)) {
+              const reason = this.getEditBlockedReason(editRequest) || 'لا يمكن تعديل هذا الطلب.';
+              this.msg.msgError('غير متاح', `<h5>${reason}</h5>`, true);
+              this.exitEditMode(true);
+              return;
+            }
+
+            if (this.selectedRequestId !== editRequest.messageId) {
+              this.selectedRequestId = editRequest.messageId;
+            }
+            this.loadSelectedRequestDetails(editRequest.messageId);
+          }
+
           if (this.selectedRequestId && !this.myRequests.some(item => item.messageId === this.selectedRequestId)) {
             this.selectedRequestId = null;
             this.selectedRequestDetails = null;
@@ -911,6 +1013,25 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         this.spinner.hide();
       }
     });
+  }
+
+  private bindRouteMode(): void {
+    const routeSub = this.route.paramMap.subscribe(params => {
+      const parsedId = this.parsePositiveInt(params.get('id'));
+      this.editRequestId = parsedId;
+
+      if (parsedId) {
+        this.activeTabIndex = 0;
+        const matched = this.myRequests.find(item => item.messageId === parsedId);
+        if (matched) {
+          this.selectedRequestId = matched.messageId;
+          this.loadSelectedRequestDetails(matched.messageId);
+        }
+        return;
+      }
+    });
+
+    this.subscriptions.add(routeSub);
   }
 
   private loadSelectedRequestDetails(messageId: number): void {
@@ -1171,6 +1292,14 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const raw = control?.value;
     const numeric = Number(raw);
     return Number.isFinite(numeric) ? numeric : 0;
+  }
+
+  private parsePositiveInt(value: unknown): number | null {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null;
+    }
+    return Math.floor(parsed);
   }
 }
 
