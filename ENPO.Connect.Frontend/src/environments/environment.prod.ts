@@ -12,11 +12,6 @@ export const environment = {
   favicon: 'assets/brand/favicon.ico',
 
 OTPApplicationName: 'CONNECT',
-  useLocalMockAuth: false,
-  disableSignalRInLocalMock: false,
-  localMockAuthPath: '/api/LocalAuth/DevLogin',
-  localMockUserId: 'test',
-  localMockPassword: 'test123',
 
   ConnectApiURL: `${MainDomain}/Applications/Connect_API`,
   LandTransportationApiURL: `${MainDomain}/Applications/Connect_API`,

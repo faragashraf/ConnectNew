@@ -386,16 +386,9 @@ export class SignalRService {
     ///////////////////////////////////////////////////////////////////////////////////////
   }
   stopChatConnection() {
-    if (!this.hubConnection || typeof (this.hubConnection as any).stop !== 'function') {
-      return;
-    }
     this.hubConnection.stop().catch(error => console.log(error))
   }
   async RefreshToken(token: string) {
-    if (!this.hubConnection || typeof (this.hubConnection as any).invoke !== 'function') {
-      return;
-    }
-
     return this.hubConnection.invoke('RefreshToken', token)
       .catch(error => console.log(error));
   }

@@ -200,7 +200,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("MAIN_OFFICE_ID");
             entity.Property(e => e.OfficeAName)
                 .HasMaxLength(80)
-                .IsUnicode()
+                .IsUnicode(false)
 
                 .HasColumnName("OFFICE_A_NAME");
             entity.Property(e => e.OfficeChaId)
@@ -260,7 +260,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("AREA_ID");
             entity.Property(e => e.AreaAName)
                 .HasMaxLength(50)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("AREA_A_NAME");
             entity.Property(e => e.AreaEName)
                 .HasMaxLength(40)
@@ -302,7 +302,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("USER_ID");
             entity.Property(e => e.ArabicName)
                 .HasMaxLength(60)
-                .IsUnicode()
+                .IsUnicode(false)
 
                 .HasColumnName("ARABIC_NAME");
             entity.Property(e => e.CreatedBy)
@@ -403,7 +403,7 @@ public partial class GPAContext : DbContext
                 entity.ToTable("LTRA_REGISTRATION");
             entity.Property(e => e.AreaAName)
                 .HasMaxLength(500)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("AREA_A_NAME");
             entity.Property(e => e.Barcode)
                 .HasMaxLength(13)
@@ -423,11 +423,11 @@ public partial class GPAContext : DbContext
                 .HasColumnName("COMMERCIAL_REGISTRATION");
             entity.Property(e => e.CompanyAddress)
                 .HasMaxLength(512)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("COMPANY_ADDRESS");
             entity.Property(e => e.CompanyName)
                 .HasMaxLength(1024)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("COMPANY_NAME");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("sysdate\n")
@@ -478,7 +478,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("NUMBER_OF_VEHICLES");
             entity.Property(e => e.OfficeAName)
                 .HasMaxLength(200)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("OFFICE_A_NAME");
             entity.Property(e => e.PhoneNumber)
                 .HasMaxLength(15)
@@ -534,7 +534,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("REPLY_STATUS");
             entity.Property(e => e.ReplySubject)
                 .HasMaxLength(500)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("REPLY_SUBJECT");
             entity.Property(e => e.RequireOperationCard)
                 .HasMaxLength(10)
@@ -546,7 +546,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("REQUIRE_TRAFFIC_LETTER");
             entity.Property(e => e.ResponsibleManager)
                 .HasMaxLength(256)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("RESPONSIBLE_MANAGER");
             entity.Property(e => e.RlttBarcode)
                 .HasMaxLength(13)
@@ -598,7 +598,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("RLTT_BARCODE");
             entity.Property(e => e.CarActivity)
                 .HasMaxLength(500)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("CAR_ACTIVITY");
             entity.Property(e => e.ChassisNumber)
                 .HasMaxLength(500)
@@ -606,7 +606,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("CHASSIS_NUMBER");
             entity.Property(e => e.CompanyName)
                 .HasMaxLength(1024)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("COMPANY_NAME");
             entity.Property(e => e.EngineNumber)
                 .HasMaxLength(500)
@@ -695,7 +695,7 @@ public partial class GPAContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("DEPARTMENT_ID");
             entity.Property(e => e.Description)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("DESCRIPTION");
             entity.Property(e => e.FileName)
                 .HasMaxLength(50)
@@ -756,7 +756,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("IS_SINGLE_POSITION");
             entity.Property(e => e.NameAr)
                 .HasMaxLength(150)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("NAME_AR");
             entity.Property(e => e.ParentId)
                 .HasColumnType("NUMBER")
@@ -778,7 +778,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("AREA_ID");
             entity.Property(e => e.DepartmentName)
                 .HasMaxLength(50)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("DEPARTMENT_NAME");
             entity.Property(e => e.DepartmentType)
                 .HasPrecision(1)
@@ -829,7 +829,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("STATUS");
             entity.Property(e => e.UnitName)
                 .HasMaxLength(300)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("UNIT_NAME");
             entity.Property(e => e.UnitTypeId)
                 .HasColumnType("NUMBER")
@@ -958,7 +958,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("PARENT_TYPE_NAME");
             entity.Property(e => e.ParentUnitName)
                 .HasMaxLength(300)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("PARENT_UNIT_NAME");
             entity.Property(e => e.Status)
                 .HasPrecision(1)
@@ -973,7 +973,7 @@ public partial class GPAContext : DbContext
                 .HasColumnName("UNIT_ID");
             entity.Property(e => e.UnitName)
                 .HasMaxLength(503)
-                .IsUnicode()
+                .IsUnicode(false)
                 .HasColumnName("UNIT_NAME");
         });
 
