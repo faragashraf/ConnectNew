@@ -13,15 +13,15 @@ namespace Persistence.Migrations
             migrationBuilder.Sql(@"
 DECLARE @AppId NVARCHAR(10) = N'SUM2026DYN';
 
-IF NOT EXISTS (SELECT 1 FROM [Application] WHERE [ApplicationID] = @AppId)
+IF NOT EXISTS (SELECT 1 FROM [Applications] WHERE [ApplicationID] = @AppId)
 BEGIN
-    INSERT INTO [Application] ([ApplicationID], [ApplicationName], [IsActive])
+    INSERT INTO [Applications] ([ApplicationID], [ApplicationName], [IsActive])
     VALUES (@AppId, N'Summer 2026 Dynamic Booking', 1);
 END
 
-IF EXISTS (SELECT 1 FROM [MandGroup] WHERE [GroupID] = 9201)
+IF EXISTS (SELECT 1 FROM [MandGroups] WHERE [GroupID] = 9201)
 BEGIN
-    UPDATE [MandGroup]
+    UPDATE [MandGroups]
        SET [GroupName] = N'بيانات الحجز',
            [GroupDescription] = N'الحقول الأساسية لحجز المصيف',
            [IsExtendable] = 0,
@@ -30,13 +30,13 @@ BEGIN
 END
 ELSE
 BEGIN
-    INSERT INTO [MandGroup] ([GroupID], [GroupName], [GroupDescription], [IsExtendable], [GroupWithInRow])
+    INSERT INTO [MandGroups] ([GroupID], [GroupName], [GroupDescription], [IsExtendable], [GroupWithInRow])
     VALUES (9201, N'بيانات الحجز', N'الحقول الأساسية لحجز المصيف', 0, 3);
 END
 
-IF EXISTS (SELECT 1 FROM [MandGroup] WHERE [GroupID] = 9202)
+IF EXISTS (SELECT 1 FROM [MandGroups] WHERE [GroupID] = 9202)
 BEGIN
-    UPDATE [MandGroup]
+    UPDATE [MandGroups]
        SET [GroupName] = N'بيانات مقدم الطلب',
            [GroupDescription] = N'بيانات الموظف صاحب الطلب',
            [IsExtendable] = 0,
@@ -45,13 +45,13 @@ BEGIN
 END
 ELSE
 BEGIN
-    INSERT INTO [MandGroup] ([GroupID], [GroupName], [GroupDescription], [IsExtendable], [GroupWithInRow])
+    INSERT INTO [MandGroups] ([GroupID], [GroupName], [GroupDescription], [IsExtendable], [GroupWithInRow])
     VALUES (9202, N'بيانات مقدم الطلب', N'بيانات الموظف صاحب الطلب', 0, 2);
 END
 
-IF EXISTS (SELECT 1 FROM [MandGroup] WHERE [GroupID] = 9203)
+IF EXISTS (SELECT 1 FROM [MandGroups] WHERE [GroupID] = 9203)
 BEGIN
-    UPDATE [MandGroup]
+    UPDATE [MandGroups]
        SET [GroupName] = N'بيانات المرافقين',
            [GroupDescription] = N'بيانات المرافقين في الحجز',
            [IsExtendable] = 1,
@@ -60,7 +60,7 @@ BEGIN
 END
 ELSE
 BEGIN
-    INSERT INTO [MandGroup] ([GroupID], [GroupName], [GroupDescription], [IsExtendable], [GroupWithInRow])
+    INSERT INTO [MandGroups] ([GroupID], [GroupName], [GroupDescription], [IsExtendable], [GroupWithInRow])
     VALUES (9203, N'بيانات المرافقين', N'بيانات المرافقين في الحجز', 1, 2);
 END
 
@@ -307,7 +307,7 @@ BEGIN
            N'string',
            0, 0, 0, 0,
            NULL, NULL, NULL,
-           0, 8, 0, 0, 0, NULL
+           0, 8, 0, 0, 0, @AppId
       FROM [CDMend];
 END
 

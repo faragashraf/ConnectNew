@@ -208,6 +208,33 @@ using (var scope = app.Services.CreateScope())
         var pendingList = pending?.ToList() ?? new System.Collections.Generic.List<string>();
         Console.WriteLine($"[StartupMigrations] Pending migrations: {(pendingList.Count > 0 ? string.Join(",", pendingList) : "<none>")}");
 
+        // Ensure CDMend.ApplicationID allows NULL to avoid migration-insert failures when seed data
+        try
+        {
+            var dbConnection = connectContext.Database.GetDbConnection();
+            try
+            {
+                dbConnection.Open();
+                using (var cmd = dbConnection.CreateCommand())
+                {
+                    // If the ApplicationID column exists, alter it to allow NULLs. This prevents migrations that re-insert seed data
+                    // from failing due to NOT NULL constraint. If the column doesn't exist this statement is skipped.
+                    cmd.CommandText = @"IF COL_LENGTH('dbo.CDMend','ApplicationID') IS NOT NULL BEGIN ALTER TABLE dbo.CDMend ALTER COLUMN ApplicationID NVARCHAR(10) NULL END";
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            finally
+            {
+                try { dbConnection.Close(); } catch { }
+            }
+        }
+        catch (Exception exAlter)
+        {
+            var loggerFactoryLocal = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
+            var loggerLocal = loggerFactoryLocal?.CreateLogger("StartupMigrations:SchemaAdjust");
+            loggerLocal?.LogWarning(exAlter, "Could not ensure CDMend.ApplicationID is nullable before migrations. Continuing to migrations.");
+        }
+
         connectContext.Database.Migrate();
         Console.WriteLine("[StartupMigrations] Database.Migrate() completed successfully.");
     }
