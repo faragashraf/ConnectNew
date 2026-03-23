@@ -406,12 +406,12 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     const proxyEnabled = this.toBoolean(proxyCtrl?.value);
     const defaults = this.extractOwnerDefaults();
 
-    const ownerControls = [
+    const ownerControls: Array<{ aliases: string[]; value: string; required: boolean; alwaysEnabled?: boolean }> = [
       { aliases: this.engine.aliases.ownerName, value: defaults.name, required: true },
       { aliases: this.engine.aliases.ownerFileNumber, value: defaults.fileNumber, required: true },
       { aliases: this.engine.aliases.ownerNationalId, value: defaults.nationalId, required: true },
       { aliases: this.engine.aliases.ownerPhone, value: defaults.phone, required: true },
-      { aliases: this.engine.aliases.ownerExtraPhone, value: defaults.extraPhone, required: false }
+      { aliases: this.engine.aliases.ownerExtraPhone, value: defaults.extraPhone, required: false, alwaysEnabled: true }
     ];
 
     ownerControls.forEach(item => {
@@ -420,10 +420,14 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
         return;
       }
 
-      if (proxyEnabled) {
+      const alwaysEnabled = item.alwaysEnabled ?? false;
+      if (proxyEnabled || alwaysEnabled) {
         control.enable({ emitEvent: false });
         if (item.required) {
           control.addValidators(Validators.required);
+        }
+        if (!proxyEnabled && alwaysEnabled) {
+          control.setValue(item.value, { emitEvent: false });
         }
       } else {
         control.setValue(item.value, { emitEvent: false });
