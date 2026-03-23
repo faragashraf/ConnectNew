@@ -149,8 +149,8 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
 
     if (!this.customFilteredCategoryMand.length) {
       this.msg.msgError(
-        'Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ÙƒØªÙ…Ù„Ø©',
-        '<h5>Ù„Ø§ ØªÙˆØ¬Ø¯ Ø­Ù‚ÙˆÙ„ Ø¯ÙŠÙ†Ø§Ù…ÙŠÙƒÙŠØ© Ù…Ø±ØªØ¨Ø·Ø© Ø¨Ø§Ù„Ù…ØµÙŠÙ Ø§Ù„Ù…Ø®ØªØ§Ø± Ø¶Ù…Ù† Ù…Ø¹Ø±Ù‘Ù Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø§Ù„Ø­Ø§Ù„ÙŠ (ApplicationID).</h5>',
+        'بيانات غير مكتملة',
+        '<h5>لا توجد حقول ديناميكية مرتبطة بالمصيف المختار ضمن معرّف التطبيق الحالي (ApplicationID).</h5>',
         true
       );
       return;
@@ -213,15 +213,15 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
 
     const destination = this.selectedDestination;
     if (!destination) {
-      this.bookingValidationAlerts = ['ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ø§Ù„Ù…ØµÙŠÙ Ø£ÙˆÙ„Ø§Ù‹.'];
-      this.msg.msgError('Ø®Ø·Ø£', '<h5>ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ø§Ù„Ù…ØµÙŠÙ Ø£ÙˆÙ„Ø§Ù‹.</h5>', true);
+      this.bookingValidationAlerts = ['يرجى اختيار المصيف أولاً.'];
+      this.msg.msgError('خطأ', '<h5>يرجى اختيار المصيف أولاً.</h5>', true);
       return;
     }
 
     const validationAlerts = this.validateBookingRules(destination);
     if (this.ticketForm.invalid || validationAlerts.length > 0) {
-      this.bookingValidationAlerts = validationAlerts.length > 0 ? validationAlerts : ['ÙŠØ±Ø¬Ù‰ Ø§Ø³ØªÙƒÙ…Ø§Ù„ Ø§Ù„Ø­Ù‚ÙˆÙ„ Ø§Ù„Ø¥Ù„Ø²Ø§Ù…ÙŠØ© Ø¨Ø´ÙƒÙ„ ØµØ­ÙŠØ­.'];
-      this.msg.msgError('Ø®Ø·Ø£', '<h5>ÙŠØ±Ø¬Ù‰ Ù…Ø±Ø§Ø¬Ø¹Ø© Ù‚ÙˆØ§Ø¹Ø¯ Ø§Ù„ØªØ­Ù‚Ù‚ ÙˆØ¥ÙƒÙ…Ø§Ù„ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª.</h5>', true);
+      this.bookingValidationAlerts = validationAlerts.length > 0 ? validationAlerts : ['يرجى استكمال الحقول الإلزامية بشكل صحيح.'];
+      this.msg.msgError('خطأ', '<h5>يرجى مراجعة قواعد التحقق وإكمال البيانات.</h5>', true);
       return;
     }
 
@@ -239,7 +239,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     const proxyMode = this.getStringValue(this.engine.aliases.proxyMode);
     const destinationSlug = String(destination.slug ?? '').trim() || `CAT${destination.categoryId}`;
     const requestRef = `SUMMER-${destinationSlug}-${employeeFileNumber}-${Date.now()}`;
-    const subject = `Ø·Ù„Ø¨ Ø­Ø¬Ø² ${destination.name} - ${waveCode}`;
+    const subject = `طلب حجز ${destination.name} - ${waveCode}`;
     const createdBy = this.authObjectsService.returnCurrentUser() || localStorage.getItem('UserId') || '';
 
     this.syncWaveLabel();
@@ -273,7 +273,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     const unitIds = this.resolveUnitIds();
 
     this.submitting = true;
-    this.spinner.show('Ø¬Ø§Ø±ÙŠ ØªØ³Ø¬ÙŠÙ„ Ø·Ù„Ø¨ Ø§Ù„Ù…ØµÙŠÙ Ø§Ù„Ø¯ÙŠÙ†Ø§Ù…ÙŠÙƒÙŠ ...');
+    this.spinner.show('جاري تسجيل طلب المصيف الديناميكي ...');
     this.dynamicFormController.createRequest(
       0,
       requestRef,
@@ -290,7 +290,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     ).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø·Ù„Ø¨ Ø§Ù„Ø¯ÙŠÙ†Ø§Ù…ÙŠÙƒÙŠ Ø¨Ù†Ø¬Ø§Ø­');
+          this.msg.msgSuccess('تم تسجيل الطلب الديناميكي بنجاح');
           this.bookingValidationAlerts = [];
           this.fileParameters = [];
           this.loadMyRequests();
@@ -302,11 +302,11 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
             .map(item => String(item?.message ?? '').trim())
             .filter(item => item.length > 0)
             .join('<br/>');
-          this.msg.msgError('Ø®Ø·Ø£', `<h5>${errors || 'ØªØ¹Ø°Ø± ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø·Ù„Ø¨.'}</h5>`, true);
+          this.msg.msgError('خطأ', `<h5>${errors || 'تعذر تسجيل الطلب.'}</h5>`, true);
         }
       },
       error: () => {
-        this.msg.msgError('Ø®Ø·Ø£', '<h5>ØªØ¹Ø°Ø± ØªØ³Ø¬ÙŠÙ„ Ø·Ù„Ø¨ Ø§Ù„Ù…ØµÙŠÙ Ø­Ø§Ù„ÙŠØ§Ù‹.</h5>', true);
+        this.msg.msgError('خطأ', '<h5>تعذر تسجيل طلب المصيف حاليًا.</h5>', true);
       },
       complete: () => {
         this.spinner.hide();
@@ -342,12 +342,12 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
       next: success => {
         this.metadataLoaded = !!success && this.hasSummerMetadata();
         if (!this.metadataLoaded) {
-          this.metadataError = 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ø­Ù‚ÙˆÙ„ Ø§Ù„Ø¯ÙŠÙ†Ø§Ù…ÙŠÙƒÙŠØ© Ù„Ù„Ù…ØµØ§ÙŠÙ. Ø±Ø§Ø¬Ø¹ Ù…Ø¹Ø±Ù‘Ù Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ (ApplicationID) ÙˆØ±Ø¨Ø· Ø§Ù„Ø­Ù‚ÙˆÙ„.';
+          this.metadataError = 'تعذر تحميل الحقول الديناميكية للمصايف. راجع معرّف التطبيق (ApplicationID) وربط الحقول.';
         }
       },
       error: () => {
         this.metadataLoaded = false;
-        this.metadataError = 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ø­Ù‚ÙˆÙ„ Ø§Ù„Ø¯ÙŠÙ†Ø§Ù…ÙŠÙƒÙŠØ© Ù„Ù„Ù…ØµØ§ÙŠÙ. Ø±Ø§Ø¬Ø¹ Ù…Ø¹Ø±Ù‘Ù Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ (ApplicationID) ÙˆØ±Ø¨Ø· Ø§Ù„Ø­Ù‚ÙˆÙ„.';
+        this.metadataError = 'تعذر تحميل الحقول الديناميكية للمصايف. راجع معرّف التطبيق (ApplicationID) وربط الحقول.';
       }
     });
   }
@@ -538,20 +538,20 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     const employeeId = this.getStringValue(this.engine.aliases.ownerFileNumber);
 
     if (!waveCode) {
-      alerts.push('Ø§Ø®ØªÙŠØ§Ø± Ø§Ù„ÙÙˆØ¬ Ù…Ø·Ù„ÙˆØ¨.');
+      alerts.push('اختيار الفوج مطلوب.');
     }
 
     if (destination.stayModes.length > 1 && !stayMode) {
-      alerts.push('ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ù†ÙˆØ¹ Ø§Ù„Ø­Ø¬Ø².');
+      alerts.push('يرجى اختيار نوع الحجز.');
     }
 
     const maxFamily = destination.familyOptions.length > 0 ? Math.max(...destination.familyOptions) : 0;
     if (maxFamily > 0 && familyCount !== maxFamily && extraCount > 0) {
-      alerts.push(`Ø§Ù„Ø£ÙØ±Ø§Ø¯ Ø§Ù„Ø¥Ø¶Ø§ÙÙŠÙˆÙ† Ù…ØªØ§Ø­ÙˆÙ† ÙÙ‚Ø· Ø¹Ù†Ø¯ Ø§Ø®ØªÙŠØ§Ø± Ø§Ù„Ø³Ø¹Ø© Ø§Ù„Ù‚ØµÙˆÙ‰ (${maxFamily}).`);
+      alerts.push(`الأفراد الإضافيون متاحون فقط عند اختيار السعة القصوى (${maxFamily}).`);
     }
 
     if (extraCount > destination.maxExtraMembers) {
-      alerts.push(`Ø§Ù„Ø­Ø¯ Ø§Ù„Ø£Ù‚ØµÙ‰ Ù„Ù„Ø£ÙØ±Ø§Ø¯ Ø§Ù„Ø¥Ø¶Ø§ÙÙŠÙŠÙ† ÙÙŠ ${destination.name} Ù‡Ùˆ ${destination.maxExtraMembers}.`);
+      alerts.push(`الحد الأقصى للأفراد الإضافيين في ${destination.name} هو ${destination.maxExtraMembers}.`);
     }
 
     const duplicateActive = this.myRequests.some(request =>
@@ -561,7 +561,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
       String(request.status ?? '').trim().toLowerCase() !== 'rejected'
     );
     if (duplicateActive) {
-      alerts.push('Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ³Ø¬ÙŠÙ„ Ø£ÙƒØ«Ø± Ù…Ù† Ø­Ø¬Ø² Ù†Ø´Ø· Ù„Ù†ÙØ³ Ø§Ù„Ù…ÙˆØ¸Ù ÙÙŠ Ù†ÙØ³ Ø§Ù„ÙÙˆØ¬ ÙˆØ§Ù„Ù…ØµÙŠÙ.');
+      alerts.push('لا يمكن تسجيل أكثر من حجز نشط لنفس الموظف في نفس الفوج والمصيف.');
     }
 
     const companionGroup = this.engine.findCompanionGroup(this.genericFormService.dynamicGroups);
@@ -588,8 +588,8 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
           }
         });
 
-        if ((relation === 'Ø§Ø¨Ù†' || relation === 'Ø§Ø¨Ù†Ø©') && age.length === 0) {
-          alerts.push(`Ø³Ù† Ø§Ù„Ù…Ø±Ø§ÙÙ‚ Ø±Ù‚Ù… ${index + 1} Ù…Ø·Ù„ÙˆØ¨ Ø¹Ù†Ø¯ Ø§Ø®ØªÙŠØ§Ø± Ø¯Ø±Ø¬Ø© Ø§Ù„Ù‚Ø±Ø§Ø¨Ø© Ø§Ø¨Ù†/Ø§Ø¨Ù†Ø©.`);
+        if ((relation === 'ابن' || relation === 'ابنة') && age.length === 0) {
+          alerts.push(`سن المرافق رقم ${index + 1} مطلوب عند اختيار درجة القرابة ابن/ابنة.`);
         }
       });
     }
@@ -738,7 +738,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnDestroy {
     merged.isNew = true;
     merged.showViewToggle = false;
     merged.formDisplayOption = merged.formDisplayOption || 'fullscreen';
-    merged.submitButtonText = (merged.submitButtonText || '').trim() || 'ØªØ³Ø¬ÙŠÙ„ Ø·Ù„Ø¨ Ø§Ù„Ù…ØµÙŠÙ';
+    merged.submitButtonText = (merged.submitButtonText || '').trim() || 'تسجيل طلب المصيف';
     merged.attachmentConfig = {
       ...this.formConfig.attachmentConfig,
       ...(config.attachmentConfig || {})
