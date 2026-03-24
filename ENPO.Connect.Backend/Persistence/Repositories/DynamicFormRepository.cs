@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using ENPO.CreateLogFile;
 using ENPO.Dto.HubSync;
 using ENPO.Dto.Utilities;
@@ -142,7 +142,7 @@ namespace Persistence.Repositories
             var isSummerCategory = _connectContext.CdCategoryMands
                 .AsNoTracking()
                 .Any(x => x.MendCategory == messageRequest.CategoryCd
-                    && x.MendField == "SummerCamp"
+                    && x.MendField.Contains("SUM2026")
                     && x.MendStat == false);
 
             // instantiate handler and dispatch accordingly
