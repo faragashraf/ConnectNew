@@ -68,19 +68,19 @@ namespace Models.DTO.Common
     public class SummerNotificationTemplates
     {
         public string AdminActionSmsTemplate { get; set; } =
-            "Dear {FirstName}, your summer request {RequestRef} was updated. Action: {ActionLabel}. Resort: {CategoryName}, wave: {WaveCode}. {AdminCommentLine}";
+            "السيد/ة {FirstName}، تم تحديث طلب المصيف رقم {RequestRef}. الإجراء: {ActionLabel}. المصيف: {CategoryName}، الفوج: {WaveCode}. {AdminCommentLine}";
 
         public string AutoCancelSmsTemplate { get; set; } =
-            "Dear {FirstName}, your summer request {RequestRef} was auto-cancelled because payment was not completed before {PaymentDueAtUtc}.";
+            "السيد/ة {FirstName}، نحيطكم علماً بأنه تم إلغاء طلب المصيف رقم {RequestRef} تلقائياً لعدم السداد قبل الموعد النهائي {PaymentDueAtUtc}. يمكنكم تقديم طلب جديد وفق الإتاحة الحالية.";
 
         public string AdminActionSignalRTemplate { get; set; } =
-            "Your summer request {RequestRef} was updated by administration. Action: {ActionLabel}.";
+            "تم تنفيذ إجراء إداري ({ActionLabel}) على طلب المصيف رقم {RequestRef}. {AdminCommentLine}";
 
         public string AutoCancelSignalRTemplate { get; set; } =
-            "Your summer request {RequestRef} was auto-cancelled due to payment timeout.";
+            "تم إلغاء طلب المصيف رقم {RequestRef} تلقائياً لعدم السداد قبل الموعد النهائي {PaymentDueAtUtc}.";
 
-        public string AdminActionSignalRTitle { get; set; } = "Summer Requests Management";
-        public string AutoCancelSignalRTitle { get; set; } = "Summer Request Auto Cancellation";
+        public string AdminActionSignalRTitle { get; set; } = "إدارة طلبات المصايف";
+        public string AutoCancelSignalRTitle { get; set; } = "إلغاء تلقائي لطلب المصيف";
     }
 
     public class TokenOptions

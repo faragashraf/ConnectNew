@@ -15,6 +15,7 @@ using Models.DTO.Correspondance.Enums;
 using NPOI.SS.Formula.Functions;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.Notifications;
 using Persistence.Services.Summer;
 using SignalR.Notification;
 using System;
@@ -35,7 +36,9 @@ namespace Persistence.Services
         private readonly ENPOCreateLogFile _logger;
         private readonly MessageRequestService _messageRequestService;
         private readonly SignalRConnectionManager _signalRConnectionManager;
+        private readonly IConnectNotificationService _notificationService;
         private const int CapacityLockTimeoutMs = 15000;
+        private const string SummerActionBroadcastGroup = "241";
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -68,7 +71,7 @@ namespace Persistence.Services
             "Summer_AdminComment"
         };
 
-        public HandleEmployeeCategories(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, helperService helperService, IMapper mapper, ENPOCreateLogFile logger, MessageRequestService messageRequestService, SignalRConnectionManager signalRConnectionManager)
+        public HandleEmployeeCategories(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, helperService helperService, IMapper mapper, ENPOCreateLogFile logger, MessageRequestService messageRequestService, SignalRConnectionManager signalRConnectionManager, IConnectNotificationService notificationService)
         {
             _connectContext = connectContext;
             _attach_HeldContext = attach_HeldContext;
@@ -78,6 +81,7 @@ namespace Persistence.Services
             _logger = logger ?? new ENPOCreateLogFile("C:\\Connect_Log", "HandleEmployeeCategories_Log" + DateTime.Today.ToString("dd-MMM-yyyy"), FileExtension.txt);
             _messageRequestService = messageRequestService ?? throw new ArgumentNullException(nameof(messageRequestService));
             _signalRConnectionManager = signalRConnectionManager ?? throw new ArgumentNullException(nameof(signalRConnectionManager));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         }
 
         private helperService helper_service_check(helperService svc)
@@ -441,6 +445,19 @@ namespace Persistence.Services
                 time = DateTime.Now,
                 sender = "Connect",
                 Category = NotificationCategory.Business
+            });
+
+            await _notificationService.SendSignalRToGroupAsync(new SignalRGroupDispatchRequest
+            {
+                GroupName = SummerActionBroadcastGroup,
+                Notification = isEditOperation
+                    ? $"تم تعديل طلب المصيف رقم #{reply?.MessageId ?? 0} بواسطة صاحب الطلب (مرجع: {requestRef})."
+                    : $"تم إنشاء طلب مصيف جديد رقم #{reply?.MessageId ?? 0} بواسطة صاحب الطلب (مرجع: {requestRef}).",
+                Title = "إدارة طلبات المصايف",
+                Type = NotificationType.info,
+                Category = NotificationCategory.Business,
+                Sender = "Connect",
+                Time = DateTime.Now
             });
             _logger.AppendLine("Transactions committed.");
         }

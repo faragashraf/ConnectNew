@@ -320,6 +320,47 @@ namespace Persistence.Services.Notifications
             return response;
         }
 
+        public async Task<CommonResponse<bool>> SendSignalRToGroupAsync(SignalRGroupDispatchRequest request, CancellationToken cancellationToken = default)
+        {
+            var response = new CommonResponse<bool>();
+
+            try
+            {
+                if (request == null || string.IsNullOrWhiteSpace(request.GroupName) || string.IsNullOrWhiteSpace(request.Notification))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = "SignalR group payload is invalid."
+                    });
+                    return response;
+                }
+
+                await _signalRConnectionManager.SendNotificationToGroup(request.GroupName.Trim(), new NotificationDto
+                {
+                    Notification = request.Notification.Trim(),
+                    type = request.Type,
+                    Title = string.IsNullOrWhiteSpace(request.Title) ? "Connect" : request.Title.Trim(),
+                    time = request.Time ?? DateTime.Now,
+                    sender = string.IsNullOrWhiteSpace(request.Sender) ? "Connect" : request.Sender.Trim(),
+                    Category = request.Category
+                });
+
+                response.Data = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error while sending SignalR group notification.");
+                response.Errors.Add(new Error
+                {
+                    Code = ex.HResult.ToString(),
+                    Message = ex.Message
+                });
+            }
+
+            return response;
+        }
+
         public Task<CommonResponse<bool>> SendWhatsAppAsync(WhatsAppDispatchRequest request, CancellationToken cancellationToken = default)
         {
             var response = new CommonResponse<bool>();

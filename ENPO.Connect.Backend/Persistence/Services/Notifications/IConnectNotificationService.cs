@@ -10,6 +10,7 @@ namespace Persistence.Services.Notifications
         Task<CommonResponse<bool>> SendSmsAsync(SmsDispatchRequest request, CancellationToken cancellationToken = default);
         Task<CommonResponse<bool>> SendSmsByMultiMessagesAsync(SmsDispatchRequest request, CancellationToken cancellationToken = default);
         Task<CommonResponse<bool>> SendSignalRToUserAsync(SignalRDispatchRequest request, CancellationToken cancellationToken = default);
+        Task<CommonResponse<bool>> SendSignalRToGroupAsync(SignalRGroupDispatchRequest request, CancellationToken cancellationToken = default);
 
         Task<CommonResponse<bool>> SendWhatsAppAsync(WhatsAppDispatchRequest request, CancellationToken cancellationToken = default);
         Task<CommonResponse<bool>> SendEmailAsync(EmailDispatchRequest request, CancellationToken cancellationToken = default);
@@ -28,6 +29,17 @@ namespace Persistence.Services.Notifications
     public sealed class SignalRDispatchRequest
     {
         public string UserId { get; set; } = string.Empty;
+        public string Notification { get; set; } = string.Empty;
+        public string Title { get; set; } = "Connect";
+        public NotificationType Type { get; set; } = NotificationType.info;
+        public NotificationCategory Category { get; set; } = NotificationCategory.Business;
+        public string Sender { get; set; } = "Connect";
+        public DateTime? Time { get; set; }
+    }
+
+    public sealed class SignalRGroupDispatchRequest
+    {
+        public string GroupName { get; set; } = string.Empty;
         public string Notification { get; set; } = string.Empty;
         public string Title { get; set; } = "Connect";
         public NotificationType Type { get; set; } = NotificationType.info;

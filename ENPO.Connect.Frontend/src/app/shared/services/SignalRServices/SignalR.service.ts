@@ -56,6 +56,10 @@ export interface UserDataDto {
   unreadCount?: number;
 }
 
+type OrgUnitWithCountDto = {
+  unitId?: number | string | null;
+};
+
 @Injectable({
   providedIn: 'root'
 })
@@ -186,6 +190,33 @@ export class SignalRService {
         .padStart(2, '0')}`;
     }
   }
+
+  private getUnitGroupNamesFromAuthObject(): string[] {
+    const authObject = this.authservice.getAuthObject() as { vwOrgUnitsWithCounts?: OrgUnitWithCountDto[] } | null;
+    const orgUnits = Array.isArray(authObject?.vwOrgUnitsWithCounts) ? authObject!.vwOrgUnitsWithCounts : [];
+    const groups = new Set<string>();
+
+    orgUnits.forEach(unit => {
+      const groupName = String(unit?.unitId ?? '').trim();
+      if (groupName.length > 0) {
+        groups.add(groupName);
+      }
+    });
+
+    return Array.from(groups);
+  }
+
+  private async registerUserGroups(): Promise<void> {
+    const groups = new Set<string>();
+    const defaultGroup = String(this.groupName ?? '').trim();
+    if (defaultGroup.length > 0) {
+      groups.add(defaultGroup);
+    }
+
+    this.getUnitGroupNamesFromAuthObject().forEach(group => groups.add(group));
+    await Promise.all(Array.from(groups).map(group => this.AddUserTogroup(group)));
+  }
+
   startConnection() {
     this.userAuth = this.authservice.returnCurrentUser();
     this.userRName = this.authservice.returnCurrentUserName();
@@ -258,16 +289,17 @@ export class SignalRService {
     this.hubConnection.onreconnected(async () => {
       this.connectionStartTime = Date.now(); // <-- Set start time here
       await this.hubConnectionState$.next('Online')
+      await this.registerUserGroups();
     });
 
     this.hubConnection.on('Connected', async () => {
       this.connectionStartTime = Date.now(); // <-- Set start time here
       await this.hubConnectionState$.next('Online')
-      await this.AddUserTogroup(this.groupName) // Use generic group name
+      await this.registerUserGroups();
       console.log('XXXXXXXXXXXX')
     });
     this.hubConnection.on('AddListedAppPatternAsync', async () => {
-      await this.AddUserTogroup(this.groupName) // Use generic group name
+      await this.registerUserGroups();
     });
     this.hubConnection.on('ForceDisconnectRequest', (customUser, currentIp) => {
       let msg = '';
