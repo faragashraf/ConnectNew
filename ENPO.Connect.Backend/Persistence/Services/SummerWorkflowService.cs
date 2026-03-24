@@ -22,13 +22,13 @@ namespace Persistence.Services
     {
         private readonly ConnectContext _connectContext;
         private readonly Attach_HeldContext _attachHeldContext;
+        private readonly GPAContext _gPAContext;
         private readonly helperService _helperService;
         private readonly SignalRConnectionManager _signalRConnectionManager;
         private readonly IConnectNotificationService _notificationService;
         private readonly ApplicationConfig _applicationConfig;
 
         private const int CapacityLockTimeoutMs = 15000;
-        private const string SummerActionBroadcastGroup = "241";
         private const string SummerDynamicApplicationId = "SUM2026DYN";
         private const string SummerDestinationCatalogMend = "SUM2026_DestinationCatalog";
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
@@ -40,6 +40,7 @@ namespace Persistence.Services
         public SummerWorkflowService(
             ConnectContext connectContext,
             Attach_HeldContext attachHeldContext,
+            GPAContext gpaContext,
             helperService helperService,
             SignalRConnectionManager signalRConnectionManager,
             IConnectNotificationService notificationService,
@@ -47,6 +48,7 @@ namespace Persistence.Services
         {
             _connectContext = connectContext;
             _attachHeldContext = attachHeldContext;
+            _gPAContext = gpaContext;
             _helperService = helperService;
             _signalRConnectionManager = signalRConnectionManager;
             _notificationService = notificationService;
@@ -149,15 +151,32 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetAdminRequestsAsync(SummerAdminRequestsQuery query)
+        public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetAdminRequestsAsync(SummerAdminRequestsQuery query, string userId)
         {
             var response = new CommonResponse<IEnumerable<SummerRequestSummaryDto>>();
             query ??= new SummerAdminRequestsQuery();
             try
             {
+                var normalizedUserId = (userId ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(normalizedUserId))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "معرف المستخدم مطلوب." });
+                    return response;
+                }
+
                 var seasonYear = query.SeasonYear <= 0 ? DateTime.UtcNow.Year : query.SeasonYear;
                 var pageNumber = query.PageNumber <= 0 ? 1 : query.PageNumber;
                 var pageSize = query.PageSize <= 0 ? 50 : query.PageSize;
+
+                var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+                if (!userUnitIds.Any())
+                {
+                    response.Data = Array.Empty<SummerRequestSummaryDto>();
+                    response.TotalCount = 0;
+                    response.PageNumber = pageNumber;
+                    response.PageSize = pageSize;
+                    return response;
+                }
 
                 var summerRules = await GetSummerRulesAsync(seasonYear);
                 var summerCategoryIds = summerRules.Keys.ToList();
@@ -171,7 +190,9 @@ namespace Persistence.Services
                 }
                 var messages = await _connectContext.Messages
                     .AsNoTracking()
-                    .Where(m => summerCategoryIds.Contains(m.CategoryCd))
+                    .Where(m => summerCategoryIds.Contains(m.CategoryCd)
+                        && (userUnitIds.Contains(m.CurrentResponsibleSectorId ?? string.Empty)
+                            || userUnitIds.Contains(m.AssignedSectorId ?? string.Empty)))
                     .OrderByDescending(m => m.CreatedDate)
                     .ToListAsync();
 
@@ -325,7 +346,35 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerAdminDashboardDto>> GetAdminDashboardAsync(int seasonYear, int? categoryId = null, string? waveCode = null)
+        private async Task<List<string>> GetActiveUserUnitIdsAsync(string userId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return new List<string>();
+            }
+
+            var now = DateTime.Now.Date;
+            var unitIds = await _gPAContext.UserPositions
+                .AsNoTracking()
+                .Where(position =>
+                    position.UserId == normalizedUserId
+                    && position.IsActive != false
+                    && (!position.StartDate.HasValue || position.StartDate.Value <= now)
+                    && (!position.EndDate.HasValue || position.EndDate.Value >= now))
+                .Select(position => position.UnitId)
+                .Distinct()
+                .ToListAsync();
+
+            return unitIds
+                .Select(unitId => unitId.ToString())
+                .Select(unitId => (unitId ?? string.Empty).Trim())
+                .Where(unitId => unitId.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        public async Task<CommonResponse<SummerAdminDashboardDto>> GetAdminDashboardAsync(string userId, int seasonYear, int? categoryId = null, string? waveCode = null)
         {
             var response = new CommonResponse<SummerAdminDashboardDto>();
             try
@@ -339,7 +388,7 @@ namespace Persistence.Services
                     WaveCode = normalizedWaveCode,
                     PageNumber = 1,
                     PageSize = int.MaxValue
-                });
+                }, userId);
 
                 if (!listResponse.IsSuccess)
                 {
@@ -597,6 +646,7 @@ namespace Persistence.Services
                 if (response.Data != null)
                 {
                     await NotifySummerActionGroupAsync(
+                        response.Data.MessageId,
                         $"تم تنفيذ إجراء إداري '{ResolveAdminActionLabel(actionCode)}' على طلب المصيف رقم #{response.Data.MessageId}.",
                         "إدارة طلبات المصايف");
                 }
@@ -774,6 +824,7 @@ namespace Persistence.Services
                 }
 
                 await NotifySummerActionGroupAsync(
+                    summary.MessageId,
                     $"تم تسجيل اعتذار صاحب الطلب عن طلب المصيف رقم #{summary.MessageId}.",
                     "إدارة طلبات المصايف");
 
@@ -886,6 +937,7 @@ namespace Persistence.Services
                 if (response.Data != null)
                 {
                     await NotifySummerActionGroupAsync(
+                        response.Data.MessageId,
                         $"تم تسجيل السداد لطلب المصيف رقم #{response.Data.MessageId}.",
                         "إدارة طلبات المصايف");
                 }
@@ -1054,6 +1106,7 @@ namespace Persistence.Services
                     if (response.Data != null)
                     {
                         await NotifySummerActionGroupAsync(
+                            response.Data.MessageId,
                             $"تم تنفيذ تحويل طلب المصيف رقم #{response.Data.MessageId}.",
                             "إدارة طلبات المصايف");
                     }
@@ -1210,6 +1263,7 @@ namespace Persistence.Services
                 if (cancelledMessageId > 0)
                 {
                     await NotifySummerActionGroupAsync(
+                        cancelledMessageId,
                         $"تم إلغاء طلب المصيف رقم #{cancelledMessageId} تلقائياً بسبب عدم السداد خلال المهلة.",
                         "إدارة طلبات المصايف");
                 }
@@ -1579,29 +1633,34 @@ SELECT @result;
                 Category = NotificationCategory.Business
             };
 
-            foreach (var group in SummerNotificationGroups)
+            await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
             {
-                try
-                {
-                    await _signalRConnectionManager.SendNotificationToGroup(group, notification);
-                }
-                catch
-                {
-                    // Best effort only.
-                }
-            }
+                GroupNames = SummerNotificationGroups,
+                Notification = notification.Notification,
+                Type = notification.type,
+                Title = notification.Title,
+                Time = notification.time,
+                Sender = notification.sender,
+                Category = notification.Category ?? NotificationCategory.Business
+            });
         }
 
-        private async Task NotifySummerActionGroupAsync(string message, string title)
+        private async Task NotifySummerActionGroupAsync(int messageId, string message, string title)
         {
-            if (string.IsNullOrWhiteSpace(message))
+            if (messageId <= 0 || string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            var groupName = await ResolveResponsibleAdminGroupAsync(messageId);
+            if (string.IsNullOrWhiteSpace(groupName))
             {
                 return;
             }
 
             await _notificationService.SendSignalRToGroupAsync(new SignalRGroupDispatchRequest
             {
-                GroupName = SummerActionBroadcastGroup,
+                GroupName = groupName,
                 Notification = message.Trim(),
                 Title = string.IsNullOrWhiteSpace(title) ? "إدارة طلبات المصايف" : title.Trim(),
                 Type = NotificationType.info,
@@ -1609,6 +1668,21 @@ SELECT @result;
                 Sender = "Connect",
                 Time = DateTime.Now
             });
+        }
+
+        private async Task<string?> ResolveResponsibleAdminGroupAsync(int messageId)
+        {
+            var sector = await _connectContext.Messages
+                .AsNoTracking()
+                .Where(message => message.MessageId == messageId)
+                .Select(message =>
+                    !string.IsNullOrWhiteSpace(message.CurrentResponsibleSectorId)
+                        ? message.CurrentResponsibleSectorId
+                        : message.AssignedSectorId)
+                .FirstOrDefaultAsync();
+
+            var normalizedSector = (sector ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(normalizedSector) ? null : normalizedSector;
         }
 
         private async Task AddReplyWithAttachmentsAsync(int messageId, string message, string userId, string ip, List<IFormFile>? files)

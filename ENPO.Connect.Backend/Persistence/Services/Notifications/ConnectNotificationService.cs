@@ -322,21 +322,62 @@ namespace Persistence.Services.Notifications
 
         public async Task<CommonResponse<bool>> SendSignalRToGroupAsync(SignalRGroupDispatchRequest request, CancellationToken cancellationToken = default)
         {
+            if (request == null)
+            {
+                var invalidResponse = new CommonResponse<bool>();
+                invalidResponse.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "SignalR group payload is invalid."
+                });
+                return invalidResponse;
+            }
+
+            return await SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+            {
+                GroupNames = new[] { request.GroupName },
+                Notification = request.Notification,
+                Title = request.Title,
+                Type = request.Type,
+                Category = request.Category,
+                Sender = request.Sender,
+                Time = request.Time
+            }, cancellationToken);
+        }
+
+        public async Task<CommonResponse<bool>> SendSignalRToGroupsAsync(SignalRGroupsDispatchRequest request, CancellationToken cancellationToken = default)
+        {
             var response = new CommonResponse<bool>();
 
             try
             {
-                if (request == null || string.IsNullOrWhiteSpace(request.GroupName) || string.IsNullOrWhiteSpace(request.Notification))
+                if (request == null || string.IsNullOrWhiteSpace(request.Notification))
                 {
                     response.Errors.Add(new Error
                     {
                         Code = "400",
-                        Message = "SignalR group payload is invalid."
+                        Message = "SignalR groups payload is invalid."
                     });
                     return response;
                 }
 
-                await _signalRConnectionManager.SendNotificationToGroup(request.GroupName.Trim(), new NotificationDto
+                var groups = (request.GroupNames ?? Array.Empty<string>())
+                    .Select(group => (group ?? string.Empty).Trim())
+                    .Where(group => group.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (!groups.Any())
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = "At least one SignalR group is required."
+                    });
+                    return response;
+                }
+
+                var notification = new NotificationDto
                 {
                     Notification = request.Notification.Trim(),
                     type = request.Type,
@@ -344,13 +385,30 @@ namespace Persistence.Services.Notifications
                     time = request.Time ?? DateTime.Now,
                     sender = string.IsNullOrWhiteSpace(request.Sender) ? "Connect" : request.Sender.Trim(),
                     Category = request.Category
-                });
+                };
 
-                response.Data = true;
+                foreach (var group in groups)
+                {
+                    try
+                    {
+                        await _signalRConnectionManager.SendNotificationToGroup(group, notification);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Unexpected error while sending SignalR notification to group {GroupName}.", group);
+                        response.Errors.Add(new Error
+                        {
+                            Code = "SIGNALR_GROUP_SEND_FAILED",
+                            Message = $"Failed to send notification to group '{group}'."
+                        });
+                    }
+                }
+
+                response.Data = !response.Errors.Any();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error while sending SignalR group notification.");
+                _logger.LogError(ex, "Unexpected error while sending SignalR group notifications.");
                 response.Errors.Add(new Error
                 {
                     Code = ex.HResult.ToString(),

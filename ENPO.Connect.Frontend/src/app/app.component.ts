@@ -181,8 +181,6 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
           title: 'تحديث سعات المصايف',
           notification: 'تم تحديث السعات المتاحة للحجز.'
         };
-        this.signalRService.Notification.push(capacityNotification);
-        this.signalRService.primMsgCount++;
         this.cdr.detectChanges();
         return;
       }

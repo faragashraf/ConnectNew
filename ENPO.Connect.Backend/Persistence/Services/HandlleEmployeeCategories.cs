@@ -38,7 +38,6 @@ namespace Persistence.Services
         private readonly SignalRConnectionManager _signalRConnectionManager;
         private readonly IConnectNotificationService _notificationService;
         private const int CapacityLockTimeoutMs = 15000;
-        private const string SummerActionBroadcastGroup = "241";
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -447,19 +446,44 @@ namespace Persistence.Services
                 Category = NotificationCategory.Business
             });
 
-            await _notificationService.SendSignalRToGroupAsync(new SignalRGroupDispatchRequest
+            var targetAdminGroup = ResolveResponsibleAdminGroupName(messageRequest);
+            if (!string.IsNullOrWhiteSpace(targetAdminGroup))
             {
-                GroupName = SummerActionBroadcastGroup,
-                Notification = isEditOperation
-                    ? $"تم تعديل طلب المصيف رقم #{reply?.MessageId ?? 0} بواسطة صاحب الطلب (مرجع: {requestRef})."
-                    : $"تم إنشاء طلب مصيف جديد رقم #{reply?.MessageId ?? 0} بواسطة صاحب الطلب (مرجع: {requestRef}).",
-                Title = "إدارة طلبات المصايف",
-                Type = NotificationType.info,
-                Category = NotificationCategory.Business,
-                Sender = "Connect",
-                Time = DateTime.Now
-            });
+                await _notificationService.SendSignalRToGroupAsync(new SignalRGroupDispatchRequest
+                {
+                    GroupName = targetAdminGroup,
+                    Notification = isEditOperation
+                        ? $"تم تعديل طلب المصيف رقم #{reply?.MessageId ?? 0} بواسطة صاحب الطلب (مرجع: {requestRef})."
+                        : $"تم إنشاء طلب مصيف جديد رقم #{reply?.MessageId ?? 0} بواسطة صاحب الطلب (مرجع: {requestRef}).",
+                    Title = "إدارة طلبات المصايف",
+                    Type = NotificationType.info,
+                    Category = NotificationCategory.Business,
+                    Sender = "Connect",
+                    Time = DateTime.Now
+                });
+            }
+            else
+            {
+                _logger.AppendLine($"PostCommitActionsAsync: no responsible admin group found for message #{reply?.MessageId ?? 0}.");
+            }
             _logger.AppendLine("Transactions committed.");
+        }
+
+        private static string? ResolveResponsibleAdminGroupName(MessageRequest? messageRequest)
+        {
+            if (messageRequest == null)
+            {
+                return null;
+            }
+
+            var responsible = (messageRequest.CurrentResponsibleSectorId ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(responsible))
+            {
+                return responsible;
+            }
+
+            var assigned = (messageRequest.AssignedSectorId ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(assigned) ? null : assigned;
         }
 
         private static bool IsUniqueConstraintViolation(string message)
@@ -663,17 +687,16 @@ SELECT @result;
                 Category = NotificationCategory.Business
             };
 
-            foreach (var group in SummerNotificationGroups)
+            await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
             {
-                try
-                {
-                    await _signalRConnectionManager.SendNotificationToGroup(group, notification);
-                }
-                catch
-                {
-                    // Best effort only.
-                }
-            }
+                GroupNames = SummerNotificationGroups,
+                Notification = notification.Notification,
+                Type = notification.type,
+                Title = notification.Title,
+                Time = notification.time,
+                Sender = notification.sender,
+                Category = notification.Category ?? NotificationCategory.Business
+            });
         }
 
         private static string? GetFieldValue(IEnumerable<TkmendField>? fields, string fieldKind)
