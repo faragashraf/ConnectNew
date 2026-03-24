@@ -206,13 +206,18 @@ export class RequestTableComponent implements OnInit, OnDestroy {
     this.messageDto = {} as MessageDto
   }
 
-  onMessageUpdated(updatedMessage: MessageDto) {
+  onMessageUpdated(updatedMessage: MessageDto | Event) {
+    const candidate = updatedMessage as MessageDto;
+    if (!candidate || typeof candidate !== 'object' || !Number.isFinite(Number(candidate.messageId))) {
+      return;
+    }
+
     // Also keeping the local messageDto in sync in case the modal uses it.
-    this.messageDto = updatedMessage;
+    this.messageDto = candidate;
     // Replace the messageDto in the messageDtos array to reflect changes on UI
-    const index = this.messageDtos.findIndex(m => m.messageId === updatedMessage.messageId);
+    const index = this.messageDtos.findIndex(m => m.messageId === candidate.messageId);
     if (index !== -1) {
-      this.messageDtos[index] = updatedMessage;
+      this.messageDtos[index] = candidate;
     }
   }
 
