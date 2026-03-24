@@ -26,10 +26,12 @@ import {
   SummerWaveDefinition
 } from '../summer-requests-workspace/summer-requests-workspace.config';
 import {
-  formatRequestFieldValue,
-  resolveFieldLabel,
-  SUMMER_FIELD_LABEL_MAP
+  buildSummerRequestCompanions,
+  buildSummerRequestDetailFields,
+  SummerRequestFieldGridRow
 } from '../summer-requests-workspace/summer-requests-workspace.utils';
+
+type SummerAdminActionCode = 'FINAL_APPROVE' | 'MANUAL_CANCEL' | 'COMMENT' | 'APPROVE_TRANSFER';
 
 @Component({
   selector: 'app-summer-requests-admin-console',
@@ -58,7 +60,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: 'OverdueUnpaid', label: 'متأخر وغير مسدد' }
   ];
 
-  readonly actionOptions = [
+  readonly actionOptions: Array<{ value: SummerAdminActionCode; label: string }> = [
     { value: 'COMMENT', label: 'تعليق / رد إداري' },
     { value: 'FINAL_APPROVE', label: 'اعتماد نهائي' },
     { value: 'MANUAL_CANCEL', label: 'إلغاء يدوي' },
@@ -86,6 +88,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   requestsTotalPages = 1;
 
   readonly pageSizeOptions = [5, 10, 25, 50];
+  private readonly allowedAdminActionCodes = new Set<SummerAdminActionCode>([
+    'FINAL_APPROVE',
+    'MANUAL_CANCEL',
+    'COMMENT',
+    'APPROVE_TRANSFER'
+  ]);
 
   capacityDialogVisible = false;
   loadingWaveCapacity = false;
@@ -353,98 +361,25 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       .sort((a, b) => this.getWaveOrder(a.code) - this.getWaveOrder(b.code));
   }
 
-  get selectedRequestFields(): Array<{ label: string; value: string; groupId: number }> {
-    const fields = this.selectedRequestDetails?.fields ?? [];
+  get selectedRequestFields(): SummerRequestFieldGridRow[] {
     const currentRequest = this.selectedRequest;
-    return fields
-      .filter(field => String(field.fildTxt ?? '').trim().length > 0)
-      .filter(field => !this.isCompanionFieldKey(String(field.fildKind ?? '').trim()))
-      .map(field => {
-        const fieldKey = String(field.fildKind ?? '').trim();
-        const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
-        let value = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
-
-        if (currentRequest && normalizedFieldKey === 'summercamplabel') {
-          const expectedWaveLabel = this.getWaveLabelByCategoryAndCode(currentRequest.categoryId, currentRequest.waveCode);
-          if (expectedWaveLabel) {
-            value = expectedWaveLabel;
-          }
-        }
-
-        return {
-          label: resolveFieldLabel(fieldKey, SUMMER_FIELD_LABEL_MAP),
-          value,
-          groupId: Number(field.instanceGroupId ?? 1) || 1
-        };
-      })
-      .sort((a, b) => a.groupId - b.groupId || a.label.localeCompare(b.label));
+    return buildSummerRequestDetailFields({
+      fields: this.selectedRequestDetails?.fields,
+      summary: currentRequest ?? null,
+      summaryStatusLabel: currentRequest ? this.getRequestStatusLabel(currentRequest) : '',
+      summaryDateFormatter: this.formatDate.bind(this),
+      resolveWaveLabel: (categoryId, waveCode) => this.getWaveLabelByCategoryAndCode(categoryId, waveCode),
+      resolveDestinationNameById: (categoryId) => this.getDestinationNameByCategoryId(categoryId)
+    });
   }
 
   get selectedRequestCompanions(): Array<{ index: number; name: string; relation: string; nationalId: string; age: string }> {
-    const fields = this.selectedRequestDetails?.fields ?? [];
-    const grouped = new Map<number, { groupId: number; name: string; relation: string; nationalId: string; age: string }>();
+    return buildSummerRequestCompanions(this.selectedRequestDetails?.fields);
+  }
 
-    fields.forEach((field, rowIndex) => {
-      const fieldKey = String(field.fildKind ?? '').trim();
-      if (!this.isCompanionFieldKey(fieldKey)) {
-        return;
-      }
-
-      const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
-      const formattedValue = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
-      const rawGroupId = Number(field.instanceGroupId ?? 0);
-      const groupId = Number.isFinite(rawGroupId) && rawGroupId > 0 ? rawGroupId : (10000 + rowIndex);
-
-      if (!grouped.has(groupId)) {
-        grouped.set(groupId, {
-          groupId,
-          name: '',
-          relation: '',
-          nationalId: '',
-          age: ''
-        });
-      }
-
-      const row = grouped.get(groupId);
-      if (!row) {
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymembername')) {
-        row.name = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey === 'familyrelation') {
-        row.relation = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymembernationalid')) {
-        row.nationalId = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymemberage')) {
-        row.age = formattedValue;
-      }
-    });
-
-    const toDisplay = (value: string): string => {
-      const normalized = String(value ?? '').trim();
-      return normalized.length > 0 ? normalized : '-';
-    };
-
-    return [...grouped.values()]
-      .sort((a, b) => a.groupId - b.groupId)
-      .map((row, index) => ({
-        index: index + 1,
-        name: toDisplay(row.name),
-        relation: toDisplay(row.relation),
-        nationalId: toDisplay(row.nationalId),
-        age: toDisplay(row.age)
-      }))
-      .filter(row => row.name !== '-' || row.relation !== '-' || row.nationalId !== '-' || row.age !== '-');
+  get isTransferActionSelected(): boolean {
+    const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
+    return normalized === 'APPROVE_TRANSFER';
   }
 
   get selectedRequestReplies(): Array<{ id: number; author: string; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
@@ -831,7 +766,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     const raw = this.actionForm.getRawValue();
-    const actionCode = String(raw.actionCode ?? '').trim();
+    const actionCode = this.normalizeActionCode(raw.actionCode);
+
+    if (!actionCode) {
+      this.msg.msgError('خطأ', '<h5>نوع الإجراء الإداري غير مدعوم.</h5>', true);
+      return;
+    }
 
     if (actionCode === 'APPROVE_TRANSFER' && (!raw.toCategoryId || !String(raw.toWaveCode ?? '').trim())) {
       this.msg.msgError('خطأ', '<h5>بيانات التحويل غير مكتملة.</h5>', true);
@@ -1061,7 +1001,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   private bindActionRules(): void {
     const actionCodeSub = this.actionForm.get('actionCode')?.valueChanges.subscribe(value => {
-      const normalized = String(value ?? '').trim().toUpperCase();
+      const normalized = this.normalizeActionCode(value);
       const toCategoryControl = this.actionForm.get('toCategoryId');
       const toWaveControl = this.actionForm.get('toWaveCode');
       const familyControl = this.actionForm.get('newFamilyCount');
@@ -1069,6 +1009,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
       if (!toCategoryControl || !toWaveControl || !familyControl || !extraControl) {
         return;
+      }
+
+      const currentValue = String(value ?? '').trim();
+      if (normalized && currentValue !== normalized) {
+        this.actionForm.patchValue({ actionCode: normalized }, { emitEvent: false });
       }
 
       if (normalized === 'APPROVE_TRANSFER') {
@@ -1120,6 +1065,51 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     if (transferDestinationSub) {
       this.subscriptions.add(transferDestinationSub);
     }
+  }
+
+  /**
+   * Mirrors backend NormalizeActionCode:
+   * FINAL_APPROVE | MANUAL_CANCEL | COMMENT | APPROVE_TRANSFER
+   */
+  private normalizeActionCode(actionCode: unknown): SummerAdminActionCode | '' {
+    const token = this.normalizeSearchToken(actionCode);
+    switch (token) {
+      case 'finalapprove':
+      case 'approve':
+      case 'اعتمادنهائي':
+      case 'اعتماد':
+      case 'final_approve':
+        return 'FINAL_APPROVE';
+      case 'manualcancel':
+      case 'cancel':
+      case 'الغاءيدوي':
+      case 'الغاء':
+        return 'MANUAL_CANCEL';
+      case 'comment':
+      case 'reply':
+      case 'تعليق':
+      case 'رد':
+        return 'COMMENT';
+      case 'approvetransfer':
+      case 'transferapprove':
+      case 'اعتمادالتحويل':
+        return 'APPROVE_TRANSFER';
+      default:
+        if (this.allowedAdminActionCodes.has(String(actionCode ?? '').trim() as SummerAdminActionCode)) {
+          return String(actionCode ?? '').trim() as SummerAdminActionCode;
+        }
+        return '';
+    }
+  }
+
+  private normalizeSearchToken(value: unknown): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ى/g, 'ي')
+      .replace(/[\s\-]+/g, '')
+      .replace(/[^a-z0-9_\u0600-\u06FF]/g, '');
   }
 
   private bindFilterDependencies(): void {
@@ -1282,19 +1272,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return String(wave?.startsAtLabel ?? '').trim();
   }
 
-  private normalizeDynamicFieldKey(fieldKey: string): string {
-    return String(fieldKey ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-  }
-
-  private isCompanionFieldKey(fieldKey: string): boolean {
-    const normalized = this.normalizeDynamicFieldKey(fieldKey);
-    return normalized.includes('familymembername')
-      || normalized === 'familyrelation'
-      || normalized.includes('familymembernationalid')
-      || normalized.includes('familymemberage');
+  private getDestinationNameByCategoryId(categoryId: number): string {
+    const destination = this.destinations.find(item => item.categoryId === categoryId);
+    return String(destination?.name ?? '').trim();
   }
 
   private isRejectedStatus(status: string | undefined): boolean {

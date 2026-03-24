@@ -2,14 +2,19 @@
   <h5>{{ title }}</h5>
 
   <div class="details-grid" *ngIf="rows.length > 0; else emptyState">
-    <div class="detail-row" *ngFor="let row of rows">
-      <span class="k">{{ resolveLabel(row) }}</span>
-      <span class="v">{{ resolveValue(row) }}</span>
-    </div>
+    <ng-container *ngFor="let row of rows">
+      <div class="group-row" *ngIf="isGroupHeader(row)">
+        {{ resolveGroupTitle(row) }}
+      </div>
+
+      <div class="detail-row" *ngIf="!isGroupHeader(row)">
+        <span class="k">{{ resolveLabel(row) }}</span>
+        <span class="v">{{ resolveValue(row) }}</span>
+      </div>
+    </ng-container>
   </div>
 
   <ng-template #emptyState>
     <p class="empty-sub">{{ emptyMessage }}</p>
   </ng-template>
 </section>
-

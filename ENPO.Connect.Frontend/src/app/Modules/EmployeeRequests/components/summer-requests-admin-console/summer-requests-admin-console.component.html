@@ -295,8 +295,39 @@
       <section class="request-details">
         <header>
           <h4>تفاصيل الطلب المختار</h4>
-          <small *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
+          <small class="loading-note" *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
         </header>
+
+        <div class="details-skeleton" *ngIf="loadingDetails" aria-hidden="true">
+          <div class="skeleton-bar skeleton-title"></div>
+
+          <div class="skeleton-grid">
+            <div class="skeleton-card" *ngFor="let _ of [1,2,3,4,5,6,7,8]">
+              <div class="skeleton-bar skeleton-label"></div>
+              <div class="skeleton-bar skeleton-value"></div>
+            </div>
+          </div>
+
+          <div class="skeleton-owner">
+            <div class="skeleton-bar skeleton-section"></div>
+            <div class="skeleton-owner-grid">
+              <div class="skeleton-card" *ngFor="let _ of [1,2,3,4]">
+                <div class="skeleton-bar skeleton-label"></div>
+                <div class="skeleton-bar skeleton-value"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="skeleton-table">
+            <div class="skeleton-bar skeleton-section"></div>
+            <div class="skeleton-table-head">
+              <div class="skeleton-bar" *ngFor="let _ of [1,2,3,4]"></div>
+            </div>
+            <div class="skeleton-table-row" *ngFor="let _ of [1,2,3]">
+              <div class="skeleton-bar" *ngFor="let __ of [1,2,3,4]"></div>
+            </div>
+          </div>
+        </div>
 
         <ng-container *ngIf="!loadingDetails">
           <app-summer-request-fields-grid
@@ -355,7 +386,7 @@
             <span>تنفيذ إجباري (عند الحاجة)</span>
           </label>
 
-          <ng-container *ngIf="actionForm.get('actionCode')?.value === 'APPROVE_TRANSFER'">
+          <ng-container *ngIf="isTransferActionSelected">
             <label>
               <span>المصيف المستهدف</span>
               <select formControlName="toCategoryId">

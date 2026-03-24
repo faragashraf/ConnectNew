@@ -28,11 +28,11 @@ import {
 } from '../summer-requests-workspace.config';
 import {
   SUMMER_ALLOWED_ATTACHMENT_EXTENSIONS,
-  SUMMER_FIELD_LABEL_MAP,
+  buildSummerRequestCompanions,
+  buildSummerRequestDetailFields,
   coalesceText,
   extractCapacityPayloadFromSignal,
   formatLocalDateHour,
-  formatRequestFieldValue,
   formatUtcDateToCairoHour,
   getFieldValueByKeys,
   getStatusClass,
@@ -42,8 +42,8 @@ import {
   parseDateToEpoch,
   parseWaveLabelDate,
   resolveAttachmentId,
-  resolveFieldLabel,
   resolveReplyAuthorName,
+  SummerRequestFieldGridRow,
   toDisplayOrDash
 } from '../summer-requests-workspace.utils';
 
@@ -203,99 +203,20 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       : 'الخدمة اللحظية غير متصلة (SignalR)';
   }
 
-  get selectedRequestDetailFields(): Array<{ label: string; value: string; instanceGroupId: number }> {
-    const fields = this.selectedRequestDetails?.fields ?? [];
+  get selectedRequestDetailFields(): SummerRequestFieldGridRow[] {
     const currentRequest = this.selectedRequest;
-    const detailedRows = fields
-      .filter(field => String(field.fildTxt ?? '').trim().length > 0)
-      .filter(field => !this.isCompanionFieldKey(String(field.fildKind ?? '').trim()))
-      .map(field => {
-        const fieldKey = String(field.fildKind ?? '').trim();
-        const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
-        let value = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
-
-        if (currentRequest && normalizedFieldKey === 'summercamplabel') {
-          const expectedWaveLabel = this.getWaveLabelByCategoryAndCode(currentRequest.categoryId, currentRequest.waveCode);
-          if (expectedWaveLabel) {
-            value = expectedWaveLabel;
-          }
-        }
-
-        return {
-          label: resolveFieldLabel(fieldKey, SUMMER_FIELD_LABEL_MAP),
-          value,
-          instanceGroupId: Number(field.instanceGroupId ?? 1) || 1
-        };
-      })
-      .sort((a, b) => a.instanceGroupId - b.instanceGroupId || a.label.localeCompare(b.label));
-
-    if (detailedRows.length > 0) {
-      return detailedRows;
-    }
-
-    return this.buildSummaryFallbackDetailFields(currentRequest);
+    return buildSummerRequestDetailFields({
+      fields: this.selectedRequestDetails?.fields,
+      summary: currentRequest ?? null,
+      summaryStatusLabel: currentRequest ? this.getRequestStatusLabel(currentRequest) : '',
+      summaryDateFormatter: this.formatUtcDate.bind(this),
+      resolveWaveLabel: (categoryId, waveCode) => this.getWaveLabelByCategoryAndCode(categoryId, waveCode),
+      resolveDestinationNameById: (categoryId) => this.getDestinationNameByCategoryId(categoryId)
+    });
   }
 
   get selectedRequestCompanions(): Array<{ index: number; name: string; relation: string; nationalId: string; age: string }> {
-    const fields = this.selectedRequestDetails?.fields ?? [];
-    const grouped = new Map<number, { groupId: number; name: string; relation: string; nationalId: string; age: string }>();
-
-    fields.forEach((field, rowIndex) => {
-      const fieldKey = String(field.fildKind ?? '').trim();
-      if (!this.isCompanionFieldKey(fieldKey)) {
-        return;
-      }
-
-      const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
-      const formattedValue = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
-      const rawGroupId = Number(field.instanceGroupId ?? 0);
-      const groupId = Number.isFinite(rawGroupId) && rawGroupId > 0 ? rawGroupId : (10000 + rowIndex);
-
-      if (!grouped.has(groupId)) {
-        grouped.set(groupId, {
-          groupId,
-          name: '',
-          relation: '',
-          nationalId: '',
-          age: ''
-        });
-      }
-
-      const row = grouped.get(groupId);
-      if (!row) {
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymembername') || normalizedFieldKey.includes('companionname')) {
-        row.name = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey === 'familyrelation' || normalizedFieldKey === 'companionrelation') {
-        row.relation = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymembernationalid') || normalizedFieldKey.includes('companionnationalid')) {
-        row.nationalId = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymemberage') || normalizedFieldKey.includes('companionage')) {
-        row.age = formattedValue;
-      }
-    });
-
-    return [...grouped.values()]
-      .sort((a, b) => a.groupId - b.groupId)
-      .map((row, index) => ({
-        index: index + 1,
-        name: toDisplayOrDash(row.name),
-        relation: toDisplayOrDash(row.relation),
-        nationalId: toDisplayOrDash(row.nationalId),
-        age: toDisplayOrDash(row.age)
-      }))
-      .filter(row => row.name !== '-' || row.relation !== '-' || row.nationalId !== '-' || row.age !== '-');
+    return buildSummerRequestCompanions(this.selectedRequestDetails?.fields);
   }
 
   get selectedRequestAttachments(): Array<{ id: number; name: string; size: number }> {
@@ -1324,6 +1245,11 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     return String(wave?.startsAtLabel ?? '').trim();
   }
 
+  private getDestinationNameByCategoryId(categoryId: number): string {
+    const destination = this.destinations.find(item => item.categoryId === categoryId);
+    return String(destination?.name ?? '').trim();
+  }
+
   private getSelectedActionType(): string {
     const fields = this.selectedRequestDetails?.fields ?? [];
     const action = getFieldValueByKeys(fields, ['Summer_ActionType', 'Summer_AdminLastAction']);
@@ -1336,25 +1262,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   private getSelectedCancelReason(): string {
     const fields = this.selectedRequestDetails?.fields ?? [];
     return String(getFieldValueByKeys(fields, ['Summer_CancelReason']) ?? '').trim();
-  }
-
-  private normalizeDynamicFieldKey(fieldKey: string): string {
-    return String(fieldKey ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-  }
-
-  private isCompanionFieldKey(fieldKey: string): boolean {
-    const normalized = this.normalizeDynamicFieldKey(fieldKey);
-    return normalized.includes('familymembername')
-      || normalized === 'familyrelation'
-      || normalized.includes('familymembernationalid')
-      || normalized.includes('familymemberage')
-      || normalized.includes('companionname')
-      || normalized === 'companionrelation'
-      || normalized.includes('companionnationalid')
-      || normalized.includes('companionage');
   }
 
   private toFileParameters(files: File[]): FileParameter[] {
@@ -1377,25 +1284,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const raw = control?.value;
     const numeric = Number(raw);
     return Number.isFinite(numeric) ? numeric : 0;
-  }
-
-  private buildSummaryFallbackDetailFields(
-    request: SummerRequestSummaryDto | undefined
-  ): Array<{ label: string; value: string; instanceGroupId: number }> {
-    if (!request) {
-      return [];
-    }
-
-    const rows: Array<{ label: string; value: string; instanceGroupId: number }> = [
-      { label: 'رقم الطلب', value: toDisplayOrDash(request.requestRef), instanceGroupId: 1 },
-      { label: 'المصيف', value: toDisplayOrDash(request.categoryName), instanceGroupId: 1 },
-      { label: 'الفوج', value: toDisplayOrDash(request.waveCode), instanceGroupId: 1 },
-      { label: 'الحالة', value: this.getRequestStatusLabel(request), instanceGroupId: 1 },
-      { label: 'استحقاق السداد', value: this.formatUtcDate(request.paymentDueAtUtc), instanceGroupId: 1 },
-      { label: 'تاريخ السداد', value: this.formatUtcDate(request.paidAtUtc), instanceGroupId: 1 }
-    ];
-
-    return rows.filter(row => String(row.value ?? '').trim().length > 0);
   }
 
   private parsePositiveInt(value: unknown): number | null {

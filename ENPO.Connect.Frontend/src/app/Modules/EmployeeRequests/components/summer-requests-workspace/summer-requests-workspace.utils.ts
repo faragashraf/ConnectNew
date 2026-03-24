@@ -27,7 +27,7 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   FamilyCount: 'عدد الأفراد',
   Over_Count: 'أفراد إضافيون',
   SummerStayMode: 'نوع الحجز',
-  SummerDestinationId: 'كود المصيف',
+  SummerDestinationId: 'اسم المصيف',
   SummerDestinationName: 'اسم المصيف',
   SummerProxyMode: 'تسجيل بالنيابة',
   Description: 'ملاحظات',
@@ -293,6 +293,587 @@ export function resolveFieldLabel(key: string, labelMap: Record<string, string> 
   }
 
   return key;
+}
+
+export type SummerRequestFieldGridRow = {
+  label: string;
+  value: string;
+  instanceGroupId: number;
+  rowType?: 'group-header' | 'field';
+  groupTitle?: string;
+};
+
+type SummerFieldSource = {
+  fildKind?: unknown;
+  fildTxt?: unknown;
+  instanceGroupId?: unknown;
+};
+
+type SummerRequestSummaryLike = {
+  requestRef?: unknown;
+  categoryName?: unknown;
+  categoryId?: unknown;
+  waveCode?: unknown;
+  seasonYear?: unknown;
+  paymentDueAtUtc?: unknown;
+  paidAtUtc?: unknown;
+};
+
+type FieldGroupKey = 'booking' | 'owner' | 'workflow' | 'other';
+
+type CanonicalFieldMeta = {
+  id: string;
+  label: string;
+  group: FieldGroupKey;
+  order: number;
+};
+
+type CanonicalFieldRow = CanonicalFieldMeta & {
+  instanceGroupId: number;
+  value: string;
+};
+
+type BuildSummerRequestDetailFieldsInput = {
+  fields: SummerFieldSource[] | undefined;
+  summary?: SummerRequestSummaryLike | null;
+  summaryStatusLabel?: string;
+  summaryDateFormatter?: (value?: string) => string;
+  resolveWaveLabel?: (categoryId: number, waveCode: string) => string;
+  resolveDestinationNameById?: (categoryId: number) => string;
+  labelMap?: Record<string, string>;
+};
+
+const FIELD_GROUP_LABELS: Record<FieldGroupKey, string> = {
+  booking: 'بيانات الحجز',
+  owner: 'بيانات صاحب الطلب',
+  workflow: 'بيانات المتابعة',
+  other: 'بيانات إضافية'
+};
+
+const PREFER_TEXT_CANONICAL_KEYS = new Set<string>([
+  'destination_name',
+  'transfer_from_destination',
+  'transfer_to_destination'
+]);
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return Math.floor(parsed);
+}
+
+function normalizeInstanceGroupId(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+}
+
+function isNumericText(value: string): boolean {
+  return /^\d+$/.test(String(value ?? '').trim());
+}
+
+function shouldReplaceCanonicalValue(current: string, candidate: string, canonicalKey: string): boolean {
+  const currentNormalized = toDisplayOrDash(current);
+  const candidateNormalized = toDisplayOrDash(candidate);
+  if (candidateNormalized === '-') {
+    return false;
+  }
+  if (currentNormalized === '-') {
+    return true;
+  }
+  if (currentNormalized === candidateNormalized) {
+    return false;
+  }
+
+  if (PREFER_TEXT_CANONICAL_KEYS.has(canonicalKey)) {
+    if (isNumericText(currentNormalized) && !isNumericText(candidateNormalized)) {
+      return true;
+    }
+  }
+
+  if (canonicalKey === 'wave_label') {
+    if (!currentNormalized.includes('/') && candidateNormalized.includes('/')) {
+      return true;
+    }
+  }
+
+  return candidateNormalized.length > currentNormalized.length;
+}
+
+function resolveDestinationText(
+  rawValue: string,
+  resolveDestinationNameById?: (categoryId: number) => string,
+  fallbackName?: string
+): string {
+  const normalized = toDisplayOrDash(rawValue);
+  if (normalized === '-') {
+    return toDisplayOrDash(fallbackName ?? '');
+  }
+  if (!isNumericText(normalized)) {
+    return normalized;
+  }
+
+  const categoryId = parsePositiveInt(normalized);
+  if (!categoryId) {
+    return toDisplayOrDash(fallbackName ?? normalized);
+  }
+
+  const resolved = String(resolveDestinationNameById?.(categoryId) ?? '').trim();
+  if (resolved.length > 0) {
+    return resolved;
+  }
+
+  return toDisplayOrDash(fallbackName ?? normalized);
+}
+
+function resolveFriendlyLabel(key: string, labelMap: Record<string, string>): string {
+  const resolved = resolveFieldLabel(key, labelMap);
+  if (resolved !== key) {
+    return resolved;
+  }
+
+  const normalized = normalizeFieldToken(key);
+  if (normalized.includes('destination')) {
+    return 'المصيف';
+  }
+  if (normalized.includes('wave') || normalized.includes('camp')) {
+    return 'الفوج';
+  }
+  if (normalized.includes('season') || normalized.includes('year')) {
+    return 'موسم الحجز';
+  }
+  if (normalized.includes('relation')) {
+    return 'درجة القرابة';
+  }
+  if (normalized.includes('phone') || normalized.includes('mobile') || normalized.includes('tel')) {
+    return 'رقم الهاتف';
+  }
+  if (normalized.includes('count')) {
+    return 'العدد';
+  }
+  if (normalized.includes('status')) {
+    return 'الحالة';
+  }
+  if (normalized.includes('date') || normalized.includes('time') || normalized.includes('atutc')) {
+    return 'التاريخ';
+  }
+  return 'بيان إضافي';
+}
+
+function resolveCanonicalFieldMeta(
+  fieldKey: string,
+  labelMap: Record<string, string>
+): CanonicalFieldMeta {
+  const normalized = normalizeFieldToken(fieldKey);
+
+  if (normalized.includes('requestref')) {
+    return { id: 'request_ref', label: 'رقم الطلب', group: 'workflow', order: 10 };
+  }
+  if (normalized.includes('subject')) {
+    return { id: 'request_subject', label: 'عنوان الطلب', group: 'workflow', order: 20 };
+  }
+
+  if (normalized.includes('transferfromcategory') || normalized.includes('transferfromdestination') || normalized.includes('fromdestination')) {
+    return { id: 'transfer_from_destination', label: 'من مصيف', group: 'workflow', order: 110 };
+  }
+  if (normalized.includes('transfertocategory') || normalized.includes('transfertodestination') || normalized.includes('todestination')) {
+    return { id: 'transfer_to_destination', label: 'إلى مصيف', group: 'workflow', order: 130 };
+  }
+  if (normalized.includes('transferfromwave')) {
+    return { id: 'transfer_from_wave', label: 'من فوج', group: 'workflow', order: 120 };
+  }
+  if (normalized.includes('transfertowave')) {
+    return { id: 'transfer_to_wave', label: 'إلى فوج', group: 'workflow', order: 140 };
+  }
+
+  if (normalized.includes('summerdestinationname') || normalized.includes('summerdestinationid') || normalized.includes('destinationname') || normalized.includes('destinationid')) {
+    return { id: 'destination_name', label: 'اسم المصيف', group: 'booking', order: 10 };
+  }
+  if (normalized.includes('summercamplabel') || (normalized.includes('wave') && normalized.includes('label'))) {
+    return { id: 'wave_label', label: 'بيان الفوج', group: 'booking', order: 30 };
+  }
+  if (normalized.includes('summercamp') || normalized === 'wave' || normalized === 'wavecode') {
+    return { id: 'wave_code', label: 'الفوج', group: 'booking', order: 20 };
+  }
+  if (normalized.includes('seasonyear')) {
+    return { id: 'season_year', label: 'موسم الحجز', group: 'booking', order: 40 };
+  }
+  if (normalized.includes('staymode')) {
+    return { id: 'stay_mode', label: 'نوع الحجز', group: 'booking', order: 50 };
+  }
+  if (normalized.includes('familycount')) {
+    return { id: 'family_count', label: 'عدد الأفراد', group: 'booking', order: 60 };
+  }
+  if (normalized.includes('overcount') || normalized.includes('extracount')) {
+    return { id: 'extra_count', label: 'أفراد إضافيون', group: 'booking', order: 70 };
+  }
+
+  if (normalized.includes('proxymode')) {
+    return { id: 'proxy_mode', label: 'تسجيل بالنيابة', group: 'owner', order: 60 };
+  }
+  if (normalized.includes('empid') || normalized.includes('ownerfilenumber') || normalized === 'filenumber' || normalized.includes('employeefilenumber')) {
+    return { id: 'owner_file', label: 'رقم الملف', group: 'owner', order: 20 };
+  }
+  if ((normalized.includes('national') || normalized.includes('nid') || normalized.includes('idnumber'))
+    && !normalized.includes('family')
+    && !normalized.includes('companion')) {
+    return { id: 'owner_national_id', label: 'الرقم القومي', group: 'owner', order: 30 };
+  }
+  if (normalized.includes('extraphone') || normalized.includes('secondaryphone') || normalized.includes('alternatephone')) {
+    return { id: 'owner_extra_phone', label: 'هاتف إضافي', group: 'owner', order: 50 };
+  }
+  if ((normalized.includes('phone') || normalized.includes('mobile') || normalized.includes('tel'))
+    && !normalized.includes('family')
+    && !normalized.includes('companion')) {
+    return { id: 'owner_phone', label: 'رقم الهاتف', group: 'owner', order: 40 };
+  }
+  if ((normalized.includes('empname') || normalized.includes('employeename') || normalized.includes('ownername') || normalized === 'name')
+    && !normalized.includes('family')
+    && !normalized.includes('companion')
+    && !normalized.includes('destination')) {
+    return { id: 'owner_name', label: 'اسم الموظف', group: 'owner', order: 10 };
+  }
+
+  if (normalized.includes('actiontype')) {
+    return { id: 'action_type', label: 'نوع الإجراء', group: 'workflow', order: 30 };
+  }
+  if (normalized.includes('adminlastaction')) {
+    return { id: 'admin_last_action', label: 'آخر إجراء إداري', group: 'workflow', order: 35 };
+  }
+  if (normalized.includes('adminactionatutc')) {
+    return { id: 'admin_action_at', label: 'تاريخ الإجراء الإداري', group: 'workflow', order: 40 };
+  }
+  if (normalized.includes('paymentstatus')) {
+    return { id: 'payment_status', label: 'حالة السداد', group: 'workflow', order: 50 };
+  }
+  if (normalized.includes('paymentdue')) {
+    return { id: 'payment_due', label: 'مهلة السداد', group: 'workflow', order: 60 };
+  }
+  if (normalized.includes('paidat')) {
+    return { id: 'paid_at', label: 'تاريخ السداد', group: 'workflow', order: 70 };
+  }
+  if (normalized.includes('cancelreason')) {
+    return { id: 'cancel_reason', label: 'سبب الاعتذار', group: 'workflow', order: 80 };
+  }
+  if (normalized.includes('cancelledat')) {
+    return { id: 'cancelled_at', label: 'تاريخ الإلغاء', group: 'workflow', order: 90 };
+  }
+  if (normalized.includes('transfercount')) {
+    return { id: 'transfer_count', label: 'عدد مرات التحويل', group: 'workflow', order: 100 };
+  }
+  if (normalized.includes('transferredat')) {
+    return { id: 'transferred_at', label: 'تاريخ التحويل', group: 'workflow', order: 150 };
+  }
+  if (normalized.includes('transferapprovedat')) {
+    return { id: 'transfer_approved_at', label: 'تاريخ اعتماد التحويل', group: 'workflow', order: 160 };
+  }
+  if (normalized.includes('description') || normalized.includes('notes')) {
+    return { id: 'notes', label: 'ملاحظات', group: 'workflow', order: 170 };
+  }
+
+  return {
+    id: `other:${normalized || fieldKey}`,
+    label: resolveFriendlyLabel(fieldKey, labelMap),
+    group: 'other',
+    order: 900
+  };
+}
+
+function groupOrder(groupKey: FieldGroupKey): number {
+  if (groupKey === 'booking') {
+    return 1;
+  }
+  if (groupKey === 'owner') {
+    return 2;
+  }
+  if (groupKey === 'workflow') {
+    return 3;
+  }
+  return 4;
+}
+
+function appendGroupHeaders(rows: CanonicalFieldRow[]): SummerRequestFieldGridRow[] {
+  const sorted = [...rows].sort((a, b) =>
+    groupOrder(a.group) - groupOrder(b.group)
+    || a.instanceGroupId - b.instanceGroupId
+    || a.order - b.order
+    || a.label.localeCompare(b.label, 'ar')
+  );
+
+  const result: SummerRequestFieldGridRow[] = [];
+  let previousGroup: FieldGroupKey | null = null;
+  sorted.forEach(row => {
+    if (row.group !== previousGroup) {
+      result.push({
+        label: FIELD_GROUP_LABELS[row.group],
+        value: '',
+        instanceGroupId: row.instanceGroupId,
+        rowType: 'group-header',
+        groupTitle: FIELD_GROUP_LABELS[row.group]
+      });
+      previousGroup = row.group;
+    }
+
+    result.push({
+      label: row.label,
+      value: toDisplayOrDash(row.value),
+      instanceGroupId: row.instanceGroupId,
+      rowType: 'field'
+    });
+  });
+
+  return result;
+}
+
+function upsertCanonicalRow(
+  rowsByKey: Map<string, CanonicalFieldRow>,
+  next: CanonicalFieldRow
+): void {
+  const key = `${next.instanceGroupId}|${next.id}`;
+  const existing = rowsByKey.get(key);
+  if (!existing) {
+    rowsByKey.set(key, next);
+    return;
+  }
+
+  if (shouldReplaceCanonicalValue(existing.value, next.value, next.id)) {
+    existing.value = next.value;
+    existing.label = next.label;
+  }
+}
+
+function addSummaryRows(
+  rowsByKey: Map<string, CanonicalFieldRow>,
+  summary: SummerRequestSummaryLike,
+  statusLabel: string,
+  dateFormatter?: (value?: string) => string
+): void {
+  const formattedDueAt = toDisplayOrDash(String(dateFormatter?.(String(summary.paymentDueAtUtc ?? '').trim()) ?? '').trim());
+  const formattedPaidAt = toDisplayOrDash(String(dateFormatter?.(String(summary.paidAtUtc ?? '').trim()) ?? '').trim());
+
+  const rows: CanonicalFieldRow[] = [
+    {
+      id: 'request_ref',
+      label: 'رقم الطلب',
+      group: 'workflow',
+      order: 10,
+      instanceGroupId: 1,
+      value: toDisplayOrDash(String(summary.requestRef ?? '').trim())
+    },
+    {
+      id: 'destination_name',
+      label: 'اسم المصيف',
+      group: 'booking',
+      order: 10,
+      instanceGroupId: 1,
+      value: toDisplayOrDash(String(summary.categoryName ?? '').trim())
+    },
+    {
+      id: 'wave_code',
+      label: 'الفوج',
+      group: 'booking',
+      order: 20,
+      instanceGroupId: 1,
+      value: toDisplayOrDash(String(summary.waveCode ?? '').trim())
+    },
+    {
+      id: 'request_status',
+      label: 'الحالة',
+      group: 'workflow',
+      order: 45,
+      instanceGroupId: 1,
+      value: toDisplayOrDash(statusLabel)
+    },
+    {
+      id: 'payment_due',
+      label: 'مهلة السداد',
+      group: 'workflow',
+      order: 60,
+      instanceGroupId: 1,
+      value: formattedDueAt
+    },
+    {
+      id: 'paid_at',
+      label: 'تاريخ السداد',
+      group: 'workflow',
+      order: 70,
+      instanceGroupId: 1,
+      value: formattedPaidAt
+    }
+  ];
+
+  rows.forEach(row => {
+    if (toDisplayOrDash(row.value) !== '-') {
+      upsertCanonicalRow(rowsByKey, row);
+    }
+  });
+}
+
+function isCompanionNameToken(normalizedKey: string): boolean {
+  return normalizedKey.includes('name')
+    && (normalizedKey.includes('familymember') || normalizedKey.includes('companion'));
+}
+
+function isCompanionRelationToken(normalizedKey: string): boolean {
+  return normalizedKey.includes('relation')
+    && (normalizedKey.includes('family') || normalizedKey.includes('companion'));
+}
+
+function isCompanionNationalIdToken(normalizedKey: string): boolean {
+  return (normalizedKey.includes('national') || normalizedKey.includes('nid') || normalizedKey.includes('idnumber'))
+    && (normalizedKey.includes('familymember') || normalizedKey.includes('companion'));
+}
+
+function isCompanionAgeToken(normalizedKey: string): boolean {
+  return normalizedKey.includes('age')
+    && (normalizedKey.includes('familymember') || normalizedKey.includes('companion'));
+}
+
+export function isCompanionFieldKey(fieldKey: string): boolean {
+  const normalized = normalizeFieldToken(fieldKey);
+  return isCompanionNameToken(normalized)
+    || isCompanionRelationToken(normalized)
+    || isCompanionNationalIdToken(normalized)
+    || isCompanionAgeToken(normalized);
+}
+
+export function buildSummerRequestCompanions(
+  fields: SummerFieldSource[] | undefined
+): Array<{ index: number; name: string; relation: string; nationalId: string; age: string }> {
+  const grouped = new Map<number, { groupId: number; name: string; relation: string; nationalId: string; age: string }>();
+
+  (fields ?? []).forEach((field, index) => {
+    const fieldKey = String(field.fildKind ?? '').trim();
+    if (!isCompanionFieldKey(fieldKey)) {
+      return;
+    }
+
+    const normalizedFieldKey = normalizeFieldToken(fieldKey);
+    const formattedValue = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
+    const fallbackGroupId = 10000 + index;
+    const groupId = parsePositiveInt(field.instanceGroupId) ?? fallbackGroupId;
+
+    if (!grouped.has(groupId)) {
+      grouped.set(groupId, {
+        groupId,
+        name: '',
+        relation: '',
+        nationalId: '',
+        age: ''
+      });
+    }
+
+    const row = grouped.get(groupId);
+    if (!row) {
+      return;
+    }
+
+    if (isCompanionNameToken(normalizedFieldKey)) {
+      row.name = formattedValue;
+      return;
+    }
+    if (isCompanionRelationToken(normalizedFieldKey)) {
+      row.relation = formattedValue;
+      return;
+    }
+    if (isCompanionNationalIdToken(normalizedFieldKey)) {
+      row.nationalId = formattedValue;
+      return;
+    }
+    if (isCompanionAgeToken(normalizedFieldKey)) {
+      row.age = formattedValue;
+    }
+  });
+
+  return [...grouped.values()]
+    .sort((a, b) => a.groupId - b.groupId)
+    .map((row, index) => ({
+      index: index + 1,
+      name: toDisplayOrDash(row.name),
+      relation: toDisplayOrDash(row.relation),
+      nationalId: toDisplayOrDash(row.nationalId),
+      age: toDisplayOrDash(row.age)
+    }))
+    .filter(row => row.name !== '-' || row.relation !== '-' || row.nationalId !== '-' || row.age !== '-');
+}
+
+export function buildSummerRequestDetailFields(input: BuildSummerRequestDetailFieldsInput): SummerRequestFieldGridRow[] {
+  const labelMap = input.labelMap ?? SUMMER_FIELD_LABEL_MAP;
+  const rowsByKey = new Map<string, CanonicalFieldRow>();
+  const summary = input.summary ?? null;
+  const summaryDestinationName = String(summary?.categoryName ?? '').trim();
+  const summaryCategoryId = parsePositiveInt(summary?.categoryId);
+  const summaryWaveCode = String(summary?.waveCode ?? '').trim();
+
+  (input.fields ?? []).forEach(field => {
+    const fieldKey = String(field.fildKind ?? '').trim();
+    const rawValue = String(field.fildTxt ?? '').trim();
+    if (!fieldKey || !rawValue || isCompanionFieldKey(fieldKey)) {
+      return;
+    }
+
+    const meta = resolveCanonicalFieldMeta(fieldKey, labelMap);
+    const instanceGroupId = normalizeInstanceGroupId(field.instanceGroupId);
+    let value = formatRequestFieldValue(fieldKey, rawValue);
+
+    if (meta.id === 'destination_name') {
+      value = resolveDestinationText(value, input.resolveDestinationNameById, summaryDestinationName);
+    }
+    if (meta.id === 'transfer_from_destination' || meta.id === 'transfer_to_destination') {
+      value = resolveDestinationText(value, input.resolveDestinationNameById);
+    }
+
+    upsertCanonicalRow(rowsByKey, {
+      ...meta,
+      value,
+      instanceGroupId
+    });
+  });
+
+  if (summaryCategoryId && summaryWaveCode) {
+    const waveLabel = String(input.resolveWaveLabel?.(summaryCategoryId, summaryWaveCode) ?? '').trim();
+    if (waveLabel.length > 0) {
+      upsertCanonicalRow(rowsByKey, {
+        id: 'wave_label',
+        label: 'بيان الفوج',
+        group: 'booking',
+        order: 30,
+        instanceGroupId: 1,
+        value: waveLabel
+      });
+    }
+  }
+
+  if (summaryDestinationName.length > 0) {
+    upsertCanonicalRow(rowsByKey, {
+      id: 'destination_name',
+      label: 'اسم المصيف',
+      group: 'booking',
+      order: 10,
+      instanceGroupId: 1,
+      value: summaryDestinationName
+    });
+  } else if (summaryCategoryId) {
+    const destinationName = String(input.resolveDestinationNameById?.(summaryCategoryId) ?? '').trim();
+    if (destinationName.length > 0) {
+      upsertCanonicalRow(rowsByKey, {
+        id: 'destination_name',
+        label: 'اسم المصيف',
+        group: 'booking',
+        order: 10,
+        instanceGroupId: 1,
+        value: destinationName
+      });
+    }
+  }
+
+  if (rowsByKey.size === 0 && summary) {
+    addSummaryRows(rowsByKey, summary, toDisplayOrDash(input.summaryStatusLabel ?? ''), input.summaryDateFormatter);
+  }
+
+  return appendGroupHeaders(Array.from(rowsByKey.values()))
+    .filter(row => row.rowType === 'group-header' || toDisplayOrDash(row.value) !== '-');
 }
 
 export function resolveAttachmentId(item: { attchId?: unknown; id?: unknown } | undefined): number {
