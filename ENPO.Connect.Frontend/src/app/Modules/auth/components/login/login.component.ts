@@ -391,10 +391,70 @@ export class LoginComponent implements OnInit {
     });
     this.chatService.RefreshToken(this.UserAuthorizationsNew.token as string);
 
-    const returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/Home';
+    const returnUrl = this.resolvePostLoginUrl();
     this.router.navigateByUrl(returnUrl);
 
   }
+
+  private resolvePostLoginUrl(): string {
+    const raw = String(this.route.snapshot.queryParams['returnUrl'] ?? '').trim();
+    return this.normalizeReturnUrl(raw);
+  }
+
+  private normalizeReturnUrl(rawReturnUrl: string): string {
+    if (!rawReturnUrl) {
+      return '/Home';
+    }
+
+    let candidate = rawReturnUrl;
+    try {
+      candidate = decodeURIComponent(rawReturnUrl);
+    } catch {
+      candidate = rawReturnUrl;
+    }
+
+    candidate = candidate.replace(/\\/g, '/').trim();
+    if (!candidate) {
+      return '/Home';
+    }
+
+    if (/^https?:\/\//i.test(candidate)) {
+      try {
+        const parsed = new URL(candidate);
+        candidate = parsed.hash?.startsWith('#/')
+          ? parsed.hash.substring(1)
+          : `${parsed.pathname || '/'}${parsed.search || ''}`;
+      } catch {
+        return '/Home';
+      }
+    }
+
+    const hashIndex = candidate.indexOf('#');
+    if (hashIndex >= 0) {
+      const hashRoute = candidate.substring(hashIndex + 1).trim();
+      if (hashRoute.startsWith('/')) {
+        candidate = hashRoute;
+      }
+    }
+
+    if (!candidate.startsWith('/')) {
+      candidate = `/${candidate}`;
+    }
+
+    const normalized = candidate.toLowerCase();
+    if (
+      normalized === '/' ||
+      normalized === '/connect' ||
+      normalized === '/connect/' ||
+      normalized === '/connect/index.html' ||
+      normalized.startsWith('/auth/login')
+    ) {
+      return '/Home';
+    }
+
+    return candidate;
+  }
+
   printBarcode() {
     window.print();
   }

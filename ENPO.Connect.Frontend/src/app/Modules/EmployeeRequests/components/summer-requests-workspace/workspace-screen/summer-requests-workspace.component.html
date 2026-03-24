@@ -7,7 +7,7 @@
 
   <section class="layout-grid">
     <aside class="policy-panel">
-      <h2 style="margin-bottom: 1rem;">قواعد المصايف</h2>
+      <h2 style="margin-bottom: 1rem;">تعليمات المصايف</h2>
       <p class="rule-alert">
         قاعدة السداد: مهلة السداد هي يوم عمل واحد من وقت تسجيل الطلب.
       </p>
@@ -191,7 +191,7 @@
           </section>
         </p-tabPanel>
 
-        <p-tabPanel header="الاعتذار / السداد / التحويل">
+        <p-tabPanel header="السداد / التحويل / الاعتذار">
           <ng-container *ngIf="selectedRequest as request; else emptyRequestState">
             <div class="selected-request">
               <h3>الطلب المحدد: #{{ request.messageId }} - {{ request.requestRef }}</h3>
@@ -202,35 +202,6 @@
             </div>
 
             <div class="workflow-grid">
-              <form [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
-                <h4>الاعتذار عن الحجز</h4>
-                <p class="warn" *ngIf="!isCancelActionClosed(request)">{{ getCancelWindowNote() }}</p>
-                <label>
-                  <span class="optional-label">سبب الاعتذار</span>
-                  <textarea rows="3" formControlName="reason" placeholder="سبب الاعتذار (اختياري)"></textarea>
-                </label>
-                <label class="file-picker compact">
-                  <span>إرفاق مستندات الاعتذار</span>
-                  <input type="file" accept=".pdf,image/*" multiple (change)="addFiles($event, 'cancel')" />
-                </label>
-                <div class="file-list" *ngIf="cancelAttachments.length > 0">
-                  <div class="file-chip" *ngFor="let file of cancelAttachments; let i = index">
-                    <span>{{ file.name }}</span>
-                    <button type="button" (click)="removeFile('cancel', i)">حذف</button>
-                  </div>
-                </div>
-                <p class="warn" *ngIf="getCancelClosedMessage(request) as cancelClosedMessage">
-                  <ng-container *ngIf="cancelClosedMessage.length > 0">{{ cancelClosedMessage }}</ng-container>
-                </p>
-                <button type="submit" class="danger" [disabled]="submittingCancel || isCancelActionClosed(request) || isCancelBlockedByWindow()">
-                  {{ isCancelActionClosed(request)
-                    ? 'الاعتذار غير متاح'
-                    : (isCancelBlockedByWindow()
-                      ? 'انتهت مهلة الاعتذار لهذا الفوج'
-                      : (submittingCancel ? 'جاري التنفيذ...' : 'تنفيذ الاعتذار')) }}
-                </button>
-              </form>
-
               <form [formGroup]="paymentForm" class="workflow-card" (ngSubmit)="submitPayment()">
                 <h4>تسجيل السداد</h4>
                 <label>
@@ -315,6 +286,35 @@
                 </p>
                 <button type="submit" class="primary" [disabled]="submittingTransfer || transferForm.invalid || !isTransferAvailable(request)">
                   {{ !isTransferAvailable(request) ? 'التحويل غير متاح' : (submittingTransfer ? 'جاري التنفيذ...' : 'تنفيذ التحويل') }}
+                </button>
+              </form>
+
+                            <form [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
+                <h4>الاعتذار عن الحجز</h4>
+                <p class="warn" *ngIf="!isCancelActionClosed(request)">{{ getCancelWindowNote() }}</p>
+                <label>
+                  <span class="optional-label">سبب الاعتذار</span>
+                  <textarea rows="3" formControlName="reason" placeholder="سبب الاعتذار (اختياري)"></textarea>
+                </label>
+                <label class="file-picker compact">
+                  <span>إرفاق مستندات الاعتذار</span>
+                  <input type="file" accept=".pdf,image/*" multiple (change)="addFiles($event, 'cancel')" />
+                </label>
+                <div class="file-list" *ngIf="cancelAttachments.length > 0">
+                  <div class="file-chip" *ngFor="let file of cancelAttachments; let i = index">
+                    <span>{{ file.name }}</span>
+                    <button type="button" (click)="removeFile('cancel', i)">حذف</button>
+                  </div>
+                </div>
+                <p class="warn" *ngIf="getCancelClosedMessage(request) as cancelClosedMessage">
+                  <ng-container *ngIf="cancelClosedMessage.length > 0">{{ cancelClosedMessage }}</ng-container>
+                </p>
+                <button type="submit" class="danger" [disabled]="submittingCancel || isCancelActionClosed(request) || isCancelBlockedByWindow()">
+                  {{ isCancelActionClosed(request)
+                    ? 'الاعتذار غير متاح'
+                    : (isCancelBlockedByWindow()
+                      ? 'انتهت مهلة الاعتذار لهذا الفوج'
+                      : (submittingCancel ? 'جاري التنفيذ...' : 'تنفيذ الاعتذار')) }}
                 </button>
               </form>
             </div>

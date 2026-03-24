@@ -14,10 +14,12 @@ import { SummerWorkflowController } from 'src/app/shared/services/BackendService
 import { AuthObjectsService } from 'src/app/shared/services/helper/auth-objects.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
+import { SignalRService } from 'src/app/shared/services/SignalRServices/SignalR.service';
 import { SummerDestinationConfig } from '../summer-requests-workspace.config';
 import { SummerDynamicFormEngineService } from '../summer-dynamic-form-engine.service';
 import { ComponentConfig, getConfigByRoute } from 'src/app/shared/models/Component.Config.model';
 import { ComponentConfigService } from 'src/app/Modules/admins/services/component-config.service';
+import { extractCapacityPayloadFromSignal } from '../summer-requests-workspace.utils';
 
 type OwnerDefaults = {
   name: string;
@@ -82,6 +84,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     private readonly authObjectsService: AuthObjectsService,
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
+    private readonly signalRService: SignalRService,
     private readonly engine: SummerDynamicFormEngineService
   ) {
     this.baseFormConfig = this.engine.createFormConfig();
@@ -96,6 +99,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.resolvedApplicationId = this.applicationId;
     this.resolveEditMode();
     this.applyFormModeConfig();
+    this.bindSignalRefresh();
     this.initializeFromComponentConfig();
   }
 
@@ -673,6 +677,51 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         this.bookingCapacityLoading = false;
       }
     });
+  }
+
+  private bindSignalRefresh(): void {
+    const signalSub = this.signalRService.Notification$.subscribe(notification => {
+      const title = String((notification as { title?: string; Title?: string })?.title
+        ?? (notification as { title?: string; Title?: string })?.Title
+        ?? '');
+      const body = String((notification as { notification?: string; Notification?: string })?.notification
+        ?? (notification as { notification?: string; Notification?: string })?.Notification
+        ?? '');
+
+      const capacityPayload = extractCapacityPayloadFromSignal([body, title]);
+      if (!capacityPayload) {
+        return;
+      }
+
+      this.refreshCapacityFromSignal(capacityPayload);
+    });
+
+    this.subscriptions.add(signalSub);
+  }
+
+  private refreshCapacityFromSignal(payload: string): void {
+    const destination = this.selectedDestination;
+    if (!destination || !this.ticketForm) {
+      return;
+    }
+
+    const selectedWaveCode = this.getStringValue(this.engine.aliases.waveCode);
+    if (!selectedWaveCode) {
+      return;
+    }
+
+    const parts = payload.split('|');
+    if (parts.length < 3) {
+      this.loadBookingCapacity();
+      return;
+    }
+
+    const categoryId = Number(parts[1]);
+    const waveCode = String(parts[2] ?? '').trim();
+
+    if (categoryId === destination.categoryId && waveCode === selectedWaveCode) {
+      this.loadBookingCapacity();
+    }
   }
 
   private validateBookingRules(destination: SummerDestinationConfig): string[] {

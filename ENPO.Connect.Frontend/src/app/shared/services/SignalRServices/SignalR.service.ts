@@ -69,6 +69,7 @@ export class SignalRService {
   userAuth: string = '';
   userRName: string = '';
   groupName: string = environment.OTPApplicationName; // <-- Make group name generic
+  private readonly summerBroadcastGroups: string[] = ['CONNECT', 'CONNECT - TEST'];
 
   constructor(
     public authservice: AuthObjectsService,
@@ -213,6 +214,11 @@ export class SignalRService {
       groups.add(defaultGroup);
     }
 
+    this.summerBroadcastGroups
+      .map(group => String(group ?? '').trim())
+      .filter(group => group.length > 0)
+      .forEach(group => groups.add(group));
+
     this.getUnitGroupNamesFromAuthObject().forEach(group => groups.add(group));
     await Promise.all(Array.from(groups).map(group => this.AddUserTogroup(group)));
   }
@@ -250,6 +256,7 @@ export class SignalRService {
 
         this.spinnerService.hide();
         await this.hubConnectionState$.next('Connection Started')
+        await this.registerUserGroups();
 
         const token = localStorage.getItem('ConnectToken') as string;
         // console.log('RefreshToken',token)
