@@ -64,7 +64,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: 'COMMENT', label: 'تعليق / رد إداري' },
     { value: 'FINAL_APPROVE', label: 'اعتماد نهائي' },
     { value: 'MANUAL_CANCEL', label: 'إلغاء يدوي' },
-    { value: 'APPROVE_TRANSFER', label: 'اعتماد تحويل' }
+    // { value: 'APPROVE_TRANSFER', label: 'اعتماد تحويل' }
   ];
 
   filtersForm: FormGroup;
