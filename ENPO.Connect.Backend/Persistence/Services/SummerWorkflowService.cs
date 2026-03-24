@@ -28,6 +28,7 @@ namespace Persistence.Services
         private readonly ApplicationConfig _applicationConfig;
 
         private const int CapacityLockTimeoutMs = 15000;
+        private const string SummerActionBroadcastGroup = "241";
         private const string SummerDynamicApplicationId = "SUM2026DYN";
         private const string SummerDestinationCatalogMend = "SUM2026_DestinationCatalog";
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
@@ -593,6 +594,13 @@ namespace Persistence.Services
                     });
                 }
 
+                if (response.Data != null)
+                {
+                    await NotifySummerActionGroupAsync(
+                        $"تم تنفيذ إجراء إداري '{ResolveAdminActionLabel(actionCode)}' على طلب المصيف رقم #{response.Data.MessageId}.",
+                        "إدارة طلبات المصايف");
+                }
+
                 if (actionCode == "MANUAL_CANCEL")
                 {
                     await PublishCapacityUpdateAsync(response.Data.CategoryId, response.Data.WaveCode, "ADMIN_CANCEL");
@@ -765,6 +773,10 @@ namespace Persistence.Services
                     });
                 }
 
+                await NotifySummerActionGroupAsync(
+                    $"تم تسجيل اعتذار صاحب الطلب عن طلب المصيف رقم #{summary.MessageId}.",
+                    "إدارة طلبات المصايف");
+
                 await PublishCapacityUpdateAsync(summary.CategoryId, summary.WaveCode, "CANCEL");
             }
             catch (Exception ex)
@@ -871,6 +883,12 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(message.MessageId);
+                if (response.Data != null)
+                {
+                    await NotifySummerActionGroupAsync(
+                        $"تم تسجيل السداد لطلب المصيف رقم #{response.Data.MessageId}.",
+                        "إدارة طلبات المصايف");
+                }
             }
             catch (Exception ex)
             {
@@ -1033,6 +1051,12 @@ namespace Persistence.Services
                     await connectTx.CommitAsync();
 
                     response.Data = await BuildSummaryAsync(message.MessageId);
+                    if (response.Data != null)
+                    {
+                        await NotifySummerActionGroupAsync(
+                            $"تم تنفيذ تحويل طلب المصيف رقم #{response.Data.MessageId}.",
+                            "إدارة طلبات المصايف");
+                    }
                     await PublishCapacityUpdateAsync(fromCategory, fromWave, "TRANSFER_FROM");
                     await PublishCapacityUpdateAsync(request.ToCategoryId, normalizedTargetWave, "TRANSFER_TO");
                 }
@@ -1183,6 +1207,13 @@ namespace Persistence.Services
                     });
                 }
 
+                if (cancelledMessageId > 0)
+                {
+                    await NotifySummerActionGroupAsync(
+                        $"تم إلغاء طلب المصيف رقم #{cancelledMessageId} تلقائياً بسبب عدم السداد خلال المهلة.",
+                        "إدارة طلبات المصايف");
+                }
+
                 await PublishCapacityUpdateAsync(notifyCategoryId, notifyWaveCode, "AUTO_CANCEL");
             }
 
@@ -1208,17 +1239,17 @@ namespace Persistence.Services
                 null);
 
             var smsTemplate = string.IsNullOrWhiteSpace(templates.AdminActionSmsTemplate)
-                ? "Dear {FirstName}, your summer request {RequestRef} was updated. Action: {ActionLabel}."
+                ? "عزيزي {FirstName}، تم تحديث طلب المصيف {RequestRef}. نوع الإجراء: {ActionLabel}. {AdminCommentLine}"
                 : templates.AdminActionSmsTemplate;
 
             var signalRTemplate = string.IsNullOrWhiteSpace(templates.AdminActionSignalRTemplate)
-                ? "Your summer request {RequestRef} was updated by administration. Action: {ActionLabel}."
+                ? "تم تحديث طلب المصيف {RequestRef} من إدارة المصايف. نوع الإجراء: {ActionLabel}."
                 : templates.AdminActionSignalRTemplate;
 
             var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
             var signalRMessage = _notificationService.RenderTemplate(signalRTemplate, placeholders);
             var signalRTitle = string.IsNullOrWhiteSpace(templates.AdminActionSignalRTitle)
-                ? "Summer Requests Management"
+                ? "إدارة طلبات المصايف"
                 : templates.AdminActionSignalRTitle;
 
             await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
@@ -1238,17 +1269,17 @@ namespace Persistence.Services
             var placeholders = BuildNotificationPlaceholders(summary, string.Empty, string.Empty, paymentDueAtUtc);
 
             var smsTemplate = string.IsNullOrWhiteSpace(templates.AutoCancelSmsTemplate)
-                ? "Dear {FirstName}, your summer request {RequestRef} was auto-cancelled because payment was not completed before {PaymentDueAtUtc}."
+                ? "عزيزي {FirstName}، تم إلغاء طلب المصيف {RequestRef} تلقائياً لعدم استكمال السداد قبل {PaymentDueAtUtc}."
                 : templates.AutoCancelSmsTemplate;
 
             var signalRTemplate = string.IsNullOrWhiteSpace(templates.AutoCancelSignalRTemplate)
-                ? "Your summer request {RequestRef} was auto-cancelled due to payment timeout."
+                ? "تم إلغاء طلب المصيف {RequestRef} تلقائياً بسبب انتهاء مهلة السداد."
                 : templates.AutoCancelSignalRTemplate;
 
             var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
             var signalRMessage = _notificationService.RenderTemplate(signalRTemplate, placeholders);
             var signalRTitle = string.IsNullOrWhiteSpace(templates.AutoCancelSignalRTitle)
-                ? "Summer Request Auto Cancellation"
+                ? "إلغاء تلقائي لطلب المصيف"
                 : templates.AutoCancelSignalRTitle;
 
             await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
@@ -1559,6 +1590,25 @@ SELECT @result;
                     // Best effort only.
                 }
             }
+        }
+
+        private async Task NotifySummerActionGroupAsync(string message, string title)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            await _notificationService.SendSignalRToGroupAsync(new SignalRGroupDispatchRequest
+            {
+                GroupName = SummerActionBroadcastGroup,
+                Notification = message.Trim(),
+                Title = string.IsNullOrWhiteSpace(title) ? "إدارة طلبات المصايف" : title.Trim(),
+                Type = NotificationType.info,
+                Category = NotificationCategory.Business,
+                Sender = "Connect",
+                Time = DateTime.Now
+            });
         }
 
         private async Task AddReplyWithAttachmentsAsync(int messageId, string message, string userId, string ip, List<IFormFile>? files)

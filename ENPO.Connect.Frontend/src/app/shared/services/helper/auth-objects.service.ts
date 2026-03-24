@@ -377,7 +377,7 @@ export class AuthObjectsService {
         label: '',
         items: [
           { label: 'الملف الشخصي', icon: 'pi pi-user', iconStyle: { color: '#2563eb' }, command: () => { this.Profie(); } },
-          { label: 'طلباتي', icon: 'pi pi-list', iconStyle: { color: '#0ea5a4' }, command: () => { this.router.navigate(['/EmployeeRequests/MyRequests']); } },
+          { label: 'طلبات المصايف', icon: 'pi pi-list', iconStyle: { color: '#0ea5a4' }, command: () => { this.router.navigate(['/EmployeeRequests/SummerRequests']); } },
           {
             label: 'تحديث النظام', icon: 'pi pi-refresh', iconStyle: { color: '#f59e0b' }, command: () => {
               this.soundService.performClearCacheAndReload();
