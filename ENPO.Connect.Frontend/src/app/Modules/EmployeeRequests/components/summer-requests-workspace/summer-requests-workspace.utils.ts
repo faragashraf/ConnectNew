@@ -917,6 +917,7 @@ export function formatUtcDateToCairoHour(value?: string): string {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
+    minute: '2-digit',
     hour12: false,
     timeZone: 'Africa/Cairo'
   }).formatToParts(parsed);
@@ -925,12 +926,13 @@ export function formatUtcDateToCairoHour(value?: string): string {
   const month = getDatePart(parts, 'month');
   const year = getDatePart(parts, 'year');
   const hour = getDatePart(parts, 'hour');
+  const minute = getDatePart(parts, 'minute');
 
-  if (!day || !month || !year || !hour) {
+  if (!day || !month || !year || !hour || !minute) {
     return value;
   }
 
-  return `${day}/${month}/${year} ${hour}:00`;
+  return `${day}/${month}/${year} ${hour}:${minute}`;
 }
 
 export function formatFileSize(bytes: number): string {
@@ -1011,7 +1013,8 @@ export function formatLocalDateHour(value: Date): string {
   const month = String(value.getMonth() + 1).padStart(2, '0');
   const year = String(value.getFullYear());
   const hour = String(value.getHours()).padStart(2, '0');
-  return `${day}/${month}/${year} ${hour}:00`;
+  const minute = String(value.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hour}:${minute}`;
 }
 
 export function isCorruptedText(value: string): boolean {
