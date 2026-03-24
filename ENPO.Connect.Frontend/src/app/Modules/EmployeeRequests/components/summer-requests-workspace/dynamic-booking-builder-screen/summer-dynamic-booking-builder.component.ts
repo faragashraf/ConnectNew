@@ -60,6 +60,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   loadingEditRequest = false;
   editRequestError = '';
   hasEditChanges = false;
+  canUseProxyRegistration = false;
 
   bookingCapacityLoading = false;
   bookingWaveCapacities: SummerWaveCapacityDto[] = [];
@@ -70,6 +71,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private pendingEditRequestId: number | null = null;
   private loadedEditRequestId: number | null = null;
   private initialEditSignature = '';
+  private lastProxyEnabled = false;
 
   constructor(
     private readonly fb: FormBuilder,
@@ -90,6 +92,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   }
 
   ngOnInit(): void {
+    this.refreshProxyModeAccess();
     this.resolvedApplicationId = this.applicationId;
     this.resolveEditMode();
     this.applyFormModeConfig();
@@ -143,6 +146,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
     this.ticketForm = this.fb.group({});
     this.genericFormService.dynamicGroups = [];
+    this.lastProxyEnabled = false;
     this.editRequestError = '';
     if (!this.isEditMode) {
       this.hasEditChanges = false;
@@ -188,6 +192,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       );
     }
 
+    filtered = this.filterRestrictedFields(filtered);
     this.customFilteredCategoryMand = filtered;
 
     if (!this.customFilteredCategoryMand.length) {
@@ -237,7 +242,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     if (this.matchesAlias(baseName, this.engine.aliases.proxyMode)) {
-      this.applyOwnerDefaultMode(this.isEditMode);
+      this.applyOwnerDefaultMode(false);
       return;
     }
 
@@ -302,7 +307,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     const familyCount = this.getStringValue(this.engine.aliases.familyCount);
     const extraCount = this.getStringValue(this.engine.aliases.extraCount) || '0';
     const stayMode = this.getStringValue(this.engine.aliases.stayMode);
-    const proxyMode = this.getStringValue(this.engine.aliases.proxyMode);
+    const proxyMode = this.canUseProxyRegistration
+      ? this.getStringValue(this.engine.aliases.proxyMode)
+      : 'false';
     const destinationSlug = String(destination.slug ?? '').trim() || `CAT${destination.categoryId}`;
     const generatedRequestRef = `SUMMER-${destinationSlug}-${employeeFileNumber}-${Date.now()}`;
     const requestRef = this.isEditMode
@@ -499,11 +506,18 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     const proxyCtrl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.proxyMode);
+    if (!this.canUseProxyRegistration && proxyCtrl) {
+      proxyCtrl.setValue(false, { emitEvent: false });
+      proxyCtrl.disable({ emitEvent: false });
+      proxyCtrl.updateValueAndValidity({ emitEvent: false });
+    }
+
     if (proxyCtrl && (proxyCtrl.value === null || proxyCtrl.value === undefined || proxyCtrl.value === '')) {
       proxyCtrl.setValue(false, { emitEvent: false });
     }
 
-    const proxyEnabled = this.toBoolean(proxyCtrl?.value);
+    const proxyEnabled = this.canUseProxyRegistration && this.toBoolean(proxyCtrl?.value);
+    const proxyJustEnabled = !this.lastProxyEnabled && proxyEnabled;
     const defaults = this.extractOwnerDefaults();
 
     const ownerControls: Array<{ aliases: string[]; value: string; required: boolean; alwaysEnabled?: boolean }> = [
@@ -529,6 +543,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         if (item.required) {
           control.addValidators(Validators.required);
         }
+        if (proxyEnabled && proxyJustEnabled && !preserveExistingValues) {
+          control.setValue('', { emitEvent: false });
+        }
         if (!proxyEnabled && alwaysEnabled && !shouldPreserveCurrentValue) {
           control.setValue(item.value, { emitEvent: false });
         }
@@ -540,6 +557,8 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       }
       control.updateValueAndValidity({ emitEvent: false });
     });
+
+    this.lastProxyEnabled = proxyEnabled;
   }
 
   private applySummerBusinessRules(): void {
@@ -847,6 +866,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         this.loadMetadata();
         this.loadMyRequests();
         const authSub = this.authObjectsService.authObject$.subscribe(() => {
+          this.refreshProxyModeAccess();
           this.applyOwnerDefaultMode(this.isEditMode);
         });
         this.subscriptions.add(authSub);
@@ -880,6 +900,25 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
     this.engine.applyAliasOverrides(dynamicSettings.aliases);
     this.applyFormModeConfig();
+  }
+
+  private refreshProxyModeAccess(): void {
+    try {
+      this.canUseProxyRegistration = this.authObjectsService.checkAuthFun('ConnectAdminFunc');
+    } catch {
+      this.canUseProxyRegistration = false;
+    }
+  }
+
+  private filterRestrictedFields(fields: CdCategoryMandDto[]): CdCategoryMandDto[] {
+    if (this.canUseProxyRegistration) {
+      return [...(fields ?? [])];
+    }
+
+    return (fields ?? []).filter(field => {
+      const key = String(field?.mendField ?? '').trim();
+      return !this.matchesAlias(key, this.engine.aliases.proxyMode);
+    });
   }
 
   private applyFormModeConfig(): void {

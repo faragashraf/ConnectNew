@@ -15,6 +15,7 @@ namespace Models.DTO.Common
         public MailAccountOptions MailOptions { get; set; } = new MailAccountOptions();
         public SLAConfiguration SLAConfiguration { get; set; } = new SLAConfiguration();
         public ApiOptions ApiOptions { get; set; } = new ApiOptions();
+        public NotificationChannelsOptions NotificationChannels { get; set; } = new NotificationChannelsOptions();
         public TokenOptions tokenOptions { get; set; } = new TokenOptions();
     }
 
@@ -47,6 +48,41 @@ namespace Models.DTO.Common
         public string EventSMSARejected { get; set; }
         public List<string> LtraExcelColumns { get; set; }
     }
+
+    public class NotificationChannelsOptions
+    {
+        public SmsChannelOptions Sms { get; set; } = new SmsChannelOptions();
+        public SummerNotificationTemplates Summer { get; set; } = new SummerNotificationTemplates();
+    }
+
+    public class SmsChannelOptions
+    {
+        public bool Enabled { get; set; } = true;
+        public string ServiceName { get; set; } = "CONNECT SUMMER REQUESTS";
+        public string DefaultReferenceNo { get; set; } = "SUMMER";
+        public string Provider { get; set; } = "ENQUEUE";
+        public string MultiMessagesUserName { get; set; } = "";
+        public string MultiMessagesPassword { get; set; } = "";
+    }
+
+    public class SummerNotificationTemplates
+    {
+        public string AdminActionSmsTemplate { get; set; } =
+            "Dear {FirstName}, your summer request {RequestRef} was updated. Action: {ActionLabel}. Resort: {CategoryName}, wave: {WaveCode}. {AdminCommentLine}";
+
+        public string AutoCancelSmsTemplate { get; set; } =
+            "Dear {FirstName}, your summer request {RequestRef} was auto-cancelled because payment was not completed before {PaymentDueAtUtc}.";
+
+        public string AdminActionSignalRTemplate { get; set; } =
+            "Your summer request {RequestRef} was updated by administration. Action: {ActionLabel}.";
+
+        public string AutoCancelSignalRTemplate { get; set; } =
+            "Your summer request {RequestRef} was auto-cancelled due to payment timeout.";
+
+        public string AdminActionSignalRTitle { get; set; } = "Summer Requests Management";
+        public string AutoCancelSignalRTitle { get; set; } = "Summer Request Auto Cancellation";
+    }
+
     public class TokenOptions
     {
 

@@ -16,6 +16,7 @@ using Models.DTO.Common;
 using Persistence.Data;
 using Persistence.HelperServices;
 using Persistence.Services;
+using Persistence.Services.Notifications;
 using Persistence.UnitOfWorks;
 using SignalR.Notification;
 using System.Reflection;
@@ -59,6 +60,7 @@ builder.Services.AddSingleton<ApplicationConfig>(sp =>
 
 builder.Services.AddScoped<helperService>();
 builder.Services.AddScoped<SummerWorkflowService>();
+builder.Services.AddScoped<IConnectNotificationService, ConnectNotificationService>();
 builder.Services.AddHostedService<SummerPaymentAutoCancellationHostedService>();
 builder.Services.AddSingleton<ENPOCreateLogFile>(provider => new ENPOCreateLogFile("YourStringValue", "YourSecondStringValue", FileExtension.txt));
 

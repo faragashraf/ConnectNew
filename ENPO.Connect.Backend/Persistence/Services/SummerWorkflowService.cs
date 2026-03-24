@@ -4,6 +4,7 @@ using ENPO.Dto.HubSync;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Options;
 using Models.Attachment;
 using Models.Correspondance;
 using Models.DTO.Common;
@@ -11,6 +12,7 @@ using Models.DTO.Correspondance.Enums;
 using Models.DTO.Correspondance.Summer;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.Notifications;
 using Persistence.Services.Summer;
 using SignalR.Notification;
 
@@ -22,6 +24,8 @@ namespace Persistence.Services
         private readonly Attach_HeldContext _attachHeldContext;
         private readonly helperService _helperService;
         private readonly SignalRConnectionManager _signalRConnectionManager;
+        private readonly IConnectNotificationService _notificationService;
+        private readonly ApplicationConfig _applicationConfig;
 
         private const int CapacityLockTimeoutMs = 15000;
         private const string SummerDynamicApplicationId = "SUM2026DYN";
@@ -36,12 +40,16 @@ namespace Persistence.Services
             ConnectContext connectContext,
             Attach_HeldContext attachHeldContext,
             helperService helperService,
-            SignalRConnectionManager signalRConnectionManager)
+            SignalRConnectionManager signalRConnectionManager,
+            IConnectNotificationService notificationService,
+            IOptions<ApplicationConfig> options)
         {
             _connectContext = connectContext;
             _attachHeldContext = attachHeldContext;
             _helperService = helperService;
             _signalRConnectionManager = signalRConnectionManager;
+            _notificationService = notificationService;
+            _applicationConfig = options?.Value ?? new ApplicationConfig();
         }
 
         public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear)
@@ -448,6 +456,7 @@ namespace Persistence.Services
                     return response;
                 }
 
+                var comment = (request.Comment ?? string.Empty).Trim();
                 if (actionCode == "APPROVE_TRANSFER")
                 {
                     if (!request.ToCategoryId.HasValue || string.IsNullOrWhiteSpace(request.ToWaveCode))
@@ -477,6 +486,10 @@ namespace Persistence.Services
                     }
 
                     response.Data = transferResponse.Data;
+                    if (transferResponse.Data != null)
+                    {
+                        await NotifyEmployeeOnAdminActionAsync(transferResponse.Data, actionCode, comment);
+                    }
                     return response;
                 }
 
@@ -489,7 +502,6 @@ namespace Persistence.Services
                 }
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
-                var comment = (request.Comment ?? string.Empty).Trim();
 
                 await using var connectTx = await _connectContext.Database.BeginTransactionAsync(IsolationLevel.Serializable);
                 await using var attachTx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
@@ -562,6 +574,10 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(request.MessageId);
+                if (response.Data != null)
+                {
+                    await NotifyEmployeeOnAdminActionAsync(response.Data, actionCode, comment, includeSignalR: false);
+                }
 
                 var employeeId = response.Data.EmployeeId;
                 if (!string.IsNullOrWhiteSpace(employeeId))
@@ -1064,6 +1080,8 @@ namespace Persistence.Services
                 var notifyEmployeeId = string.Empty;
                 var notifyCategoryId = 0;
                 var notifyWaveCode = string.Empty;
+                var notifyDueAtUtc = (DateTime?)null;
+                var cancelledMessageId = 0;
                 var wasAutoCancelled = false;
 
                 await using var connectTx = await _connectContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -1116,6 +1134,8 @@ namespace Persistence.Services
                     notifyEmployeeId = GetFieldValue(fields, "Emp_Id") ?? string.Empty;
                     notifyCategoryId = message.CategoryCd;
                     notifyWaveCode = GetFieldValue(fields, "SummerCamp") ?? string.Empty;
+                    notifyDueAtUtc = dueAt;
+                    cancelledMessageId = message.MessageId;
                     wasAutoCancelled = true;
                     autoCancelledCount += 1;
                 }
@@ -1127,6 +1147,27 @@ namespace Persistence.Services
                 if (!wasAutoCancelled)
                 {
                     continue;
+                }
+
+                SummerRequestSummaryDto? autoCancelledSummary = null;
+                if (cancelledMessageId > 0)
+                {
+                    try
+                    {
+                        autoCancelledSummary = await BuildSummaryAsync(cancelledMessageId);
+                    }
+                    catch
+                    {
+                        // Best effort only.
+                    }
+                }
+
+                if (autoCancelledSummary != null)
+                {
+                    notifyEmployeeId = string.IsNullOrWhiteSpace(autoCancelledSummary.EmployeeId) ? notifyEmployeeId : autoCancelledSummary.EmployeeId;
+                    notifyCategoryId = autoCancelledSummary.CategoryId > 0 ? autoCancelledSummary.CategoryId : notifyCategoryId;
+                    notifyWaveCode = string.IsNullOrWhiteSpace(autoCancelledSummary.WaveCode) ? notifyWaveCode : autoCancelledSummary.WaveCode;
+                    await NotifyEmployeeOnAutoCancelAsync(autoCancelledSummary, notifyDueAtUtc, includeSignalR: false);
                 }
 
                 if (!string.IsNullOrWhiteSpace(notifyEmployeeId))
@@ -1146,6 +1187,164 @@ namespace Persistence.Services
             }
 
             return autoCancelledCount;
+        }
+
+        private async Task NotifyEmployeeOnAdminActionAsync(
+            SummerRequestSummaryDto summary,
+            string actionCode,
+            string? comment,
+            bool includeSignalR = true)
+        {
+            if (summary == null)
+            {
+                return;
+            }
+
+            var templates = _applicationConfig.NotificationChannels?.Summer ?? new SummerNotificationTemplates();
+            var placeholders = BuildNotificationPlaceholders(
+                summary,
+                ResolveAdminActionLabel(actionCode),
+                string.IsNullOrWhiteSpace(comment) ? string.Empty : $"تعليق الإدارة: {comment.Trim()}",
+                null);
+
+            var smsTemplate = string.IsNullOrWhiteSpace(templates.AdminActionSmsTemplate)
+                ? "Dear {FirstName}, your summer request {RequestRef} was updated. Action: {ActionLabel}."
+                : templates.AdminActionSmsTemplate;
+
+            var signalRTemplate = string.IsNullOrWhiteSpace(templates.AdminActionSignalRTemplate)
+                ? "Your summer request {RequestRef} was updated by administration. Action: {ActionLabel}."
+                : templates.AdminActionSignalRTemplate;
+
+            var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+            var signalRMessage = _notificationService.RenderTemplate(signalRTemplate, placeholders);
+            var signalRTitle = string.IsNullOrWhiteSpace(templates.AdminActionSignalRTitle)
+                ? "Summer Requests Management"
+                : templates.AdminActionSignalRTitle;
+
+            await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
+        }
+
+        private async Task NotifyEmployeeOnAutoCancelAsync(
+            SummerRequestSummaryDto summary,
+            DateTime? paymentDueAtUtc,
+            bool includeSignalR = true)
+        {
+            if (summary == null)
+            {
+                return;
+            }
+
+            var templates = _applicationConfig.NotificationChannels?.Summer ?? new SummerNotificationTemplates();
+            var placeholders = BuildNotificationPlaceholders(summary, string.Empty, string.Empty, paymentDueAtUtc);
+
+            var smsTemplate = string.IsNullOrWhiteSpace(templates.AutoCancelSmsTemplate)
+                ? "Dear {FirstName}, your summer request {RequestRef} was auto-cancelled because payment was not completed before {PaymentDueAtUtc}."
+                : templates.AutoCancelSmsTemplate;
+
+            var signalRTemplate = string.IsNullOrWhiteSpace(templates.AutoCancelSignalRTemplate)
+                ? "Your summer request {RequestRef} was auto-cancelled due to payment timeout."
+                : templates.AutoCancelSignalRTemplate;
+
+            var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+            var signalRMessage = _notificationService.RenderTemplate(signalRTemplate, placeholders);
+            var signalRTitle = string.IsNullOrWhiteSpace(templates.AutoCancelSignalRTitle)
+                ? "Summer Request Auto Cancellation"
+                : templates.AutoCancelSignalRTitle;
+
+            await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
+        }
+
+        private async Task DispatchSummerNotificationsAsync(
+            SummerRequestSummaryDto summary,
+            string smsMessage,
+            string signalRMessage,
+            string signalRTitle,
+            bool includeSignalR)
+        {
+            var mobile = ResolvePreferredMobile(summary.EmployeePhone, summary.EmployeeExtraPhone);
+            if (!string.IsNullOrWhiteSpace(mobile) && !string.IsNullOrWhiteSpace(smsMessage))
+            {
+                await _notificationService.SendSmsAsync(new SmsDispatchRequest
+                {
+                    MobileNumber = mobile,
+                    Message = smsMessage,
+                    UserId = string.IsNullOrWhiteSpace(summary.EmployeeId) ? "SYSTEM" : summary.EmployeeId.Trim(),
+                    ReferenceNo = string.IsNullOrWhiteSpace(summary.RequestRef) ? $"SUMMER-{summary.MessageId}" : summary.RequestRef.Trim()
+                });
+            }
+
+            if (!includeSignalR || string.IsNullOrWhiteSpace(summary.EmployeeId) || string.IsNullOrWhiteSpace(signalRMessage))
+            {
+                return;
+            }
+
+            await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
+            {
+                UserId = summary.EmployeeId.Trim(),
+                Notification = signalRMessage,
+                Title = signalRTitle,
+                Type = NotificationType.info,
+                Category = NotificationCategory.Business,
+                Sender = "Connect",
+                Time = DateTime.Now
+            });
+        }
+
+        private static IReadOnlyDictionary<string, string?> BuildNotificationPlaceholders(
+            SummerRequestSummaryDto summary,
+            string actionLabel,
+            string adminCommentLine,
+            DateTime? paymentDueAtUtc)
+        {
+            return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["FirstName"] = ResolveFirstName(summary.EmployeeName),
+                ["EmployeeName"] = summary.EmployeeName,
+                ["EmployeeId"] = summary.EmployeeId,
+                ["RequestRef"] = summary.RequestRef,
+                ["MessageId"] = summary.MessageId.ToString(),
+                ["CategoryName"] = summary.CategoryName,
+                ["CategoryId"] = summary.CategoryId.ToString(),
+                ["WaveCode"] = summary.WaveCode,
+                ["ActionLabel"] = actionLabel,
+                ["AdminCommentLine"] = adminCommentLine,
+                ["PaymentDueAtUtc"] = paymentDueAtUtc.HasValue ? $"{paymentDueAtUtc.Value:yyyy-MM-dd HH:mm} UTC" : string.Empty
+            };
+        }
+
+        private static string ResolveAdminActionLabel(string actionCode)
+        {
+            return actionCode switch
+            {
+                "FINAL_APPROVE" => "اعتماد نهائي",
+                "MANUAL_CANCEL" => "إلغاء إداري",
+                "COMMENT" => "تعليق إداري",
+                "APPROVE_TRANSFER" => "اعتماد التحويل",
+                _ => actionCode ?? string.Empty
+            };
+        }
+
+        private static string ResolvePreferredMobile(string? primary, string? secondary)
+        {
+            var first = (primary ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(first))
+            {
+                return first;
+            }
+
+            return (secondary ?? string.Empty).Trim();
+        }
+
+        private static string ResolveFirstName(string? fullName)
+        {
+            var normalized = (fullName ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return "عميلنا العزيز";
+            }
+
+            var parts = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length == 0 ? normalized : parts[0];
         }
 
         private async Task<bool> HasEmployeeUsedTransferInSeasonAsync(

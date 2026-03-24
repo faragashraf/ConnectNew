@@ -454,9 +454,15 @@ export class GenericFormsService {
 
         for (const errorKey in abstractControl.errors) {
           if (errorKey) {
+            const configuredMessage = String(messages_X?.find(f => f.key == errorKey)?.value ?? '').trim();
+            const resolvedMessage = configuredMessage || this.resolveFallbackValidationMessage(errorKey);
+            if (!resolvedMessage) {
+              continue;
+            }
+
             this.formErrors.map(m => {
               if (m.key == key) {
-                m.value += (m.value.length > 0 ? ' - ' : '') + messages_X?.find(f => f.key == errorKey)?.value
+                m.value += (m.value.length > 0 ? ' - ' : '') + resolvedMessage
               }
             })
           }
@@ -478,6 +484,25 @@ export class GenericFormsService {
 
   returnFormErrors(key: string) {
     return this.formErrors?.find(f => f.key == key)?.value
+  }
+
+  private resolveFallbackValidationMessage(errorKey: string): string {
+    switch (String(errorKey ?? '').trim().toLowerCase()) {
+      case 'required':
+        return '\u0647\u0630\u0627 \u0627\u0644\u062D\u0642\u0644 \u0645\u0637\u0644\u0648\u0628.';
+      case 'min':
+        return '\u0627\u0644\u0642\u064A\u0645\u0629 \u0623\u0642\u0644 \u0645\u0646 \u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649 \u0627\u0644\u0645\u0633\u0645\u0648\u062D.';
+      case 'max':
+        return '\u0627\u0644\u0642\u064A\u0645\u0629 \u0623\u0639\u0644\u0649 \u0645\u0646 \u0627\u0644\u062D\u062F \u0627\u0644\u0623\u0642\u0635\u0649 \u0627\u0644\u0645\u0633\u0645\u0648\u062D.';
+      case 'minlength':
+        return '\u0639\u062F\u062F \u0627\u0644\u0623\u062D\u0631\u0641 \u0623\u0642\u0644 \u0645\u0646 \u0627\u0644\u0645\u0637\u0644\u0648\u0628.';
+      case 'maxlength':
+        return '\u0639\u062F\u062F \u0627\u0644\u0623\u062D\u0631\u0641 \u0623\u0643\u0628\u0631 \u0645\u0646 \u0627\u0644\u0645\u0633\u0645\u0648\u062D.';
+      case 'pattern':
+        return '\u0627\u0644\u0642\u064A\u0645\u0629 \u063A\u064A\u0631 \u0645\u0637\u0627\u0628\u0642\u0629 \u0644\u0644\u0646\u0645\u0637 \u0627\u0644\u0645\u0637\u0644\u0648\u0628.';
+      default:
+        return '\u0642\u064A\u0645\u0629 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D\u0629.';
+    }
   }
 
   filedIsRequired(field: string): boolean {
@@ -726,7 +751,7 @@ export class GenericFormsService {
     }
   }
   setErrorsObjects(_mandData: CdmendDto | undefined, control: AbstractControl, index: number = -1, isNotRequired: boolean = false) {
-    const fieldLable = <string>_mandData?.cdMendLbl
+    const fieldLable = String(_mandData?.cdMendLbl ?? _mandData?.cdmendTxt ?? '').trim() || '\u0647\u0630\u0627 \u0627\u0644\u062D\u0642\u0644'
 
     const controlName = `${_mandData?.cdmendTxt}|${index}`
 
