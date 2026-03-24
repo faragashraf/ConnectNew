@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using System.Text.Json;
 using ENPO.Dto.HubSync;
 using Microsoft.AspNetCore.Http;
@@ -1687,7 +1687,7 @@ SELECT @result;
             var token = NormalizeSearchToken(actionCode);
             return token switch
             {
-                "finalapprove" or "approve" or "اعتمادنهائي" or "اعتماد" => "FINAL_APPROVE",
+                "finalapprove" or "approve" or "اعتمادنهائي" or "اعتماد" or "final_approve" => "FINAL_APPROVE",
                 "manualcancel" or "cancel" or "الغاءيدوي" or "الغاء" => "MANUAL_CANCEL",
                 "comment" or "reply" or "تعليق" or "رد" => "COMMENT",
                 "approvetransfer" or "transferapprove" or "اعتمادالتحويل" => "APPROVE_TRANSFER",
