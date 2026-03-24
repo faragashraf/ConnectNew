@@ -24,8 +24,8 @@
 
 .signalr-global-banner {
   position: sticky;
-  top: 0;
-  z-index: 1200;
+  top: var(--main-navbar-height, 74px);
+  z-index: 999;
   padding: 10px 14px;
   text-align: center;
   font-weight: 700;
