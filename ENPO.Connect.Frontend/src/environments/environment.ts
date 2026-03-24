@@ -27,7 +27,7 @@ export const environment = {
   PublicationsUrl: `http://10.10.31.52/publicationsApi`,
   // PublicationsUrl: `http://localhost:5269`,
   
-  // ConnectApiURL: `${MainDomain}/Applications/Connect_API`,
+  ConnectApiURL: `${MainDomain}/Applications/Connect_API`,
   LandTransportationApiURL: `${MainDomain}/Applications/Connect_API`,
   DomainAuthURL: `${MainDomain}/Applications/Domain_Authorization`,
   SSoURL: `${MainDomain}/Applications/SSO`,
@@ -36,7 +36,7 @@ export const environment = {
 
   // SignalRHubServer: `http://localhost:5005`,
   // LandTransportationApiURL: `http://localhost:8888`,
-  ConnectApiURL: `http://localhost:8888`,
+  // ConnectApiURL: `http://localhost:8888`,
   // DomainAuthURL:  "https://localhost:8998",
   // PowerBi: "http://localhost:8020",
   // PublicationsUrl: "http://localhost:5269",
