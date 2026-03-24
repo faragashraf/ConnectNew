@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, AfterViewInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, AfterViewInit, HostListener } from '@angular/core';
 import { WindowsNotificationService } from './shared/services/helper/windowsNotification.service';
 import { SpinnerService } from './shared/services/helper/spinner.service';
 import { animate, state, style, transition, trigger } from '@angular/animations';
@@ -215,6 +215,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
+    this.syncSignalRBannerOffset();
+    setTimeout(() => this.syncSignalRBannerOffset(), 0);
+
     this.lifetimeInterval = setInterval(() => {
       this.connectionLifetimeTooltip = this.signalRService.getConnectionLifetime();
       try {
@@ -246,7 +249,20 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.authService.setRamadanPreference(false);
   }
 
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.syncSignalRBannerOffset();
+  }
+
+  private syncSignalRBannerOffset(): void {
+    const nav = document.querySelector('.p-megamenu') as HTMLElement | null;
+    const navHeight = Math.max(Number(nav?.offsetHeight ?? 74), 60);
+    document.documentElement.style.setProperty('--main-navbar-height', `${navHeight}px`);
+  }
+
   private updateSignalRBannerState(state: string): void {
+    this.syncSignalRBannerOffset();
+
     const normalized = String(state ?? '').trim().toLowerCase();
     const isOnline = normalized === 'online' || normalized === 'connection started';
     const shouldTrack = this.authService.isAuthenticated && !this.authService.isOfflineAuthenticated;
