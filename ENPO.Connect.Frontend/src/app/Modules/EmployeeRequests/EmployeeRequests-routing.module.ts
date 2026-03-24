@@ -8,14 +8,6 @@ import { SummerRequestsAdminConsoleComponent } from './components/summer-request
 
 const routes: Routes = [
   {
-    path: 'edit/:id',
-    component: SummerRequestsWorkspaceComponent,
-    canActivate: [AuthNewGuardService], data: {
-      func: 'AllEnpoUsersFunc',
-      configRouteKey: 'EmployeeRequests/SummerRequests'
-    }
-  },
-  {
     path: 'SummerRequests',
     component: SummerRequestsWorkspaceComponent,
     canActivate: [AuthNewGuardService], data: {
@@ -38,24 +30,11 @@ const routes: Routes = [
       func: 'ConnectAdminFunc',
       configRouteKey: 'Admin/SummerRequestsManagement'
     }
-  },
-  {
-    path: 'Summer2026Management',
-    component: TotalReuestsParentComponent,
-    canActivate: [AuthNewGuardService], data: {
-      func: 'ViewSubjectFunc'
-    }
   }, {
     path: 'Chart',
     component: ModuleChartsComponent,
     canActivate: [AuthNewGuardService], data: {
       func: 'SubjectDashboardFunc'
-    }
-  }, {
-    path: 'MyRequests',
-    component: TotalReuestsParentComponent,
-    canActivate: [AuthNewGuardService], data: {
-      func: 'AllEnpoUsersFunc'
     }
   }
 ];
