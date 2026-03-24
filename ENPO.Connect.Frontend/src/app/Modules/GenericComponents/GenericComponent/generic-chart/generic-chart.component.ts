@@ -552,7 +552,7 @@ export class GenericChartComponent implements OnInit, OnChanges {
     private normalizeKey(key: string): string {
         if (!key) return '';
         // Remove all whitespace (\s), zero-width spaces, ltr/rtl marks, control chars
-        return key.toString().replace(/[\s\u200B-\u200D\uFEFF\u061C\u200E\u200F]/g, '');
+        return key.toString().replace(/[\s​-‍﻿؜‎‏]/g, '');
     }
 
     private resolveAxisId(rawSeriesName: string, map: any, strict: boolean = false): string | null {

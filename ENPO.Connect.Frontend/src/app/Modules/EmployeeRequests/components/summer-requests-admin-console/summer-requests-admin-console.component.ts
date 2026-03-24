@@ -980,7 +980,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return false;
     }
 
-    return /[\u0600-\u06FF]/.test(text);
+    return /[؀-ۿ]/.test(text);
   }
 
   trackByDestinationChip(_index: number, item: { categoryId: number }): number {
@@ -1110,7 +1110,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       .replace(/[أإآ]/g, 'ا')
       .replace(/ى/g, 'ي')
       .replace(/[\s\-]+/g, '')
-      .replace(/[^a-z0-9_\u0600-\u06FF]/g, '');
+      .replace(/[^a-z0-9_؀-ۿ]/g, '');
   }
 
   private bindFilterDependencies(): void {

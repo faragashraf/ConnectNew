@@ -1,4 +1,5 @@
-using System.Data;
+﻿using System.Data;
+using System.Text;
 using System.Text.Json;
 using ENPO.Dto.HubSync;
 using Microsoft.AspNetCore.Http;
@@ -1687,7 +1688,8 @@ SELECT @result;
 
         private async Task AddReplyWithAttachmentsAsync(int messageId, string message, string userId, string ip, List<IFormFile>? files)
         {
-            var reply = _helperService.CreateReply(messageId, message, userId, userId, ip);
+            var normalizedMessage = NormalizePotentialMojibake(message);
+            var reply = _helperService.CreateReply(messageId, normalizedMessage, userId, userId, ip);
             await _connectContext.Replies.AddAsync(reply);
 
             if (files != null && files.Any())
@@ -1924,6 +1926,7 @@ SELECT @result;
 
         private void UpsertField(List<TkmendField> fields, int messageId, string kind, string value)
         {
+            var normalizedValue = NormalizePotentialMojibake(value);
             var existing = fields.FirstOrDefault(f => string.Equals(f.FildKind, kind, StringComparison.OrdinalIgnoreCase));
             if (existing == null)
             {
@@ -1931,7 +1934,7 @@ SELECT @result;
                 {
                     FildRelted = messageId,
                     FildKind = kind,
-                    FildTxt = value,
+                    FildTxt = normalizedValue,
                     InstanceGroupId = 1
                 };
                 fields.Add(field);
@@ -1939,8 +1942,65 @@ SELECT @result;
             }
             else
             {
-                existing.FildTxt = value;
+                existing.FildTxt = normalizedValue;
             }
+        }
+
+        private static string NormalizePotentialMojibake(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return value?.Trim() ?? string.Empty;
+            }
+
+            var text = value.Trim();
+            if (!LooksLikeMojibake(text))
+            {
+                return text;
+            }
+
+            try
+            {
+                var latin1 = Encoding.GetEncoding("ISO-8859-1");
+                var bytes = latin1.GetBytes(text);
+                var decoded = Encoding.UTF8.GetString(bytes).Trim();
+                if (ContainsArabicLetters(decoded) && !LooksLikeMojibake(decoded))
+                {
+                    return decoded;
+                }
+            }
+            catch
+            {
+                // keep original text when conversion fails
+            }
+
+            return text;
+        }
+
+        private static bool LooksLikeMojibake(string text)
+        {
+            return text.IndexOf('Ø') >= 0
+                || text.IndexOf('Ù') >= 0
+                || text.IndexOf('Ã') >= 0
+                || text.IndexOf('Ð') >= 0
+                || text.IndexOf('�') >= 0;
+        }
+
+        private static bool ContainsArabicLetters(string text)
+        {
+            foreach (var ch in text)
+            {
+                if ((ch >= '؀' && ch <= 'ۿ')
+                    || (ch >= 'ݐ' && ch <= 'ݿ')
+                    || (ch >= 'ࢠ' && ch <= 'ࣿ')
+                    || (ch >= 'ﭐ' && ch <= '﷿')
+                    || (ch >= 'ﹰ' && ch <= '﻿'))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool ValidateAllowedAttachmentExtensions<T>(List<IFormFile>? files, CommonResponse<T> response)

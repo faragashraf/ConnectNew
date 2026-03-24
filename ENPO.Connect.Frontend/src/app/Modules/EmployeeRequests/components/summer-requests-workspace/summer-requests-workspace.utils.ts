@@ -1,4 +1,4 @@
-export const SUMMER_ALLOWED_ATTACHMENT_EXTENSIONS = new Set([
+﻿export const SUMMER_ALLOWED_ATTACHMENT_EXTENSIONS = new Set([
   '.pdf',
   '.jpg',
   '.jpeg',
@@ -110,7 +110,7 @@ export function normalizeFieldToken(value: string): string {
   return String(value ?? '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+    .replace(/[^a-z0-9؀-ۿ]/g, '');
 }
 
 export function getFieldValueByKeys(
@@ -170,7 +170,7 @@ function normalizeLookupValue(value: string): string {
 }
 
 function countArabicChars(value: string): number {
-  return (String(value ?? '').match(/[\u0600-\u06FF]/g) ?? []).length;
+  return (String(value ?? '').match(/[؀-ۿ]/g) ?? []).length;
 }
 
 function countCorruptionChars(value: string): number {
@@ -716,7 +716,15 @@ function isCompanionNameToken(normalizedKey: string): boolean {
 }
 
 function isCompanionRelationToken(normalizedKey: string): boolean {
+  if (normalizedKey.includes('relationother')) {
+    return false;
+  }
   return normalizedKey.includes('relation')
+    && (normalizedKey.includes('family') || normalizedKey.includes('companion'));
+}
+
+function isCompanionRelationOtherToken(normalizedKey: string): boolean {
+  return normalizedKey.includes('relationother')
     && (normalizedKey.includes('family') || normalizedKey.includes('companion'));
 }
 
@@ -734,14 +742,26 @@ export function isCompanionFieldKey(fieldKey: string): boolean {
   const normalized = normalizeFieldToken(fieldKey);
   return isCompanionNameToken(normalized)
     || isCompanionRelationToken(normalized)
+    || isCompanionRelationOtherToken(normalized)
     || isCompanionNationalIdToken(normalized)
     || isCompanionAgeToken(normalized);
+}
+
+function isOtherRelationDisplayValue(value: string): boolean {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآ]/g, 'ا');
+
+  return normalized === 'اخرى'
+    || normalized === 'اخري'
+    || normalized === 'other';
 }
 
 export function buildSummerRequestCompanions(
   fields: SummerFieldSource[] | undefined
 ): Array<{ index: number; name: string; relation: string; nationalId: string; age: string }> {
-  const grouped = new Map<number, { groupId: number; name: string; relation: string; nationalId: string; age: string }>();
+  const grouped = new Map<number, { groupId: number; name: string; relation: string; relationOther: string; nationalId: string; age: string }>();
 
   (fields ?? []).forEach((field, index) => {
     const fieldKey = String(field.fildKind ?? '').trim();
@@ -759,6 +779,7 @@ export function buildSummerRequestCompanions(
         groupId,
         name: '',
         relation: '',
+        relationOther: '',
         nationalId: '',
         age: ''
       });
@@ -777,6 +798,10 @@ export function buildSummerRequestCompanions(
       row.relation = formattedValue;
       return;
     }
+    if (isCompanionRelationOtherToken(normalizedFieldKey)) {
+      row.relationOther = formattedValue;
+      return;
+    }
     if (isCompanionNationalIdToken(normalizedFieldKey)) {
       row.nationalId = formattedValue;
       return;
@@ -789,9 +814,13 @@ export function buildSummerRequestCompanions(
   return [...grouped.values()]
     .sort((a, b) => a.groupId - b.groupId)
     .map((row, index) => ({
+      relation: toDisplayOrDash(
+        isOtherRelationDisplayValue(row.relation) && String(row.relationOther ?? '').trim().length > 0
+          ? row.relationOther
+          : row.relation
+      ),
       index: index + 1,
       name: toDisplayOrDash(row.name),
-      relation: toDisplayOrDash(row.relation),
       nationalId: toDisplayOrDash(row.nationalId),
       age: toDisplayOrDash(row.age)
     }))
@@ -1023,12 +1052,12 @@ export function isCorruptedText(value: string): boolean {
     return false;
   }
 
-  const questionMarks = (text.match(/[\?\u061F]/g) ?? []).length;
+  const questionMarks = (text.match(/[\?؟]/g) ?? []).length;
   if (questionMarks > 0 && questionMarks >= Math.ceil(text.length * 0.35)) {
     return true;
   }
 
-  const nonQuestionText = text.replace(/[\?\u061F\s]/g, '');
+  const nonQuestionText = text.replace(/[\?؟\s]/g, '');
   if (!nonQuestionText.length) {
     return true;
   }

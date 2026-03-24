@@ -9,8 +9,8 @@ const excludedRelativePaths = new Set([
 ]);
 
 const suspiciousQuestionMarks = /\?{4,}/;
-const suspiciousReplacement = /\uFFFD/;
-const suspiciousMojibakeToken = /(\u00D8.|\u00D9.|\u00C3.|\u00D0.|\u00EF\u00BF\u00BD)/g;
+const suspiciousReplacement = /�/;
+const suspiciousMojibakeToken = /(Ø.|Ù.|Ã.|Ð.|�)/g;
 
 function walkFiles(dir, files = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });

@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+﻿import { Injectable } from '@angular/core';
 import { AbstractControl, FormArray, FormGroup, Validators } from '@angular/forms';
 import { CdCategoryMandDto, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { ComponentConfig, defaultModel, userConfigFromLocalStorage } from 'src/app/shared/models/Component.Config.model';
@@ -20,6 +20,7 @@ export type SummerFieldAliasMap = {
   notes: string[];
   companionName: string[];
   companionRelation: string[];
+  companionRelationOther: string[];
   companionNationalId: string[];
   companionAge: string[];
   seasonYear: string[];
@@ -29,6 +30,12 @@ export type SummerFieldAliasMap = {
 
 @Injectable()
 export class SummerDynamicFormEngineService {
+  private readonly otherRelationTokens = new Set<string>([
+    'أخرى',
+    'اخرى',
+    'اخري',
+    'OTHER'
+  ]);
   private readonly childRelationTokens = new Set<string>(['ابن', 'ابنة', 'SON', 'DAUGHTER']);
 
   aliases: SummerFieldAliasMap = {
@@ -44,10 +51,11 @@ export class SummerDynamicFormEngineService {
     ownerPhone: ['PhoneNumber', 'Phone', 'MobileNumber', 'Mobile', 'PhoneWhats'],
     ownerExtraPhone: ['ExtraPhoneNumber', 'SecondaryPhone', 'AlternatePhone'],
     notes: ['Description', 'Notes'],
-    companionName: ['FamilyMember_Name'],
-    companionRelation: ['FamilyRelation'],
-    companionNationalId: ['FamilyMember_NationalId'],
-    companionAge: ['FamilyMember_Age'],
+    companionName: ['SUM2026_CompanionName', 'FamilyMember_Name', 'CompanionName'],
+    companionRelation: ['SUM2026_CompanionRelation', 'FamilyRelation', 'CompanionRelation'],
+    companionRelationOther: ['SUM2026_CompanionRelationOther', 'FamilyRelationOther', 'CompanionRelationOther'],
+    companionNationalId: ['SUM2026_CompanionNationalId', 'FamilyMember_NationalId', 'CompanionNationalId'],
+    companionAge: ['SUM2026_CompanionAge', 'FamilyMember_Age', 'CompanionAge'],
     seasonYear: ['SummerSeasonYear'],
     destinationId: ['SummerDestinationId'],
     destinationName: ['SummerDestinationName']
@@ -269,8 +277,38 @@ export class SummerDynamicFormEngineService {
     ageControl.updateValueAndValidity({ emitEvent: false });
   }
 
+  ensureRelationOtherRule(form: FormGroup, genericFormService: GenericFormsService, relationControlName: string): void {
+    const relationContext = this.resolveControlByName(form, relationControlName);
+    if (!relationContext) {
+      return;
+    }
+
+    const requiresRelationText = this.isOtherRelation(relationContext.control.value);
+    let relationOtherControl = this.resolveCompanionControl(relationContext.formArray, this.aliases.companionRelationOther);
+    relationOtherControl ??= this.resolveControl(form, genericFormService, this.aliases.companionRelationOther);
+
+    if (!relationOtherControl) {
+      return;
+    }
+
+    if (requiresRelationText) {
+      relationOtherControl.enable({ emitEvent: false });
+      relationOtherControl.setValidators([Validators.required]);
+    } else {
+      relationOtherControl.setValue('', { emitEvent: false });
+      relationOtherControl.clearValidators();
+      relationOtherControl.disable({ emitEvent: false });
+    }
+
+    relationOtherControl.updateValueAndValidity({ emitEvent: false });
+  }
+
   isChildRelation(value: unknown): boolean {
     return this.childRelationTokens.has(this.normalizeRelationValue(value));
+  }
+
+  isOtherRelation(value: unknown): boolean {
+    return this.otherRelationTokens.has(this.normalizeRelationValue(value));
   }
 
   collectRequestFields(form: FormGroup, genericFormService: GenericFormsService, groups: GroupInfo[], categoryId: number, applicationId: string): TkmendField[] {
@@ -361,11 +399,16 @@ export class SummerDynamicFormEngineService {
     return null;
   }
   private resolveCompanionAgeControl(formArray: FormArray): AbstractControl | null {
+    return this.resolveCompanionControl(formArray, this.aliases.companionAge);
+  }
+
+  private resolveCompanionControl(formArray: FormArray, aliases: readonly string[]): AbstractControl | null {
+    const normalizedAliases = aliases.map(alias => String(alias ?? '').trim().toLowerCase());
     for (const rowControl of formArray.controls) {
       const row = rowControl as FormGroup;
       const controlName = Object.keys(row.controls)[0];
       const base = this.parseControlName(controlName).base.toLowerCase();
-      if (this.aliases.companionAge.some(alias => alias.toLowerCase() === base)) {
+      if (normalizedAliases.some(alias => alias === base)) {
         return row.get(controlName);
       }
     }

@@ -1,4 +1,4 @@
-import { Injectable, SkipSelf } from '@angular/core';
+﻿import { Injectable, SkipSelf } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
 import { forkJoin, of, Observable } from 'rxjs';
@@ -489,19 +489,19 @@ export class GenericFormsService {
   private resolveFallbackValidationMessage(errorKey: string): string {
     switch (String(errorKey ?? '').trim().toLowerCase()) {
       case 'required':
-        return '\u0647\u0630\u0627 \u0627\u0644\u062D\u0642\u0644 \u0645\u0637\u0644\u0648\u0628.';
+        return 'هذا الحقل مطلوب.';
       case 'min':
-        return '\u0627\u0644\u0642\u064A\u0645\u0629 \u0623\u0642\u0644 \u0645\u0646 \u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649 \u0627\u0644\u0645\u0633\u0645\u0648\u062D.';
+        return 'القيمة أقل من الحد الأدنى المسموح.';
       case 'max':
-        return '\u0627\u0644\u0642\u064A\u0645\u0629 \u0623\u0639\u0644\u0649 \u0645\u0646 \u0627\u0644\u062D\u062F \u0627\u0644\u0623\u0642\u0635\u0649 \u0627\u0644\u0645\u0633\u0645\u0648\u062D.';
+        return 'القيمة أعلى من الحد الأقصى المسموح.';
       case 'minlength':
-        return '\u0639\u062F\u062F \u0627\u0644\u0623\u062D\u0631\u0641 \u0623\u0642\u0644 \u0645\u0646 \u0627\u0644\u0645\u0637\u0644\u0648\u0628.';
+        return 'عدد الأحرف أقل من المطلوب.';
       case 'maxlength':
-        return '\u0639\u062F\u062F \u0627\u0644\u0623\u062D\u0631\u0641 \u0623\u0643\u0628\u0631 \u0645\u0646 \u0627\u0644\u0645\u0633\u0645\u0648\u062D.';
+        return 'عدد الأحرف أكبر من المسموح.';
       case 'pattern':
-        return '\u0627\u0644\u0642\u064A\u0645\u0629 \u063A\u064A\u0631 \u0645\u0637\u0627\u0628\u0642\u0629 \u0644\u0644\u0646\u0645\u0637 \u0627\u0644\u0645\u0637\u0644\u0648\u0628.';
+        return 'القيمة غير مطابقة للنمط المطلوب.';
       default:
-        return '\u0642\u064A\u0645\u0629 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D\u0629.';
+        return 'قيمة غير صالحة.';
     }
   }
 
@@ -751,7 +751,7 @@ export class GenericFormsService {
     }
   }
   setErrorsObjects(_mandData: CdmendDto | undefined, control: AbstractControl, index: number = -1, isNotRequired: boolean = false) {
-    const fieldLable = String(_mandData?.cdMendLbl ?? _mandData?.cdmendTxt ?? '').trim() || '\u0647\u0630\u0627 \u0627\u0644\u062D\u0642\u0644'
+    const fieldLable = String(_mandData?.cdMendLbl ?? _mandData?.cdmendTxt ?? '').trim() || 'هذا الحقل'
 
     const controlName = `${_mandData?.cdmendTxt}|${index}`
 

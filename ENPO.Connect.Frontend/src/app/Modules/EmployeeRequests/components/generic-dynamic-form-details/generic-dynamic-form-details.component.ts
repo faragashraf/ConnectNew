@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges } from '@angular/core';
+﻿import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, ValidationErrors } from '@angular/forms';
 import { Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 import { GenericFormsService, GroupInfo } from 'src/app/Modules/GenericComponents/GenericForms.service';
@@ -28,6 +28,8 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
   @Output() fileUploadEvent = new EventEmitter<FileParameter[]>();
 
   ticketForm: FormGroup = this.fb.group({});
+  private readonly companionRelationFieldNames = ['SUM2026_CompanionRelation', 'FamilyRelation', 'CompanionRelation'];
+  private readonly companionRelationOtherFieldNames = ['SUM2026_CompanionRelationOther', 'FamilyRelationOther', 'CompanionRelationOther'];
 
   private formChangesSub: Subscription | null = null;
 
@@ -102,6 +104,14 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
     this.ticketForm.markAllAsTouched();
     this.genericFormService.logValidationErrors(this.ticketForm);
     this.submitFormChange.emit(this.ticketForm);
+  }
+
+  shouldRenderControl(controlFullName: string, formArrayName: string): boolean {
+    if (!this.isCompanionRelationOtherField(controlFullName)) {
+      return true;
+    }
+
+    return this.isOtherRelationSelected(formArrayName);
   }
 
   getFormArrayControls(formArrayName: string): AbstractControl[] {
@@ -400,6 +410,65 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
     }
 
     control.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private isCompanionRelationOtherField(controlFullName: string): boolean {
+    const baseName = this.extractBaseFieldName(controlFullName);
+    return this.companionRelationOtherFieldNames
+      .some(fieldName => this.normalizeFieldName(fieldName) === baseName);
+  }
+
+  private isOtherRelationSelected(formArrayName: string): boolean {
+    const formArray = this.getFormArrayInstance(formArrayName);
+    if (!formArray) {
+      return false;
+    }
+
+    for (const rowControl of formArray.controls) {
+      const row = rowControl as FormGroup;
+      const controlName = Object.keys(row.controls)[0];
+      if (!controlName) {
+        continue;
+      }
+
+      const baseName = this.extractBaseFieldName(controlName);
+      const isRelationField = this.companionRelationFieldNames
+        .some(fieldName => this.normalizeFieldName(fieldName) === baseName);
+
+      if (!isRelationField) {
+        continue;
+      }
+
+      const value = row.get(controlName)?.value;
+      if (this.isOtherRelationValue(value)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private isOtherRelationValue(value: unknown): boolean {
+    const normalized = String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[أإآ]/g, 'ا');
+
+    return normalized === 'اخرى'
+      || normalized === 'اخري'
+      || normalized === 'other';
+  }
+
+  private extractBaseFieldName(controlFullName: string): string {
+    const baseName = String(controlFullName ?? '').split('|')[0];
+    return this.normalizeFieldName(baseName);
+  }
+
+  private normalizeFieldName(value: string): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
   }
 
   private resolveCreatedBy(): string {

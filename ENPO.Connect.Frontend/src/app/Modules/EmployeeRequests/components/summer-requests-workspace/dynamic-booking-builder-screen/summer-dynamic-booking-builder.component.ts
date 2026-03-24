@@ -242,6 +242,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
     if (this.matchesAlias(baseName, this.engine.aliases.companionRelation)) {
       this.engine.ensureAgeRule(this.ticketForm, this.genericFormService, controlFullName);
+      this.engine.ensureRelationOtherRule(this.ticketForm, this.genericFormService, controlFullName);
       return;
     }
 
@@ -632,6 +633,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         const base = this.engine.parseControlName(controlName).base.toLowerCase();
         if (this.matchesAlias(base, this.engine.aliases.companionRelation)) {
           this.engine.ensureAgeRule(this.ticketForm, this.genericFormService, controlName);
+          this.engine.ensureRelationOtherRule(this.ticketForm, this.genericFormService, controlName);
         }
       }
     }
@@ -771,6 +773,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         }
 
         let relation = '';
+        let relationOther = '';
         let age = '';
         formArray.controls.forEach(control => {
           const row = control as FormGroup;
@@ -780,10 +783,17 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
           if (this.matchesAlias(base, this.engine.aliases.companionRelation)) {
             relation = value;
           }
+          if (this.matchesAlias(base, this.engine.aliases.companionRelationOther)) {
+            relationOther = value;
+          }
           if (this.matchesAlias(base, this.engine.aliases.companionAge)) {
             age = value;
           }
         });
+
+        if (this.engine.isOtherRelation(relation) && relationOther.length === 0) {
+          alerts.push(`يرجى إدخال اسم القرابة للمرافق رقم ${index + 1} عند اختيار درجة القرابة "أخرى".`);
+        }
 
         if (this.engine.isChildRelation(relation) && age.length === 0) {
           alerts.push(`سن المرافق رقم ${index + 1} مطلوب عند اختيار درجة القرابة ابن/ابنة.`);
