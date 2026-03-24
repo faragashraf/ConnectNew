@@ -40,7 +40,7 @@
 
   <section class="capacity-overview" *ngIf="selectedDestination">
     <h4>الإتاحة اللحظية للفوج المختار</h4>
-    <small *ngIf="bookingCapacityLoading">جاري تحديث الإتاحة...</small>
+    <small class="loading-note" *ngIf="bookingCapacityLoading">جاري تحديث الإتاحة...</small>
     <div class="capacity-grid" *ngIf="bookingCapacitySummary.length > 0">
       <article class="capacity-card" *ngFor="let row of bookingCapacitySummary">
         <span>سعة {{ row.familyCount }}</span>
@@ -53,8 +53,18 @@
     </p>
   </section>
 
-  <div class="loading" *ngIf="loadingMetadata">جاري تحميل بيانات التعريف الديناميكية...</div>
-  <div class="loading" *ngIf="loadingEditRequest">جاري تحميل بيانات الطلب للتعديل...</div>
+  <ng-container *ngIf="loadingMetadata || loadingEditRequest">
+    <div class="loading loading-note">
+      {{ loadingMetadata ? 'جاري تحميل بيانات التعريف الديناميكية...' : 'جاري تحميل بيانات الطلب للتعديل...' }}
+    </div>
+    <app-summer-skeleton
+      [variant]="'form'"
+      [columns]="2"
+      [rows]="6"
+      [showTitle]="false"
+      [ariaLabel]="'جاري تحميل بيانات النموذج الديناميكي'">
+    </app-summer-skeleton>
+  </ng-container>
 
   <app-generic-dynamic-form-details
     *ngIf="!loadingEditRequest && selectedDestination && customFilteredCategoryMand.length > 0"

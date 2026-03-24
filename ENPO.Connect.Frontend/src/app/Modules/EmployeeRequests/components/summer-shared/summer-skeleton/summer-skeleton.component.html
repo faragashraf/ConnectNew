@@ -1,0 +1,96 @@
+<section class="summer-skeleton" [attr.aria-label]="ariaLabel" role="status" aria-live="polite">
+  <ng-container [ngSwitch]="variant">
+    <ng-container *ngSwitchCase="'details'">
+      <div class="sk-bar sk-title" *ngIf="showTitle"></div>
+
+      <div class="sk-grid" [ngStyle]="{ '--sk-cols': columns }">
+        <article class="sk-card" *ngFor="let _ of toRange(cards); trackBy: trackByIndex">
+          <div class="sk-bar sk-label"></div>
+          <div class="sk-bar sk-value"></div>
+        </article>
+      </div>
+
+      <div class="sk-section">
+        <div class="sk-bar sk-section-title"></div>
+        <div class="sk-grid" [ngStyle]="{ '--sk-cols': columns }">
+          <article class="sk-card" *ngFor="let _ of toRange(columns); trackBy: trackByIndex">
+            <div class="sk-bar sk-label"></div>
+            <div class="sk-bar sk-value"></div>
+          </article>
+        </div>
+      </div>
+
+      <div class="sk-section">
+        <div class="sk-bar sk-section-title"></div>
+        <div class="sk-table-head" [ngStyle]="{ '--sk-cols': columns }">
+          <div class="sk-bar sk-th" *ngFor="let _ of toRange(columns); trackBy: trackByIndex"></div>
+        </div>
+        <div class="sk-table-row" [ngStyle]="{ '--sk-cols': columns }" *ngFor="let _ of toRange(rows); trackBy: trackByIndex">
+          <div class="sk-bar sk-td" *ngFor="let __ of toRange(columns); trackBy: trackByIndex"></div>
+        </div>
+      </div>
+    </ng-container>
+
+    <ng-container *ngSwitchCase="'table'">
+      <div class="sk-table-head" [ngStyle]="{ '--sk-cols': columns }">
+        <div class="sk-bar sk-th" *ngFor="let _ of toRange(columns); trackBy: trackByIndex"></div>
+      </div>
+      <div class="sk-table-row" [ngStyle]="{ '--sk-cols': columns }" *ngFor="let _ of toRange(rows); trackBy: trackByIndex">
+        <div class="sk-bar sk-td" *ngFor="let __ of toRange(columns); trackBy: trackByIndex"></div>
+      </div>
+    </ng-container>
+
+    <ng-container *ngSwitchCase="'dashboard'">
+      <div class="sk-grid" [ngStyle]="{ '--sk-cols': columns }">
+        <article class="sk-metric" *ngFor="let _ of toRange(cards); trackBy: trackByIndex">
+          <div class="sk-bar sk-label"></div>
+          <div class="sk-bar sk-metric-value"></div>
+        </article>
+      </div>
+    </ng-container>
+
+    <ng-container *ngSwitchCase="'form'">
+      <div class="sk-bar sk-title" *ngIf="showTitle"></div>
+      <div class="sk-grid" [ngStyle]="{ '--sk-cols': columns }">
+        <article class="sk-card" *ngFor="let _ of toRange(rows); trackBy: trackByIndex">
+          <div class="sk-bar sk-label"></div>
+          <div class="sk-bar sk-input"></div>
+        </article>
+      </div>
+      <div class="sk-actions">
+        <div class="sk-bar sk-button"></div>
+        <div class="sk-bar sk-button ghost"></div>
+      </div>
+    </ng-container>
+
+    <ng-container *ngSwitchCase="'capacity'">
+      <div class="sk-grid" [ngStyle]="{ '--sk-cols': 3 }">
+        <article class="sk-metric" *ngFor="let _ of toRange(3); trackBy: trackByIndex">
+          <div class="sk-bar sk-label"></div>
+          <div class="sk-bar sk-metric-value"></div>
+        </article>
+      </div>
+      <div class="sk-table-head" [ngStyle]="{ '--sk-cols': 4 }">
+        <div class="sk-bar sk-th" *ngFor="let _ of toRange(4); trackBy: trackByIndex"></div>
+      </div>
+      <div class="sk-table-row" [ngStyle]="{ '--sk-cols': 4 }" *ngFor="let _ of toRange(rows); trackBy: trackByIndex">
+        <div class="sk-bar sk-td" *ngFor="let __ of toRange(4); trackBy: trackByIndex"></div>
+      </div>
+    </ng-container>
+
+    <ng-container *ngSwitchCase="'cards'">
+      <div class="sk-grid" [ngStyle]="{ '--sk-cols': columns }">
+        <article class="sk-card" *ngFor="let _ of toRange(cards); trackBy: trackByIndex">
+          <div class="sk-bar sk-card-title"></div>
+          <div class="sk-bar sk-card-line"></div>
+          <div class="sk-bar sk-card-line short"></div>
+        </article>
+      </div>
+    </ng-container>
+
+    <ng-container *ngSwitchDefault>
+      <div class="sk-bar sk-inline"></div>
+    </ng-container>
+  </ng-container>
+</section>
+

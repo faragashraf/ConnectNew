@@ -15,6 +15,7 @@ import { SummerAttachmentsListComponent } from './components/summer-shared/summe
 import { SummerUpdatesTimelineComponent } from './components/summer-shared/summer-updates-timeline/summer-updates-timeline.component';
 import { SummerRequestsListComponent } from './components/summer-shared/summer-requests-list/summer-requests-list.component';
 import { SummerRequestCompanionsTableComponent } from './components/summer-shared/summer-request-companions-table/summer-request-companions-table.component';
+import { SummerSkeletonComponent } from './components/summer-shared/summer-skeleton/summer-skeleton.component';
 
 
 @NgModule({
@@ -28,7 +29,8 @@ import { SummerRequestCompanionsTableComponent } from './components/summer-share
     SummerAttachmentsListComponent,
     SummerUpdatesTimelineComponent,
     SummerRequestsListComponent,
-    SummerRequestCompanionsTableComponent
+    SummerRequestCompanionsTableComponent,
+    SummerSkeletonComponent
   ],
   imports: [
     CommonModule,

@@ -14,8 +14,15 @@
 
   <section class="scope-panel" *ngIf="loadingDestinations">
     <div class="scope-row">
-      <small>جاري تحميل إعدادات المصايف...</small>
+      <small class="loading-note">جاري تحميل إعدادات المصايف...</small>
     </div>
+    <app-summer-skeleton
+      [variant]="'cards'"
+      [columns]="3"
+      [cards]="3"
+      [showTitle]="false"
+      [ariaLabel]="'جاري تحميل إعدادات المصايف'">
+    </app-summer-skeleton>
   </section>
 
   <section class="scope-panel" *ngIf="!loadingDestinations && destinationsError.length > 0">
@@ -105,8 +112,15 @@
   </section>
 
   <ng-template #dashboardLoading>
-    <section class="dashboard-grid">
-      <article class="metric-card"><span>جاري تحميل الإحصاءات...</span><strong>{{ loadingDashboard ? '...' : '-' }}</strong></article>
+    <section class="dashboard-loading-shell">
+      <small class="loading-note">جاري تحميل الإحصاءات...</small>
+      <app-summer-skeleton
+        [variant]="'dashboard'"
+        [columns]="4"
+        [cards]="8"
+        [showTitle]="false"
+        [ariaLabel]="'جاري تحميل الإحصاءات'">
+      </app-summer-skeleton>
     </section>
   </ng-template>
 
@@ -234,7 +248,14 @@
 
       <p class="capacity-error" *ngIf="capacityErrorText.length > 0">{{ capacityErrorText }}</p>
 
-      <div class="capacity-loading" *ngIf="loadingWaveCapacity">جاري تحميل بيان الإتاحة...</div>
+      <div class="capacity-loading loading-note" *ngIf="loadingWaveCapacity">جاري تحميل بيان الإتاحة...</div>
+      <app-summer-skeleton
+        *ngIf="loadingWaveCapacity"
+        [variant]="'capacity'"
+        [rows]="4"
+        [showTitle]="false"
+        [ariaLabel]="'جاري تحميل بيان الإتاحة'">
+      </app-summer-skeleton>
 
       <div class="capacity-table-wrap" *ngIf="!loadingWaveCapacity && capacityRows.length > 0">
         <table class="capacity-table">
@@ -298,36 +319,14 @@
           <small class="loading-note" *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
         </header>
 
-        <div class="details-skeleton" *ngIf="loadingDetails" aria-hidden="true">
-          <div class="skeleton-bar skeleton-title"></div>
-
-          <div class="skeleton-grid">
-            <div class="skeleton-card" *ngFor="let _ of [1,2,3,4,5,6,7,8]">
-              <div class="skeleton-bar skeleton-label"></div>
-              <div class="skeleton-bar skeleton-value"></div>
-            </div>
-          </div>
-
-          <div class="skeleton-owner">
-            <div class="skeleton-bar skeleton-section"></div>
-            <div class="skeleton-owner-grid">
-              <div class="skeleton-card" *ngFor="let _ of [1,2,3,4]">
-                <div class="skeleton-bar skeleton-label"></div>
-                <div class="skeleton-bar skeleton-value"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="skeleton-table">
-            <div class="skeleton-bar skeleton-section"></div>
-            <div class="skeleton-table-head">
-              <div class="skeleton-bar" *ngFor="let _ of [1,2,3,4]"></div>
-            </div>
-            <div class="skeleton-table-row" *ngFor="let _ of [1,2,3]">
-              <div class="skeleton-bar" *ngFor="let __ of [1,2,3,4]"></div>
-            </div>
-          </div>
-        </div>
+        <app-summer-skeleton
+          *ngIf="loadingDetails"
+          [variant]="'details'"
+          [columns]="4"
+          [cards]="8"
+          [rows]="3"
+          [ariaLabel]="'جاري تحميل تفاصيل الطلب المختار'">
+        </app-summer-skeleton>
 
         <ng-container *ngIf="!loadingDetails">
           <app-summer-request-fields-grid

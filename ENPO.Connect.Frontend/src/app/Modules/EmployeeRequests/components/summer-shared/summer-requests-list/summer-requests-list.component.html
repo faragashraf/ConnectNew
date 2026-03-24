@@ -1,5 +1,14 @@
 ﻿<section class="summer-requests-list">
-  <div class="table-wrap">
+  <app-summer-skeleton
+    *ngIf="loading"
+    [variant]="'table'"
+    [columns]="6"
+    [rows]="skeletonRowCount"
+    [showTitle]="false"
+    [ariaLabel]="'جاري تحميل قائمة الطلبات'">
+  </app-summer-skeleton>
+
+  <div class="table-wrap" *ngIf="!loading">
     <table class="requests-table" [class.admin-table]="isAdminVariant">
       <thead>
         <tr *ngIf="isAdminVariant">
@@ -70,7 +79,7 @@
           </ng-template>
         </tr>
 
-        <tr *ngIf="!loading && requests.length === 0">
+        <tr *ngIf="requests.length === 0">
           <td [attr.colspan]="6" class="empty">{{ emptyMessage }}</td>
         </tr>
       </tbody>
@@ -112,3 +121,4 @@
     </div>
   </div>
 </section>
+

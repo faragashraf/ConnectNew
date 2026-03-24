@@ -74,7 +74,15 @@
           </ng-container>
           <ng-template #destinationCatalogState>
             <div class="empty-state">
-              <h3 *ngIf="loadingDestinations">جاري تحميل إعدادات المصايف...</h3>
+              <h3 class="loading-note" *ngIf="loadingDestinations">جاري تحميل إعدادات المصايف...</h3>
+              <app-summer-skeleton
+                *ngIf="loadingDestinations"
+                [variant]="'cards'"
+                [columns]="3"
+                [cards]="6"
+                [showTitle]="false"
+                [ariaLabel]="'جاري تحميل إعدادات المصايف'">
+              </app-summer-skeleton>
               <h3 *ngIf="!loadingDestinations && destinationsError.length > 0">تعذر تحميل إعدادات المصايف</h3>
               <p *ngIf="!loadingDestinations && destinationsError.length > 0">{{ destinationsError }}</p>
             </div>
@@ -136,36 +144,14 @@
               </ng-container>
             </p>
 
-            <div class="details-skeleton" *ngIf="loadingSelectedRequestDetails" aria-hidden="true">
-              <div class="skeleton-bar skeleton-title"></div>
-
-              <div class="skeleton-grid">
-                <div class="skeleton-card" *ngFor="let _ of [1,2,3,4,5,6,7,8]">
-                  <div class="skeleton-bar skeleton-label"></div>
-                  <div class="skeleton-bar skeleton-value"></div>
-                </div>
-              </div>
-
-              <div class="skeleton-owner">
-                <div class="skeleton-bar skeleton-section"></div>
-                <div class="skeleton-owner-grid">
-                  <div class="skeleton-card" *ngFor="let _ of [1,2,3,4]">
-                    <div class="skeleton-bar skeleton-label"></div>
-                    <div class="skeleton-bar skeleton-value"></div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="skeleton-table">
-                <div class="skeleton-bar skeleton-section"></div>
-                <div class="skeleton-table-head">
-                  <div class="skeleton-bar" *ngFor="let _ of [1,2,3,4]"></div>
-                </div>
-                <div class="skeleton-table-row" *ngFor="let _ of [1,2,3]">
-                  <div class="skeleton-bar" *ngFor="let __ of [1,2,3,4]"></div>
-                </div>
-              </div>
-            </div>
+            <app-summer-skeleton
+              *ngIf="loadingSelectedRequestDetails"
+              [variant]="'details'"
+              [columns]="4"
+              [cards]="8"
+              [rows]="3"
+              [ariaLabel]="'جاري تحميل تفاصيل الطلب المختار'">
+            </app-summer-skeleton>
 
             <ng-container *ngIf="!loadingSelectedRequestDetails">
               <app-summer-request-fields-grid
