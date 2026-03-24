@@ -2524,7 +2524,7 @@
   {
     "showFormSignature": false,
     "submitButtonText": "تسجيل طلب المصيف",
-    "submissionLabel": "تسجيل ديناميكي",
+    "submissionLabel": "تسجيل الطلب",
     "showViewToggle": false,
     "formDisplayOption": "tabs",
     "requestsarray": [],
@@ -2568,7 +2568,7 @@
       }
     ],
     "routeKey": "admins/summer-requests/dynamic-booking",
-    "componentTitle": "إنشاء طلب مصيف ديناميكي",
+    "componentTitle": "إنشاء طلب مصيف",
     "genericFormName": "SUM2026DYN",
     "menuId": 0,
     "listRequestModel": {

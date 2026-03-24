@@ -27,7 +27,7 @@
     },
     {
       "id": "dynamic-fields-manager",
-      "label": { "en": "Dynamic Fields Manager", "ar": "مدير الحقول الديناميكية" },
+      "label": { "en": "Fields Manager", "ar": "مدير الحقول" },
       "file": { "en": "en/dynamic-fields-manager.md", "ar": "ar/dynamic-fields-manager.md" }
     },
     {

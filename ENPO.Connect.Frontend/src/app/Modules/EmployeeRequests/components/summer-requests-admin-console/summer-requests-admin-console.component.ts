@@ -170,13 +170,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         const errors = Array.isArray(response?.errors) ? response.errors : [];
         this.destinationsError = errors.length > 0
           ? errors.join('<br/>')
-          : 'تعذر تحميل إعدادات المصايف الديناميكية من CDMendTbl.';
+          : 'تعذر تحميل إعدادات المصايف من CDMendTbl.';
         this.loadDashboard();
         this.loadRequests();
       },
       error: () => {
         this.destinations = [];
-        this.destinationsError = 'تعذر تحميل إعدادات المصايف الديناميكية من الخدمة العامة.';
+        this.destinationsError = 'تعذر تحميل إعدادات المصايف من الخدمة العامة.';
         this.loadDashboard();
         this.loadRequests();
       },

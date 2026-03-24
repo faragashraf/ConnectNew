@@ -198,7 +198,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     if (!this.customFilteredCategoryMand.length) {
       this.msg.msgError(
         'بيانات غير مكتملة',
-        '<h5>لا توجد حقول ديناميكية مرتبطة بالمصيف المختار ضمن معرّف التطبيق الحالي (ApplicationID).</h5>',
+        '<h5>لا توجد حقول مرتبطة بالمصيف المختار ضمن معرّف التطبيق الحالي (ApplicationID).</h5>',
         true
       );
       return;
@@ -365,7 +365,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.submitting = true;
     this.spinner.show(this.isEditMode
       ? 'جاري حفظ تعديلات طلب المصيف ...'
-      : 'جاري تسجيل طلب المصيف الديناميكي ...');
+      : 'جاري تسجيل طلب المصيف ...');
     this.dynamicFormController.createRequest(
       this.isEditMode ? currentMessageId : 0,
       requestRef,
@@ -385,7 +385,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
           const savedMessageId = Number(response?.data?.messageId ?? currentMessageId);
           this.msg.msgSuccess(this.isEditMode
             ? 'تم حفظ تعديلات الطلب بنجاح'
-            : 'تم تسجيل الطلب الديناميكي بنجاح');
+            : 'تم تسجيل الطلب بنجاح');
           this.bookingValidationAlerts = [];
           this.fileParameters = [];
           this.hasEditChanges = false;
@@ -445,14 +445,14 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       next: success => {
         this.metadataLoaded = !!success && this.hasSummerMetadata();
         if (!this.metadataLoaded) {
-          this.metadataError = 'تعذر تحميل الحقول الديناميكية للمصايف. راجع معرّف التطبيق (ApplicationID) وربط الحقول.';
+          this.metadataError = 'تعذر تحميل حقول طلبات المصايف. راجع معرّف التطبيق (ApplicationID) وربط الحقول.';
         } else {
           this.tryLoadEditRequest();
         }
       },
       error: () => {
         this.metadataLoaded = false;
-        this.metadataError = 'تعذر تحميل الحقول الديناميكية للمصايف. راجع معرّف التطبيق (ApplicationID) وربط الحقول.';
+        this.metadataError = 'تعذر تحميل حقول طلبات المصايف. راجع معرّف التطبيق (ApplicationID) وربط الحقول.';
       }
     });
   }

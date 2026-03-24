@@ -1,13 +1,9 @@
 ﻿<section class="dynamic-booking-shell" dir="rtl">
   <div class="dynamic-head">
     <div class="head-content">
-      <h3>{{ isEditMode ? ('تعديل طلب المصيف #' + editRequestId) : 'إنشاء طلب جديد (ديناميكي)' }}</h3>
-      <p *ngIf="!isEditMode">المكوّن مبني على بيانات تعريف من الجداول الديناميكية مع الحفاظ على قواعد المصايف.</p>
+      <h3>{{ isEditMode ? ('تعديل طلب المصيف #' + editRequestId) : 'إنشاء طلب جديد' }}</h3>
+      <p *ngIf="!isEditMode">النموذج يعتمد على بيانات التعريف مع الحفاظ على قواعد المصايف.</p>
       <p *ngIf="isEditMode">يتم تحميل بيانات الطلب الحالي لتعديلها ثم حفظ التغييرات.</p>
-    </div>
-    <div class="app-id-pill">
-      <span>معرّف التطبيق</span>
-      <strong>{{ resolvedApplicationId }}</strong>
     </div>
   </div>
 
@@ -55,14 +51,14 @@
 
   <ng-container *ngIf="loadingMetadata || loadingEditRequest">
     <div class="loading loading-note">
-      {{ loadingMetadata ? 'جاري تحميل بيانات التعريف الديناميكية...' : 'جاري تحميل بيانات الطلب للتعديل...' }}
+      {{ loadingMetadata ? 'جاري تحميل بيانات التعريف...' : 'جاري تحميل بيانات الطلب للتعديل...' }}
     </div>
     <app-summer-skeleton
       [variant]="'form'"
       [columns]="2"
       [rows]="6"
       [showTitle]="false"
-      [ariaLabel]="'جاري تحميل بيانات النموذج الديناميكي'">
+      [ariaLabel]="'جاري تحميل بيانات النموذج'">
     </app-summer-skeleton>
   </ng-container>
 
@@ -82,6 +78,6 @@
   </app-generic-dynamic-form-details>
 
   <div class="empty-state" *ngIf="!loadingMetadata && !loadingEditRequest && selectedDestination && customFilteredCategoryMand.length === 0">
-    لا توجد حقول ديناميكية مرتبطة بالمصيف المختار ضمن معرّف التطبيق الحالي.
+    لا توجد حقول مرتبطة بالمصيف المختار ضمن معرّف التطبيق الحالي.
   </div>
 </section>

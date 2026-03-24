@@ -56,7 +56,7 @@ export class SummerDynamicFormEngineService {
   createFormConfig(): ComponentConfig {
     return new ComponentConfig({
       routeKey: 'admins/summer-requests/dynamic-booking',
-      componentTitle: 'إنشاء طلب مصيف ديناميكي',
+      componentTitle: 'إنشاء طلب مصيف',
       showViewToggle: false,
       formDisplayOption: 'fullscreen',
       isNew: true,
@@ -67,7 +67,7 @@ export class SummerDynamicFormEngineService {
       listRequestModel: { ...defaultModel },
       userConfiguration: { ...userConfigFromLocalStorage },
       submitButtonText: 'تسجيل طلب المصيف',
-      submissionLabel: 'تسجيل ديناميكي',
+      submissionLabel: 'تسجيل الطلب',
       fieldsConfiguration: {
         isDivDisabled: false,
         dateFormat: 'yy/mm/dd',
