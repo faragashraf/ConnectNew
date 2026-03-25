@@ -16,6 +16,9 @@ public class SummerRequestSummaryDto
     public string EmployeeExtraPhone { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string StatusLabel { get; set; } = string.Empty;
+    public string WorkflowStateCode { get; set; } = string.Empty;
+    public string WorkflowStateLabel { get; set; } = string.Empty;
+    public bool NeedsTransferReview { get; set; }
     public DateTime? CreatedAt { get; set; }
     public DateTime? PaymentDueAtUtc { get; set; }
     public DateTime? PaidAtUtc { get; set; }

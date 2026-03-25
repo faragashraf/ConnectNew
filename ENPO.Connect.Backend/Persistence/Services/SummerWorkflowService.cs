@@ -32,6 +32,8 @@ namespace Persistence.Services
         private const int CapacityLockTimeoutMs = 15000;
         private const string SummerDynamicApplicationId = "SUM2026DYN";
         private const string SummerDestinationCatalogMend = "SUM2026_DestinationCatalog";
+        private const string TransferReviewRequiredCode = "TRANSFER_REVIEW_REQUIRED";
+        private const string TransferReviewResolvedCode = "TRANSFER_REVIEW_RESOLVED";
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -121,6 +123,13 @@ namespace Persistence.Services
                         continue;
                     }
 
+                    var workflowStateCode = GetFieldValue(messageFields, "Summer_WorkflowState") ?? string.Empty;
+                    var workflowStateLabel = ResolveWorkflowStateLabel(workflowStateCode);
+                    var needsTransferReview = string.Equals(
+                        workflowStateCode,
+                        TransferReviewRequiredCode,
+                        StringComparison.OrdinalIgnoreCase);
+
                     summaries.Add(new SummerRequestSummaryDto
                     {
                         MessageId = message.MessageId,
@@ -134,7 +143,10 @@ namespace Persistence.Services
                         EmployeePhone = GetFirstFieldValue(messageFields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
                         EmployeeExtraPhone = GetFirstFieldValue(messageFields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
                         Status = message.Status.ToString(),
-                        StatusLabel = message.Status.GetDescription(),
+                        StatusLabel = needsTransferReview ? workflowStateLabel : message.Status.GetDescription(),
+                        WorkflowStateCode = workflowStateCode,
+                        WorkflowStateLabel = workflowStateLabel,
+                        NeedsTransferReview = needsTransferReview,
                         CreatedAt = message.CreatedDate,
                         PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaymentDueAtUtc")),
                         PaidAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaidAtUtc")),
@@ -227,6 +239,13 @@ namespace Persistence.Services
                         continue;
                     }
 
+                    var workflowStateCode = GetFieldValue(messageFields, "Summer_WorkflowState") ?? string.Empty;
+                    var workflowStateLabel = ResolveWorkflowStateLabel(workflowStateCode);
+                    var needsTransferReview = string.Equals(
+                        workflowStateCode,
+                        TransferReviewRequiredCode,
+                        StringComparison.OrdinalIgnoreCase);
+
                     summaries.Add(new SummerRequestSummaryDto
                     {
                         MessageId = message.MessageId,
@@ -240,7 +259,10 @@ namespace Persistence.Services
                         EmployeePhone = GetFirstFieldValue(messageFields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
                         EmployeeExtraPhone = GetFirstFieldValue(messageFields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
                         Status = message.Status.ToString(),
-                        StatusLabel = message.Status.GetDescription(),
+                        StatusLabel = needsTransferReview ? workflowStateLabel : message.Status.GetDescription(),
+                        WorkflowStateCode = workflowStateCode,
+                        WorkflowStateLabel = workflowStateLabel,
+                        NeedsTransferReview = needsTransferReview,
                         CreatedAt = message.CreatedDate,
                         PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaymentDueAtUtc")),
                         PaidAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaidAtUtc")),
@@ -287,7 +309,12 @@ namespace Persistence.Services
                         {
                             var statusToken = NormalizeSearchToken(item.Status);
                             var statusLabelToken = NormalizeSearchToken(item.StatusLabel);
-                            if (!statusToken.Contains(normalizedStatus) && !statusLabelToken.Contains(normalizedStatus))
+                            var workflowStateToken = NormalizeSearchToken(item.WorkflowStateCode);
+                            var workflowStateLabelToken = NormalizeSearchToken(item.WorkflowStateLabel);
+                            if (!statusToken.Contains(normalizedStatus)
+                                && !statusLabelToken.Contains(normalizedStatus)
+                                && !workflowStateToken.Contains(normalizedStatus)
+                                && !workflowStateLabelToken.Contains(normalizedStatus))
                             {
                                 return false;
                             }
@@ -576,6 +603,12 @@ namespace Persistence.Services
                         {
                             UpsertField(fields, message.MessageId, "Summer_AdminComment", comment);
                         }
+                        if (IsTransferReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(TransferReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
 
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? "تم اعتماد الطلب نهائياً من إدارة المصايف."
@@ -589,6 +622,12 @@ namespace Persistence.Services
                         UpsertField(fields, message.MessageId, "Summer_CancelReason", string.IsNullOrWhiteSpace(comment) ? "إلغاء يدوي من إدارة المصايف." : comment);
                         UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "CANCELLED_ADMIN");
+                        if (IsTransferReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(TransferReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
 
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? "تم إلغاء الطلب يدويًا من إدارة المصايف."
@@ -989,6 +1028,13 @@ namespace Persistence.Services
                 var normalizedTargetWave = request.ToWaveCode.Trim();
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
+                var paymentStatus = (GetFieldValue(fields, "Summer_PaymentStatus") ?? string.Empty).Trim();
+                var paidAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc"));
+                var adminLastAction = (GetFieldValue(fields, "Summer_AdminLastAction") ?? string.Empty).Trim();
+                var wasPaid = paidAtUtc.HasValue || string.Equals(paymentStatus, "PAID", StringComparison.OrdinalIgnoreCase);
+                var wasFinalApproved = string.Equals(adminLastAction, "FINAL_APPROVE", StringComparison.OrdinalIgnoreCase)
+                    || message.Status == MessageStatus.Replied;
+                var requiresTransferReview = wasPaid || wasFinalApproved;
                 var transferCount = ParseInt(GetFieldValue(fields, "Summer_TransferCount"), 0);
                 if (transferCount > 0)
                 {
@@ -1019,6 +1065,16 @@ namespace Persistence.Services
                     response.Errors.Add(new Error { Code = "400", Message = "المصيف المستهدف غير مُعد في النظام." });
                     return response;
                 }
+
+                var targetCategoryName = await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .Where(c => c.CatId == request.ToCategoryId)
+                    .Select(c => c.CatName)
+                    .FirstOrDefaultAsync();
+
+                var targetCategoryDisplayName = string.IsNullOrWhiteSpace(targetCategoryName)
+                    ? $"رقم {request.ToCategoryId}"
+                    : targetCategoryName.Trim();
 
                 if (newFamilyCount <= 0 || !rule.CapacityByFamily.ContainsKey(newFamilyCount))
                 {
@@ -1088,12 +1144,20 @@ namespace Persistence.Services
                     UpsertField(fields, message.MessageId, "Summer_TransferToCategory", request.ToCategoryId.ToString());
                     UpsertField(fields, message.MessageId, "Summer_TransferToWave", normalizedTargetWave);
                     UpsertField(fields, message.MessageId, "Summer_TransferredAtUtc", DateTime.UtcNow.ToString("o"));
+                    if (requiresTransferReview)
+                    {
+                        message.Status = MessageStatus.InProgress;
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewRequiredCode);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(TransferReviewRequiredCode));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateReason", ResolveTransferReviewReason(wasPaid, wasFinalApproved));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                    }
 
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
                         string.IsNullOrWhiteSpace(request.Notes)
-                            ? $"تم تحويل الطلب إلى المصيف {request.ToCategoryId} والفوج {normalizedTargetWave}."
-                            : $"تم تحويل الطلب إلى المصيف {request.ToCategoryId} والفوج {normalizedTargetWave}. الملاحظات: {request.Notes.Trim()}",
+                            ? $"تم تحويل الطلب إلى مصيف {targetCategoryDisplayName} والفوج {normalizedTargetWave}."
+                            : $"تم تحويل الطلب إلى مصيف {targetCategoryDisplayName} والفوج {normalizedTargetWave}. الملاحظات: {request.Notes.Trim()}",
                         userId,
                         ip,
                         request.files);
@@ -1720,6 +1784,13 @@ SELECT @result;
                 .Select(c => c.CatName)
                 .FirstOrDefaultAsync() ?? string.Empty;
 
+            var workflowStateCode = GetFieldValue(fields, "Summer_WorkflowState") ?? string.Empty;
+            var workflowStateLabel = ResolveWorkflowStateLabel(workflowStateCode);
+            var needsTransferReview = string.Equals(
+                workflowStateCode,
+                TransferReviewRequiredCode,
+                StringComparison.OrdinalIgnoreCase);
+
             return new SummerRequestSummaryDto
             {
                 MessageId = message.MessageId,
@@ -1733,7 +1804,10 @@ SELECT @result;
                 EmployeePhone = GetFirstFieldValue(fields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
                 EmployeeExtraPhone = GetFirstFieldValue(fields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
                 Status = message.Status.ToString(),
-                StatusLabel = message.Status.GetDescription(),
+                StatusLabel = needsTransferReview ? workflowStateLabel : message.Status.GetDescription(),
+                WorkflowStateCode = workflowStateCode,
+                WorkflowStateLabel = workflowStateLabel,
+                NeedsTransferReview = needsTransferReview,
                 CreatedAt = message.CreatedDate,
                 PaymentDueAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaymentDueAtUtc")),
                 PaidAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")),
@@ -2063,6 +2137,43 @@ SELECT @result;
             }
 
             return MessageStatus.New;
+        }
+
+        private static bool IsTransferReviewRequired(IEnumerable<TkmendField> fields)
+        {
+            var workflowState = GetFieldValue(fields, "Summer_WorkflowState") ?? string.Empty;
+            return string.Equals(workflowState, TransferReviewRequiredCode, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ResolveWorkflowStateLabel(string? workflowStateCode)
+        {
+            var normalized = (workflowStateCode ?? string.Empty).Trim().ToUpperInvariant();
+            return normalized switch
+            {
+                TransferReviewRequiredCode => "يتطلب مراجعة بعد التحويل",
+                TransferReviewResolvedCode => "تمت مراجعة التحويل",
+                _ => string.Empty
+            };
+        }
+
+        private static string ResolveTransferReviewReason(bool wasPaid, bool wasFinalApproved)
+        {
+            if (wasPaid && wasFinalApproved)
+            {
+                return "تم التحويل بعد السداد وبعد الاعتماد النهائي، ويلزم متابعة إدارية.";
+            }
+
+            if (wasPaid)
+            {
+                return "تم التحويل بعد سداد الطلب، ويلزم متابعة إدارية.";
+            }
+
+            if (wasFinalApproved)
+            {
+                return "تم التحويل بعد الاعتماد النهائي، ويلزم متابعة إدارية.";
+            }
+
+            return "تم التحويل ويلزم متابعة إدارية.";
         }
 
         private static string NormalizeActionCode(string? actionCode)

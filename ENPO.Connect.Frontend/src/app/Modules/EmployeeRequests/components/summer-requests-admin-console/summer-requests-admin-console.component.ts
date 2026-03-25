@@ -49,6 +49,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: '', label: 'الكل' },
     { value: 'New', label: 'جديد' },
     { value: 'InProgress', label: 'جاري التنفيذ' },
+    { value: 'TRANSFER_REVIEW_REQUIRED', label: 'يتطلب مراجعة بعد التحويل' },
     { value: 'Replied', label: 'تم الرد/اعتماد' },
     { value: 'Rejected', label: 'مرفوض/ملغي' }
   ];
@@ -921,6 +922,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   getStatusClass(item: SummerRequestSummaryDto): string {
+    const workflowStateCode = String(item?.workflowStateCode ?? '').trim().toUpperCase();
+    if (item?.needsTransferReview || workflowStateCode === 'TRANSFER_REVIEW_REQUIRED') {
+      return 'status-mid';
+    }
+
     const status = String(item.status ?? '').toLowerCase();
     if (status.includes('rejected')) {
       return 'status-bad';

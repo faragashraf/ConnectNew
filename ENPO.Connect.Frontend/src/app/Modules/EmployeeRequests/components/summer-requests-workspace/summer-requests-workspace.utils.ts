@@ -45,7 +45,11 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   Summer_TransferToCategory: 'إلى مصيف',
   Summer_TransferToWave: 'إلى فوج',
   Summer_TransferApprovedAtUtc: 'تاريخ اعتماد التحويل',
-  Summer_CancelReason: 'سبب الاعتذار'
+  Summer_CancelReason: 'سبب الاعتذار',
+  Summer_WorkflowState: 'حالة المتابعة',
+  Summer_WorkflowStateLabel: 'وصف حالة المتابعة',
+  Summer_WorkflowStateReason: 'سبب المتابعة',
+  Summer_WorkflowStateAtUtc: 'تاريخ حالة المتابعة'
 };
 
 const ACTION_TYPE_LABELS: Record<string, string> = {
@@ -66,6 +70,11 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   CANCELLED_USER: 'ملغي بناءً على الاعتذار',
   CANCELLED: 'ملغي',
   OVERDUE: 'متأخر عن السداد'
+};
+
+const WORKFLOW_STATE_LABELS: Record<string, string> = {
+  TRANSFER_REVIEW_REQUIRED: 'يتطلب مراجعة بعد التحويل',
+  TRANSFER_REVIEW_RESOLVED: 'تمت مراجعة التحويل'
 };
 
 const STAY_MODE_LABELS: Record<string, string> = {
@@ -241,6 +250,10 @@ export function formatRequestFieldValue(fieldKey: string, rawValue: string): str
 
   if (normalizedKey.includes('paymentstatus')) {
     return translateValue(value, PAYMENT_STATUS_LABELS);
+  }
+
+  if (normalizedKey.includes('workflowstate') && !normalizedKey.includes('reason') && !normalizedKey.includes('label')) {
+    return translateValue(value, WORKFLOW_STATE_LABELS);
   }
 
   if (normalizedKey.includes('staymode')) {
