@@ -28,21 +28,21 @@ namespace Persistence.Services
         private readonly ApplicationConfig _applicationConfig;
 
         private const int CapacityLockTimeoutMs = 15000;
-        private const string SummerDynamicApplicationId = "SUM2026DYN";
-        private const string SummerDestinationCatalogMend = "SUM2026_DestinationCatalog";
-        private const string TransferReviewRequiredCode = "TRANSFER_REVIEW_REQUIRED";
-        private const string TransferReviewResolvedCode = "TRANSFER_REVIEW_RESOLVED";
-        private static readonly string[] WaveCodeFieldKinds = { "SummerCamp", "SUM2026_WaveCode", "WaveCode" };
-        private static readonly string[] WaveLabelFieldKinds = { "SummerCampLabel", "SUM2026_WaveLabel", "WaveLabel" };
-        private static readonly string[] FamilyCountFieldKinds = { "FamilyCount", "SUM2026_FamilyCount" };
-        private static readonly string[] ExtraCountFieldKinds = { "Over_Count", "SUM2026_ExtraCount", "ExtraCount" };
-        private static readonly string[] DestinationIdFieldKinds = { "SummerDestinationId", "SUM2026_DestinationId" };
-        private static readonly string[] DestinationNameFieldKinds = { "SummerDestinationName", "SUM2026_DestinationName" };
-        private static readonly string[] EmployeeIdFieldKinds = { "Emp_Id", "SUM2026_OwnerFileNumber", "EmployeeFileNumber", "FileNumber", "EmployeeId" };
-        private static readonly string[] EmployeeNameFieldKinds = { "Emp_Name", "SUM2026_OwnerName", "EmployeeName", "Name", "ArabicName", "DisplayName" };
-        private static readonly string[] EmployeeNationalIdFieldKinds = { "NationalId", "SUM2026_OwnerNationalId", "NationalID", "NATIONAL_ID", "national_id", "NID", "IDNumber" };
-        private static readonly string[] EmployeePhoneFieldKinds = { "PhoneNumber", "SUM2026_OwnerPhone", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone" };
-        private static readonly string[] EmployeeExtraPhoneFieldKinds = { "ExtraPhoneNumber", "SUM2026_OwnerExtraPhone", "SecondaryPhone", "AlternatePhone" };
+        private const string SummerDynamicApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId;
+        private const string SummerDestinationCatalogMend = SummerWorkflowDomainConstants.DestinationCatalogMend;
+        private const string TransferReviewRequiredCode = SummerWorkflowDomainConstants.TransferReviewRequiredCode;
+        private const string TransferReviewResolvedCode = SummerWorkflowDomainConstants.TransferReviewResolvedCode;
+        private static readonly string[] WaveCodeFieldKinds = SummerWorkflowDomainConstants.WaveCodeFieldKinds;
+        private static readonly string[] WaveLabelFieldKinds = SummerWorkflowDomainConstants.WaveLabelFieldKinds;
+        private static readonly string[] FamilyCountFieldKinds = SummerWorkflowDomainConstants.FamilyCountFieldKinds;
+        private static readonly string[] ExtraCountFieldKinds = SummerWorkflowDomainConstants.ExtraCountFieldKinds;
+        private static readonly string[] DestinationIdFieldKinds = SummerWorkflowDomainConstants.DestinationIdFieldKinds;
+        private static readonly string[] DestinationNameFieldKinds = SummerWorkflowDomainConstants.DestinationNameFieldKinds;
+        private static readonly string[] EmployeeIdFieldKinds = SummerWorkflowDomainConstants.EmployeeIdFieldKinds;
+        private static readonly string[] EmployeeNameFieldKinds = SummerWorkflowDomainConstants.EmployeeNameFieldKinds;
+        private static readonly string[] EmployeeNationalIdFieldKinds = SummerWorkflowDomainConstants.EmployeeNationalIdFieldKinds;
+        private static readonly string[] EmployeePhoneFieldKinds = SummerWorkflowDomainConstants.EmployeePhoneFieldKinds;
+        private static readonly string[] EmployeeExtraPhoneFieldKinds = SummerWorkflowDomainConstants.EmployeeExtraPhoneFieldKinds;
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -556,7 +556,7 @@ namespace Persistence.Services
                 }
 
                 var comment = (request.Comment ?? string.Empty).Trim();
-                if (actionCode == "APPROVE_TRANSFER")
+                if (actionCode == SummerAdminActionCatalog.Codes.ApproveTransfer)
                 {
                     if (!request.ToCategoryId.HasValue || string.IsNullOrWhiteSpace(request.ToWaveCode))
                     {
@@ -607,7 +607,7 @@ namespace Persistence.Services
                 try
                 {
                     var replyMessage = string.Empty;
-                    if (actionCode == "FINAL_APPROVE")
+                    if (actionCode == SummerAdminActionCatalog.Codes.FinalApprove)
                     {
                         if (message.Status == MessageStatus.Rejected && !request.Force)
                         {
@@ -618,7 +618,7 @@ namespace Persistence.Services
                         }
 
                         message.Status = MessageStatus.Replied;
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", "FINAL_APPROVE");
+                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.FinalApprove);
                         UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         if (!string.IsNullOrWhiteSpace(comment))
                         {
@@ -652,10 +652,10 @@ namespace Persistence.Services
                             ? $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote}"
                             : $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote} تعليق الإدارة: {comment}";
                     }
-                    else if (actionCode == "MANUAL_CANCEL")
+                    else if (actionCode == SummerAdminActionCatalog.Codes.ManualCancel)
                     {
                         message.Status = MessageStatus.Rejected;
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", "MANUAL_CANCEL");
+                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.ManualCancel);
                         UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_CancelReason", string.IsNullOrWhiteSpace(comment) ? "إلغاء يدوي من إدارة المصايف." : comment);
                         UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
@@ -671,9 +671,9 @@ namespace Persistence.Services
                             ? "تم إلغاء الطلب يدويًا من إدارة المصايف."
                             : $"تم إلغاء الطلب يدويًا من إدارة المصايف. السبب: {comment}";
                     }
-                    else if (actionCode == "COMMENT")
+                    else if (actionCode == SummerAdminActionCatalog.Codes.Comment)
                     {
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", "COMMENT");
+                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.Comment);
                         UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? "تم تسجيل تعليق إداري على الطلب."
@@ -707,7 +707,7 @@ namespace Persistence.Services
                     await NotifyEmployeeOnAdminActionAsync(response.Data, actionCode, comment, includeSignalR: false);
                 }
 
-                if (actionCode == "MANUAL_CANCEL" && response.Data != null)
+                if (actionCode == SummerAdminActionCatalog.Codes.ManualCancel && response.Data != null)
                 {
                     await PublishCapacityUpdateAsync(response.Data.CategoryId, response.Data.WaveCode, "ADMIN_CANCEL");
                 }
@@ -1028,7 +1028,7 @@ namespace Persistence.Services
                 var paidAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc"));
                 var adminLastAction = (GetFieldValue(fields, "Summer_AdminLastAction") ?? string.Empty).Trim();
                 var wasPaid = paidAtUtc.HasValue || string.Equals(paymentStatus, "PAID", StringComparison.OrdinalIgnoreCase);
-                var wasFinalApproved = string.Equals(adminLastAction, "FINAL_APPROVE", StringComparison.OrdinalIgnoreCase)
+                var wasFinalApproved = string.Equals(adminLastAction, SummerAdminActionCatalog.Codes.FinalApprove, StringComparison.OrdinalIgnoreCase)
                     || message.Status == MessageStatus.Replied;
                 var requiresTransferReview = wasPaid || wasFinalApproved;
                 var transferCount = ParseInt(GetFieldValue(fields, "Summer_TransferCount"), 0);
@@ -1454,14 +1454,7 @@ namespace Persistence.Services
 
         private static string ResolveAdminActionLabel(string actionCode)
         {
-            return actionCode switch
-            {
-                "FINAL_APPROVE" => "اعتماد نهائي",
-                "MANUAL_CANCEL" => "إلغاء إداري",
-                "COMMENT" => "تعليق إداري",
-                "APPROVE_TRANSFER" => "اعتماد التحويل",
-                _ => actionCode ?? string.Empty
-            };
+            return SummerAdminActionCatalog.ResolveLabel(actionCode);
         }
 
         private static string ResolvePreferredMobile(string? primary, string? secondary)
@@ -1860,7 +1853,7 @@ SELECT @result;
             };
         }
 
-        private async Task<Dictionary<int, SummerRule>> GetSummerRulesAsync(int seasonYear = 2026, string? applicationId = null)
+        private async Task<Dictionary<int, SummerRule>> GetSummerRulesAsync(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear, string? applicationId = null)
         {
             var destinations = await GetSummerDestinationConfigsAsync(seasonYear, applicationId);
             var rules = new Dictionary<int, SummerRule>();
@@ -2253,10 +2246,10 @@ SELECT @result;
             var adminAction = NormalizeActionCode(GetFieldValue(fields, "Summer_AdminLastAction"));
             return adminAction switch
             {
-                "FINAL_APPROVE" => "اعتماد نهائي",
-                "COMMENT" => "رد إداري",
-                "MANUAL_CANCEL" => "إلغاء يدوي",
-                "APPROVE_TRANSFER" => "اعتماد تحويل",
+                SummerAdminActionCatalog.Codes.FinalApprove => "اعتماد نهائي",
+                SummerAdminActionCatalog.Codes.Comment => "رد إداري",
+                SummerAdminActionCatalog.Codes.ManualCancel => "إلغاء يدوي",
+                SummerAdminActionCatalog.Codes.ApproveTransfer => "اعتماد تحويل",
                 _ => messageStatus.GetDescription()
             };
         }
@@ -2282,9 +2275,9 @@ SELECT @result;
                 "جاريالتنفيذ" => "IN_PROGRESS",
                 "ردإداري" or "رداداري" => "ADMIN_REPLY",
                 "تمالرد" => "REPLIED",
-                "اعتمادنهائي" => "FINAL_APPROVE",
-                "اعتمادتحويل" => "APPROVE_TRANSFER",
-                "الغاءيدوي" => "MANUAL_CANCEL",
+                "اعتمادنهائي" => SummerAdminActionCatalog.Codes.FinalApprove,
+                "اعتمادتحويل" => SummerAdminActionCatalog.Codes.ApproveTransfer,
+                "الغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
                 "مرفوض" or "ملغي" => "REJECTED",
                 "يتطلبمراجعةبعدالتحويل" => TransferReviewRequiredCode,
                 "تمتمراجعةالتحويل" => TransferReviewResolvedCode,
@@ -2294,15 +2287,7 @@ SELECT @result;
 
         private static string NormalizeActionCode(string? actionCode)
         {
-            var token = NormalizeSearchToken(actionCode);
-            return token switch
-            {
-                "finalapprove" or "approve" or "اعتمادنهائي" or "اعتماد" or "final_approve" => "FINAL_APPROVE",
-                "manual_cancel" or "cancel" or "الغاءيدوي" or "الغاء" => "MANUAL_CANCEL",
-                "comment" or "reply" or "تعليق" or "رد" => "COMMENT",
-                "approvetransfer" or "transferapprove" or "اعتمادالتحويل" => "APPROVE_TRANSFER",
-                _ => string.Empty
-            };
+            return SummerAdminActionCatalog.Normalize(actionCode);
         }
 
         private static string NormalizeSearchToken(string? value)

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Models.DTO.Common;
 using Models.DTO.Correspondance.Summer;
 using Persistence.Services;
+using Persistence.Services.Summer;
 
 namespace Api.Controllers
 {
@@ -17,7 +18,7 @@ namespace Api.Controllers
         }
 
         [HttpGet(nameof(GetMyRequests))]
-        public Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequests(int seasonYear = 2026, int? messageId = null)
+        public Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequests(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear, int? messageId = null)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
             return _summerWorkflowService.GetMyRequestsAsync(userId, seasonYear, messageId);
@@ -37,7 +38,7 @@ namespace Api.Controllers
         }
 
         [HttpGet(nameof(GetAdminDashboard))]
-        public Task<CommonResponse<SummerAdminDashboardDto>> GetAdminDashboard(int seasonYear = 2026, int? categoryId = null, string? waveCode = null)
+        public Task<CommonResponse<SummerAdminDashboardDto>> GetAdminDashboard(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear, int? categoryId = null, string? waveCode = null)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
             return _summerWorkflowService.GetAdminDashboardAsync(userId, seasonYear, categoryId, waveCode);

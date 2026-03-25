@@ -7,6 +7,7 @@ import { CdCategoryMandDto, MessageDto } from 'src/app/shared/services/BackendSe
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { GenericDynamicFormGroupsFacadeService } from './generic-dynamic-form-groups-facade.service';
+import { SUMMER_CANONICAL_FIELD_KEYS } from '../summer-shared/core/summer-field-aliases';
 
 @Component({
   selector: 'app-generic-dynamic-form-details',
@@ -28,8 +29,8 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
   @Output() fileUploadEvent = new EventEmitter<FileParameter[]>();
 
   ticketForm: FormGroup = this.fb.group({});
-  private readonly companionRelationFieldNames = ['SUM2026_CompanionRelation', 'FamilyRelation', 'CompanionRelation'];
-  private readonly companionRelationOtherFieldNames = ['SUM2026_CompanionRelationOther', 'FamilyRelationOther', 'CompanionRelationOther'];
+  private readonly companionRelationFieldNames = [...SUMMER_CANONICAL_FIELD_KEYS.companionRelation];
+  private readonly companionRelationOtherFieldNames = [...SUMMER_CANONICAL_FIELD_KEYS.companionRelationOther];
 
   private formChangesSub: Subscription | null = null;
 

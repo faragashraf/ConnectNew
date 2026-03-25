@@ -23,4 +23,11 @@ export const environment = {
   PowerBi: `${MainDomain}/Applications/PowerBi`,
   SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
   PublicationsUrl: `http://10.10.31.52/publicationsApi`,
+
+  summerFeature: {
+    seasonYear: 2026,
+    dynamicApplicationId: 'SUM2026DYN',
+    destinationCatalogKey: 'SUM2026_DestinationCatalog',
+    pdfReferenceTitle: 'مواعيد الافواج موسم صيف 2026.pdf'
+  }
 };

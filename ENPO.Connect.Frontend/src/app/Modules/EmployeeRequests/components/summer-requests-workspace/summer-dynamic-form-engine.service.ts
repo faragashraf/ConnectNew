@@ -4,29 +4,10 @@ import { CdCategoryMandDto, TkmendField } from 'src/app/shared/services/BackendS
 import { ComponentConfig, defaultModel, userConfigFromLocalStorage } from 'src/app/shared/models/Component.Config.model';
 import { GenericFormsService, GroupInfo, selection } from 'src/app/Modules/GenericComponents/GenericForms.service';
 import { SummerDestinationConfig } from './summer-requests-workspace.config';
-
-export type SummerFieldAliasMap = {
-  waveCode: string[];
-  waveLabel: string[];
-  stayMode: string[];
-  familyCount: string[];
-  extraCount: string[];
-  proxyMode: string[];
-  ownerName: string[];
-  ownerFileNumber: string[];
-  ownerNationalId: string[];
-  ownerPhone: string[];
-  ownerExtraPhone: string[];
-  notes: string[];
-  companionName: string[];
-  companionRelation: string[];
-  companionRelationOther: string[];
-  companionNationalId: string[];
-  companionAge: string[];
-  seasonYear: string[];
-  destinationId: string[];
-  destinationName: string[];
-};
+import {
+  createDefaultSummerFieldAliases,
+  SummerFieldAliasMap
+} from '../summer-shared/core/summer-field-aliases';
 
 @Injectable()
 export class SummerDynamicFormEngineService {
@@ -38,28 +19,7 @@ export class SummerDynamicFormEngineService {
   ]);
   private readonly childRelationTokens = new Set<string>(['ابن', 'ابنة', 'SON', 'DAUGHTER']);
 
-  aliases: SummerFieldAliasMap = {
-    waveCode: ['SummerCamp', 'WaveCode'],
-    waveLabel: ['SummerCampLabel', 'WaveLabel'],
-    stayMode: ['SummerStayMode', 'StayMode'],
-    familyCount: ['FamilyCount'],
-    extraCount: ['Over_Count', 'ExtraCount'],
-    proxyMode: ['SummerProxyMode', 'ProxyMode'],
-    ownerName: ['Emp_Name', 'EmployeeName', 'EmpName', 'OwnerName'],
-    ownerFileNumber: ['Emp_Id', 'EmployeeFileNumber', 'FileNumber'],
-    ownerNationalId: ['NationalId', 'EmployeeNationalId', 'National_ID'],
-    ownerPhone: ['PhoneNumber', 'Phone', 'MobileNumber', 'Mobile', 'PhoneWhats'],
-    ownerExtraPhone: ['ExtraPhoneNumber', 'SecondaryPhone', 'AlternatePhone'],
-    notes: ['Description', 'Notes'],
-    companionName: ['SUM2026_CompanionName', 'FamilyMember_Name', 'CompanionName'],
-    companionRelation: ['SUM2026_CompanionRelation', 'FamilyRelation', 'CompanionRelation'],
-    companionRelationOther: ['SUM2026_CompanionRelationOther', 'FamilyRelationOther', 'CompanionRelationOther'],
-    companionNationalId: ['SUM2026_CompanionNationalId', 'FamilyMember_NationalId', 'CompanionNationalId'],
-    companionAge: ['SUM2026_CompanionAge', 'FamilyMember_Age', 'CompanionAge'],
-    seasonYear: ['SummerSeasonYear'],
-    destinationId: ['SummerDestinationId'],
-    destinationName: ['SummerDestinationName']
-  };
+  aliases: SummerFieldAliasMap = createDefaultSummerFieldAliases();
 
   createFormConfig(): ComponentConfig {
     return new ComponentConfig({

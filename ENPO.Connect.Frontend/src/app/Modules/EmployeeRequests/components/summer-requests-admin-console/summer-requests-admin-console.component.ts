@@ -20,6 +20,16 @@ import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
 import { SignalRService } from 'src/app/shared/services/SignalRServices/SignalR.service';
 import {
+  SUMMER_DESTINATION_CATALOG_KEY,
+  SUMMER_DYNAMIC_APPLICATION_ID
+} from '../summer-shared/core/summer-feature.config';
+import {
+  normalizeSummerAdminActionCode,
+  SUMMER_ADMIN_ACTION,
+  SummerAdminActionCode
+} from '../summer-shared/core/summer-action-codes';
+import { SUMMER_UI_TEXTS_AR } from '../summer-shared/core/summer-ui-texts.ar';
+import {
   parseSummerDestinationCatalog,
   SUMMER_SEASON_YEAR,
   SummerDestinationConfig,
@@ -35,8 +45,6 @@ import {
   SummerRequestFieldGridRow
 } from '../summer-requests-workspace/summer-requests-workspace.utils';
 
-type SummerAdminActionCode = 'FINAL_APPROVE' | 'MANUAL_CANCEL' | 'COMMENT' | 'APPROVE_TRANSFER';
-
 @Component({
   selector: 'app-summer-requests-admin-console',
   templateUrl: './summer-requests-admin-console.component.html',
@@ -44,7 +52,7 @@ type SummerAdminActionCode = 'FINAL_APPROVE' | 'MANUAL_CANCEL' | 'COMMENT' | 'AP
 })
 export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   readonly seasonYear = SUMMER_SEASON_YEAR;
-  readonly dynamicSummerApplicationId = 'SUM2026DYN';
+  readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   destinations: SummerDestinationConfig[] = [];
   loadingDestinations = false;
   destinationsError = '';
@@ -68,9 +76,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   ];
 
   readonly actionOptions: Array<{ value: SummerAdminActionCode; label: string }> = [
-    { value: 'COMMENT', label: 'تعليق / رد إداري' },
-    { value: 'FINAL_APPROVE', label: 'اعتماد نهائي' },
-    { value: 'MANUAL_CANCEL', label: 'إلغاء يدوي' },
+    { value: SUMMER_ADMIN_ACTION.COMMENT, label: 'تعليق / رد إداري' },
+    { value: SUMMER_ADMIN_ACTION.FINAL_APPROVE, label: 'اعتماد نهائي' },
+    { value: SUMMER_ADMIN_ACTION.MANUAL_CANCEL, label: 'إلغاء يدوي' },
     // { value: 'APPROVE_TRANSFER', label: 'اعتماد تحويل' }
   ];
 
@@ -96,10 +104,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   readonly pageSizeOptions = [5, 10, 25, 50];
   private readonly allowedAdminActionCodes = new Set<SummerAdminActionCode>([
-    'FINAL_APPROVE',
-    'MANUAL_CANCEL',
-    'COMMENT',
-    'APPROVE_TRANSFER'
+    SUMMER_ADMIN_ACTION.FINAL_APPROVE,
+    SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
+    SUMMER_ADMIN_ACTION.COMMENT,
+    SUMMER_ADMIN_ACTION.APPROVE_TRANSFER
   ]);
 
   capacityDialogVisible = false;
@@ -138,7 +146,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     });
 
     this.actionForm = this.fb.group({
-      actionCode: ['COMMENT', Validators.required],
+      actionCode: [SUMMER_ADMIN_ACTION.COMMENT, Validators.required],
       comment: ['', Validators.maxLength(2000)],
       force: [false],
       toCategoryId: [null],
@@ -162,7 +170,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   loadDestinationCatalog(): void {
     this.loadingDestinations = true;
     this.destinationsError = '';
-    this.dynamicMetadataService.getMendJson<unknown>(this.dynamicSummerApplicationId, 'SUM2026_DestinationCatalog').subscribe({
+    this.dynamicMetadataService.getMendJson<unknown>(this.dynamicSummerApplicationId, SUMMER_DESTINATION_CATALOG_KEY).subscribe({
       next: response => {
         if (response?.isSuccess) {
           this.destinations = parseSummerDestinationCatalog(response.data, this.seasonYear);
@@ -177,13 +185,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         const errors = Array.isArray(response?.errors) ? response.errors : [];
         this.destinationsError = errors.length > 0
           ? errors.join('<br/>')
-          : 'تعذر تحميل إعدادات المصايف من CDMendTbl.';
+          : SUMMER_UI_TEXTS_AR.errors.destinationCatalogInvalid;
         this.loadDashboard();
         this.loadRequests();
       },
       error: () => {
         this.destinations = [];
-        this.destinationsError = 'تعذر تحميل إعدادات المصايف من الخدمة العامة.';
+        this.destinationsError = SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed;
         this.loadDashboard();
         this.loadRequests();
       },
@@ -386,7 +394,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   get isTransferActionSelected(): boolean {
     const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
-    return normalized === 'APPROVE_TRANSFER';
+    return normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER;
   }
 
   get selectedRequestReplies(): Array<{ id: number; author: string; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
@@ -615,7 +623,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   openWaveCapacityDialog(): void {
     if (!this.canOpenWaveCapacityDialog) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار المصيف والفوج أولاً.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidWaveCapacityScope}</h5>`, true);
       return;
     }
 
@@ -763,12 +771,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   submitAdminAction(): void {
     this.actionForm.markAllAsTouched();
     if (this.actionForm.invalid) {
-      this.msg.msgError('خطأ', '<h5>يرجى استكمال بيانات الإجراء الإداري.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidAdminActionData}</h5>`, true);
       return;
     }
 
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب أولاً.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.requestSelectionRequired}</h5>`, true);
       return;
     }
 
@@ -776,17 +784,17 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     const actionCode = this.normalizeActionCode(raw.actionCode);
 
     if (!actionCode) {
-      this.msg.msgError('خطأ', '<h5>نوع الإجراء الإداري غير مدعوم.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.unsupportedAdminAction}</h5>`, true);
       return;
     }
 
-    if (actionCode === 'APPROVE_TRANSFER' && (!raw.toCategoryId || !String(raw.toWaveCode ?? '').trim())) {
-      this.msg.msgError('خطأ', '<h5>بيانات التحويل غير مكتملة.</h5>', true);
+    if (actionCode === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER && (!raw.toCategoryId || !String(raw.toWaveCode ?? '').trim())) {
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidTransferData}</h5>`, true);
       return;
     }
 
     this.submittingAction = true;
-    this.spinner.show('جاري تنفيذ الإجراء الإداري ...');
+    this.spinner.show(SUMMER_UI_TEXTS_AR.loading.adminAction);
     this.summerWorkflowController.executeAdminAction({
       messageId: this.selectedRequestId,
       actionCode,
@@ -800,7 +808,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تنفيذ الإجراء الإداري بنجاح');
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.adminActionCompleted);
           this.actionAttachments = [];
           this.actionForm.patchValue({ comment: '', force: false });
           if (this.selectedRequestId) {
@@ -853,11 +861,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   downloadAttachment(attachmentId: number, fileName: string): void {
     if (!attachmentId || attachmentId <= 0) {
-      this.msg.msgError('خطأ', '<h5>لا يمكن تنزيل هذا المرفق لعدم توفر معرف صالح.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.attachmentDownloadMissingId}</h5>`, true);
       return;
     }
 
-    this.spinner.show('جاري تنزيل المرفق ...');
+    this.spinner.show(SUMMER_UI_TEXTS_AR.loading.attachmentDownload);
     this.attachmentsController.downloadDocument(attachmentId).subscribe({
       next: response => {
         const fileContent = String(response?.data ?? '').trim();
@@ -869,7 +877,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         this.msg.msgError('خطأ', `<h5>${this.collectErrors(response) || 'تعذر تنزيل المرفق.'}</h5>`, true);
       },
       error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تنزيل المرفق حالياً.</h5>', true);
+        this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.attachmentDownloadFailed}</h5>`, true);
       },
       complete: () => {
         this.spinner.hide();
@@ -1039,7 +1047,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         this.actionForm.patchValue({ actionCode: normalized }, { emitEvent: false });
       }
 
-      if (normalized === 'APPROVE_TRANSFER') {
+      if (normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER) {
         toCategoryControl.setValidators([Validators.required]);
         toWaveControl.setValidators([Validators.required]);
         familyControl.setValidators([Validators.required, Validators.min(1)]);
@@ -1095,34 +1103,17 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
    * FINAL_APPROVE | MANUAL_CANCEL | COMMENT | APPROVE_TRANSFER
    */
   private normalizeActionCode(actionCode: unknown): SummerAdminActionCode | '' {
-    const token = this.normalizeSearchToken(actionCode);
-    switch (token) {
-      case 'finalapprove':
-      case 'approve':
-      case 'اعتمادنهائي':
-      case 'اعتماد':
-      case 'final_approve':
-        return 'FINAL_APPROVE';
-      case 'manualcancel':
-      case 'cancel':
-      case 'الغاءيدوي':
-      case 'الغاء':
-        return 'MANUAL_CANCEL';
-      case 'comment':
-      case 'reply':
-      case 'تعليق':
-      case 'رد':
-        return 'COMMENT';
-      case 'approvetransfer':
-      case 'transferapprove':
-      case 'اعتمادالتحويل':
-        return 'APPROVE_TRANSFER';
-      default:
-        if (this.allowedAdminActionCodes.has(String(actionCode ?? '').trim() as SummerAdminActionCode)) {
-          return String(actionCode ?? '').trim() as SummerAdminActionCode;
-        }
-        return '';
+    const normalized = normalizeSummerAdminActionCode(actionCode);
+    if (normalized) {
+      return normalized;
     }
+
+    const direct = String(actionCode ?? '').trim() as SummerAdminActionCode;
+    if (this.allowedAdminActionCodes.has(direct)) {
+      return direct;
+    }
+
+    return '';
   }
 
   private normalizeSearchToken(value: unknown): string {
@@ -1309,7 +1300,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     this.actionForm.patchValue({
-      actionCode: 'COMMENT',
+      actionCode: SUMMER_ADMIN_ACTION.COMMENT,
       comment: '',
       force: false,
       toCategoryId: request.categoryId,
@@ -1339,7 +1330,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       .map(item => String(item?.message ?? '').trim())
       .filter(item => item.length > 0);
 
-    return errors.length ? errors.join('<br/>') : 'حدث خطأ غير متوقع.';
+    return errors.length ? errors.join('<br/>') : SUMMER_UI_TEXTS_AR.errors.generic;
   }
 
   private toFileParameters(files: File[]): FileParameter[] {

@@ -20,6 +20,11 @@ import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
 import { SignalRService } from 'src/app/shared/services/SignalRServices/SignalR.service';
 import {
+  SUMMER_DESTINATION_CATALOG_KEY,
+  SUMMER_DYNAMIC_APPLICATION_ID
+} from '../../summer-shared/core/summer-feature.config';
+import { SUMMER_UI_TEXTS_AR } from '../../summer-shared/core/summer-ui-texts.ar';
+import {
   parseSummerDestinationCatalog,
   SUMMER_PDF_REFERENCE_TITLE,
   SUMMER_SEASON_YEAR,
@@ -58,7 +63,7 @@ type FileBucket = 'cancel' | 'payment' | 'transfer';
 export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   readonly seasonYear = SUMMER_SEASON_YEAR;
   readonly pdfReferenceTitle = SUMMER_PDF_REFERENCE_TITLE;
-  readonly dynamicSummerApplicationId = 'SUM2026DYN';
+  readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   readonly dynamicSummerConfigRouteKey = 'admins/summer-requests/dynamic-booking';
   destinations: SummerDestinationConfig[] = [];
   loadingDestinations = false;
@@ -496,7 +501,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   submitCancel(): void {
     this.cancelForm.markAllAsTouched();
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.requestSelectionRequiredShort}</h5>`, true);
       return;
     }
 
@@ -508,7 +513,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تنفيذ الاعتذار بنجاح');
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.cancelCompleted);
           this.cancelForm.reset({ reason: '' });
           this.cancelAttachments = [];
           this.loadMyRequests();
@@ -534,7 +539,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }
 
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.requestSelectionRequiredShort}</h5>`, true);
       return;
     }
 
@@ -556,7 +561,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تسجيل السداد بنجاح');
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.payCompleted);
           this.paymentForm.reset({ paidAtLocal: '', notes: '' });
           this.paymentAttachments = [];
           this.loadMyRequests();
@@ -582,7 +587,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }
 
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.requestSelectionRequiredShort}</h5>`, true);
       return;
     }
 
@@ -624,7 +629,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تنفيذ التحويل بنجاح');
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.transferCompleted);
           this.transferAttachments = [];
           this.transferForm.patchValue({ notes: '' });
           this.loadMyRequests();
@@ -669,7 +674,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   loadDestinationCatalog(): void {
     this.loadingDestinations = true;
     this.destinationsError = '';
-    this.dynamicMetadataService.getMendJson<unknown>(this.dynamicSummerApplicationId, 'SUM2026_DestinationCatalog').subscribe({
+    this.dynamicMetadataService.getMendJson<unknown>(this.dynamicSummerApplicationId, SUMMER_DESTINATION_CATALOG_KEY).subscribe({
       next: response => {
         if (response?.isSuccess) {
           this.destinations = parseSummerDestinationCatalog(response.data, this.seasonYear);
@@ -682,11 +687,11 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         const errors = Array.isArray(response?.errors) ? response.errors : [];
         this.destinationsError = errors.length > 0
           ? errors.join('<br/>')
-          : 'تعذر تحميل إعدادات المصايف من CDMendTbl.';
+          : SUMMER_UI_TEXTS_AR.errors.destinationCatalogInvalid;
       },
       error: () => {
         this.destinations = [];
-        this.destinationsError = 'تعذر تحميل إعدادات المصايف من الخدمة العامة.';
+        this.destinationsError = SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed;
       },
       complete: () => {
         this.loadingDestinations = false;

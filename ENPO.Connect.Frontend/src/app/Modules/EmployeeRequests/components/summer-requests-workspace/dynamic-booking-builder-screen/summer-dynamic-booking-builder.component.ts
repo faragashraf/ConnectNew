@@ -20,6 +20,11 @@ import { SummerDynamicFormEngineService } from '../summer-dynamic-form-engine.se
 import { ComponentConfig, getConfigByRoute } from 'src/app/shared/models/Component.Config.model';
 import { ComponentConfigService } from 'src/app/Modules/admins/services/component-config.service';
 import { extractCapacityPayloadFromSignal } from '../summer-requests-workspace.utils';
+import {
+  SUMMER_DEFAULT_SEASON_YEAR,
+  SUMMER_DYNAMIC_APPLICATION_ID
+} from '../../summer-shared/core/summer-feature.config';
+import { SUMMER_CANONICAL_FIELD_KEYS } from '../../summer-shared/core/summer-field-aliases';
 
 type OwnerDefaults = {
   name: string;
@@ -37,8 +42,8 @@ type OwnerDefaults = {
 })
 export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, OnDestroy {
   @Input() destinations: SummerDestinationConfig[] = [];
-  @Input() seasonYear = 2026;
-  @Input() applicationId = 'SUM2026DYN';
+  @Input() seasonYear = SUMMER_DEFAULT_SEASON_YEAR;
+  @Input() applicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   @Input() configRouteKey = 'admins/summer-requests/dynamic-booking';
   @Input() editRequestId: number | null = null;
   @Output() bookingCreated = new EventEmitter<number>();
@@ -53,7 +58,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   bookingValidationAlerts: string[] = [];
 
   selectedDestinationId: number | null = null;
-  resolvedApplicationId = 'SUM2026DYN';
+  resolvedApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   loadingMetadata = false;
   metadataLoaded = false;
   metadataError = '';
@@ -1437,12 +1442,12 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     // Keep edit-screen aliases in sync with canonical summer keys used by backend transfer actions.
-    this.syncAliasFieldValues(fields, ['SummerCamp', 'SUM2026_WaveCode', 'WaveCode'], this.engine.aliases.waveCode);
-    this.syncAliasFieldValues(fields, ['SummerCampLabel', 'SUM2026_WaveLabel', 'WaveLabel'], this.engine.aliases.waveLabel);
-    this.syncAliasFieldValues(fields, ['FamilyCount', 'SUM2026_FamilyCount'], this.engine.aliases.familyCount);
-    this.syncAliasFieldValues(fields, ['Over_Count', 'SUM2026_ExtraCount', 'ExtraCount'], this.engine.aliases.extraCount);
-    this.syncAliasFieldValues(fields, ['SummerDestinationId', 'SUM2026_DestinationId'], this.engine.aliases.destinationId);
-    this.syncAliasFieldValues(fields, ['SummerDestinationName', 'SUM2026_DestinationName'], this.engine.aliases.destinationName);
+    this.syncAliasFieldValues(fields, [...SUMMER_CANONICAL_FIELD_KEYS.waveCode], this.engine.aliases.waveCode);
+    this.syncAliasFieldValues(fields, [...SUMMER_CANONICAL_FIELD_KEYS.waveLabel], this.engine.aliases.waveLabel);
+    this.syncAliasFieldValues(fields, [...SUMMER_CANONICAL_FIELD_KEYS.familyCount], this.engine.aliases.familyCount);
+    this.syncAliasFieldValues(fields, [...SUMMER_CANONICAL_FIELD_KEYS.extraCount], this.engine.aliases.extraCount);
+    this.syncAliasFieldValues(fields, [...SUMMER_CANONICAL_FIELD_KEYS.destinationId], this.engine.aliases.destinationId);
+    this.syncAliasFieldValues(fields, [...SUMMER_CANONICAL_FIELD_KEYS.destinationName], this.engine.aliases.destinationName);
   }
 
   private syncAliasFieldValues(fields: TkmendField[], sourceAliases: string[], targetAliases: string[]): void {

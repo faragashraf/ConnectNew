@@ -20,4 +20,11 @@ OTPApplicationName: 'CONNECT',
   PowerBi: `${MainDomain}/Applications/PowerBi`,
   SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
   PublicationsUrl: `${MainDomain}/Applications/publicationsApi`,
+
+  summerFeature: {
+    seasonYear: 2026,
+    dynamicApplicationId: 'SUM2026DYN',
+    destinationCatalogKey: 'SUM2026_DestinationCatalog',
+    pdfReferenceTitle: 'مواعيد الافواج موسم صيف 2026.pdf'
+  }
 };
