@@ -75,22 +75,27 @@
       <strong>{{ stats.totalRequests }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('New')" (click)="applyStatusQuickFilter('New')">
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('جديد')" (click)="applyStatusQuickFilter('جديد')">
       <span>جديد</span>
       <strong>{{ stats.newCount }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('InProgress')" (click)="applyStatusQuickFilter('InProgress')">
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('جاري التنفيذ')" (click)="applyStatusQuickFilter('جاري التنفيذ')">
       <span>جاري التنفيذ</span>
       <strong>{{ stats.inProgressCount }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('Replied')" (click)="applyStatusQuickFilter('Replied')">
-      <span>تم الرد/اعتماد</span>
-      <strong>{{ stats.repliedCount }}</strong>
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('رد إداري')" (click)="applyStatusQuickFilter('رد إداري')">
+      <span>رد إداري</span>
+      <strong>{{ getDashboardStatusCount('رد إداري', 'تم الرد') }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('Rejected')" (click)="applyStatusQuickFilter('Rejected')">
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('اعتماد نهائي')" (click)="applyStatusQuickFilter('اعتماد نهائي')">
+      <span>اعتماد نهائي</span>
+      <strong>{{ getDashboardStatusCount('اعتماد نهائي') }}</strong>
+    </article>
+
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('مرفوض')" (click)="applyStatusQuickFilter('مرفوض')">
       <span>مرفوض/ملغي</span>
       <strong>{{ stats.rejectedCount }}</strong>
     </article>

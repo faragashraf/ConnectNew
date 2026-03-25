@@ -49,7 +49,9 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   Summer_WorkflowState: 'حالة المتابعة',
   Summer_WorkflowStateLabel: 'وصف حالة المتابعة',
   Summer_WorkflowStateReason: 'سبب المتابعة',
-  Summer_WorkflowStateAtUtc: 'تاريخ حالة المتابعة'
+  Summer_WorkflowStateAtUtc: 'تاريخ حالة المتابعة',
+  Summer_TransferRequiresRePayment: 'إعادة السداد مطلوبة',
+  Summer_TransferRePaymentReason: 'سبب إعادة السداد'
 };
 
 const ACTION_TYPE_LABELS: Record<string, string> = {
@@ -274,6 +276,14 @@ export function formatRequestFieldValue(fieldKey: string, rawValue: string): str
       return value;
     }
     return proxy ? 'بالنيابة عن موظف آخر' : 'صاحب الطلب نفسه';
+  }
+
+  if (normalizedKey.includes('transferrequiresrepayment')) {
+    const flag = parseBooleanLike(value);
+    if (flag === null) {
+      return value;
+    }
+    return flag ? 'نعم' : 'لا';
   }
 
   return value;
@@ -1001,7 +1011,14 @@ export function getStatusClass(status: string | undefined): string {
   if (normalized.includes('inprogress') || normalized.includes('processing') || normalized.includes('قيد') || normalized.includes('جاري')) {
     return 'status-mid';
   }
-  if (normalized.includes('closed') || normalized.includes('done') || normalized.includes('مكتمل') || normalized.includes('تم') || normalized.includes('مسدد') || normalized.includes('مقبول')) {
+  if (normalized.includes('closed')
+    || normalized.includes('done')
+    || normalized.includes('مكتمل')
+    || normalized.includes('تم')
+    || normalized.includes('مسدد')
+    || normalized.includes('مقبول')
+    || normalized.includes('replied')
+    || normalized.includes('اعتماد')) {
     return 'status-good';
   }
   return 'status-neutral';
@@ -1011,6 +1028,12 @@ export function getStatusLabel(status: string | undefined): string {
   const normalized = (status ?? '').toLowerCase();
   if (isRejectedStatus(normalized)) {
     return 'مرفوض';
+  }
+  if (normalized.includes('finalapprove') || normalized.includes('اعتماد') || normalized.includes('approved')) {
+    return 'اعتماد نهائي';
+  }
+  if (normalized.includes('replied') || normalized.includes('reply')) {
+    return 'تم الرد';
   }
   if (normalized.includes('inprogress') || normalized.includes('processing') || normalized.includes('قيد') || normalized.includes('جاري')) {
     return 'قيد التنفيذ';
@@ -1155,6 +1178,65 @@ export function extractCapacityPayloadFromSignal(texts: string[]): string | null
       if (payloadParts.length >= 3) {
         return payload;
       }
+    }
+  }
+
+  return null;
+}
+
+export type SummerRequestUpdateSignalPayload = {
+  messageId: number;
+  action: string;
+  raw: string;
+};
+
+export function extractRequestUpdatePayloadFromSignal(texts: string[]): SummerRequestUpdateSignalPayload | null {
+  const markers = ['SUMMER_REQUEST_UPDATED|', 'request|'];
+
+  for (const text of texts) {
+    const normalized = String(text ?? '').trim();
+    if (!normalized) {
+      continue;
+    }
+
+    const directParts = normalized.split('|');
+    if (directParts.length >= 3) {
+      const head = String(directParts[0] ?? '').trim().toLowerCase();
+      if (head === 'summer_request_updated' || head === 'request') {
+        const messageId = Number(directParts[1] ?? 0);
+        if (Number.isFinite(messageId) && messageId > 0) {
+          return {
+            messageId: Math.floor(messageId),
+            action: String(directParts[2] ?? '').trim().toUpperCase(),
+            raw: normalized
+          };
+        }
+      }
+    }
+
+    const lower = normalized.toLowerCase();
+    for (const marker of markers) {
+      const index = lower.indexOf(marker.toLowerCase());
+      if (index < 0) {
+        continue;
+      }
+
+      const payload = normalized.substring(index).trim();
+      const parts = payload.split('|');
+      if (parts.length < 3) {
+        continue;
+      }
+
+      const messageId = Number(parts[1] ?? 0);
+      if (!Number.isFinite(messageId) || messageId <= 0) {
+        continue;
+      }
+
+      return {
+        messageId: Math.floor(messageId),
+        action: String(parts[2] ?? '').trim().toUpperCase(),
+        raw: payload
+      };
     }
   }
 

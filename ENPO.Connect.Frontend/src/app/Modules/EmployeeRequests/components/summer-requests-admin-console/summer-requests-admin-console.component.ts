@@ -28,6 +28,9 @@ import {
 import {
   buildSummerRequestCompanions,
   buildSummerRequestDetailFields,
+  extractRequestUpdatePayloadFromSignal,
+  getStatusClass as resolveSummerStatusClass,
+  getStatusLabel as resolveSummerStatusLabel,
   SummerRequestFieldGridRow
 } from '../summer-requests-workspace/summer-requests-workspace.utils';
 
@@ -47,11 +50,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   readonly statusOptions = [
     { value: '', label: 'الكل' },
-    { value: 'New', label: 'جديد' },
-    { value: 'InProgress', label: 'جاري التنفيذ' },
+    { value: 'جديد', label: 'جديد' },
+    { value: 'جاري التنفيذ', label: 'جاري التنفيذ' },
+    { value: 'رد إداري', label: 'رد إداري' },
+    { value: 'اعتماد نهائي', label: 'اعتماد نهائي' },
     { value: 'TRANSFER_REVIEW_REQUIRED', label: 'يتطلب مراجعة بعد التحويل' },
-    { value: 'Replied', label: 'تم الرد/اعتماد' },
-    { value: 'Rejected', label: 'مرفوض/ملغي' }
+    { value: 'تم الرد', label: 'تم الرد (عام)' },
+    { value: 'مرفوض', label: 'مرفوض/ملغي' }
   ];
 
   readonly paymentStateOptions = [
@@ -927,17 +932,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return 'status-mid';
     }
 
-    const status = String(item.status ?? '').toLowerCase();
-    if (status.includes('rejected')) {
-      return 'status-bad';
-    }
-    if (status.includes('replied')) {
-      return 'status-good';
-    }
-    if (status.includes('inprogress')) {
-      return 'status-mid';
-    }
-    return 'status-neutral';
+    return resolveSummerStatusClass(String(item?.statusLabel ?? item?.status ?? '').trim());
   }
 
   getRequestStatusLabel(item: SummerRequestSummaryDto): string {
@@ -946,8 +941,27 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return statusLabel;
     }
 
-    const status = String(item?.status ?? '').trim();
-    return status.length > 0 ? status : '-';
+    return resolveSummerStatusLabel(String(item?.status ?? '').trim());
+  }
+
+  getDashboardStatusCount(...statusTokens: string[]): number {
+    const normalizedTokens = new Set(
+      statusTokens
+        .map(token => this.normalizeSearchToken(token))
+        .filter(token => token.length > 0)
+    );
+
+    if (!this.dashboard || normalizedTokens.size === 0) {
+      return 0;
+    }
+
+    return (this.dashboard.byStatus ?? [])
+      .filter(item => {
+        const labelToken = this.normalizeSearchToken(item?.statusLabel);
+        const codeToken = this.normalizeSearchToken(item?.statusCode);
+        return normalizedTokens.has(labelToken) || normalizedTokens.has(codeToken);
+      })
+      .reduce((total, item) => total + (Number(item?.count ?? 0) || 0), 0);
   }
 
   getDestinationCount(categoryId: number): number {
@@ -1175,10 +1189,25 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         ?? (notification as { notification?: string; Notification?: string })?.Notification
         ?? '');
 
-      const text = `${title} ${body}`.toUpperCase();
-      if (text.includes('SUMMER') || text.includes('مصيف')) {
+      const text = `${title} ${body}`.toLowerCase();
+      const requestUpdate = extractRequestUpdatePayloadFromSignal([body, title]);
+      if (requestUpdate
+        || text.includes('summer')
+        || text.includes('request')
+        || text.includes('booking')
+        || text.includes('capacity')
+        || text.includes('مصيف')
+        || text.includes('مصايف')
+        || text.includes('حجز')
+        || text.includes('إتاحة')
+        || text.includes('سداد')
+        || text.includes('اعتماد')
+        || text.includes('تحويل')) {
         this.loadDashboard();
         this.loadRequests();
+        if (this.selectedRequestId && (!requestUpdate || requestUpdate.messageId === this.selectedRequestId)) {
+          this.loadSelectedRequestDetails(this.selectedRequestId);
+        }
         if (this.capacityDialogVisible) {
           this.refreshWaveCapacity(true);
         }

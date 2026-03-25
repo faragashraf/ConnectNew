@@ -143,7 +143,7 @@ namespace Persistence.Services
                         EmployeePhone = GetFirstFieldValue(messageFields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
                         EmployeeExtraPhone = GetFirstFieldValue(messageFields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
                         Status = message.Status.ToString(),
-                        StatusLabel = needsTransferReview ? workflowStateLabel : message.Status.GetDescription(),
+                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
                         WorkflowStateCode = workflowStateCode,
                         WorkflowStateLabel = workflowStateLabel,
                         NeedsTransferReview = needsTransferReview,
@@ -259,7 +259,7 @@ namespace Persistence.Services
                         EmployeePhone = GetFirstFieldValue(messageFields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
                         EmployeeExtraPhone = GetFirstFieldValue(messageFields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
                         Status = message.Status.ToString(),
-                        StatusLabel = needsTransferReview ? workflowStateLabel : message.Status.GetDescription(),
+                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
                         WorkflowStateCode = workflowStateCode,
                         WorkflowStateLabel = workflowStateLabel,
                         NeedsTransferReview = needsTransferReview,
@@ -329,17 +329,25 @@ namespace Persistence.Services
                             && item.PaymentDueAtUtc.Value < nowUtc
                             && ResolveMessageStatus(item.Status) != MessageStatus.Rejected;
 
-                        if (normalizedPaymentState is "paid" && !isPaid)
+                        var isPaidFilter = normalizedPaymentState is "paid" or "مسدد";
+                        var isUnpaidFilter = normalizedPaymentState is "unpaid" or "غيرمسدد";
+                        var isOverdueUnpaidFilter = normalizedPaymentState is
+                            "overdue"
+                            or "overdueunpaid"
+                            or "متاخرغيرمسدد"
+                            or "متأخرغيرمسدد";
+
+                        if (isPaidFilter && !isPaid)
                         {
                             return false;
                         }
 
-                        if (normalizedPaymentState is "unpaid" && isPaid)
+                        if (isUnpaidFilter && isPaid)
                         {
                             return false;
                         }
 
-                        if (normalizedPaymentState is "overdue" or "overdueunpaid" && !isOverdueUnpaid)
+                        if (isOverdueUnpaidFilter && !isOverdueUnpaid)
                         {
                             return false;
                         }
@@ -484,11 +492,11 @@ namespace Persistence.Services
                         .OrderByDescending(g => g.Count)
                         .ToList(),
                     ByStatus = requests
-                        .GroupBy(r => ResolveMessageStatus(r.Status))
+                        .GroupBy(r => ResolveDashboardStatusLabel(r))
                         .Select(g => new SummerDashboardStatusBucketDto
                         {
-                            StatusCode = g.Key.ToString(),
-                            StatusLabel = g.Key.GetDescription(),
+                            StatusCode = ResolveDashboardStatusCode(g.Key),
+                            StatusLabel = g.Key,
                             Count = g.Count()
                         })
                         .OrderByDescending(g => g.Count)
@@ -669,7 +677,7 @@ namespace Persistence.Services
                     await NotifyEmployeeOnAdminActionAsync(response.Data, actionCode, comment, includeSignalR: false);
                 }
 
-                var employeeId = response.Data.EmployeeId;
+                var employeeId = response.Data?.EmployeeId;
                 if (!string.IsNullOrWhiteSpace(employeeId))
                 {
                     await _signalRConnectionManager.SendNotificationToUser(employeeId, new NotificationDto
@@ -691,10 +699,12 @@ namespace Persistence.Services
                         "إدارة طلبات المصايف");
                 }
 
-                if (actionCode == "MANUAL_CANCEL")
+                if (actionCode == "MANUAL_CANCEL" && response.Data != null)
                 {
                     await PublishCapacityUpdateAsync(response.Data.CategoryId, response.Data.WaveCode, "ADMIN_CANCEL");
                 }
+
+                await PublishRequestUpdateAsync(request.MessageId, actionCode);
             }
             catch (Exception ex)
             {
@@ -869,6 +879,7 @@ namespace Persistence.Services
                     "إدارة طلبات المصايف");
 
                 await PublishCapacityUpdateAsync(summary.CategoryId, summary.WaveCode, "CANCEL");
+                await PublishRequestUpdateAsync(summary.MessageId, "CANCEL");
             }
             catch (Exception ex)
             {
@@ -947,6 +958,7 @@ namespace Persistence.Services
                     UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PAID");
                     UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", paidAt.ToString("o"));
                     UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", dueAt.ToString("o"));
+                    UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
                     if (!string.IsNullOrWhiteSpace(request.Notes))
                     {
                         UpsertField(fields, message.MessageId, "Summer_PaymentNotes", request.Notes.Trim());
@@ -981,6 +993,8 @@ namespace Persistence.Services
                         $"تم تسجيل السداد لطلب المصيف رقم #{response.Data.MessageId}.",
                         "إدارة طلبات المصايف");
                 }
+
+                await PublishRequestUpdateAsync(message.MessageId, "PAY");
             }
             catch (Exception ex)
             {
@@ -1057,8 +1071,12 @@ namespace Persistence.Services
                     return response;
                 }
 
-                var newFamilyCount = request.NewFamilyCount ?? ParseInt(GetFieldValue(fields, "FamilyCount"), 0);
-                var newExtraCount = request.NewExtraCount ?? ParseInt(GetFieldValue(fields, "Over_Count"), 0);
+                var currentFamilyCount = ParseInt(GetFieldValue(fields, "FamilyCount"), 0);
+                var currentExtraCount = ParseInt(GetFieldValue(fields, "Over_Count"), 0);
+                var newFamilyCount = request.NewFamilyCount ?? currentFamilyCount;
+                var newExtraCount = request.NewExtraCount ?? currentExtraCount;
+                var familyCompositionChanged = newFamilyCount != currentFamilyCount || newExtraCount != currentExtraCount;
+                var requiresRePayment = wasPaid && familyCompositionChanged;
 
                 if (!summerRules.TryGetValue(request.ToCategoryId, out var rule))
                 {
@@ -1152,12 +1170,24 @@ namespace Persistence.Services
                         UpsertField(fields, message.MessageId, "Summer_WorkflowStateReason", ResolveTransferReviewReason(wasPaid, wasFinalApproved));
                         UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
                     }
+                    if (requiresRePayment)
+                    {
+                        var reopenedDueAt = SummerCalendarRules.CalculatePaymentDueUtc(DateTime.UtcNow);
+                        UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PENDING_PAYMENT");
+                        UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", string.Empty);
+                        UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", reopenedDueAt.ToString("o"));
+                        UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "true");
+                        UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", "تم تغيير عدد الأفراد بعد السداد، ويلزم إعادة السداد.");
+                    }
 
+                    var rePaymentNote = requiresRePayment
+                        ? " تم تغيير عدد الأفراد بعد السداد، وتمت إعادة فتح السداد لاستكمال الإجراءات."
+                        : string.Empty;
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
                         string.IsNullOrWhiteSpace(request.Notes)
-                            ? $"تم تحويل الطلب إلى مصيف {targetCategoryDisplayName} والفوج {normalizedTargetWave}."
-                            : $"تم تحويل الطلب إلى مصيف {targetCategoryDisplayName} والفوج {normalizedTargetWave}. الملاحظات: {request.Notes.Trim()}",
+                            ? $"تم تحويل الطلب إلى مصيف {targetCategoryDisplayName} والفوج {normalizedTargetWave}.{rePaymentNote}"
+                            : $"تم تحويل الطلب إلى مصيف {targetCategoryDisplayName} والفوج {normalizedTargetWave}.{rePaymentNote} الملاحظات: {request.Notes.Trim()}",
                         userId,
                         ip,
                         request.files);
@@ -1177,6 +1207,7 @@ namespace Persistence.Services
                     }
                     await PublishCapacityUpdateAsync(fromCategory, fromWave, "TRANSFER_FROM");
                     await PublishCapacityUpdateAsync(request.ToCategoryId, normalizedTargetWave, "TRANSFER_TO");
+                    await PublishRequestUpdateAsync(message.MessageId, "TRANSFER");
                 }
                 catch
                 {
@@ -1334,6 +1365,7 @@ namespace Persistence.Services
                 }
 
                 await PublishCapacityUpdateAsync(notifyCategoryId, notifyWaveCode, "AUTO_CANCEL");
+                await PublishRequestUpdateAsync(cancelledMessageId, "AUTO_CANCEL");
             }
 
             return autoCancelledCount;
@@ -1710,6 +1742,39 @@ SELECT @result;
             });
         }
 
+        private async Task PublishRequestUpdateAsync(int messageId, string action)
+        {
+            if (messageId <= 0)
+            {
+                return;
+            }
+
+            var normalizedAction = string.IsNullOrWhiteSpace(action)
+                ? "UPDATE"
+                : action.Trim().ToUpperInvariant();
+            var messageText = $"SUMMER_REQUEST_UPDATED|{messageId}|{normalizedAction}|{DateTime.UtcNow:o}";
+            var notification = new NotificationDto
+            {
+                Notification = messageText,
+                type = NotificationType.info,
+                Title = "تحديث طلبات المصايف",
+                time = DateTime.Now,
+                sender = "Connect",
+                Category = NotificationCategory.Business
+            };
+
+            await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+            {
+                GroupNames = SummerNotificationGroups,
+                Notification = notification.Notification,
+                Type = notification.type,
+                Title = notification.Title,
+                Time = notification.time,
+                Sender = notification.sender,
+                Category = notification.Category ?? NotificationCategory.Business
+            });
+        }
+
         private async Task NotifySummerActionGroupAsync(int messageId, string message, string title)
         {
             if (messageId <= 0 || string.IsNullOrWhiteSpace(message))
@@ -1804,7 +1869,7 @@ SELECT @result;
                 EmployeePhone = GetFirstFieldValue(fields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
                 EmployeeExtraPhone = GetFirstFieldValue(fields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
                 Status = message.Status.ToString(),
-                StatusLabel = needsTransferReview ? workflowStateLabel : message.Status.GetDescription(),
+                StatusLabel = ResolveSummaryStatusLabel(message.Status, fields, needsTransferReview, workflowStateLabel),
                 WorkflowStateCode = workflowStateCode,
                 WorkflowStateLabel = workflowStateLabel,
                 NeedsTransferReview = needsTransferReview,
@@ -2174,6 +2239,59 @@ SELECT @result;
             }
 
             return "تم التحويل ويلزم متابعة إدارية.";
+        }
+
+        private static string ResolveSummaryStatusLabel(
+            MessageStatus messageStatus,
+            IEnumerable<TkmendField> fields,
+            bool needsTransferReview,
+            string workflowStateLabel)
+        {
+            if (needsTransferReview && !string.IsNullOrWhiteSpace(workflowStateLabel))
+            {
+                return workflowStateLabel;
+            }
+
+            var adminAction = NormalizeActionCode(GetFieldValue(fields, "Summer_AdminLastAction"));
+            return adminAction switch
+            {
+                "FINAL_APPROVE" => "اعتماد نهائي",
+                "COMMENT" => "رد إداري",
+                "MANUAL_CANCEL" => "إلغاء يدوي",
+                "APPROVE_TRANSFER" => "اعتماد تحويل",
+                _ => messageStatus.GetDescription()
+            };
+        }
+
+        private static string ResolveDashboardStatusLabel(SummerRequestSummaryDto request)
+        {
+            var explicitLabel = (request?.StatusLabel ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(explicitLabel))
+            {
+                return explicitLabel;
+            }
+
+            var status = ResolveMessageStatus(request?.Status);
+            return status.GetDescription();
+        }
+
+        private static string ResolveDashboardStatusCode(string label)
+        {
+            var token = NormalizeSearchToken(label);
+            return token switch
+            {
+                "جديد" => "NEW",
+                "جاريالتنفيذ" => "IN_PROGRESS",
+                "ردإداري" or "رداداري" => "ADMIN_REPLY",
+                "تمالرد" => "REPLIED",
+                "اعتمادنهائي" => "FINAL_APPROVE",
+                "اعتمادتحويل" => "APPROVE_TRANSFER",
+                "الغاءيدوي" => "MANUAL_CANCEL",
+                "مرفوض" or "ملغي" => "REJECTED",
+                "يتطلبمراجعةبعدالتحويل" => TransferReviewRequiredCode,
+                "تمتمراجعةالتحويل" => TransferReviewResolvedCode,
+                _ => token.ToUpperInvariant()
+            };
         }
 
         private static string NormalizeActionCode(string? actionCode)

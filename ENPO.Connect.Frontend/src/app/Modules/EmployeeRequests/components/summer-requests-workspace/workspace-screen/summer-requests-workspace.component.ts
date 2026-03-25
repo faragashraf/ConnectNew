@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+﻿import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
@@ -32,6 +32,7 @@ import {
   buildSummerRequestDetailFields,
   coalesceText,
   extractCapacityPayloadFromSignal,
+  extractRequestUpdatePayloadFromSignal,
   formatLocalDateHour,
   formatUtcDateToCairoHour,
   getFieldValueByKeys,
@@ -199,8 +200,8 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   get signalRStatusLabel(): string {
     return this.isSignalRConnected
-      ? 'متصل بالخدمة اللحظية (SignalR)'
-      : 'الخدمة اللحظية غير متصلة (SignalR)';
+      ? 'Ù…ØªØµÙ„ Ø¨Ø§Ù„Ø®Ø¯Ù…Ø© Ø§Ù„Ù„Ø­Ø¸ÙŠØ© (SignalR)'
+      : 'Ø§Ù„Ø®Ø¯Ù…Ø© Ø§Ù„Ù„Ø­Ø¸ÙŠØ© ØºÙŠØ± Ù…ØªØµÙ„Ø© (SignalR)';
   }
 
   get selectedRequestDetailFields(): SummerRequestFieldGridRow[] {
@@ -263,7 +264,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         'IdNumber',
         'NationalNo',
         'IdentityNumber',
-        'الرقم القومي',
+        'Ø§Ù„Ø±Ù‚Ù… Ø§Ù„Ù‚ÙˆÙ…ÙŠ',
         'UserNationalId'
       ]),
       summary?.employeeNationalId
@@ -281,8 +282,8 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         'Emp_Phone',
         'Telephone',
         'Tel',
-        'رقم الهاتف',
-        'هاتف',
+        'Ø±Ù‚Ù… Ø§Ù„Ù‡Ø§ØªÙ',
+        'Ù‡Ø§ØªÙ',
         'UserPhone',
         'Mobile'
       ]),
@@ -290,7 +291,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     );
 
     const extraPhone = coalesceText(
-      getFieldValueByKeys(sourceFields, ['ExtraPhoneNumber', 'SecondaryPhone', 'AlternatePhone', 'PhoneSecondary', 'هاتف إضافي']),
+      getFieldValueByKeys(sourceFields, ['ExtraPhoneNumber', 'SecondaryPhone', 'AlternatePhone', 'PhoneSecondary', 'Ù‡Ø§ØªÙ Ø¥Ø¶Ø§ÙÙŠ']),
       summary?.employeeExtraPhone
     );
 
@@ -407,15 +408,15 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   getEditBlockedReason(request: SummerRequestSummaryDto | undefined | null): string {
     if (!request) {
-      return 'لا يمكن تعديل الطلب.';
+      return 'Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø·Ù„Ø¨.';
     }
 
     if (this.isRejectedStatus(request.status)) {
-      return 'لا يمكن تعديل طلب ملغي/مرفوض.';
+      return 'Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø·Ù„Ø¨ Ù…Ù„ØºÙŠ/Ù…Ø±ÙÙˆØ¶.';
     }
 
     if (String(request.paidAtUtc ?? '').trim().length > 0) {
-      return 'لا يمكن تعديل الطلب بعد تسجيل السداد.';
+      return 'Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø·Ù„Ø¨ Ø¨Ø¹Ø¯ ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø³Ø¯Ø§Ø¯.';
     }
 
     return '';
@@ -427,8 +428,8 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }
 
     if (!this.canEditRequest(request)) {
-      const reason = this.getEditBlockedReason(request) || 'لا يمكن تعديل هذا الطلب.';
-      this.msg.msgError('غير متاح', `<h5>${reason}</h5>`, true);
+      const reason = this.getEditBlockedReason(request) || 'Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ù‡Ø°Ø§ Ø§Ù„Ø·Ù„Ø¨.';
+      this.msg.msgError('ØºÙŠØ± Ù…ØªØ§Ø­', `<h5>${reason}</h5>`, true);
       return;
     }
 
@@ -456,8 +457,8 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
     if (invalidFiles.length > 0) {
       this.msg.msgError(
-        'نوع ملف غير مسموح',
-        `<h5>يسمح فقط بملفات PDF أو صور. الملفات غير المسموح بها: ${invalidFiles.map(file => file.name).join(' - ')}</h5>`,
+        'Ù†ÙˆØ¹ Ù…Ù„Ù ØºÙŠØ± Ù…Ø³Ù…ÙˆØ­',
+        `<h5>ÙŠØ³Ù…Ø­ ÙÙ‚Ø· Ø¨Ù…Ù„ÙØ§Øª PDF Ø£Ùˆ ØµÙˆØ±. Ø§Ù„Ù…Ù„ÙØ§Øª ØºÙŠØ± Ø§Ù„Ù…Ø³Ù…ÙˆØ­ Ø¨Ù‡Ø§: ${invalidFiles.map(file => file.name).join(' - ')}</h5>`,
         true
       );
     }
@@ -495,7 +496,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   submitCancel(): void {
     this.cancelForm.markAllAsTouched();
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ø·Ù„Ø¨.</h5>', true);
       return;
     }
 
@@ -507,17 +508,17 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تنفيذ الاعتذار بنجاح');
+          this.msg.msgSuccess('ØªÙ… ØªÙ†ÙÙŠØ° Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ø¨Ù†Ø¬Ø§Ø­');
           this.cancelForm.reset({ reason: '' });
           this.cancelAttachments = [];
           this.loadMyRequests();
           return;
         }
 
-        this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
+        this.msg.msgError('Ø®Ø·Ø£', `<h5>${this.collectErrors(response)}</h5>`, true);
       },
       error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تنفيذ الاعتذار حاليًا.</h5>', true);
+        this.msg.msgError('Ø®Ø·Ø£', '<h5>ØªØ¹Ø°Ø± ØªÙ†ÙÙŠØ° Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ø­Ø§Ù„ÙŠÙ‹Ø§.</h5>', true);
       },
       complete: () => {
         this.submittingCancel = false;
@@ -528,17 +529,17 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   submitPayment(): void {
     this.paymentForm.markAllAsTouched();
     if (this.paymentForm.invalid) {
-      this.msg.msgError('خطأ', '<h5>يرجى استكمال بيانات السداد.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>ÙŠØ±Ø¬Ù‰ Ø§Ø³ØªÙƒÙ…Ø§Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø³Ø¯Ø§Ø¯.</h5>', true);
       return;
     }
 
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ø·Ù„Ø¨.</h5>', true);
       return;
     }
 
     if (this.paymentAttachments.length === 0) {
-      this.msg.msgError('خطأ', '<h5>يجب إرفاق ملف واحد على الأقل قبل تسجيل السداد.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>ÙŠØ¬Ø¨ Ø¥Ø±ÙØ§Ù‚ Ù…Ù„Ù ÙˆØ§Ø­Ø¯ Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„ Ù‚Ø¨Ù„ ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø³Ø¯Ø§Ø¯.</h5>', true);
       return;
     }
 
@@ -555,17 +556,17 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تسجيل السداد بنجاح');
+          this.msg.msgSuccess('ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø¨Ù†Ø¬Ø§Ø­');
           this.paymentForm.reset({ paidAtLocal: '', notes: '' });
           this.paymentAttachments = [];
           this.loadMyRequests();
           return;
         }
 
-        this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
+        this.msg.msgError('Ø®Ø·Ø£', `<h5>${this.collectErrors(response)}</h5>`, true);
       },
       error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تسجيل السداد حاليًا.</h5>', true);
+        this.msg.msgError('Ø®Ø·Ø£', '<h5>ØªØ¹Ø°Ø± ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø­Ø§Ù„ÙŠÙ‹Ø§.</h5>', true);
       },
       complete: () => {
         this.submittingPayment = false;
@@ -576,23 +577,23 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   submitTransfer(): void {
     this.transferForm.markAllAsTouched();
     if (this.transferForm.invalid) {
-      this.msg.msgError('خطأ', '<h5>يرجى استكمال بيانات التحويل.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>ÙŠØ±Ø¬Ù‰ Ø§Ø³ØªÙƒÙ…Ø§Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ØªØ­ÙˆÙŠÙ„.</h5>', true);
       return;
     }
 
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ø·Ù„Ø¨.</h5>', true);
       return;
     }
 
     if (this.seasonTransferAlreadyUsed) {
-      this.msg.msgError('خطأ', '<h5>تم استخدام التحويل بالفعل في الموسم الحالي.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>ØªÙ… Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„ØªØ­ÙˆÙŠÙ„ Ø¨Ø§Ù„ÙØ¹Ù„ ÙÙŠ Ø§Ù„Ù…ÙˆØ³Ù… Ø§Ù„Ø­Ø§Ù„ÙŠ.</h5>', true);
       return;
     }
 
     const destination = this.transferDestination;
     if (!destination) {
-      this.msg.msgError('خطأ', '<h5>الوجهة المستهدفة غير صالحة.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>Ø§Ù„ÙˆØ¬Ù‡Ø© Ø§Ù„Ù…Ø³ØªÙ‡Ø¯ÙØ© ØºÙŠØ± ØµØ§Ù„Ø­Ø©.</h5>', true);
       return;
     }
 
@@ -601,13 +602,13 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const newExtraCount = this.getNumberValue(this.transferForm.get('newExtraCount'));
 
     if (maxFamilyOption > 0 && newFamilyCount !== maxFamilyOption && newExtraCount > 0) {
-      this.msg.msgError('خطأ', '<h5>الأفراد الإضافيون متاحون فقط عند اختيار السعة القصوى.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>Ø§Ù„Ø£ÙØ±Ø§Ø¯ Ø§Ù„Ø¥Ø¶Ø§ÙÙŠÙˆÙ† Ù…ØªØ§Ø­ÙˆÙ† ÙÙ‚Ø· Ø¹Ù†Ø¯ Ø§Ø®ØªÙŠØ§Ø± Ø§Ù„Ø³Ø¹Ø© Ø§Ù„Ù‚ØµÙˆÙ‰.</h5>', true);
       return;
     }
 
     const transferCapacity = this.getTransferCapacityByFamily(newFamilyCount);
     if (transferCapacity && transferCapacity.availableUnits <= 0) {
-      this.msg.msgError('خطأ', '<h5>لا توجد سعة متاحة لعدد الأفراد المختار في الفوج المحدد.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>Ù„Ø§ ØªÙˆØ¬Ø¯ Ø³Ø¹Ø© Ù…ØªØ§Ø­Ø© Ù„Ø¹Ø¯Ø¯ Ø§Ù„Ø£ÙØ±Ø§Ø¯ Ø§Ù„Ù…Ø®ØªØ§Ø± ÙÙŠ Ø§Ù„ÙÙˆØ¬ Ø§Ù„Ù…Ø­Ø¯Ø¯.</h5>', true);
       return;
     }
 
@@ -623,17 +624,17 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تنفيذ التحويل بنجاح');
+          this.msg.msgSuccess('ØªÙ… ØªÙ†ÙÙŠØ° Ø§Ù„ØªØ­ÙˆÙŠÙ„ Ø¨Ù†Ø¬Ø§Ø­');
           this.transferAttachments = [];
           this.transferForm.patchValue({ notes: '' });
           this.loadMyRequests();
           return;
         }
 
-        this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
+        this.msg.msgError('Ø®Ø·Ø£', `<h5>${this.collectErrors(response)}</h5>`, true);
       },
       error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تنفيذ التحويل حاليًا.</h5>', true);
+        this.msg.msgError('Ø®Ø·Ø£', '<h5>ØªØ¹Ø°Ø± ØªÙ†ÙÙŠØ° Ø§Ù„ØªØ­ÙˆÙŠÙ„ Ø­Ø§Ù„ÙŠÙ‹Ø§.</h5>', true);
       },
       complete: () => {
         this.submittingTransfer = false;
@@ -681,11 +682,11 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         const errors = Array.isArray(response?.errors) ? response.errors : [];
         this.destinationsError = errors.length > 0
           ? errors.join('<br/>')
-          : 'تعذر تحميل إعدادات المصايف من CDMendTbl.';
+          : 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù…ØµØ§ÙŠÙ Ù…Ù† CDMendTbl.';
       },
       error: () => {
         this.destinations = [];
-        this.destinationsError = 'تعذر تحميل إعدادات المصايف من الخدمة العامة.';
+        this.destinationsError = 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù…ØµØ§ÙŠÙ Ù…Ù† Ø§Ù„Ø®Ø¯Ù…Ø© Ø§Ù„Ø¹Ø§Ù…Ø©.';
       },
       complete: () => {
         this.loadingDestinations = false;
@@ -707,14 +708,14 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           if (this.isEditMode && this.editRequestId) {
             const editRequest = this.myRequests.find(item => item.messageId === this.editRequestId);
             if (!editRequest) {
-              this.msg.msgError('خطأ', '<h5>تعذر العثور على الطلب المطلوب للتعديل ضمن طلباتك الحالية.</h5>', true);
+              this.msg.msgError('Ø®Ø·Ø£', '<h5>ØªØ¹Ø°Ø± Ø§Ù„Ø¹Ø«ÙˆØ± Ø¹Ù„Ù‰ Ø§Ù„Ø·Ù„Ø¨ Ø§Ù„Ù…Ø·Ù„ÙˆØ¨ Ù„Ù„ØªØ¹Ø¯ÙŠÙ„ Ø¶Ù…Ù† Ø·Ù„Ø¨Ø§ØªÙƒ Ø§Ù„Ø­Ø§Ù„ÙŠØ©.</h5>', true);
               this.exitEditMode(true);
               return;
             }
 
             if (!this.canEditRequest(editRequest)) {
-              const reason = this.getEditBlockedReason(editRequest) || 'لا يمكن تعديل هذا الطلب.';
-              this.msg.msgError('غير متاح', `<h5>${reason}</h5>`, true);
+              const reason = this.getEditBlockedReason(editRequest) || 'Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ù‡Ø°Ø§ Ø§Ù„Ø·Ù„Ø¨.';
+              this.msg.msgError('ØºÙŠØ± Ù…ØªØ§Ø­', `<h5>${reason}</h5>`, true);
               this.exitEditMode(true);
               return;
             }
@@ -771,7 +772,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   getStatusClass(request: SummerRequestSummaryDto): string {
-    return getStatusClass(request.status);
+    return getStatusClass(String(request?.statusLabel ?? request?.status ?? '').trim());
   }
 
   getStatusLabel(status: string | undefined): string {
@@ -779,6 +780,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   getRequestStatusLabel(request: SummerRequestSummaryDto): string {
+    const explicitLabel = String(request?.statusLabel ?? '').trim();
+    if (explicitLabel.length > 0) {
+      return explicitLabel;
+    }
     return this.getStatusLabel(request?.status);
   }
 
@@ -790,15 +795,15 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   getCancelWindowNote(): string {
     const info = this.getCancelWindowInfo();
     if (!info) {
-      return 'قاعدة الاعتذار: لا يمكن الاعتذار قبل موعد الفوج بأقل من 14 يوم.';
+      return 'Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø±: Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ù‚Ø¨Ù„ Ù…ÙˆØ¹Ø¯ Ø§Ù„ÙÙˆØ¬ Ø¨Ø£Ù‚Ù„ Ù…Ù† 14 ÙŠÙˆÙ….';
     }
 
     const lockDateText = formatLocalDateHour(info.lastAllowedDate);
     if (info.blocked) {
-      return `انتهت مهلة الاعتذار لهذا الطلب. آخر موعد كان ${lockDateText}.`;
+      return `Ø§Ù†ØªÙ‡Øª Ù…Ù‡Ù„Ø© Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ù„Ù‡Ø°Ø§ Ø§Ù„Ø·Ù„Ø¨. Ø¢Ø®Ø± Ù…ÙˆØ¹Ø¯ ÙƒØ§Ù† ${lockDateText}.`;
     }
 
-    return `يمكن تقديم الاعتذار حتى ${lockDateText}.`;
+    return `ÙŠÙ…ÙƒÙ† ØªÙ‚Ø¯ÙŠÙ… Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ø­ØªÙ‰ ${lockDateText}.`;
   }
 
   isRejectedStatus(status: string | undefined): boolean {
@@ -816,27 +821,27 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
     const actionType = this.getSelectedActionType();
     if (actionType === 'CANCEL') {
-      return 'تم تسجيل الاعتذار مسبقًا عن هذا الطلب.';
+      return 'ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø§Ø¹ØªØ°Ø§Ø± Ù…Ø³Ø¨Ù‚Ù‹Ø§ Ø¹Ù† Ù‡Ø°Ø§ Ø§Ù„Ø·Ù„Ø¨.';
     }
 
     if (actionType === 'AUTO_CANCEL_PAYMENT_TIMEOUT') {
-      return 'تم إلغاء الطلب تلقائيًا لعدم السداد خلال مهلة يوم العمل.';
+      return 'ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø·Ù„Ø¨ ØªÙ„Ù‚Ø§Ø¦ÙŠÙ‹Ø§ Ù„Ø¹Ø¯Ù… Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø®Ù„Ø§Ù„ Ù…Ù‡Ù„Ø© ÙŠÙˆÙ… Ø§Ù„Ø¹Ù…Ù„.';
     }
 
     if (actionType === 'MANUAL_CANCEL') {
-      return 'تم إلغاء الطلب يدويًا من إدارة المصايف.';
+      return 'ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø·Ù„Ø¨ ÙŠØ¯ÙˆÙŠÙ‹Ø§ Ù…Ù† Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ù…ØµØ§ÙŠÙ.';
     }
 
     const reason = this.getSelectedCancelReason().toLowerCase();
-    if (reason.includes('تلقائي') || reason.includes('مهلة') || reason.includes('auto')) {
-      return 'تم إلغاء الطلب تلقائيًا لعدم السداد خلال مهلة يوم العمل.';
+    if (reason.includes('ØªÙ„Ù‚Ø§Ø¦ÙŠ') || reason.includes('Ù…Ù‡Ù„Ø©') || reason.includes('auto')) {
+      return 'ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø·Ù„Ø¨ ØªÙ„Ù‚Ø§Ø¦ÙŠÙ‹Ø§ Ù„Ø¹Ø¯Ù… Ø§Ù„Ø³Ø¯Ø§Ø¯ Ø®Ù„Ø§Ù„ Ù…Ù‡Ù„Ø© ÙŠÙˆÙ… Ø§Ù„Ø¹Ù…Ù„.';
     }
 
     if (reason.length > 0) {
-      return `الطلب ملغي/مرفوض. السبب: ${reason}`;
+      return `Ø§Ù„Ø·Ù„Ø¨ Ù…Ù„ØºÙŠ/Ù…Ø±ÙÙˆØ¶. Ø§Ù„Ø³Ø¨Ø¨: ${reason}`;
     }
 
-    return 'الطلب ملغي/مرفوض ولا يمكن تسجيل اعتذار جديد.';
+    return 'Ø§Ù„Ø·Ù„Ø¨ Ù…Ù„ØºÙŠ/Ù…Ø±ÙÙˆØ¶ ÙˆÙ„Ø§ ÙŠÙ…ÙƒÙ† ØªØ³Ø¬ÙŠÙ„ Ø§Ø¹ØªØ°Ø§Ø± Ø¬Ø¯ÙŠØ¯.';
   }
 
   isTransferAvailable(request: SummerRequestSummaryDto): boolean {
@@ -861,18 +866,18 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   getTransferStateLabel(request: SummerRequestSummaryDto): string {
     if (request.transferUsed) {
-      return 'تم استخدام التحويل';
+      return 'ØªÙ… Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„ØªØ­ÙˆÙŠÙ„';
     }
 
     if (this.isRejectedStatus(request.status)) {
-      return 'غير متاح (الطلب ملغي/مرفوض)';
+      return 'ØºÙŠØ± Ù…ØªØ§Ø­ (Ø§Ù„Ø·Ù„Ø¨ Ù…Ù„ØºÙŠ/Ù…Ø±ÙÙˆØ¶)';
     }
 
     if (this.seasonTransferAlreadyUsed) {
-      return 'غير متاح (تم استخدام التحويل في طلب آخر)';
+      return 'ØºÙŠØ± Ù…ØªØ§Ø­ (ØªÙ… Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„ØªØ­ÙˆÙŠÙ„ ÙÙŠ Ø·Ù„Ø¨ Ø¢Ø®Ø±)';
     }
 
-    return 'متاح التحويل';
+    return 'Ù…ØªØ§Ø­ Ø§Ù„ØªØ­ÙˆÙŠÙ„';
   }
 
   getTransferStateClass(request: SummerRequestSummaryDto): string {
@@ -881,15 +886,15 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   getSelectedTransferBlockNote(request: SummerRequestSummaryDto): string {
     if (request.transferUsed) {
-      return 'تم استخدام التحويل بالفعل لهذا الطلب.';
+      return 'ØªÙ… Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„ØªØ­ÙˆÙŠÙ„ Ø¨Ø§Ù„ÙØ¹Ù„ Ù„Ù‡Ø°Ø§ Ø§Ù„Ø·Ù„Ø¨.';
     }
 
     if (this.isRejectedStatus(request.status)) {
-      return 'لا يمكن تحويل طلب ملغي أو مرفوض.';
+      return 'Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ­ÙˆÙŠÙ„ Ø·Ù„Ø¨ Ù…Ù„ØºÙŠ Ø£Ùˆ Ù…Ø±ÙÙˆØ¶.';
     }
 
     if (this.seasonTransferAlreadyUsed) {
-      return 'تم استخدام التحويل بالفعل في هذا الموسم، ولا يمكن تنفيذ تحويل جديد.';
+      return 'ØªÙ… Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„ØªØ­ÙˆÙŠÙ„ Ø¨Ø§Ù„ÙØ¹Ù„ ÙÙŠ Ù‡Ø°Ø§ Ø§Ù„Ù…ÙˆØ³Ù…ØŒ ÙˆÙ„Ø§ ÙŠÙ…ÙƒÙ† ØªÙ†ÙÙŠØ° ØªØ­ÙˆÙŠÙ„ Ø¬Ø¯ÙŠØ¯.';
     }
 
     return '';
@@ -901,7 +906,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return `${familyCount}`;
     }
 
-    return `${familyCount} (متاح ${Math.max(0, capacity.availableUnits)} من ${capacity.totalUnits})`;
+    return `${familyCount} (Ù…ØªØ§Ø­ ${Math.max(0, capacity.availableUnits)} Ù…Ù† ${capacity.totalUnits})`;
   }
 
   isTransferFamilyOptionDisabled(familyCount: number): boolean {
@@ -916,11 +921,11 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   downloadAttachment(attachmentId: number, fileName: string): void {
     if (!attachmentId || attachmentId <= 0) {
-      this.msg.msgError('خطأ', '<h5>لا يمكن تنزيل المرفق لأن معرف المرفق غير صالح.</h5>', true);
+      this.msg.msgError('Ø®Ø·Ø£', '<h5>Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªÙ†Ø²ÙŠÙ„ Ø§Ù„Ù…Ø±ÙÙ‚ Ù„Ø£Ù† Ù…Ø¹Ø±Ù Ø§Ù„Ù…Ø±ÙÙ‚ ØºÙŠØ± ØµØ§Ù„Ø­.</h5>', true);
       return;
     }
 
-    this.spinner.show('جاري تحميل المرفق ...');
+    this.spinner.show('Ø¬Ø§Ø±ÙŠ ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ù…Ø±ÙÙ‚ ...');
     this.attachmentsController.downloadDocument(attachmentId).subscribe({
       next: response => {
         const fileContent = String(response?.data ?? '').trim();
@@ -933,10 +938,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           .map(item => String(item?.message ?? '').trim())
           .filter(item => item.length > 0)
           .join('<br/>');
-        this.msg.msgError('خطأ', `<h5>${errors || 'تعذر تحميل المرفق.'}</h5>`, true);
+        this.msg.msgError('Ø®Ø·Ø£', `<h5>${errors || 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ù…Ø±ÙÙ‚.'}</h5>`, true);
       },
       error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تحميل بيانات المرفق.</h5>', true);
+        this.msg.msgError('Ø®Ø·Ø£', '<h5>ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ø±ÙÙ‚.</h5>', true);
       },
       complete: () => {
         this.spinner.hide();
@@ -1008,7 +1013,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         this.selectedRequestDetails = null;
         this.selectedRequestDetailsError = this.resolveRequestDetailsErrorMessage(
           collectedErrors,
-          'تعذر تحميل تفاصيل الطلب من الخدمة حالياً.'
+          'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ ØªÙØ§ØµÙŠÙ„ Ø§Ù„Ø·Ù„Ø¨ Ù…Ù† Ø§Ù„Ø®Ø¯Ù…Ø© Ø­Ø§Ù„ÙŠØ§Ù‹.'
         );
         this.loadingSelectedRequestDetails = false;
         return;
@@ -1036,7 +1041,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           }
         },
         error: () => {
-          collectedErrors.push({ message: 'تعذر الوصول لخدمة الطلبات أثناء محاولة التحميل البديلة.' });
+          collectedErrors.push({ message: 'ØªØ¹Ø°Ø± Ø§Ù„ÙˆØµÙˆÙ„ Ù„Ø®Ø¯Ù…Ø© Ø§Ù„Ø·Ù„Ø¨Ø§Øª Ø£Ø«Ù†Ø§Ø¡ Ù…Ø­Ø§ÙˆÙ„Ø© Ø§Ù„ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ø¨Ø¯ÙŠÙ„Ø©.' });
         },
         complete: () => {
           if (resolved) {
@@ -1151,9 +1156,13 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         this.refreshCapacityFromSignal(capacityPayload);
       }
 
-      if (text.includes('summer') || text.includes('booking') || text.includes('capacity') || text.includes('مصيف') || text.includes('حجز') || text.includes('إتاحة')) {
+      const requestUpdate = extractRequestUpdatePayloadFromSignal([body, title]);
+      if (requestUpdate || text.includes('summer') || text.includes('booking') || text.includes('capacity') || text.includes('request') || text.includes('مصيف') || text.includes('مصايف') || text.includes('حجز') || text.includes('إتاحة') || text.includes('سداد') || text.includes('اعتماد') || text.includes('تحويل')) {
         this.loadMyRequests();
         this.loadTransferCapacity();
+        if (this.selectedRequestId && (!requestUpdate || requestUpdate.messageId === this.selectedRequestId)) {
+          this.loadSelectedRequestDetails(this.selectedRequestId);
+        }
       }
     });
 
@@ -1277,7 +1286,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       .map(error => String(error?.message ?? '').trim())
       .filter(message => message.length > 0);
 
-    return errors.length ? errors.join('<br/>') : 'لا توجد رسائل خطأ.';
+    return errors.length ? errors.join('<br/>') : 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ø±Ø³Ø§Ø¦Ù„ Ø®Ø·Ø£.';
   }
 
   private getNumberValue(control: AbstractControl | null): number {
@@ -1652,7 +1661,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
     const normalized = combined.toLowerCase();
     if (normalized.includes('attch_shipment') && normalized.includes('invalid object name')) {
-      return 'تعذر تحميل تفاصيل الطلب بسبب مشكلة بجدول المرفقات في قاعدة البيانات (Attch_shipment). برجاء مراجعة الـ Backend.';
+      return 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ ØªÙØ§ØµÙŠÙ„ Ø§Ù„Ø·Ù„Ø¨ Ø¨Ø³Ø¨Ø¨ Ù…Ø´ÙƒÙ„Ø© Ø¨Ø¬Ø¯ÙˆÙ„ Ø§Ù„Ù…Ø±ÙÙ‚Ø§Øª ÙÙŠ Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª (Attch_shipment). Ø¨Ø±Ø¬Ø§Ø¡ Ù…Ø±Ø§Ø¬Ø¹Ø© Ø§Ù„Ù€ Backend.';
     }
 
     return combined || fallback;
