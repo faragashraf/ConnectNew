@@ -1384,6 +1384,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       'mendFields',
       'MendFields'
     ]));
+    this.harmonizeEditFieldAliases(fields);
     normalized['fields'] = fields;
 
     let categoryCd = this.parsePositiveInt(this.readValue(source, [
@@ -1428,6 +1429,88 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     normalized['replies'] = replies;
 
     return normalized as unknown as MessageDto;
+  }
+
+  private harmonizeEditFieldAliases(fields: TkmendField[]): void {
+    if (!Array.isArray(fields) || fields.length === 0) {
+      return;
+    }
+
+    // Keep edit-screen aliases in sync with canonical summer keys used by backend transfer actions.
+    this.syncAliasFieldValues(fields, ['SummerCamp', 'SUM2026_WaveCode', 'WaveCode'], this.engine.aliases.waveCode);
+    this.syncAliasFieldValues(fields, ['SummerCampLabel', 'SUM2026_WaveLabel', 'WaveLabel'], this.engine.aliases.waveLabel);
+    this.syncAliasFieldValues(fields, ['FamilyCount', 'SUM2026_FamilyCount'], this.engine.aliases.familyCount);
+    this.syncAliasFieldValues(fields, ['Over_Count', 'SUM2026_ExtraCount', 'ExtraCount'], this.engine.aliases.extraCount);
+    this.syncAliasFieldValues(fields, ['SummerDestinationId', 'SUM2026_DestinationId'], this.engine.aliases.destinationId);
+    this.syncAliasFieldValues(fields, ['SummerDestinationName', 'SUM2026_DestinationName'], this.engine.aliases.destinationName);
+  }
+
+  private syncAliasFieldValues(fields: TkmendField[], sourceAliases: string[], targetAliases: string[]): void {
+    const sourceField = this.findFirstFieldByAliases(fields, sourceAliases);
+    const sourceValue = String(sourceField?.fildTxt ?? '').trim();
+    if (sourceValue.length === 0) {
+      return;
+    }
+
+    const uniqueTargets = Array.from(new Set(
+      (targetAliases ?? [])
+        .map(alias => String(alias ?? '').trim())
+        .filter(alias => alias.length > 0)
+    ));
+
+    uniqueTargets.forEach(alias => {
+      const targetField = this.findFirstFieldByAliases(fields, [alias]);
+      if (targetField) {
+        if (String(targetField.fildTxt ?? '').trim() !== sourceValue) {
+          targetField.fildTxt = sourceValue;
+        }
+        return;
+      }
+
+      fields.push({
+        ...(sourceField ?? ({} as TkmendField)),
+        fildSql: fields.length + 1,
+        fildKind: alias,
+        fildTxt: sourceValue,
+        fildRelted: Number(sourceField?.fildRelted ?? 0) || 0,
+        instanceGroupId: Number(sourceField?.instanceGroupId ?? 1) || 1,
+        mendSql: Number(sourceField?.mendSql ?? 0) || 0,
+        mendCategory: Number(sourceField?.mendCategory ?? this.selectedDestinationId ?? 0) || 0,
+        mendStat: sourceField?.mendStat ?? false,
+        mendGroup: Number(sourceField?.mendGroup ?? 0) || 0,
+        applicationId: String(sourceField?.applicationId ?? this.resolvedApplicationId ?? ''),
+        groupName: String(sourceField?.groupName ?? ''),
+        isExtendable: sourceField?.isExtendable ?? false,
+        groupWithInRow: Number(sourceField?.groupWithInRow ?? 0) || 0
+      } as TkmendField);
+    });
+  }
+
+  private findFirstFieldByAliases(fields: TkmendField[], aliases: string[]): TkmendField | null {
+    if (!Array.isArray(fields) || fields.length === 0 || !Array.isArray(aliases) || aliases.length === 0) {
+      return null;
+    }
+
+    const normalizedAliases = aliases
+      .map(alias => this.normalizeObjectLookupKey(alias))
+      .filter(alias => alias.length > 0);
+
+    if (normalizedAliases.length === 0) {
+      return null;
+    }
+
+    for (const field of fields) {
+      const key = this.normalizeObjectLookupKey(String(field?.fildKind ?? ''));
+      if (key.length === 0) {
+        continue;
+      }
+
+      if (normalizedAliases.includes(key)) {
+        return field;
+      }
+    }
+
+    return null;
   }
 
   private normalizeLoadedFields(rawFields: unknown): TkmendField[] {

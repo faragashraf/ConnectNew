@@ -34,6 +34,12 @@ namespace Persistence.Services
         private const string SummerDestinationCatalogMend = "SUM2026_DestinationCatalog";
         private const string TransferReviewRequiredCode = "TRANSFER_REVIEW_REQUIRED";
         private const string TransferReviewResolvedCode = "TRANSFER_REVIEW_RESOLVED";
+        private static readonly string[] WaveCodeFieldKinds = { "SummerCamp", "SUM2026_WaveCode", "WaveCode" };
+        private static readonly string[] WaveLabelFieldKinds = { "SummerCampLabel", "SUM2026_WaveLabel", "WaveLabel" };
+        private static readonly string[] FamilyCountFieldKinds = { "FamilyCount", "SUM2026_FamilyCount" };
+        private static readonly string[] ExtraCountFieldKinds = { "Over_Count", "SUM2026_ExtraCount", "ExtraCount" };
+        private static readonly string[] DestinationIdFieldKinds = { "SummerDestinationId", "SUM2026_DestinationId" };
+        private static readonly string[] DestinationNameFieldKinds = { "SummerDestinationName", "SUM2026_DestinationName" };
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -1071,8 +1077,8 @@ namespace Persistence.Services
                     return response;
                 }
 
-                var currentFamilyCount = ParseInt(GetFieldValue(fields, "FamilyCount"), 0);
-                var currentExtraCount = ParseInt(GetFieldValue(fields, "Over_Count"), 0);
+                var currentFamilyCount = ParseInt(GetFirstFieldValue(fields, "FamilyCount", "SUM2026_FamilyCount"), 0);
+                var currentExtraCount = ParseInt(GetFirstFieldValue(fields, "Over_Count", "SUM2026_ExtraCount", "ExtraCount"), 0);
                 var newFamilyCount = request.NewFamilyCount ?? currentFamilyCount;
                 var newExtraCount = request.NewExtraCount ?? currentExtraCount;
                 var familyCompositionChanged = newFamilyCount != currentFamilyCount || newExtraCount != currentExtraCount;
@@ -1093,6 +1099,7 @@ namespace Persistence.Services
                 var targetCategoryDisplayName = string.IsNullOrWhiteSpace(targetCategoryName)
                     ? $"رقم {request.ToCategoryId}"
                     : targetCategoryName.Trim();
+                var targetWaveLabel = normalizedTargetWave;
 
                 if (newFamilyCount <= 0 || !rule.CapacityByFamily.ContainsKey(newFamilyCount))
                 {
@@ -1148,13 +1155,16 @@ namespace Persistence.Services
                     }
 
                     var fromCategory = message.CategoryCd;
-                    var fromWave = GetFieldValue(fields, "SummerCamp") ?? string.Empty;
+                    var fromWave = GetFirstFieldValue(fields, "SummerCamp", "SUM2026_WaveCode", "WaveCode");
 
                     message.CategoryCd = request.ToCategoryId;
 
-                    UpsertField(fields, message.MessageId, "SummerCamp", normalizedTargetWave);
-                    UpsertField(fields, message.MessageId, "FamilyCount", newFamilyCount.ToString());
-                    UpsertField(fields, message.MessageId, "Over_Count", newExtraCount.ToString());
+                    UpsertFieldRange(fields, message.MessageId, WaveCodeFieldKinds, normalizedTargetWave);
+                    UpsertFieldRange(fields, message.MessageId, WaveLabelFieldKinds, targetWaveLabel);
+                    UpsertFieldRange(fields, message.MessageId, FamilyCountFieldKinds, newFamilyCount.ToString());
+                    UpsertFieldRange(fields, message.MessageId, ExtraCountFieldKinds, newExtraCount.ToString());
+                    UpsertFieldRange(fields, message.MessageId, DestinationIdFieldKinds, request.ToCategoryId.ToString());
+                    UpsertFieldRange(fields, message.MessageId, DestinationNameFieldKinds, targetCategoryDisplayName);
                     UpsertField(fields, message.MessageId, "Summer_ActionType", "TRANSFER");
                     UpsertField(fields, message.MessageId, "Summer_TransferCount", "1");
                     UpsertField(fields, message.MessageId, "Summer_TransferFromCategory", fromCategory.ToString());
@@ -1763,9 +1773,16 @@ SELECT @result;
                 Category = NotificationCategory.Business
             };
 
+            var groups = new HashSet<string>(SummerNotificationGroups, StringComparer.OrdinalIgnoreCase);
+            var responsibleGroups = await ResolveResponsibleAdminGroupsAsync(messageId);
+            foreach (var responsibleGroup in responsibleGroups)
+            {
+                groups.Add(responsibleGroup.Trim());
+            }
+
             await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
             {
-                GroupNames = SummerNotificationGroups,
+                GroupNames = groups.ToArray(),
                 Notification = notification.Notification,
                 Type = notification.type,
                 Title = notification.Title,
@@ -1802,17 +1819,32 @@ SELECT @result;
 
         private async Task<string?> ResolveResponsibleAdminGroupAsync(int messageId)
         {
-            var sector = await _connectContext.Messages
+            var groups = await ResolveResponsibleAdminGroupsAsync(messageId);
+            return groups.FirstOrDefault();
+        }
+
+        private async Task<List<string>> ResolveResponsibleAdminGroupsAsync(int messageId)
+        {
+            var sectorData = await _connectContext.Messages
                 .AsNoTracking()
                 .Where(message => message.MessageId == messageId)
-                .Select(message =>
-                    !string.IsNullOrWhiteSpace(message.CurrentResponsibleSectorId)
-                        ? message.CurrentResponsibleSectorId
-                        : message.AssignedSectorId)
+                .Select(message => new
+                {
+                    CurrentResponsibleSectorId = message.CurrentResponsibleSectorId,
+                    AssignedSectorId = message.AssignedSectorId
+                })
                 .FirstOrDefaultAsync();
 
-            var normalizedSector = (sector ?? string.Empty).Trim();
-            return string.IsNullOrWhiteSpace(normalizedSector) ? null : normalizedSector;
+            if (sectorData == null)
+            {
+                return new List<string>();
+            }
+
+            return new[] { sectorData.CurrentResponsibleSectorId, sectorData.AssignedSectorId }
+                .Where(sector => !string.IsNullOrWhiteSpace(sector))
+                .Select(sector => sector!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         private async Task AddReplyWithAttachmentsAsync(int messageId, string message, string userId, string ip, List<IFormFile>? files)
@@ -2082,6 +2114,24 @@ SELECT @result;
             else
             {
                 existing.FildTxt = normalizedValue;
+            }
+        }
+
+        private void UpsertFieldRange(List<TkmendField> fields, int messageId, IEnumerable<string> kinds, string value)
+        {
+            if (kinds == null)
+            {
+                return;
+            }
+
+            foreach (var kind in kinds)
+            {
+                if (string.IsNullOrWhiteSpace(kind))
+                {
+                    continue;
+                }
+
+                UpsertField(fields, messageId, kind.Trim(), value);
             }
         }
 
