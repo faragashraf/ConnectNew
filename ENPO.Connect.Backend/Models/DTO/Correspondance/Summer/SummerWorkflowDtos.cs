@@ -96,6 +96,7 @@ public class SummerTransferRequest
 public class SummerAdminRequestsQuery
 {
     public int SeasonYear { get; set; } = 2026;
+    public int? MessageId { get; set; }
     public int? CategoryId { get; set; }
     public string? WaveCode { get; set; }
     public string? Status { get; set; }

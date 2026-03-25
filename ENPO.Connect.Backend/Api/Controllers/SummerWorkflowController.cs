@@ -17,10 +17,10 @@ namespace Api.Controllers
         }
 
         [HttpGet(nameof(GetMyRequests))]
-        public Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequests(int seasonYear = 2026)
+        public Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequests(int seasonYear = 2026, int? messageId = null)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.GetMyRequestsAsync(userId, seasonYear);
+            return _summerWorkflowService.GetMyRequestsAsync(userId, seasonYear, messageId);
         }
 
         [HttpGet(nameof(GetWaveCapacity))]

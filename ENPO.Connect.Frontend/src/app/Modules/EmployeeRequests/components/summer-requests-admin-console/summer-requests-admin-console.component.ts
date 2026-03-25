@@ -28,6 +28,7 @@ import {
 import {
   buildSummerRequestCompanions,
   buildSummerRequestDetailFields,
+  extractCapacityPayloadFromSignal,
   extractRequestUpdatePayloadFromSignal,
   getStatusClass as resolveSummerStatusClass,
   getStatusLabel as resolveSummerStatusLabel,
@@ -802,8 +803,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.msg.msgSuccess('تم تنفيذ الإجراء الإداري بنجاح');
           this.actionAttachments = [];
           this.actionForm.patchValue({ comment: '', force: false });
-          this.loadRequests();
-          this.loadDashboard();
+          if (this.selectedRequestId) {
+            this.refreshRequestRowFromSignal(this.selectedRequestId);
+          }
           if (this.selectedRequestId) {
             this.loadSelectedRequestDetails(this.selectedRequestId);
           }
@@ -1189,32 +1191,115 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         ?? (notification as { notification?: string; Notification?: string })?.Notification
         ?? '');
 
-      const text = `${title} ${body}`.toLowerCase();
+      const capacityPayload = extractCapacityPayloadFromSignal([body, title]);
+      if (capacityPayload) {
+        this.refreshWaveCapacityFromSignal(capacityPayload);
+      }
+
       const requestUpdate = extractRequestUpdatePayloadFromSignal([body, title]);
-      if (requestUpdate
-        || text.includes('summer')
-        || text.includes('request')
-        || text.includes('booking')
-        || text.includes('capacity')
-        || text.includes('مصيف')
-        || text.includes('مصايف')
-        || text.includes('حجز')
-        || text.includes('إتاحة')
-        || text.includes('سداد')
-        || text.includes('اعتماد')
-        || text.includes('تحويل')) {
-        this.loadDashboard();
-        this.loadRequests();
-        if (this.selectedRequestId && (!requestUpdate || requestUpdate.messageId === this.selectedRequestId)) {
-          this.loadSelectedRequestDetails(this.selectedRequestId);
-        }
-        if (this.capacityDialogVisible) {
-          this.refreshWaveCapacity(true);
-        }
+      if (!requestUpdate) {
+        return;
+      }
+
+      this.refreshRequestRowFromSignal(requestUpdate.messageId);
+      if (this.selectedRequestId && requestUpdate.messageId === this.selectedRequestId) {
+        this.loadSelectedRequestDetails(this.selectedRequestId);
       }
     });
 
     this.subscriptions.add(signalSub);
+  }
+
+  private refreshWaveCapacityFromSignal(payload: string): void {
+    if (!this.capacityDialogVisible || !this.capacityScopeCategoryId || !this.capacityScopeWaveCode) {
+      return;
+    }
+
+    const parts = payload.split('|');
+    if (parts.length < 3) {
+      this.refreshWaveCapacity(true);
+      return;
+    }
+
+    const categoryId = Number(parts[1] ?? 0);
+    const waveCode = String(parts[2] ?? '').trim();
+    if (categoryId === this.capacityScopeCategoryId && waveCode === this.capacityScopeWaveCode) {
+      this.refreshWaveCapacity(true);
+    }
+  }
+
+  private refreshRequestRowFromSignal(messageId: number): void {
+    const targetMessageId = Number(messageId ?? 0);
+    if (!Number.isFinite(targetMessageId) || targetMessageId <= 0) {
+      return;
+    }
+
+    const raw = this.filtersForm.getRawValue();
+    this.summerWorkflowController.getAdminRequests({
+      seasonYear: this.seasonYear,
+      messageId: targetMessageId,
+      categoryId: raw.categoryId,
+      waveCode: String(raw.waveCode ?? '').trim(),
+      status: String(raw.status ?? '').trim(),
+      paymentState: String(raw.paymentState ?? '').trim(),
+      employeeId: String(raw.employeeId ?? '').trim(),
+      search: String(raw.search ?? '').trim(),
+      pageNumber: 1,
+      pageSize: 1
+    }).subscribe({
+      next: response => {
+        const records = response?.isSuccess && Array.isArray(response.data) ? response.data : [];
+        const matched = records.find(item => Number(item?.messageId ?? 0) === targetMessageId);
+        if (matched) {
+          this.upsertRequestInCurrentPage(matched);
+          return;
+        }
+
+        this.removeRequestFromCurrentPage(targetMessageId);
+      }
+    });
+  }
+
+  private upsertRequestInCurrentPage(summary: SummerRequestSummaryDto): void {
+    const messageId = Number(summary?.messageId ?? 0);
+    if (!Number.isFinite(messageId) || messageId <= 0) {
+      return;
+    }
+
+    const index = this.requests.findIndex(item => Number(item?.messageId ?? 0) === messageId);
+    const next = [...this.requests];
+
+    if (index >= 0) {
+      next[index] = summary;
+      this.requests = next;
+      return;
+    }
+
+    if (this.requestsPageNumber !== 1) {
+      return;
+    }
+
+    next.unshift(summary);
+    next.sort((a, b) => this.toEpoch(b.createdAt) - this.toEpoch(a.createdAt) || Number(b.messageId ?? 0) - Number(a.messageId ?? 0));
+    if (next.length > this.requestsPageSize) {
+      next.splice(this.requestsPageSize);
+    }
+
+    this.requests = next;
+  }
+
+  private removeRequestFromCurrentPage(messageId: number): void {
+    const index = this.requests.findIndex(item => Number(item?.messageId ?? 0) === messageId);
+    if (index < 0) {
+      return;
+    }
+
+    this.requests = this.requests.filter(item => Number(item?.messageId ?? 0) !== messageId);
+
+    if (this.selectedRequestId === messageId) {
+      this.selectedRequestId = null;
+      this.selectedRequestDetails = null;
+    }
   }
 
   private patchActionDefaultsForSelectedRequest(): void {

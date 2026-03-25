@@ -21,8 +21,11 @@ export class SummerWorkflowController {
 
   constructor(private readonly http: HttpClient) {}
 
-  getMyRequests(seasonYear: number): Observable<SummerWorkflowCommonResponse<SummerRequestSummaryDto[]>> {
-    const params = new HttpParams().set('seasonYear', String(seasonYear));
+  getMyRequests(seasonYear: number, messageId?: number | null): Observable<SummerWorkflowCommonResponse<SummerRequestSummaryDto[]>> {
+    let params = new HttpParams().set('seasonYear', String(seasonYear));
+    if (messageId && messageId > 0) {
+      params = params.set('messageId', String(messageId));
+    }
     return this.http.get<SummerWorkflowCommonResponse<SummerRequestSummaryDto[]>>(`${this.baseUrl}/GetMyRequests`, { params });
   }
 
@@ -39,6 +42,9 @@ export class SummerWorkflowController {
       .set('pageNumber', String(query.pageNumber))
       .set('pageSize', String(query.pageSize));
 
+    if (query.messageId && query.messageId > 0) {
+      params = params.set('messageId', String(query.messageId));
+    }
     if (query.categoryId && query.categoryId > 0) {
       params = params.set('categoryId', String(query.categoryId));
     }

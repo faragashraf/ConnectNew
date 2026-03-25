@@ -15,7 +15,6 @@ using Persistence.Data;
 using Persistence.HelperServices;
 using Persistence.Services.Notifications;
 using Persistence.Services.Summer;
-using SignalR.Notification;
 
 namespace Persistence.Services
 {
@@ -25,7 +24,6 @@ namespace Persistence.Services
         private readonly Attach_HeldContext _attachHeldContext;
         private readonly GPAContext _gPAContext;
         private readonly helperService _helperService;
-        private readonly SignalRConnectionManager _signalRConnectionManager;
         private readonly IConnectNotificationService _notificationService;
         private readonly ApplicationConfig _applicationConfig;
 
@@ -40,6 +38,11 @@ namespace Persistence.Services
         private static readonly string[] ExtraCountFieldKinds = { "Over_Count", "SUM2026_ExtraCount", "ExtraCount" };
         private static readonly string[] DestinationIdFieldKinds = { "SummerDestinationId", "SUM2026_DestinationId" };
         private static readonly string[] DestinationNameFieldKinds = { "SummerDestinationName", "SUM2026_DestinationName" };
+        private static readonly string[] EmployeeIdFieldKinds = { "Emp_Id", "SUM2026_OwnerFileNumber", "EmployeeFileNumber", "FileNumber", "EmployeeId" };
+        private static readonly string[] EmployeeNameFieldKinds = { "Emp_Name", "SUM2026_OwnerName", "EmployeeName", "Name", "ArabicName", "DisplayName" };
+        private static readonly string[] EmployeeNationalIdFieldKinds = { "NationalId", "SUM2026_OwnerNationalId", "NationalID", "NATIONAL_ID", "national_id", "NID", "IDNumber" };
+        private static readonly string[] EmployeePhoneFieldKinds = { "PhoneNumber", "SUM2026_OwnerPhone", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone" };
+        private static readonly string[] EmployeeExtraPhoneFieldKinds = { "ExtraPhoneNumber", "SUM2026_OwnerExtraPhone", "SecondaryPhone", "AlternatePhone" };
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -51,7 +54,6 @@ namespace Persistence.Services
             Attach_HeldContext attachHeldContext,
             GPAContext gpaContext,
             helperService helperService,
-            SignalRConnectionManager signalRConnectionManager,
             IConnectNotificationService notificationService,
             IOptions<ApplicationConfig> options)
         {
@@ -59,12 +61,11 @@ namespace Persistence.Services
             _attachHeldContext = attachHeldContext;
             _gPAContext = gpaContext;
             _helperService = helperService;
-            _signalRConnectionManager = signalRConnectionManager;
             _notificationService = notificationService;
             _applicationConfig = options?.Value ?? new ApplicationConfig();
         }
 
-        public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear)
+        public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear, int? messageId = null)
         {
             var response = new CommonResponse<IEnumerable<SummerRequestSummaryDto>>();
             try
@@ -88,9 +89,11 @@ namespace Persistence.Services
                     return response;
                 }
 
+                var scopedMessageId = messageId.HasValue && messageId.Value > 0 ? messageId.Value : 0;
                 var messages = await _connectContext.Messages
                     .AsNoTracking()
-                    .Where(m => summerCategoryIds.Contains(m.CategoryCd))
+                    .Where(m => summerCategoryIds.Contains(m.CategoryCd)
+                        && (scopedMessageId <= 0 || m.MessageId == scopedMessageId))
                     .OrderByDescending(m => m.CreatedDate)
                     .ToListAsync();
 
@@ -115,7 +118,7 @@ namespace Persistence.Services
                 foreach (var message in messages)
                 {
                     var messageFields = fields.Where(f => f.FildRelted == message.MessageId).ToList();
-                    var employeeId = GetFirstFieldValue(messageFields, "Emp_Id", "EmployeeFileNumber", "FileNumber", "EmployeeId");
+                    var employeeId = GetFirstFieldValue(messageFields, EmployeeIdFieldKinds);
                     var createdByUser = string.Equals(message.CreatedBy, userId, StringComparison.OrdinalIgnoreCase);
                     var forEmployee = string.Equals(employeeId, userId, StringComparison.OrdinalIgnoreCase);
                     if (!createdByUser && !forEmployee)
@@ -142,12 +145,12 @@ namespace Persistence.Services
                         RequestRef = message.RequestRef ?? string.Empty,
                         CategoryId = message.CategoryCd,
                         CategoryName = categories.TryGetValue(message.CategoryCd, out var categoryName) ? categoryName : string.Empty,
-                        WaveCode = GetFieldValue(messageFields, "SummerCamp") ?? string.Empty,
+                        WaveCode = GetFirstFieldValue(messageFields, WaveCodeFieldKinds),
                         EmployeeId = employeeId,
-                        EmployeeName = GetFirstFieldValue(messageFields, "Emp_Name", "EmployeeName", "Name", "ArabicName", "DisplayName"),
-                        EmployeeNationalId = GetFirstFieldValue(messageFields, "NationalId", "NationalID", "NATIONAL_ID", "national_id", "NID", "IDNumber"),
-                        EmployeePhone = GetFirstFieldValue(messageFields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
-                        EmployeeExtraPhone = GetFirstFieldValue(messageFields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
+                        EmployeeName = GetFirstFieldValue(messageFields, EmployeeNameFieldKinds),
+                        EmployeeNationalId = GetFirstFieldValue(messageFields, EmployeeNationalIdFieldKinds),
+                        EmployeePhone = GetFirstFieldValue(messageFields, EmployeePhoneFieldKinds),
+                        EmployeeExtraPhone = GetFirstFieldValue(messageFields, EmployeeExtraPhoneFieldKinds),
                         Status = message.Status.ToString(),
                         StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
                         WorkflowStateCode = workflowStateCode,
@@ -207,9 +210,13 @@ namespace Persistence.Services
                     response.PageSize = pageSize;
                     return response;
                 }
+                var scopedMessageId = query.MessageId.HasValue && query.MessageId.Value > 0
+                    ? query.MessageId.Value
+                    : 0;
                 var messages = await _connectContext.Messages
                     .AsNoTracking()
                     .Where(m => summerCategoryIds.Contains(m.CategoryCd)
+                        && (scopedMessageId <= 0 || m.MessageId == scopedMessageId)
                         && (userUnitIds.Contains(m.CurrentResponsibleSectorId ?? string.Empty)
                             || userUnitIds.Contains(m.AssignedSectorId ?? string.Empty)))
                     .OrderByDescending(m => m.CreatedDate)
@@ -258,12 +265,12 @@ namespace Persistence.Services
                         RequestRef = message.RequestRef ?? string.Empty,
                         CategoryId = message.CategoryCd,
                         CategoryName = categories.TryGetValue(message.CategoryCd, out var categoryName) ? categoryName : string.Empty,
-                        WaveCode = GetFieldValue(messageFields, "SummerCamp") ?? string.Empty,
-                        EmployeeId = GetFirstFieldValue(messageFields, "Emp_Id", "EmployeeFileNumber", "FileNumber", "EmployeeId"),
-                        EmployeeName = GetFirstFieldValue(messageFields, "Emp_Name", "EmployeeName", "Name", "ArabicName", "DisplayName"),
-                        EmployeeNationalId = GetFirstFieldValue(messageFields, "NationalId", "NationalID", "NATIONAL_ID", "national_id", "NID", "IDNumber"),
-                        EmployeePhone = GetFirstFieldValue(messageFields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
-                        EmployeeExtraPhone = GetFirstFieldValue(messageFields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
+                        WaveCode = GetFirstFieldValue(messageFields, WaveCodeFieldKinds),
+                        EmployeeId = GetFirstFieldValue(messageFields, EmployeeIdFieldKinds),
+                        EmployeeName = GetFirstFieldValue(messageFields, EmployeeNameFieldKinds),
+                        EmployeeNationalId = GetFirstFieldValue(messageFields, EmployeeNationalIdFieldKinds),
+                        EmployeePhone = GetFirstFieldValue(messageFields, EmployeePhoneFieldKinds),
+                        EmployeeExtraPhone = GetFirstFieldValue(messageFields, EmployeeExtraPhoneFieldKinds),
                         Status = message.Status.ToString(),
                         StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
                         WorkflowStateCode = workflowStateCode,
@@ -362,7 +369,7 @@ namespace Persistence.Services
                     if (!string.IsNullOrWhiteSpace(normalizedSearch))
                     {
                         var haystack = NormalizeSearchToken(
-                            $"{item.RequestRef} {item.EmployeeName} {item.EmployeeId} {item.EmployeeNationalId} {item.EmployeePhone} {item.CategoryName} {item.WaveCode}");
+                            $"{item.MessageId} {item.RequestRef} {item.EmployeeName} {item.EmployeeId} {item.EmployeeNationalId} {item.EmployeePhone} {item.CategoryName} {item.WaveCode}");
                         if (!haystack.Contains(normalizedSearch))
                         {
                             return false;
@@ -580,7 +587,7 @@ namespace Persistence.Services
                     response.Data = transferResponse.Data;
                     if (transferResponse.Data != null)
                     {
-                        await NotifyEmployeeOnAdminActionAsync(transferResponse.Data, actionCode, comment);
+                        await NotifyEmployeeOnAdminActionAsync(transferResponse.Data, actionCode, comment, includeSignalR: false);
                     }
                     return response;
                 }
@@ -617,6 +624,23 @@ namespace Persistence.Services
                         {
                             UpsertField(fields, message.MessageId, "Summer_AdminComment", comment);
                         }
+
+                        var paymentStatusToken = NormalizeSearchToken(GetFieldValue(fields, "Summer_PaymentStatus"));
+                        var needsRePaymentToken = NormalizeSearchToken(GetFieldValue(fields, "Summer_TransferRequiresRePayment"));
+                        var shouldRestorePaidState = paymentStatusToken == "pendingpayment"
+                            || needsRePaymentToken == "true"
+                            || needsRePaymentToken == "1";
+                        var restorePaidNote = string.Empty;
+                        if (shouldRestorePaidState)
+                        {
+                            var paidAt = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")) ?? DateTime.UtcNow;
+                            UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PAID");
+                            UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", paidAt.ToString("o"));
+                            UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
+                            UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", "تم اعتماد الطلب نهائيًا من الإدارة، وتمت إعادة حالة السداد إلى مسدد.");
+                            restorePaidNote = " وتمت إعادة حالة السداد إلى مسدد تلقائياً.";
+                        }
+
                         if (IsTransferReviewRequired(fields))
                         {
                             UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
@@ -625,8 +649,8 @@ namespace Persistence.Services
                         }
 
                         replyMessage = string.IsNullOrWhiteSpace(comment)
-                            ? "تم اعتماد الطلب نهائياً من إدارة المصايف."
-                            : $"تم اعتماد الطلب نهائياً من إدارة المصايف. تعليق الإدارة: {comment}";
+                            ? $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote}"
+                            : $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote} تعليق الإدارة: {comment}";
                     }
                     else if (actionCode == "MANUAL_CANCEL")
                     {
@@ -681,28 +705,6 @@ namespace Persistence.Services
                 if (response.Data != null)
                 {
                     await NotifyEmployeeOnAdminActionAsync(response.Data, actionCode, comment, includeSignalR: false);
-                }
-
-                var employeeId = response.Data?.EmployeeId;
-                if (!string.IsNullOrWhiteSpace(employeeId))
-                {
-                    await _signalRConnectionManager.SendNotificationToUser(employeeId, new NotificationDto
-                    {
-                        Notification = "تم تنفيذ إجراء إداري على طلب المصيف الخاص بك.",
-                        type = NotificationType.info,
-                        Title = "إدارة طلبات المصايف",
-                        time = DateTime.Now,
-                        sender = "Connect",
-                        Category = NotificationCategory.Business
-                    });
-                }
-
-                if (response.Data != null)
-                {
-                    await NotifySummerActionGroupAsync(
-                        response.Data.MessageId,
-                        $"تم تنفيذ إجراء إداري '{ResolveAdminActionLabel(actionCode)}' على طلب المصيف رقم #{response.Data.MessageId}.",
-                        "إدارة طلبات المصايف");
                 }
 
                 if (actionCode == "MANUAL_CANCEL" && response.Data != null)
@@ -866,24 +868,6 @@ namespace Persistence.Services
                 var summary = await BuildSummaryAsync(message.MessageId);
                 response.Data = summary;
 
-                if (!string.IsNullOrWhiteSpace(summary.EmployeeId))
-                {
-                    await _signalRConnectionManager.SendNotificationToUser(summary.EmployeeId, new NotificationDto
-                    {
-                        Notification = "تم تسجيل الاعتذار عن الحجز بنجاح.",
-                        type = NotificationType.info,
-                        Title = "تحديث طلب المصيف",
-                        time = DateTime.Now,
-                        sender = "Connect",
-                        Category = NotificationCategory.Business
-                    });
-                }
-
-                await NotifySummerActionGroupAsync(
-                    summary.MessageId,
-                    $"تم تسجيل اعتذار صاحب الطلب عن طلب المصيف رقم #{summary.MessageId}.",
-                    "إدارة طلبات المصايف");
-
                 await PublishCapacityUpdateAsync(summary.CategoryId, summary.WaveCode, "CANCEL");
                 await PublishRequestUpdateAsync(summary.MessageId, "CANCEL");
             }
@@ -992,14 +976,6 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(message.MessageId);
-                if (response.Data != null)
-                {
-                    await NotifySummerActionGroupAsync(
-                        response.Data.MessageId,
-                        $"تم تسجيل السداد لطلب المصيف رقم #{response.Data.MessageId}.",
-                        "إدارة طلبات المصايف");
-                }
-
                 await PublishRequestUpdateAsync(message.MessageId, "PAY");
             }
             catch (Exception ex)
@@ -1062,7 +1038,7 @@ namespace Persistence.Services
                     return response;
                 }
 
-                var employeeId = GetFieldValue(fields, "Emp_Id") ?? string.Empty;
+                var employeeId = GetFirstFieldValue(fields, EmployeeIdFieldKinds);
                 if (string.IsNullOrWhiteSpace(employeeId))
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "رقم ملف الموظف مطلوب." });
@@ -1208,13 +1184,6 @@ namespace Persistence.Services
                     await connectTx.CommitAsync();
 
                     response.Data = await BuildSummaryAsync(message.MessageId);
-                    if (response.Data != null)
-                    {
-                        await NotifySummerActionGroupAsync(
-                            response.Data.MessageId,
-                            $"تم تنفيذ تحويل طلب المصيف رقم #{response.Data.MessageId}.",
-                            "إدارة طلبات المصايف");
-                    }
                     await PublishCapacityUpdateAsync(fromCategory, fromWave, "TRANSFER_FROM");
                     await PublishCapacityUpdateAsync(request.ToCategoryId, normalizedTargetWave, "TRANSFER_TO");
                     await PublishRequestUpdateAsync(message.MessageId, "TRANSFER");
@@ -1314,7 +1283,7 @@ namespace Persistence.Services
                     await _connectContext.SaveChangesAsync(cancellationToken);
                     await connectTx.CommitAsync(cancellationToken);
 
-                    notifyEmployeeId = GetFieldValue(fields, "Emp_Id") ?? string.Empty;
+                    notifyEmployeeId = GetFirstFieldValue(fields, EmployeeIdFieldKinds);
                     notifyCategoryId = message.CategoryCd;
                     notifyWaveCode = GetFieldValue(fields, "SummerCamp") ?? string.Empty;
                     notifyDueAtUtc = dueAt;
@@ -1351,27 +1320,6 @@ namespace Persistence.Services
                     notifyCategoryId = autoCancelledSummary.CategoryId > 0 ? autoCancelledSummary.CategoryId : notifyCategoryId;
                     notifyWaveCode = string.IsNullOrWhiteSpace(autoCancelledSummary.WaveCode) ? notifyWaveCode : autoCancelledSummary.WaveCode;
                     await NotifyEmployeeOnAutoCancelAsync(autoCancelledSummary, notifyDueAtUtc, includeSignalR: false);
-                }
-
-                if (!string.IsNullOrWhiteSpace(notifyEmployeeId))
-                {
-                    await _signalRConnectionManager.SendNotificationToUser(notifyEmployeeId, new NotificationDto
-                    {
-                        Notification = "تم إلغاء الطلب تلقائياً بسبب عدم السداد خلال مهلة يوم العمل.",
-                        type = NotificationType.info,
-                        Title = "إلغاء تلقائي لطلب المصيف",
-                        time = DateTime.Now,
-                        sender = "Connect",
-                        Category = NotificationCategory.Business
-                    });
-                }
-
-                if (cancelledMessageId > 0)
-                {
-                    await NotifySummerActionGroupAsync(
-                        cancelledMessageId,
-                        $"تم إلغاء طلب المصيف رقم #{cancelledMessageId} تلقائياً بسبب عدم السداد خلال المهلة.",
-                        "إدارة طلبات المصايف");
                 }
 
                 await PublishCapacityUpdateAsync(notifyCategoryId, notifyWaveCode, "AUTO_CANCEL");
@@ -1574,7 +1522,7 @@ namespace Persistence.Services
             foreach (var group in byMessage)
             {
                 var messageFields = group.ToList();
-                var employee = GetFieldValue(messageFields, "Emp_Id") ?? string.Empty;
+                var employee = GetFirstFieldValue(messageFields, EmployeeIdFieldKinds);
                 if (!string.Equals(employee, employeeId, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -1611,14 +1559,17 @@ namespace Persistence.Services
 
             return await _connectContext.TkmendFields
                 .AsNoTracking()
-                .AnyAsync(f => activeMessageIds.Contains(f.FildRelted) && f.FildKind == "Emp_Id" && f.FildTxt == employeeId);
+                .AnyAsync(f => activeMessageIds.Contains(f.FildRelted)
+                               && (f.FildKind == "Emp_Id" || f.FildKind == "SUM2026_OwnerFileNumber")
+                               && f.FildTxt == employeeId);
         }
 
         private async Task<List<int>> GetActiveMessageIdsForWaveAsync(int categoryId, string waveCode, int? excludedMessageId = null)
         {
             var matchingWaveMessageIds = await _connectContext.TkmendFields
                 .AsNoTracking()
-                .Where(f => f.FildKind == "SummerCamp" && f.FildTxt == waveCode)
+                .Where(f => (f.FildKind == "SummerCamp" || f.FildKind == "SUM2026_WaveCode" || f.FildKind == "WaveCode")
+                            && f.FildTxt == waveCode)
                 .Select(f => f.FildRelted)
                 .Distinct()
                 .ToListAsync();
@@ -1669,7 +1620,8 @@ namespace Persistence.Services
 
             var familyFields = await _connectContext.TkmendFields
                 .AsNoTracking()
-                .Where(f => activeMessageIds.Contains(f.FildRelted) && f.FildKind == "FamilyCount")
+                .Where(f => activeMessageIds.Contains(f.FildRelted)
+                            && (f.FildKind == "FamilyCount" || f.FildKind == "SUM2026_FamilyCount"))
                 .ToListAsync();
 
             var usedUnits = familyFields
@@ -1773,54 +1725,35 @@ SELECT @result;
                 Category = NotificationCategory.Business
             };
 
-            var groups = new HashSet<string>(SummerNotificationGroups, StringComparer.OrdinalIgnoreCase);
             var responsibleGroups = await ResolveResponsibleAdminGroupsAsync(messageId);
-            foreach (var responsibleGroup in responsibleGroups)
+            if (responsibleGroups.Count > 0)
             {
-                groups.Add(responsibleGroup.Trim());
+                await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+                {
+                    GroupNames = responsibleGroups,
+                    Notification = notification.Notification,
+                    Type = notification.type,
+                    Title = notification.Title,
+                    Time = notification.time,
+                    Sender = notification.sender,
+                    Category = notification.Category ?? NotificationCategory.Business
+                });
             }
 
-            await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+            var ownerEmployeeId = await ResolveRequestOwnerEmployeeIdAsync(messageId);
+            if (!string.IsNullOrWhiteSpace(ownerEmployeeId))
             {
-                GroupNames = groups.ToArray(),
-                Notification = notification.Notification,
-                Type = notification.type,
-                Title = notification.Title,
-                Time = notification.time,
-                Sender = notification.sender,
-                Category = notification.Category ?? NotificationCategory.Business
-            });
-        }
-
-        private async Task NotifySummerActionGroupAsync(int messageId, string message, string title)
-        {
-            if (messageId <= 0 || string.IsNullOrWhiteSpace(message))
-            {
-                return;
+                await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
+                {
+                    UserId = ownerEmployeeId,
+                    Notification = notification.Notification,
+                    Title = notification.Title,
+                    Type = notification.type,
+                    Time = notification.time,
+                    Sender = notification.sender,
+                    Category = notification.Category ?? NotificationCategory.Business
+                });
             }
-
-            var groupName = await ResolveResponsibleAdminGroupAsync(messageId);
-            if (string.IsNullOrWhiteSpace(groupName))
-            {
-                return;
-            }
-
-            await _notificationService.SendSignalRToGroupAsync(new SignalRGroupDispatchRequest
-            {
-                GroupName = groupName,
-                Notification = message.Trim(),
-                Title = string.IsNullOrWhiteSpace(title) ? "إدارة طلبات المصايف" : title.Trim(),
-                Type = NotificationType.info,
-                Category = NotificationCategory.Business,
-                Sender = "Connect",
-                Time = DateTime.Now
-            });
-        }
-
-        private async Task<string?> ResolveResponsibleAdminGroupAsync(int messageId)
-        {
-            var groups = await ResolveResponsibleAdminGroupsAsync(messageId);
-            return groups.FirstOrDefault();
         }
 
         private async Task<List<string>> ResolveResponsibleAdminGroupsAsync(int messageId)
@@ -1845,6 +1778,21 @@ SELECT @result;
                 .Select(sector => sector!.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        private async Task<string> ResolveRequestOwnerEmployeeIdAsync(int messageId)
+        {
+            if (messageId <= 0)
+            {
+                return string.Empty;
+            }
+
+            var fields = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(field => field.FildRelted == messageId)
+                .ToListAsync();
+
+            return GetFirstFieldValue(fields, EmployeeIdFieldKinds).Trim();
         }
 
         private async Task AddReplyWithAttachmentsAsync(int messageId, string message, string userId, string ip, List<IFormFile>? files)
@@ -1894,12 +1842,12 @@ SELECT @result;
                 RequestRef = message.RequestRef ?? string.Empty,
                 CategoryId = message.CategoryCd,
                 CategoryName = categoryName,
-                WaveCode = GetFieldValue(fields, "SummerCamp") ?? string.Empty,
-                EmployeeId = GetFirstFieldValue(fields, "Emp_Id", "EmployeeFileNumber", "FileNumber", "EmployeeId"),
-                EmployeeName = GetFirstFieldValue(fields, "Emp_Name", "EmployeeName", "Name", "ArabicName", "DisplayName"),
-                EmployeeNationalId = GetFirstFieldValue(fields, "NationalId", "NationalID", "NATIONAL_ID", "national_id", "NID", "IDNumber"),
-                EmployeePhone = GetFirstFieldValue(fields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
-                EmployeeExtraPhone = GetFirstFieldValue(fields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
+                WaveCode = GetFirstFieldValue(fields, WaveCodeFieldKinds),
+                EmployeeId = GetFirstFieldValue(fields, EmployeeIdFieldKinds),
+                EmployeeName = GetFirstFieldValue(fields, EmployeeNameFieldKinds),
+                EmployeeNationalId = GetFirstFieldValue(fields, EmployeeNationalIdFieldKinds),
+                EmployeePhone = GetFirstFieldValue(fields, EmployeePhoneFieldKinds),
+                EmployeeExtraPhone = GetFirstFieldValue(fields, EmployeeExtraPhoneFieldKinds),
                 Status = message.Status.ToString(),
                 StatusLabel = ResolveSummaryStatusLabel(message.Status, fields, needsTransferReview, workflowStateLabel),
                 WorkflowStateCode = workflowStateCode,

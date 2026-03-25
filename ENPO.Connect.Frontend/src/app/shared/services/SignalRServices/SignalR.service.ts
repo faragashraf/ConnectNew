@@ -95,6 +95,8 @@ export class SignalRService {
   notificationList$ = new Subject<any[]>();
   primMsgList: any[] = [];
   primMsgCount: number = 0
+  private readonly notificationDedupeWindowMs = 2500;
+  private readonly recentNotificationSignatures = new Map<string, number>();
 
   hubConnectionState$ = new BehaviorSubject<string>('Disconnected');
   hubConnectionState: string = '';
@@ -356,7 +358,9 @@ export class SignalRService {
       }).catch(error => console.log(error))
     });
     this.hubConnection.on('ReciveNotification', (Notification) => {
-      this.Notification$.next(Notification)
+      if (this.shouldEmitNotification(Notification as NotificationDto)) {
+        this.Notification$.next(Notification)
+      }
     });
     this.hubConnection.on('RecieveHistory', (UserChatHistory, UserHistory: any) => {
       this.messages$.next(UserHistory)
@@ -508,6 +512,38 @@ export class SignalRService {
   async ForceDisconnectCurrentSession(userId: string) {
     return this.hubConnection.invoke('ForceDisconnectCurrentSession', userId)
       .catch(error => console.log(error));
+  }
+
+  private shouldEmitNotification(notification: NotificationDto): boolean {
+    const payload = notification as NotificationDto & {
+      Notification?: string;
+      Title?: string;
+      Sender?: string;
+      Type?: string;
+      Category?: string;
+    };
+
+    const body = String(payload?.notification ?? payload?.Notification ?? '').trim();
+    const title = String(payload?.title ?? payload?.Title ?? '').trim();
+    const sender = String(payload?.sender ?? payload?.Sender ?? '').trim();
+    const type = String(payload?.type ?? payload?.Type ?? '').trim();
+    const category = String(payload?.category ?? payload?.Category ?? '').trim();
+    if (!body && !title) {
+      return true;
+    }
+
+    const signature = `${type}|${category}|${sender}|${title}|${body}`;
+    const now = Date.now();
+
+    this.recentNotificationSignatures.forEach((timestamp, key) => {
+      if (now - timestamp > this.notificationDedupeWindowMs) {
+        this.recentNotificationSignatures.delete(key);
+      }
+    });
+
+    const previous = this.recentNotificationSignatures.get(signature);
+    this.recentNotificationSignatures.set(signature, now);
+    return !(previous && (now - previous) <= this.notificationDedupeWindowMs);
   }
 
 

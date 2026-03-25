@@ -113,6 +113,7 @@ export interface SummerTransferFormRequest {
 
 export interface SummerAdminRequestsQuery {
   seasonYear: number;
+  messageId?: number | null;
   categoryId?: number | null;
   waveCode?: string;
   status?: string;

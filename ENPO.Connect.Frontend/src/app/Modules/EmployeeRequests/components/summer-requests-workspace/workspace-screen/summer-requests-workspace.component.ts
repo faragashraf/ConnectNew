@@ -1149,24 +1149,82 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       const body = String((notification as unknown as { notification?: string; Notification?: string })?.notification
         ?? (notification as unknown as { notification?: string; Notification?: string })?.Notification
         ?? '');
-      const text = `${title} ${body}`.toLowerCase();
-
       const capacityPayload = extractCapacityPayloadFromSignal([body, title]);
       if (capacityPayload) {
         this.refreshCapacityFromSignal(capacityPayload);
       }
 
       const requestUpdate = extractRequestUpdatePayloadFromSignal([body, title]);
-      if (requestUpdate || text.includes('summer') || text.includes('booking') || text.includes('capacity') || text.includes('request') || text.includes('مصيف') || text.includes('مصايف') || text.includes('حجز') || text.includes('إتاحة') || text.includes('سداد') || text.includes('اعتماد') || text.includes('تحويل')) {
-        this.loadMyRequests();
+      if (!requestUpdate) {
+        return;
+      }
+
+      this.refreshMyRequestRowFromSignal(requestUpdate.messageId);
+      if (this.selectedRequestId && requestUpdate.messageId === this.selectedRequestId) {
         this.loadTransferCapacity();
-        if (this.selectedRequestId && (!requestUpdate || requestUpdate.messageId === this.selectedRequestId)) {
-          this.loadSelectedRequestDetails(this.selectedRequestId);
-        }
+        this.loadSelectedRequestDetails(this.selectedRequestId);
       }
     });
 
     this.subscriptions.add(signalSub);
+  }
+
+  private refreshMyRequestRowFromSignal(messageId: number): void {
+    const targetMessageId = Number(messageId ?? 0);
+    if (!Number.isFinite(targetMessageId) || targetMessageId <= 0) {
+      return;
+    }
+
+    this.summerWorkflowController.getMyRequests(this.seasonYear, targetMessageId).subscribe({
+      next: response => {
+        const records = response?.isSuccess && Array.isArray(response.data) ? response.data : [];
+        const matched = records.find(item => Number(item?.messageId ?? 0) === targetMessageId);
+        if (matched) {
+          this.upsertMyRequestSummary(matched);
+          return;
+        }
+
+        this.removeMyRequestSummary(targetMessageId);
+      }
+    });
+  }
+
+  private upsertMyRequestSummary(summary: SummerRequestSummaryDto): void {
+    const messageId = Number(summary?.messageId ?? 0);
+    if (!Number.isFinite(messageId) || messageId <= 0) {
+      return;
+    }
+
+    const index = this.myRequests.findIndex(item => Number(item?.messageId ?? 0) === messageId);
+    const next = [...this.myRequests];
+    if (index >= 0) {
+      next[index] = summary;
+    } else {
+      next.unshift(summary);
+    }
+
+    next.sort((a, b) => parseDateToEpoch(b.createdAt) - parseDateToEpoch(a.createdAt) || Number(b.messageId ?? 0) - Number(a.messageId ?? 0));
+    this.myRequests = next;
+    this.seasonTransferAlreadyUsed = this.myRequests.some(item => item.transferUsed);
+  }
+
+  private removeMyRequestSummary(messageId: number): void {
+    const index = this.myRequests.findIndex(item => Number(item?.messageId ?? 0) === messageId);
+    if (index < 0) {
+      return;
+    }
+
+    this.myRequests = this.myRequests.filter(item => Number(item?.messageId ?? 0) !== messageId);
+    this.seasonTransferAlreadyUsed = this.myRequests.some(item => item.transferUsed);
+    if (this.requestsFirst >= this.myRequests.length) {
+      this.requestsFirst = 0;
+    }
+
+    if (this.selectedRequestId === messageId) {
+      this.selectedRequestId = null;
+      this.selectedRequestDetails = null;
+      this.selectedRequestDetailsError = '';
+    }
   }
 
   private refreshCapacityFromSignal(payload: string): void {
