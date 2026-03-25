@@ -24,6 +24,10 @@ import {
   SUMMER_DYNAMIC_APPLICATION_ID
 } from '../../summer-shared/core/summer-feature.config';
 import { SUMMER_UI_TEXTS_AR } from '../../summer-shared/core/summer-ui-texts.ar';
+import { SummerRequestRowRefreshService } from '../../summer-shared/core/summer-request-row-refresh.service';
+import { SummerRequestsListPatchService } from '../../summer-shared/core/summer-requests-list-patch.service';
+import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
+import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
 import {
   parseSummerDestinationCatalog,
   SUMMER_PDF_REFERENCE_TITLE,
@@ -36,8 +40,6 @@ import {
   buildSummerRequestCompanions,
   buildSummerRequestDetailFields,
   coalesceText,
-  extractCapacityPayloadFromSignal,
-  extractRequestUpdatePayloadFromSignal,
   formatLocalDateHour,
   formatUtcDateToCairoHour,
   getFieldValueByKeys,
@@ -112,7 +114,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     private readonly attchedObjectService: AttchedObjectService,
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
-    private readonly signalRService: SignalRService
+    private readonly signalRService: SignalRService,
+    private readonly summerRealtimeService: SummerRequestsRealtimeService,
+    private readonly rowRefreshService: SummerRequestRowRefreshService,
+    private readonly listPatchService: SummerRequestsListPatchService
   ) {
     this.cancelForm = this.fb.group({
       reason: ['', Validators.maxLength(1000)]
@@ -516,7 +521,15 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.cancelCompleted);
           this.cancelForm.reset({ reason: '' });
           this.cancelAttachments = [];
-          this.loadMyRequests();
+          if (response.data) {
+            this.upsertMyRequestSummary(response.data);
+          } else if (this.selectedRequestId) {
+            this.refreshMyRequestRowFromSignal(this.selectedRequestId);
+          }
+          if (this.selectedRequestId) {
+            this.loadSelectedRequestDetails(this.selectedRequestId);
+          }
+          this.loadTransferCapacity();
           return;
         }
 
@@ -564,7 +577,14 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.payCompleted);
           this.paymentForm.reset({ paidAtLocal: '', notes: '' });
           this.paymentAttachments = [];
-          this.loadMyRequests();
+          if (response.data) {
+            this.upsertMyRequestSummary(response.data);
+          } else if (this.selectedRequestId) {
+            this.refreshMyRequestRowFromSignal(this.selectedRequestId);
+          }
+          if (this.selectedRequestId) {
+            this.loadSelectedRequestDetails(this.selectedRequestId);
+          }
           return;
         }
 
@@ -632,7 +652,15 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.transferCompleted);
           this.transferAttachments = [];
           this.transferForm.patchValue({ notes: '' });
-          this.loadMyRequests();
+          if (response.data) {
+            this.upsertMyRequestSummary(response.data);
+          } else if (this.selectedRequestId) {
+            this.refreshMyRequestRowFromSignal(this.selectedRequestId);
+          }
+          if (this.selectedRequestId) {
+            this.loadSelectedRequestDetails(this.selectedRequestId);
+          }
+          this.loadTransferCapacity();
           return;
         }
 
@@ -1147,31 +1175,20 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private bindSignalRRefresh(): void {
-    const signalSub = this.signalRService.Notification$.subscribe(notification => {
-      const title = String((notification as unknown as { title?: string; Title?: string })?.title
-        ?? (notification as unknown as { title?: string; Title?: string })?.Title
-        ?? '');
-      const body = String((notification as unknown as { notification?: string; Notification?: string })?.notification
-        ?? (notification as unknown as { notification?: string; Notification?: string })?.Notification
-        ?? '');
-      const capacityPayload = extractCapacityPayloadFromSignal([body, title]);
-      if (capacityPayload) {
-        this.refreshCapacityFromSignal(capacityPayload);
-      }
-
-      const requestUpdate = extractRequestUpdatePayloadFromSignal([body, title]);
-      if (!requestUpdate) {
-        return;
-      }
-
-      this.refreshMyRequestRowFromSignal(requestUpdate.messageId);
-      if (this.selectedRequestId && requestUpdate.messageId === this.selectedRequestId) {
+    const requestSub = this.summerRealtimeService.requestUpdates$.subscribe(update => {
+      this.refreshMyRequestRowFromSignal(update.messageId);
+      if (this.selectedRequestId && update.messageId === this.selectedRequestId) {
         this.loadTransferCapacity();
         this.loadSelectedRequestDetails(this.selectedRequestId);
       }
     });
 
-    this.subscriptions.add(signalSub);
+    const capacitySub = this.summerRealtimeService.capacityUpdates$.subscribe(update => {
+      this.refreshCapacityFromSignal(update);
+    });
+
+    this.subscriptions.add(requestSub);
+    this.subscriptions.add(capacitySub);
   }
 
   private refreshMyRequestRowFromSignal(messageId: number): void {
@@ -1180,16 +1197,13 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.summerWorkflowController.getMyRequests(this.seasonYear, targetMessageId).subscribe({
-      next: response => {
-        const records = response?.isSuccess && Array.isArray(response.data) ? response.data : [];
-        const matched = records.find(item => Number(item?.messageId ?? 0) === targetMessageId);
+    this.rowRefreshService.refreshOwnerRow(this.seasonYear, targetMessageId).subscribe({
+      next: matched => {
         if (matched) {
           this.upsertMyRequestSummary(matched);
-          return;
+        } else {
+          this.removeMyRequestSummary(targetMessageId);
         }
-
-        this.removeMyRequestSummary(targetMessageId);
       }
     });
   }
@@ -1200,26 +1214,18 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const index = this.myRequests.findIndex(item => Number(item?.messageId ?? 0) === messageId);
-    const next = [...this.myRequests];
-    if (index >= 0) {
-      next[index] = summary;
-    } else {
-      next.unshift(summary);
-    }
-
-    next.sort((a, b) => parseDateToEpoch(b.createdAt) - parseDateToEpoch(a.createdAt) || Number(b.messageId ?? 0) - Number(a.messageId ?? 0));
-    this.myRequests = next;
+    const patched = this.listPatchService.upsertOwnerRequests(this.myRequests, summary);
+    this.myRequests = patched.items;
     this.seasonTransferAlreadyUsed = this.myRequests.some(item => item.transferUsed);
   }
 
   private removeMyRequestSummary(messageId: number): void {
-    const index = this.myRequests.findIndex(item => Number(item?.messageId ?? 0) === messageId);
-    if (index < 0) {
+    const patched = this.listPatchService.removeByMessageId(this.myRequests, messageId);
+    if (patched.change !== 'removed') {
       return;
     }
 
-    this.myRequests = this.myRequests.filter(item => Number(item?.messageId ?? 0) !== messageId);
+    this.myRequests = patched.items;
     this.seasonTransferAlreadyUsed = this.myRequests.some(item => item.transferUsed);
     if (this.requestsFirst >= this.myRequests.length) {
       this.requestsFirst = 0;
@@ -1232,15 +1238,13 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }
   }
 
-  private refreshCapacityFromSignal(payload: string): void {
-    const parts = payload.split('|');
-    if (parts.length < 3) {
-      this.loadTransferCapacity();
+  private refreshCapacityFromSignal(update: SummerCapacityRealtimeEvent): void {
+    const categoryId = Number(update?.categoryId ?? 0);
+    const waveCode = String(update?.waveCode ?? '').trim();
+    if (!Number.isFinite(categoryId) || categoryId <= 0 || waveCode.length === 0) {
       return;
     }
 
-    const categoryId = Number(parts[1]);
-    const waveCode = String(parts[2] ?? '').trim();
     const transferCategory = this.transferDestination?.categoryId ?? 0;
     const transferWave = String(this.transferForm.get('toWaveCode')?.value ?? '').trim();
 

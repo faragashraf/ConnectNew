@@ -1,6 +1,5 @@
 import { MessageDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { SummerRequestSummaryDto } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.dto';
-import { buildSummerRequestCompanions, getFieldValueByKeys } from '../../summer-requests-workspace/summer-requests-workspace.utils';
 import {
   SummerApplicant,
   SummerPayment,
@@ -11,6 +10,7 @@ import {
   SummerTransfer
 } from './summer-request-domain.models';
 import { SUMMER_CANONICAL_FIELD_KEYS } from './summer-field-aliases';
+import { buildSummerCompanionsFromFields, getSummerFieldValueByKeys } from './summer-request-fields-reader';
 
 function normalizeRequestStatusCode(raw: string): SummerRequestStatusCode {
   const token = String(raw ?? '').trim().toUpperCase();
@@ -53,7 +53,7 @@ function mapApplicantFromSummary(summary: SummerRequestSummaryDto): SummerApplic
 
 function mapPaymentFromFields(details: MessageDto | null, summary: SummerRequestSummaryDto): SummerPayment {
   const fields = details?.fields ?? [];
-  const paymentStatusRaw = getFieldValueByKeys(fields, ['Summer_PaymentStatus']);
+  const paymentStatusRaw = getSummerFieldValueByKeys(fields, ['Summer_PaymentStatus']);
   return {
     dueAtUtc: String(summary?.paymentDueAtUtc ?? '').trim() || undefined,
     paidAtUtc: String(summary?.paidAtUtc ?? '').trim() || undefined,
@@ -63,19 +63,19 @@ function mapPaymentFromFields(details: MessageDto | null, summary: SummerRequest
 
 function mapTransferFromFields(details: MessageDto | null, summary: SummerRequestSummaryDto): SummerTransfer {
   const fields = details?.fields ?? [];
-  const transferCount = Number(getFieldValueByKeys(fields, ['Summer_TransferCount']) || 0) || 0;
+  const transferCount = Number(getSummerFieldValueByKeys(fields, ['Summer_TransferCount']) || 0) || 0;
   const requiresReview = String(summary?.workflowStateCode ?? '').trim().toUpperCase() === 'TRANSFER_REVIEW_REQUIRED';
   const requiresRePayment = ['1', 'true', 'yes', 'نعم'].includes(
-    String(getFieldValueByKeys(fields, ['Summer_TransferRequiresRePayment']) ?? '').trim().toLowerCase()
+    String(getSummerFieldValueByKeys(fields, ['Summer_TransferRequiresRePayment']) ?? '').trim().toLowerCase()
   );
 
   return {
     used: Boolean(summary?.transferUsed),
     count: transferCount,
-    fromCategoryId: Number(getFieldValueByKeys(fields, ['Summer_TransferFromCategory'])) || undefined,
-    fromWaveCode: String(getFieldValueByKeys(fields, ['Summer_TransferFromWave']) ?? '').trim() || undefined,
-    toCategoryId: Number(getFieldValueByKeys(fields, ['Summer_TransferToCategory'])) || undefined,
-    toWaveCode: String(getFieldValueByKeys(fields, ['Summer_TransferToWave']) ?? '').trim() || undefined,
+    fromCategoryId: Number(getSummerFieldValueByKeys(fields, ['Summer_TransferFromCategory'])) || undefined,
+    fromWaveCode: String(getSummerFieldValueByKeys(fields, ['Summer_TransferFromWave']) ?? '').trim() || undefined,
+    toCategoryId: Number(getSummerFieldValueByKeys(fields, ['Summer_TransferToCategory'])) || undefined,
+    toWaveCode: String(getSummerFieldValueByKeys(fields, ['Summer_TransferToWave']) ?? '').trim() || undefined,
     requiresReview,
     requiresRePayment
   };
@@ -115,11 +115,13 @@ export function mapDetailsToSummerRequest(
 ): SummerRequestDetails {
   const fields = details?.fields ?? [];
   const base = mapSummaryToSummerRequest(summary, seasonYear);
-  const companions = buildSummerRequestCompanions(fields).map(item => ({
+  const companions = buildSummerCompanionsFromFields(fields).map(item => ({
     index: item.index,
     fullName: item.name,
     relation: item.relation,
-    relationOther: String(getFieldValueByKeys(fields, [...SUMMER_CANONICAL_FIELD_KEYS.companionRelationOther]) ?? '').trim() || undefined,
+    relationOther: String(item.relationOther ?? '').trim()
+      || String(getSummerFieldValueByKeys(fields, [...SUMMER_CANONICAL_FIELD_KEYS.companionRelationOther]) ?? '').trim()
+      || undefined,
     nationalId: item.nationalId,
     age: item.age ? Number(item.age) || null : null
   }));
@@ -139,10 +141,10 @@ export function mapDetailsToSummerRequest(
 
   return {
     ...base,
-    waveLabel: String(getFieldValueByKeys(fields, [...SUMMER_CANONICAL_FIELD_KEYS.waveLabel]) ?? '').trim() || undefined,
+    waveLabel: String(getSummerFieldValueByKeys(fields, [...SUMMER_CANONICAL_FIELD_KEYS.waveLabel]) ?? '').trim() || undefined,
     owner: mapApplicantFromSummary(summary),
     companions,
-    notes: String(getFieldValueByKeys(fields, [...SUMMER_CANONICAL_FIELD_KEYS.notes]) ?? '').trim() || undefined,
+    notes: String(getSummerFieldValueByKeys(fields, [...SUMMER_CANONICAL_FIELD_KEYS.notes]) ?? '').trim() || undefined,
     attachments,
     updates,
     payment: mapPaymentFromFields(details, summary),

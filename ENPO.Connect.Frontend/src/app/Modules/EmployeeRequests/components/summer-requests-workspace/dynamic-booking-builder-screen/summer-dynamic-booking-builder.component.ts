@@ -14,17 +14,17 @@ import { SummerWorkflowController } from 'src/app/shared/services/BackendService
 import { AuthObjectsService } from 'src/app/shared/services/helper/auth-objects.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
-import { SignalRService } from 'src/app/shared/services/SignalRServices/SignalR.service';
 import { SummerDestinationConfig } from '../summer-requests-workspace.config';
 import { SummerDynamicFormEngineService } from '../summer-dynamic-form-engine.service';
 import { ComponentConfig, getConfigByRoute } from 'src/app/shared/models/Component.Config.model';
 import { ComponentConfigService } from 'src/app/Modules/admins/services/component-config.service';
-import { extractCapacityPayloadFromSignal } from '../summer-requests-workspace.utils';
 import {
   SUMMER_DEFAULT_SEASON_YEAR,
   SUMMER_DYNAMIC_APPLICATION_ID
 } from '../../summer-shared/core/summer-feature.config';
 import { SUMMER_CANONICAL_FIELD_KEYS } from '../../summer-shared/core/summer-field-aliases';
+import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
+import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
 
 type OwnerDefaults = {
   name: string;
@@ -89,7 +89,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     private readonly authObjectsService: AuthObjectsService,
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
-    private readonly signalRService: SignalRService,
+    private readonly summerRealtimeService: SummerRequestsRealtimeService,
     private readonly engine: SummerDynamicFormEngineService
   ) {
     this.baseFormConfig = this.engine.createFormConfig();
@@ -687,26 +687,14 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   }
 
   private bindSignalRefresh(): void {
-    const signalSub = this.signalRService.Notification$.subscribe(notification => {
-      const title = String((notification as { title?: string; Title?: string })?.title
-        ?? (notification as { title?: string; Title?: string })?.Title
-        ?? '');
-      const body = String((notification as { notification?: string; Notification?: string })?.notification
-        ?? (notification as { notification?: string; Notification?: string })?.Notification
-        ?? '');
-
-      const capacityPayload = extractCapacityPayloadFromSignal([body, title]);
-      if (!capacityPayload) {
-        return;
-      }
-
-      this.refreshCapacityFromSignal(capacityPayload);
+    const signalSub = this.summerRealtimeService.capacityUpdates$.subscribe(update => {
+      this.refreshCapacityFromSignal(update);
     });
 
     this.subscriptions.add(signalSub);
   }
 
-  private refreshCapacityFromSignal(payload: string): void {
+  private refreshCapacityFromSignal(update: SummerCapacityRealtimeEvent): void {
     const destination = this.selectedDestination;
     if (!destination || !this.ticketForm) {
       return;
@@ -717,14 +705,11 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return;
     }
 
-    const parts = payload.split('|');
-    if (parts.length < 3) {
-      this.loadBookingCapacity();
+    const categoryId = Number(update?.categoryId ?? 0);
+    const waveCode = String(update?.waveCode ?? '').trim();
+    if (!Number.isFinite(categoryId) || categoryId <= 0 || waveCode.length === 0) {
       return;
     }
-
-    const categoryId = Number(parts[1]);
-    const waveCode = String(parts[2] ?? '').trim();
 
     if (categoryId === destination.categoryId && waveCode === selectedWaveCode) {
       this.loadBookingCapacity();

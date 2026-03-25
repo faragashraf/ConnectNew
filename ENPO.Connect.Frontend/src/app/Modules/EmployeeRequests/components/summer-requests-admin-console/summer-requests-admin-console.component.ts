@@ -18,7 +18,6 @@ import { AttchedObjectService } from 'src/app/shared/services/helper/attched-obj
 import { DynamicMetadataService } from 'src/app/shared/services/helper/dynamic-metadata.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
-import { SignalRService } from 'src/app/shared/services/SignalRServices/SignalR.service';
 import {
   SUMMER_DESTINATION_CATALOG_KEY,
   SUMMER_DYNAMIC_APPLICATION_ID
@@ -29,6 +28,10 @@ import {
   SummerAdminActionCode
 } from '../summer-shared/core/summer-action-codes';
 import { SUMMER_UI_TEXTS_AR } from '../summer-shared/core/summer-ui-texts.ar';
+import { SummerRequestRowRefreshService } from '../summer-shared/core/summer-request-row-refresh.service';
+import { SummerRequestsListPatchService } from '../summer-shared/core/summer-requests-list-patch.service';
+import { SummerRequestsRealtimeService } from '../summer-shared/core/summer-requests-realtime.service';
+import { SummerCapacityRealtimeEvent } from '../summer-shared/core/summer-realtime-event.models';
 import {
   parseSummerDestinationCatalog,
   SUMMER_SEASON_YEAR,
@@ -38,8 +41,6 @@ import {
 import {
   buildSummerRequestCompanions,
   buildSummerRequestDetailFields,
-  extractCapacityPayloadFromSignal,
-  extractRequestUpdatePayloadFromSignal,
   getStatusClass as resolveSummerStatusClass,
   getStatusLabel as resolveSummerStatusLabel,
   SummerRequestFieldGridRow
@@ -122,6 +123,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   private readonly allowedAttachmentExtensions = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
   private readonly subscriptions = new Subscription();
   private requestsLoadVersion = 0;
+  private dashboardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly fb: FormBuilder,
@@ -132,7 +134,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     private readonly attchedObjectService: AttchedObjectService,
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
-    private readonly signalRService: SignalRService
+    private readonly summerRealtimeService: SummerRequestsRealtimeService,
+    private readonly rowRefreshService: SummerRequestRowRefreshService,
+    private readonly listPatchService: SummerRequestsListPatchService
   ) {
     this.filtersForm = this.fb.group({
       categoryId: [null],
@@ -164,6 +168,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.dashboardRefreshTimer) {
+      clearTimeout(this.dashboardRefreshTimer);
+      this.dashboardRefreshTimer = null;
+    }
     this.subscriptions.unsubscribe();
   }
 
@@ -1174,46 +1182,33 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   private bindSignalRefresh(): void {
-    const signalSub = this.signalRService.Notification$.subscribe(notification => {
-      const title = String((notification as { title?: string; Title?: string })?.title
-        ?? (notification as { title?: string; Title?: string })?.Title
-        ?? '');
-      const body = String((notification as { notification?: string; Notification?: string })?.notification
-        ?? (notification as { notification?: string; Notification?: string })?.Notification
-        ?? '');
-
-      const capacityPayload = extractCapacityPayloadFromSignal([body, title]);
-      if (capacityPayload) {
-        this.refreshWaveCapacityFromSignal(capacityPayload);
-      }
-
-      const requestUpdate = extractRequestUpdatePayloadFromSignal([body, title]);
-      if (!requestUpdate) {
-        return;
-      }
-
-      this.refreshRequestRowFromSignal(requestUpdate.messageId);
-      if (this.selectedRequestId && requestUpdate.messageId === this.selectedRequestId) {
+    const requestSub = this.summerRealtimeService.requestUpdates$.subscribe(update => {
+      this.refreshRequestRowFromSignal(update.messageId);
+      this.scheduleDashboardRefresh();
+      if (this.selectedRequestId && update.messageId === this.selectedRequestId) {
         this.loadSelectedRequestDetails(this.selectedRequestId);
       }
     });
 
-    this.subscriptions.add(signalSub);
+    const capacitySub = this.summerRealtimeService.capacityUpdates$.subscribe(update => {
+      this.refreshWaveCapacityFromSignal(update);
+    });
+
+    this.subscriptions.add(requestSub);
+    this.subscriptions.add(capacitySub);
   }
 
-  private refreshWaveCapacityFromSignal(payload: string): void {
+  private refreshWaveCapacityFromSignal(update: SummerCapacityRealtimeEvent): void {
     if (!this.capacityDialogVisible || !this.capacityScopeCategoryId || !this.capacityScopeWaveCode) {
       return;
     }
 
-    const parts = payload.split('|');
-    if (parts.length < 3) {
-      this.refreshWaveCapacity(true);
+    const categoryId = Number(update?.categoryId ?? 0);
+    const waveCode = String(update?.waveCode ?? '').trim();
+    if (!Number.isFinite(categoryId) || categoryId <= 0 || waveCode.length === 0) {
       return;
     }
 
-    const categoryId = Number(parts[1] ?? 0);
-    const waveCode = String(parts[2] ?? '').trim();
     if (categoryId === this.capacityScopeCategoryId && waveCode === this.capacityScopeWaveCode) {
       this.refreshWaveCapacity(true);
     }
@@ -1226,27 +1221,20 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     const raw = this.filtersForm.getRawValue();
-    this.summerWorkflowController.getAdminRequests({
-      seasonYear: this.seasonYear,
-      messageId: targetMessageId,
+    this.rowRefreshService.refreshAdminRow(this.seasonYear, targetMessageId, {
       categoryId: raw.categoryId,
       waveCode: String(raw.waveCode ?? '').trim(),
       status: String(raw.status ?? '').trim(),
       paymentState: String(raw.paymentState ?? '').trim(),
       employeeId: String(raw.employeeId ?? '').trim(),
-      search: String(raw.search ?? '').trim(),
-      pageNumber: 1,
-      pageSize: 1
+      search: String(raw.search ?? '').trim()
     }).subscribe({
-      next: response => {
-        const records = response?.isSuccess && Array.isArray(response.data) ? response.data : [];
-        const matched = records.find(item => Number(item?.messageId ?? 0) === targetMessageId);
+      next: matched => {
         if (matched) {
           this.upsertRequestInCurrentPage(matched);
-          return;
+        } else {
+          this.removeRequestFromCurrentPage(targetMessageId);
         }
-
-        this.removeRequestFromCurrentPage(targetMessageId);
       }
     });
   }
@@ -1257,40 +1245,42 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const index = this.requests.findIndex(item => Number(item?.messageId ?? 0) === messageId);
-    const next = [...this.requests];
-
-    if (index >= 0) {
-      next[index] = summary;
-      this.requests = next;
-      return;
+    const patched = this.listPatchService.upsertAdminCurrentPage(
+      this.requests,
+      summary,
+      this.requestsPageNumber,
+      this.requestsPageSize
+    );
+    this.requests = patched.items;
+    if (patched.change === 'inserted') {
+      this.requestsTotalCount += 1;
     }
-
-    if (this.requestsPageNumber !== 1) {
-      return;
-    }
-
-    next.unshift(summary);
-    next.sort((a, b) => this.toEpoch(b.createdAt) - this.toEpoch(a.createdAt) || Number(b.messageId ?? 0) - Number(a.messageId ?? 0));
-    if (next.length > this.requestsPageSize) {
-      next.splice(this.requestsPageSize);
-    }
-
-    this.requests = next;
   }
 
   private removeRequestFromCurrentPage(messageId: number): void {
-    const index = this.requests.findIndex(item => Number(item?.messageId ?? 0) === messageId);
-    if (index < 0) {
+    const patched = this.listPatchService.removeByMessageId(this.requests, messageId);
+    if (patched.change !== 'removed') {
       return;
     }
 
-    this.requests = this.requests.filter(item => Number(item?.messageId ?? 0) !== messageId);
+    this.requests = patched.items;
+    this.requestsTotalCount = Math.max(0, this.requestsTotalCount - 1);
 
     if (this.selectedRequestId === messageId) {
       this.selectedRequestId = null;
       this.selectedRequestDetails = null;
     }
+  }
+
+  private scheduleDashboardRefresh(): void {
+    if (this.dashboardRefreshTimer) {
+      clearTimeout(this.dashboardRefreshTimer);
+    }
+
+    this.dashboardRefreshTimer = setTimeout(() => {
+      this.dashboardRefreshTimer = null;
+      this.loadDashboard();
+    }, 250);
   }
 
   private patchActionDefaultsForSelectedRequest(): void {

@@ -114,3 +114,17 @@ It is aligned with `docs/architecture/summer-requests-guardrails.md`.
 - Full handler-per-usecase extraction from `SummerWorkflowService` (still pending staged decomposition).
 - Complete migration of all UI literals to centralized resources (high priority follow-up, partially started).
 - Full replacement of all 2026 date calendars by externalized metadata source.
+
+## 6) Phase 2 Completion Notes (SignalR / Realtime Focus)
+- Added centralized realtime normalization + dedupe layer:
+  - `summer-notification-event-normalizer.service.ts`
+  - `summer-requests-realtime.service.ts`
+- Added centralized row refresh + list patch services:
+  - `summer-request-row-refresh.service.ts`
+  - `summer-requests-list-patch.service.ts`
+- Components no longer parse SignalR payload strings directly:
+  workspace/admin/dynamic-builder consume typed `requestUpdates$` / `capacityUpdates$`.
+- Replaced full owner-list refetch after cancel/pay/transfer with row-level patching and targeted details refresh.
+- Added debounced dashboard refresh in admin on realtime request updates to avoid repeated API bursts.
+- Removed core dependency on workspace utilities by introducing:
+  `summer-request-fields-reader.ts` and rewiring `summer-request-domain.adapter.ts`.

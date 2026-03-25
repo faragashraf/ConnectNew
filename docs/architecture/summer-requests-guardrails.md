@@ -43,6 +43,8 @@ It must be applied in every future task touching this feature.
 - Avoid broad full reloads when signal payload can patch row-level state.
 - Preserve selected-request consistency after updates (upsert/remove logic must handle stale selection).
 - Pagination/filter state must remain stable after realtime updates.
+- Summer components must not subscribe directly to `SignalRService.Notification$`;
+  they consume typed streams from `summer-shared/core/summer-requests-realtime.service.ts`.
 
 ## 6) API Contract Rules
 - Keep `SummerWorkflowController` endpoints backward compatible unless all consumers are updated in the same change.
@@ -75,6 +77,7 @@ It must be applied in every future task touching this feature.
 
 ## 10) Anti-Patterns To Avoid
 - Full component reload on every SignalR event.
+- Direct SignalR payload parsing duplicated in multiple components.
 - Parsing business state from free-text Arabic replies.
 - Embedding domain logic directly in template expressions.
 - Duplicated notification fan-out causing repeated UI notifications.
