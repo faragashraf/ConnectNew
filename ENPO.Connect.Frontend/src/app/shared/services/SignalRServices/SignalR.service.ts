@@ -12,6 +12,7 @@ import { WindowsNotificationService } from '../helper/windowsNotification.servic
 import { SpinnerService } from '../helper/spinner.service';
 import { AuthObjectsService } from '../helper/auth-objects.service';
 import { ConditionalDate } from '../../Pipe/Conditional-date.pipe';
+import { SummerNotificationDisplayMapperService } from 'src/app/Modules/EmployeeRequests/components/summer-shared/core/summer-notification-display-mapper.service';
 
 export enum NotificationType {
   info = 'Info',
@@ -77,7 +78,8 @@ export class SignalRService {
     private jwtHelper: JwtHelperService,
     private msgsService: MsgsService, public primMsg: MessageService,
     private router: Router, private conditionalDate: ConditionalDate,
-    private spinnerService: SpinnerService) { }
+    private spinnerService: SpinnerService,
+    private summerNotificationDisplayMapper: SummerNotificationDisplayMapperService) { }
 
 
   fixNotificationOnRecieve$ = new Subject<boolean>(); //Subscribe from app.component, and next from HubSync.component
@@ -396,12 +398,13 @@ export class SignalRService {
       this.primMsgCount = 0;
 
       notifications.forEach((notification: NotificationDto) => {
+        const displayNotification = this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto;
         // let sev = notification.type == info ? 'info' : notification.type == '2' ? 'success' : 'warn'
-        this.Notification.push(notification)
+        this.Notification.push(displayNotification)
         let _notification = {
-          severity: notification.type,
-          summary: `${notification.sender} - ${notification.title}`,
-          detail: ` ${this.conditionalDate.transform(notification?.time ?? null, "full")} :  ${notification.notification}`,
+          severity: displayNotification.type,
+          summary: `${displayNotification.sender} - ${displayNotification.title}`,
+          detail: ` ${this.conditionalDate.transform(displayNotification?.time ?? null, "full")} :  ${displayNotification.notification}`,
           sticky: false,
           life: 5000 // notificat
         }

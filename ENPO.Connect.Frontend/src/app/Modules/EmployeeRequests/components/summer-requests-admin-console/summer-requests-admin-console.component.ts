@@ -28,10 +28,12 @@ import {
   SummerAdminActionCode
 } from '../summer-shared/core/summer-action-codes';
 import { SUMMER_UI_TEXTS_AR } from '../summer-shared/core/summer-ui-texts.ar';
-import { SummerRequestRowRefreshService } from '../summer-shared/core/summer-request-row-refresh.service';
-import { SummerRequestsListPatchService } from '../summer-shared/core/summer-requests-list-patch.service';
 import { SummerRequestsRealtimeService } from '../summer-shared/core/summer-requests-realtime.service';
-import { SummerCapacityRealtimeEvent } from '../summer-shared/core/summer-realtime-event.models';
+import {
+  SummerCapacityRealtimeEvent,
+  SummerRequestRealtimeEvent
+} from '../summer-shared/core/summer-realtime-event.models';
+import { SummerAdminRealtimePatchService } from '../summer-shared/core/summer-admin-realtime-patch.service';
 import {
   parseSummerDestinationCatalog,
   SUMMER_SEASON_YEAR,
@@ -135,8 +137,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
     private readonly summerRealtimeService: SummerRequestsRealtimeService,
-    private readonly rowRefreshService: SummerRequestRowRefreshService,
-    private readonly listPatchService: SummerRequestsListPatchService
+    private readonly adminRealtimePatchService: SummerAdminRealtimePatchService
   ) {
     this.filtersForm = this.fb.group({
       categoryId: [null],
@@ -820,10 +821,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.actionAttachments = [];
           this.actionForm.patchValue({ comment: '', force: false });
           if (this.selectedRequestId) {
-            this.refreshRequestRowFromSignal(this.selectedRequestId);
-          }
-          if (this.selectedRequestId) {
-            this.loadSelectedRequestDetails(this.selectedRequestId);
+            this.applyRealtimeRequestUpdate(this.createLocalRequestUpdateEvent(this.selectedRequestId, 'UPDATE'));
           }
         } else {
           this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
@@ -1183,11 +1181,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   private bindSignalRefresh(): void {
     const requestSub = this.summerRealtimeService.requestUpdates$.subscribe(update => {
-      this.refreshRequestRowFromSignal(update.messageId);
+      this.applyRealtimeRequestUpdate(update);
       this.scheduleDashboardRefresh();
-      if (this.selectedRequestId && update.messageId === this.selectedRequestId) {
-        this.loadSelectedRequestDetails(this.selectedRequestId);
-      }
     });
 
     const capacitySub = this.summerRealtimeService.capacityUpdates$.subscribe(update => {
@@ -1214,14 +1209,20 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
   }
 
-  private refreshRequestRowFromSignal(messageId: number): void {
-    const targetMessageId = Number(messageId ?? 0);
+  private applyRealtimeRequestUpdate(update: SummerRequestRealtimeEvent): void {
+    const targetMessageId = Number(update?.messageId ?? 0);
     if (!Number.isFinite(targetMessageId) || targetMessageId <= 0) {
       return;
     }
 
     const raw = this.filtersForm.getRawValue();
-    this.rowRefreshService.refreshAdminRow(this.seasonYear, targetMessageId, {
+    this.adminRealtimePatchService.applyRequestUpdate(this.seasonYear, update, {
+      requests: this.requests,
+      totalCount: this.requestsTotalCount,
+      pageNumber: this.requestsPageNumber,
+      pageSize: this.requestsPageSize,
+      selectedRequestId: this.selectedRequestId
+    }, {
       categoryId: raw.categoryId,
       waveCode: String(raw.waveCode ?? '').trim(),
       status: String(raw.status ?? '').trim(),
@@ -1229,47 +1230,33 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       employeeId: String(raw.employeeId ?? '').trim(),
       search: String(raw.search ?? '').trim()
     }).subscribe({
-      next: matched => {
-        if (matched) {
-          this.upsertRequestInCurrentPage(matched);
-        } else {
-          this.removeRequestFromCurrentPage(targetMessageId);
+      next: patched => {
+        this.requests = patched.requests;
+        this.requestsTotalCount = patched.totalCount;
+        this.selectedRequestId = patched.selectedRequestId;
+
+        if (patched.selectedWasRemoved) {
+          this.selectedRequestDetails = null;
+        }
+
+        if (patched.selectedWasUpdated && this.selectedRequestId) {
+          this.loadSelectedRequestDetails(this.selectedRequestId);
         }
       }
     });
   }
 
-  private upsertRequestInCurrentPage(summary: SummerRequestSummaryDto): void {
-    const messageId = Number(summary?.messageId ?? 0);
-    if (!Number.isFinite(messageId) || messageId <= 0) {
-      return;
-    }
-
-    const patched = this.listPatchService.upsertAdminCurrentPage(
-      this.requests,
-      summary,
-      this.requestsPageNumber,
-      this.requestsPageSize
-    );
-    this.requests = patched.items;
-    if (patched.change === 'inserted') {
-      this.requestsTotalCount += 1;
-    }
-  }
-
-  private removeRequestFromCurrentPage(messageId: number): void {
-    const patched = this.listPatchService.removeByMessageId(this.requests, messageId);
-    if (patched.change !== 'removed') {
-      return;
-    }
-
-    this.requests = patched.items;
-    this.requestsTotalCount = Math.max(0, this.requestsTotalCount - 1);
-
-    if (this.selectedRequestId === messageId) {
-      this.selectedRequestId = null;
-      this.selectedRequestDetails = null;
-    }
+  private createLocalRequestUpdateEvent(messageId: number, action = 'UPDATE'): SummerRequestRealtimeEvent {
+    const safeMessageId = Number(messageId ?? 0);
+    const normalizedAction = String(action ?? '').trim().toUpperCase() || 'UPDATE';
+    return {
+      kind: 'request',
+      messageId: Number.isFinite(safeMessageId) && safeMessageId > 0 ? Math.floor(safeMessageId) : 0,
+      action: normalizedAction,
+      raw: `LOCAL_SUMMER_REQUEST_UPDATED|${safeMessageId}|${normalizedAction}|${Date.now()}`,
+      signature: `local-request|${safeMessageId}|${normalizedAction}`,
+      emittedAtEpochMs: Date.now()
+    };
   }
 
   private scheduleDashboardRefresh(): void {

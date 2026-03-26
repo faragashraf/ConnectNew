@@ -128,3 +128,21 @@ It is aligned with `docs/architecture/summer-requests-guardrails.md`.
 - Added debounced dashboard refresh in admin on realtime request updates to avoid repeated API bursts.
 - Removed core dependency on workspace utilities by introducing:
   `summer-request-fields-reader.ts` and rewiring `summer-request-domain.adapter.ts`.
+
+## 7) Completion Pass (Arabic Notifications + Admin Create Upsert)
+- Added frontend display translation layer:
+  - `summer-notification-display-mapper.service.ts`
+  - Converts machine payloads to simple Arabic title/message before user display.
+  - Prevents exposing raw tokens like `SUMMER_REQUEST_UPDATED|...` in toasts/notification list.
+- Unified notification rendering path:
+  - `app.component.ts` now maps realtime notifications through display mapper before toast/push.
+  - `SignalR.service.ts` maps `ReceiveNotificationList` history through the same display mapper.
+- Fixed admin create-event realtime compatibility:
+  - `HandlleEmployeeCategories.cs` now publishes machine payload for create/edit:
+    `SUMMER_REQUEST_UPDATED|{messageId}|CREATE|...` / `...|EDIT|...`
+  - This makes create/edit events normalizable by frontend realtime layer.
+- Added admin incremental patch orchestration service:
+  - `summer-admin-realtime-patch.service.ts`
+  - Encapsulates row refresh + local list/count patching rules.
+  - Supports count increment for CREATE events even when current page is not page 1 (without full reload).
+- Refactored `summer-requests-admin-console.component.ts` to delegate request event patching to the new service.

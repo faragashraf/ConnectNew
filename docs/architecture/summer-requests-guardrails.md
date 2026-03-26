@@ -67,6 +67,8 @@ It must be applied in every future task touching this feature.
 - Arabic UI text should be sourced from feature constants/resources when reused.
 - Keep layout-safe Arabic (short labels, consistent punctuation, no mixed-key wording).
 - SignalR payload markers remain English machine tokens; UI title/message remains Arabic.
+- Raw machine payloads (for example `SUMMER_REQUEST_UPDATED|...`) must never be shown directly to end users;
+  use a dedicated display-mapper/translator layer before rendering toast/list text.
 
 ## 9) Refactoring Constraints
 - No god component -> god facade migration.

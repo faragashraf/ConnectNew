@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { NotificationDto } from 'src/app/shared/services/SignalRServices/SignalR.service';
 import {
   SummerCapacityRealtimeEvent,
   SummerRealtimeEvent,
@@ -11,7 +10,9 @@ import {
 })
 export class SummerNotificationEventNormalizerService {
   normalize(notification: unknown): SummerRealtimeEvent | null {
-    const payload = notification as NotificationDto & {
+    const payload = notification as {
+      title?: string | null;
+      notification?: string | null;
       Notification?: string;
       Title?: string;
       Sender?: string;

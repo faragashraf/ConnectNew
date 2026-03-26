@@ -447,15 +447,15 @@ namespace Persistence.Services
             });
 
             var targetAdminGroup = ResolveResponsibleAdminGroupName(messageRequest);
-            if (!string.IsNullOrWhiteSpace(targetAdminGroup))
+            var updatedMessageId = reply?.MessageId ?? 0;
+            var requestUpdatePayload = BuildSummerRequestUpdatedPayload(updatedMessageId, isEditOperation ? "EDIT" : "CREATE");
+            if (!string.IsNullOrWhiteSpace(targetAdminGroup) && !string.IsNullOrWhiteSpace(requestUpdatePayload))
             {
                 await _notificationService.SendSignalRToGroupAsync(new SignalRGroupDispatchRequest
                 {
                     GroupName = targetAdminGroup,
-                    Notification = isEditOperation
-                        ? $"تم تعديل طلب المصيف رقم #{reply?.MessageId ?? 0} بواسطة صاحب الطلب (مرجع: {requestRef})."
-                        : $"تم إنشاء طلب مصيف جديد رقم #{reply?.MessageId ?? 0} بواسطة صاحب الطلب (مرجع: {requestRef}).",
-                    Title = "إدارة طلبات المصايف",
+                    Notification = requestUpdatePayload,
+                    Title = "تحديث طلبات المصايف",
                     Type = NotificationType.info,
                     Category = NotificationCategory.Business,
                     Sender = "Connect",
@@ -464,9 +464,23 @@ namespace Persistence.Services
             }
             else
             {
-                _logger.AppendLine($"PostCommitActionsAsync: no responsible admin group found for message #{reply?.MessageId ?? 0}.");
+                _logger.AppendLine($"PostCommitActionsAsync: no valid admin group/message id for message #{updatedMessageId}.");
             }
             _logger.AppendLine("Transactions committed.");
+        }
+
+        private static string BuildSummerRequestUpdatedPayload(int messageId, string action)
+        {
+            if (messageId <= 0)
+            {
+                return string.Empty;
+            }
+
+            var normalizedAction = string.IsNullOrWhiteSpace(action)
+                ? "UPDATE"
+                : action.Trim().ToUpperInvariant();
+
+            return $"SUMMER_REQUEST_UPDATED|{messageId}|{normalizedAction}|{DateTime.UtcNow:o}";
         }
 
         private static string? ResolveResponsibleAdminGroupName(MessageRequest? messageRequest)
