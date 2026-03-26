@@ -5,6 +5,7 @@ using ENPO.CustomSwagger;
 using ENPO.Dto.Utilities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Internal;
@@ -57,6 +58,12 @@ builder.Services.AddOptions<ApplicationConfig>().BindConfiguration(nameof(Applic
 
 builder.Services.AddSingleton<ApplicationConfig>(sp =>
        sp.GetRequiredService<IOptions<ApplicationConfig>>().Value);
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddScoped<helperService>();
 builder.Services.AddScoped<SummerWorkflowService>();
@@ -69,12 +76,16 @@ builder.Services.AddHttpContextAccessor();
 // Bind the ApplicationConfig section manually
 var applicationConfig = new ApplicationConfig();
 builder.Configuration.GetSection(nameof(ApplicationConfig)).Bind(applicationConfig);
+var chatHubUrl = BuildAbsoluteUrl(
+    builder.Configuration["AppUrls:PublicBaseUrl"],
+    builder.Configuration["Routes:ChatHub"],
+    "Routes:ChatHub");
 
 builder.Services.AddSingleton<SignalRConnectionManager>(sp =>
 {
     var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
     return new SignalRConnectionManager(
-        applicationConfig.HubServerIP,
+        chatHubUrl,
         httpContextAccessor,
         applicationConfig.tokenOptions.Key, "App.Connect", "Connect", "Connect");
 });
@@ -251,7 +262,9 @@ using (var scope = app.Services.CreateScope())
 
 // Use the custom middleware
 //app.UseMiddleware<RequestValidationMiddleware>();
-app.UseCors("AllowAll");
+app.UseForwardedHeaders();
+app.UseHttpsRedirection();
+app.UseCors(AllowAllCors);
 
 app.UseRouting();
 
@@ -288,3 +301,34 @@ app.UseEndpoints(endpoints =>
 
 app.MapControllers();
 app.Run();
+
+static string BuildAbsoluteUrl(string? publicBaseUrl, string? routePath, string routePathConfigKey)
+{
+    if (string.IsNullOrWhiteSpace(publicBaseUrl))
+    {
+        throw new InvalidOperationException("AppUrls:PublicBaseUrl is required.");
+    }
+
+    if (!Uri.TryCreate(publicBaseUrl, UriKind.Absolute, out var baseUri))
+    {
+        throw new InvalidOperationException($"AppUrls:PublicBaseUrl '{publicBaseUrl}' is not a valid absolute URL.");
+    }
+
+    if (!string.Equals(baseUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("AppUrls:PublicBaseUrl must use HTTPS.");
+    }
+
+    if (string.IsNullOrWhiteSpace(routePath))
+    {
+        throw new InvalidOperationException($"{routePathConfigKey} is required.");
+    }
+
+    var normalizedRoutePath = routePath.Trim();
+    if (!normalizedRoutePath.StartsWith('/'))
+    {
+        normalizedRoutePath = $"/{normalizedRoutePath}";
+    }
+
+    return new Uri(baseUri, normalizedRoutePath).ToString();
+}

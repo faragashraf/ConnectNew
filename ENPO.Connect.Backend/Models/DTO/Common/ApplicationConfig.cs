@@ -10,7 +10,6 @@ namespace Models.DTO.Common
     public class ApplicationConfig
     {
         public string AdminIps { get; set; } = "";
-        public string HubServerIP { get; set; } = "";
         public FtpOptions FtpOptions { get; set; } = new FtpOptions();
         public MailAccountOptions MailOptions { get; set; } = new MailAccountOptions();
         public SLAConfiguration SLAConfiguration { get; set; } = new SLAConfiguration();
