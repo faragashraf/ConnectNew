@@ -1,0 +1,35 @@
+services:
+  enpo-frontend:
+    image: node:20-alpine
+    container_name: enpo_frontend
+    working_dir: /app
+    volumes:
+      - /Users/ashraffarag/ConnectNew/ENPO.Connect.Frontend:/app
+    ports:
+      - "4200:4200"
+    environment:
+      NODE_ENV: development
+    command: sh -c "npm ci --legacy-peer-deps && npx ng serve --host 0.0.0.0 --poll 2000"
+    networks:
+      - enpo-network
+
+  sqlserver:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    container_name: enpo_sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "Admin123!@#"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+      - /Users/ashraffarag/ConnectNew/ENPO.Connect.Frontend/database:/var/opt/mssql/backup
+    networks:
+      - enpo-network
+
+volumes:
+  sqlserver_data:
+
+networks:
+  enpo-network:
+    driver: bridge
