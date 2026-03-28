@@ -34,16 +34,15 @@ export const environment = {
   PowerBi: `${MainDomain}/Applications/PowerBi`,
   // SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
   
-  SignalRHubServer: `http://localhost/GlobalHubSync`,
-  // LandTransportationApiURL: `http://localhost:8888`,
-  ConnectApiURL: `http://localhost:8888`,
-  // DomainAuthURL:  "https://localhost:8998",
+SignalRHubServer: `https://sync.webserver.local`,  // LandTransportationApiURL: `http://localhost:8888`,
+  ConnectApiURL: `https://connect.webserver.local`,
+  DomainAuthURL:  "https://auth.webserver.local",
   // PowerBi: "http://localhost:8020",
   // PublicationsUrl: "http://localhost:5269",
   
   // Home
   
-  DomainAuthURL: 'http://localhost/Domain_Authorization',
+  // DomainAuthURL: 'http://localhost/Domain_Authorization',
 
   summerFeature: {
     seasonYear: 2026,

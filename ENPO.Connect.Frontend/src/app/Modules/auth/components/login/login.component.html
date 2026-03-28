@@ -171,8 +171,8 @@
                     </div>
 
                     <div class="flex flex-column gap-2 mt-2">
-                        <button pButton pRipple type="submit" label="تسجيل الدخول" [loading]="isFlipped" class="w-full"
-                            style="margin-top: -2rem;"></button>
+                        <button pButton pRipple type="submit" label="تسجيل الدخول" [loading]="isFlipped"
+                            class="w-full"></button>
                     </div>
                 </form>
 
@@ -195,8 +195,9 @@
                             <img [src]="googlePlayQrPath" alt="QR لكود Google Play" class="qr-img" />
                             <div class="download-card-body">
                                 <!-- <div class="store-label">Android</div> -->
-                                <a rel="noopener noreferrer" aria-label="فتح Google Play" class="open-store">
-                                    <img *ngIf="googlePlayBadgePath" [src]="googlePlayUrl" alt="Google Play badge"
+                                <a [href]="googlePlayUrl" target="_blank" rel="noopener noreferrer"
+                                    aria-label="فتح Google Play" class="open-store">
+                                    <img *ngIf="googlePlayBadgePath" [src]="googlePlayBadgePath" alt="Google Play badge"
                                         class="google-store-badge" />
                                 </a>
                             </div>
@@ -207,9 +208,9 @@
                             <img [src]="appStoreQrPath" alt="QR لكود App Store" class="qr-img" />
                             <div class="download-card-body">
                                 <!-- <div class="store-label">iOS</div> -->
-                                <a target="_blank" rel="noopener noreferrer" aria-label="فتح App Store"
-                                    class="open-store">
-                                    <img *ngIf="appStoreBadgePath" [src]="appStoreUrl" alt="App Store badge"
+                                <a [href]="appStoreUrl" target="_blank" rel="noopener noreferrer"
+                                    aria-label="فتح App Store" class="open-store">
+                                    <img *ngIf="appStoreBadgePath" [src]="appStoreBadgePath" alt="App Store badge"
                                         class="app-store-badge" />
                                 </a>
                             </div>

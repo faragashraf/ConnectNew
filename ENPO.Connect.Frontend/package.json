@@ -9,6 +9,8 @@
     "test": "ng test",
     "refresh-swagger": ".\\refresh.bat",
     "deploy:production": "node --max-old-space-size=8192 ./node_modules/@angular/cli/bin/ng build --configuration=production --build-optimizer --base-href /",
+    "deploy:production-mac": "cd /Users/ashraffarag/ConnectNew/ENPO.Connect.Frontend && npm run build -- --configuration production-mac",
+    "npx serve:production-mac": "npx serve -s dist/angular-template -l 4200",
     "deploy:test": "node --max-old-space-size=8192 ./node_modules/@angular/cli/bin/ng build --configuration=test --build-optimizer --base-href /Connect/",
     "nswag:generate": "node tools/generate-nswag.js",
     "generate:backend-index": "node tools/generate-backendservices-index.js",

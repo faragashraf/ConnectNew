@@ -83,6 +83,27 @@
               ],
               "outputHashing": "all"
             },
+            "production-mac": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "7mb",
+                  "maximumError": "7mb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "120kb",
+                  "maximumError": "120kb"
+                }
+              ],
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.production-mac.ts"
+                }
+              ],
+              "outputHashing": "all"
+            },
             "development": {
               "buildOptimizer": false,
               "optimization": false,
@@ -126,6 +147,9 @@
           "configurations": {
             "production": {
               "browserTarget": "AngularTemplate:build:production"
+            },
+            "production-mac": {
+              "browserTarget": "AngularTemplate:build:production-mac"
             },
             "development": {
               "browserTarget": "AngularTemplate:build:development"

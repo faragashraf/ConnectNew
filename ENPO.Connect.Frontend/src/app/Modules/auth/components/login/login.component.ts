@@ -52,13 +52,13 @@ export class LoginComponent implements OnInit {
   // Google Authenticator download assets & links
   googlePlayQrPath = 'assets/QRCode/GOOGLE_PLAY_GOOGLE_AUTHANTICATOR.png';
   appStoreQrPath = 'assets/QRCode/APP_STORE_GOOGLE_AUTHANTICATOR.png';
-  // Optional local badges (place PNGs under assets/QRCode/ if not present)
-  googlePlayBadgePath = 'assets/QRCode/google-play-badge.png';
-  appStoreBadgePath = 'assets/QRCode/app-store-badge.png';
+  // Local store badge assets
+  googlePlayBadgePath = 'assets/QRCode/googlePlay.png';
+  appStoreBadgePath = 'assets/QRCode/App_Store.png';
 
-  // Store links (open in new tab)
-  googlePlayUrl = 'assets/QRCode/googlePlay.png';
-  appStoreUrl = 'assets/QRCode/App_Store.svg';
+  // Official store links (open in new tab)
+  googlePlayUrl = 'https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2';
+  appStoreUrl = 'https://apps.apple.com/app/google-authenticator/id388497605';
 
   constructor(private fb: FormBuilder, private router: Router, private route: ActivatedRoute,
     public msg: MsgsService, private chatService: SignalRService, private notificationService: WindowsNotificationService, private sanitizer: DomSanitizer,
