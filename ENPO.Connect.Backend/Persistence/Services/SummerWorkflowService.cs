@@ -929,6 +929,17 @@ namespace Persistence.Services
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
                 var dueAt = ResolvePaymentDueAtUtc(message, fields);
                 var paidAt = request.PaidAtUtc?.ToUniversalTime() ?? DateTime.UtcNow;
+                var requestCreatedAtUtc = ResolveMessageCreatedAtUtc(message);
+
+                if (paidAt < requestCreatedAtUtc)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = "لا يمكن إدخال تاريخ السداد قبل تاريخ إنشاء الطلب."
+                    });
+                    return response;
+                }
 
                 if (paidAt > dueAt)
                 {
@@ -2311,10 +2322,24 @@ SELECT @result;
                 return fromField.Value;
             }
 
-            var createdAtUtc = message.CreatedDate.Kind == DateTimeKind.Utc
-                ? message.CreatedDate
-                : DateTime.SpecifyKind(message.CreatedDate, DateTimeKind.Utc);
+            var createdAtUtc = ResolveMessageCreatedAtUtc(message);
             return SummerCalendarRules.CalculatePaymentDueUtc(createdAtUtc);
+        }
+
+        private static DateTime ResolveMessageCreatedAtUtc(Message message)
+        {
+            var createdDate = message.CreatedDate;
+            if (createdDate.Kind == DateTimeKind.Utc)
+            {
+                return createdDate;
+            }
+
+            if (createdDate.Kind == DateTimeKind.Local)
+            {
+                return createdDate.ToUniversalTime();
+            }
+
+            return DateTime.SpecifyKind(createdDate, DateTimeKind.Utc);
         }
 
         private static DateTime? ParseDate(string? value)
@@ -2363,7 +2388,6 @@ SELECT @result;
         }
     }
 }
-
 
 
 

@@ -107,6 +107,11 @@ namespace Persistence.Services
                 return;
             }
 
+            if (!ValidateAndNormalizeCompanionNames(messageRequest.Fields, response))
+            {
+                return;
+            }
+
             var employeeId = GetFieldValue(messageRequest.Fields, "Emp_Id");
             if (string.IsNullOrWhiteSpace(employeeId))
             {
@@ -726,6 +731,45 @@ SELECT @result;
             return int.TryParse((value ?? string.Empty).Trim(), out var parsed) ? parsed : fallback;
         }
 
+        private static bool ValidateAndNormalizeCompanionNames(List<TkmendField>? fields, CommonResponse<MessageDto> response)
+        {
+            if (fields == null || fields.Count == 0)
+            {
+                return true;
+            }
+
+            var invalidCompanionFound = false;
+
+            foreach (var field in fields.Where(field => field != null && SummerCompanionNamePolicy.IsCompanionNameFieldKind(field.FildKind)))
+            {
+                var normalizedName = SummerCompanionNamePolicy.NormalizeCompanionName(field.FildTxt);
+                field.FildTxt = normalizedName;
+
+                if (string.IsNullOrWhiteSpace(normalizedName))
+                {
+                    continue;
+                }
+
+                if (!SummerCompanionNamePolicy.HasMinimumNameParts(normalizedName))
+                {
+                    invalidCompanionFound = true;
+                    break;
+                }
+            }
+
+            if (!invalidCompanionFound)
+            {
+                return true;
+            }
+
+            response.Errors.Add(new Error
+            {
+                Code = "400",
+                Message = "يجب إدخال اسم المرافق ثلاثي على الأقل."
+            });
+            return false;
+        }
+
         private static string GetSummerSequenceName(int categoryId)
         {
             return categoryId switch
@@ -900,6 +944,3 @@ SELECT @result;
         }
     }
 }
-
-
-

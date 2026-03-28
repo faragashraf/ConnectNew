@@ -206,8 +206,9 @@
                 <h4>تسجيل السداد</h4>
                 <label>
                   <span class="required-label">تاريخ ووقت السداد</span>
-                  <input type="datetime-local" step="3600" formControlName="paidAtLocal" />
+                  <input type="datetime-local" step="3600" formControlName="paidAtLocal" [attr.min]="getPaymentMinDateTimeLocal(request)" />
                 </label>
+                <p class="warn" *ngIf="hasPaymentBeforeRequestCreationError()">{{ paymentBeforeRequestCreationMessage }}</p>
                 <label>
                   <span class="optional-label">ملاحظات السداد</span>
                   <textarea rows="3" formControlName="notes" placeholder="ملاحظات السداد"></textarea>
@@ -292,6 +293,9 @@
                             <form [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
                 <h4>الاعتذار عن الحجز</h4>
                 <p class="warn" *ngIf="!isCancelActionClosed(request)">{{ getCancelWindowNote() }}</p>
+                <p class="warn" *ngIf="getCancelDeductionMessage(request) as cancelDeductionMessage">
+                  <ng-container *ngIf="cancelDeductionMessage.length > 0">{{ cancelDeductionMessage }}</ng-container>
+                </p>
                 <label>
                   <span class="optional-label">سبب الاعتذار</span>
                   <textarea rows="3" formControlName="reason" placeholder="سبب الاعتذار (اختياري)"></textarea>

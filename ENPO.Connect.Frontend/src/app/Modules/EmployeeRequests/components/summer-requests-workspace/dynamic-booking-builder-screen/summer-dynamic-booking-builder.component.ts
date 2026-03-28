@@ -23,6 +23,11 @@ import {
   SUMMER_DYNAMIC_APPLICATION_ID
 } from '../../summer-shared/core/summer-feature.config';
 import { SUMMER_CANONICAL_FIELD_KEYS } from '../../summer-shared/core/summer-field-aliases';
+import { SUMMER_UI_TEXTS_AR } from '../../summer-shared/core/summer-ui-texts.ar';
+import {
+  isValidSummerCompanionName,
+  normalizeSummerCompanionName
+} from '../../summer-shared/core/summer-companion-name.policy';
 import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
 import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
 
@@ -765,11 +770,21 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         let relation = '';
         let relationOther = '';
         let age = '';
+        let companionName = '';
         formArray.controls.forEach(control => {
           const row = control as FormGroup;
           const name = Object.keys(row.controls)[0];
           const base = this.engine.parseControlName(name).base.toLowerCase();
-          const value = String(row.get(name)?.value ?? '').trim();
+          const controlRef = row.get(name);
+          const rawValue = String(controlRef?.value ?? '');
+          const value = String(rawValue ?? '').trim();
+          if (this.matchesAlias(base, this.engine.aliases.companionName)) {
+            const normalizedName = normalizeSummerCompanionName(rawValue);
+            companionName = normalizedName;
+            if (controlRef && rawValue !== normalizedName) {
+              controlRef.setValue(normalizedName, { emitEvent: false });
+            }
+          }
           if (this.matchesAlias(base, this.engine.aliases.companionRelation)) {
             relation = value;
           }
@@ -787,6 +802,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
         if (this.engine.isChildRelation(relation) && age.length === 0) {
           alerts.push(`سن المرافق رقم ${index + 1} مطلوب عند اختيار درجة القرابة ابن/ابنة.`);
+        }
+
+        if (companionName.length > 0 && !isValidSummerCompanionName(companionName)) {
+          alerts.push(`${SUMMER_UI_TEXTS_AR.errors.companionNameMinimumThreeParts} (المرافق رقم ${index + 1}).`);
         }
       });
     }
@@ -1756,5 +1775,4 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return '';
   }
 }
-
 
