@@ -583,10 +583,44 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     this.engine.ensureExtraCountRule(this.ticketForm, this.genericFormService, destination);
+    this.syncExtraCountValidationMessage(destination);
     this.syncCompanionInstances();
     this.applyCompanionAgeRules();
     this.syncWaveLabel();
     this.loadBookingCapacity();
+  }
+
+  private syncExtraCountValidationMessage(destination: SummerDestinationConfig): void {
+    if (!this.ticketForm) {
+      return;
+    }
+
+    const controlName = this.engine.resolveControlName(this.ticketForm, this.engine.aliases.extraCount);
+    if (!controlName) {
+      return;
+    }
+
+    const maxMessage = `أفراد إضافيون يجب ألا يزيد عن ${destination.maxExtraMembers}`;
+    const targetKeys = new Set<string>([
+      controlName,
+      ...this.engine.aliases.extraCount
+    ]);
+
+    this.genericFormService.validationMessages.forEach(item => {
+      if (!targetKeys.has(String(item?.key ?? ''))) {
+        return;
+      }
+
+      const validators = Array.isArray(item.validators) ? item.validators : [];
+      const withoutMax = validators.filter(v => String(v?.key ?? '') !== 'max');
+      withoutMax.push({ key: 'max', value: maxMessage });
+      item.validators = withoutMax as any;
+    });
+
+    const extraCtrl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.extraCount);
+    if (extraCtrl) {
+      extraCtrl.updateValueAndValidity({ emitEvent: false });
+    }
   }
 
   private syncCompanionInstances(): void {
@@ -1775,4 +1809,3 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return '';
   }
 }
-
