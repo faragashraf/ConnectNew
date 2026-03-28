@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Models.DTO.Common;
 using Models.DTO.Correspondance.Summer;
 using Persistence.Services;
+using Persistence.Services.Summer;
 
 namespace Api.Controllers
 {
@@ -17,10 +18,10 @@ namespace Api.Controllers
         }
 
         [HttpGet(nameof(GetMyRequests))]
-        public Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequests(int seasonYear = 2026)
+        public Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequests(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear, int? messageId = null)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.GetMyRequestsAsync(userId, seasonYear);
+            return _summerWorkflowService.GetMyRequestsAsync(userId, seasonYear, messageId);
         }
 
         [HttpGet(nameof(GetWaveCapacity))]
@@ -32,13 +33,15 @@ namespace Api.Controllers
         [HttpGet(nameof(GetAdminRequests))]
         public Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetAdminRequests([FromQuery] SummerAdminRequestsQuery query)
         {
-            return _summerWorkflowService.GetAdminRequestsAsync(query);
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            return _summerWorkflowService.GetAdminRequestsAsync(query, userId);
         }
 
         [HttpGet(nameof(GetAdminDashboard))]
-        public Task<CommonResponse<SummerAdminDashboardDto>> GetAdminDashboard(int seasonYear = 2026, int? categoryId = null, string? waveCode = null)
+        public Task<CommonResponse<SummerAdminDashboardDto>> GetAdminDashboard(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear, int? categoryId = null, string? waveCode = null)
         {
-            return _summerWorkflowService.GetAdminDashboardAsync(seasonYear, categoryId, waveCode);
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            return _summerWorkflowService.GetAdminDashboardAsync(userId, seasonYear, categoryId, waveCode);
         }
 
         [HttpPost(nameof(Cancel))]

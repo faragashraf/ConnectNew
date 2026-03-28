@@ -1,4 +1,4 @@
-import { Injectable, SkipSelf } from '@angular/core';
+﻿import { Injectable, SkipSelf } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
 import { forkJoin, of, Observable } from 'rxjs';
@@ -454,9 +454,15 @@ export class GenericFormsService {
 
         for (const errorKey in abstractControl.errors) {
           if (errorKey) {
+            const configuredMessage = String(messages_X?.find(f => f.key == errorKey)?.value ?? '').trim();
+            const resolvedMessage = configuredMessage || this.resolveFallbackValidationMessage(errorKey);
+            if (!resolvedMessage) {
+              continue;
+            }
+
             this.formErrors.map(m => {
               if (m.key == key) {
-                m.value += (m.value.length > 0 ? ' - ' : '') + messages_X?.find(f => f.key == errorKey)?.value
+                m.value += (m.value.length > 0 ? ' - ' : '') + resolvedMessage
               }
             })
           }
@@ -478,6 +484,25 @@ export class GenericFormsService {
 
   returnFormErrors(key: string) {
     return this.formErrors?.find(f => f.key == key)?.value
+  }
+
+  private resolveFallbackValidationMessage(errorKey: string): string {
+    switch (String(errorKey ?? '').trim().toLowerCase()) {
+      case 'required':
+        return 'هذا الحقل مطلوب.';
+      case 'min':
+        return 'القيمة أقل من الحد الأدنى المسموح.';
+      case 'max':
+        return 'القيمة أعلى من الحد الأقصى المسموح.';
+      case 'minlength':
+        return 'عدد الأحرف أقل من المطلوب.';
+      case 'maxlength':
+        return 'عدد الأحرف أكبر من المسموح.';
+      case 'pattern':
+        return 'القيمة غير مطابقة للنمط المطلوب.';
+      default:
+        return 'قيمة غير صالحة.';
+    }
   }
 
   filedIsRequired(field: string): boolean {
@@ -726,7 +751,7 @@ export class GenericFormsService {
     }
   }
   setErrorsObjects(_mandData: CdmendDto | undefined, control: AbstractControl, index: number = -1, isNotRequired: boolean = false) {
-    const fieldLable = <string>_mandData?.cdMendLbl
+    const fieldLable = String(_mandData?.cdMendLbl ?? _mandData?.cdmendTxt ?? '').trim() || 'هذا الحقل'
 
     const controlName = `${_mandData?.cdmendTxt}|${index}`
 

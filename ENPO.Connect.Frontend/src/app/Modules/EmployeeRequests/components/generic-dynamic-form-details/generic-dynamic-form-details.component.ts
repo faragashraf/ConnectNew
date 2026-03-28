@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges } from '@angular/core';
+﻿import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, ValidationErrors } from '@angular/forms';
 import { Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 import { GenericFormsService, GroupInfo } from 'src/app/Modules/GenericComponents/GenericForms.service';
@@ -7,6 +7,7 @@ import { CdCategoryMandDto, MessageDto } from 'src/app/shared/services/BackendSe
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { GenericDynamicFormGroupsFacadeService } from './generic-dynamic-form-groups-facade.service';
+import { SUMMER_CANONICAL_FIELD_KEYS } from '../summer-shared/core/summer-field-aliases';
 
 @Component({
   selector: 'app-generic-dynamic-form-details',
@@ -20,6 +21,7 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
   @Input() unitTree: any[] = [];
   @Input() fileParameters: FileParameter[] = [];
   @Input() customFilteredCategoryMand: CdCategoryMandDto[] = [];
+  @Input() submitDisabled = false;
 
   @Output() ticketFormChange = new EventEmitter<FormGroup>();
   @Output() submitFormChange = new EventEmitter<FormGroup>();
@@ -27,6 +29,8 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
   @Output() fileUploadEvent = new EventEmitter<FileParameter[]>();
 
   ticketForm: FormGroup = this.fb.group({});
+  private readonly companionRelationFieldNames = [...SUMMER_CANONICAL_FIELD_KEYS.companionRelation];
+  private readonly companionRelationOtherFieldNames = [...SUMMER_CANONICAL_FIELD_KEYS.companionRelationOther];
 
   private formChangesSub: Subscription | null = null;
 
@@ -78,6 +82,7 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
     this.ticketForm.get('createdBy')?.patchValue((this.messageDto as any)?.createdBy ?? this.resolveCreatedBy(), { emitEvent: false });
 
     this.buildBaseGroupControls();
+    this.buildDynamicInstancesFromMessage();
     this.populateValuesFromMessage();
     this.syncAttachmentsControl();
     this.syncAttachmentValidators();
@@ -100,6 +105,14 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
     this.ticketForm.markAllAsTouched();
     this.genericFormService.logValidationErrors(this.ticketForm);
     this.submitFormChange.emit(this.ticketForm);
+  }
+
+  shouldRenderControl(controlFullName: string, formArrayName: string): boolean {
+    if (!this.isCompanionRelationOtherField(controlFullName)) {
+      return true;
+    }
+
+    return this.isOtherRelationSelected(formArrayName);
   }
 
   getFormArrayControls(formArrayName: string): AbstractControl[] {
@@ -261,6 +274,67 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
     });
   }
 
+  private buildDynamicInstancesFromMessage(): void {
+    const messageFields = this.messageDto?.fields ?? [];
+    if (!Array.isArray(messageFields) || messageFields.length === 0) {
+      return;
+    }
+
+    const targetInstancesByGroup = new Map<number, number[]>();
+    messageFields.forEach(field => {
+      const groupId = Number((field as any)?.mendGroup ?? 0);
+      const instanceGroupId = Number((field as any)?.instanceGroupId ?? 1);
+      const normalizedGroupId = Number.isFinite(groupId) ? Math.floor(groupId) : 0;
+      const normalizedInstanceId = Number.isFinite(instanceGroupId) ? Math.floor(instanceGroupId) : 1;
+
+      if (normalizedGroupId <= 0 || normalizedInstanceId <= 1) {
+        return;
+      }
+
+      const current = targetInstancesByGroup.get(normalizedGroupId) ?? [];
+      if (!current.includes(normalizedInstanceId)) {
+        current.push(normalizedInstanceId);
+        targetInstancesByGroup.set(normalizedGroupId, current);
+      }
+    });
+
+    targetInstancesByGroup.forEach((instanceIds, groupId) => {
+      const parentGroup = this.genericFormService.dynamicGroups.find(item =>
+        item.groupId === groupId && item.isExtendable
+      );
+      if (!parentGroup) {
+        return;
+      }
+
+      const orderedInstanceIds = [...instanceIds].sort((a, b) => a - b);
+      orderedInstanceIds.forEach(instanceId => {
+        const exists = (parentGroup.instances ?? []).some(item =>
+          Number(item.instanceGroupId ?? 0) === instanceId
+        );
+        if (exists) {
+          return;
+        }
+
+        const created = this.groupsFacade.createDuplicateInstance(
+          this.genericFormService.dynamicGroups,
+          parentGroup.groupId,
+          parentGroup.fields.length,
+          0,
+          instanceId
+        );
+        if (!created) {
+          return;
+        }
+
+        const newInstance = created.newInstance;
+        const assignedInstanceId = Number(newInstance.instanceGroupId ?? instanceId) || instanceId;
+        const formArray = this.fb.array([]);
+        this.ticketForm.addControl(newInstance.formArrayName, formArray);
+        this.addControlsToArray(newInstance, formArray, assignedInstanceId, true);
+      });
+    });
+  }
+
   private addControlsToArray(group: GroupInfo, formArray: FormArray, instanceGroupId: number, useInstancePrefix: boolean): void {
     group.fields.forEach((field, index) => {
       const controlIndex = useInstancePrefix
@@ -337,6 +411,65 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
     }
 
     control.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private isCompanionRelationOtherField(controlFullName: string): boolean {
+    const baseName = this.extractBaseFieldName(controlFullName);
+    return this.companionRelationOtherFieldNames
+      .some(fieldName => this.normalizeFieldName(fieldName) === baseName);
+  }
+
+  private isOtherRelationSelected(formArrayName: string): boolean {
+    const formArray = this.getFormArrayInstance(formArrayName);
+    if (!formArray) {
+      return false;
+    }
+
+    for (const rowControl of formArray.controls) {
+      const row = rowControl as FormGroup;
+      const controlName = Object.keys(row.controls)[0];
+      if (!controlName) {
+        continue;
+      }
+
+      const baseName = this.extractBaseFieldName(controlName);
+      const isRelationField = this.companionRelationFieldNames
+        .some(fieldName => this.normalizeFieldName(fieldName) === baseName);
+
+      if (!isRelationField) {
+        continue;
+      }
+
+      const value = row.get(controlName)?.value;
+      if (this.isOtherRelationValue(value)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private isOtherRelationValue(value: unknown): boolean {
+    const normalized = String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[أإآ]/g, 'ا');
+
+    return normalized === 'اخرى'
+      || normalized === 'اخري'
+      || normalized === 'other';
+  }
+
+  private extractBaseFieldName(controlFullName: string): string {
+    const baseName = String(controlFullName ?? '').split('|')[0];
+    return this.normalizeFieldName(baseName);
+  }
+
+  private normalizeFieldName(value: string): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
   }
 
   private resolveCreatedBy(): string {

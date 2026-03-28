@@ -51,11 +51,9 @@ export class ThemeService {
     if (savedTheme && ['light', 'dark'].includes(savedTheme)) {
       this._visualTheme = savedTheme;
     } else {
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        this._visualTheme = 'dark';
-      } else {
-        this._visualTheme = 'light';
-      }
+      // Default for first-time users is always light mode.
+      this._visualTheme = 'light';
+      localStorage.setItem('user-visual-theme', this._visualTheme);
     }
   }
 
@@ -160,4 +158,3 @@ export class ThemeService {
     }
   }
 }
-

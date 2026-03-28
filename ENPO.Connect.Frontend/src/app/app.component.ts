@@ -1,14 +1,15 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, AfterViewInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, AfterViewInit, HostListener } from '@angular/core';
 import { WindowsNotificationService } from './shared/services/helper/windowsNotification.service';
 import { SpinnerService } from './shared/services/helper/spinner.service';
 import { animate, state, style, transition, trigger } from '@angular/animations';
 import { AuthObjectsService } from './shared/services/helper/auth-objects.service';
-import { SignalRService } from './shared/services/SignalRServices/SignalR.service';
+import { NotificationDto, SignalRService } from './shared/services/SignalRServices/SignalR.service';
 import { ConditionalDate } from './shared/Pipe/Conditional-date.pipe';
 import * as signalR from '@microsoft/signalr';
 import { assignSubscription } from './shared/services/SignalRServices/AdminCerObjectHub.service';
 import { Subject, Subscription } from 'rxjs';
 import { BroadcastService } from './shared/services/helper/broadcast.service';
+import { SummerNotificationDisplayMapperService } from './Modules/EmployeeRequests/components/summer-shared/core/summer-notification-display-mapper.service';
 
 @Component({
   selector: 'app-root',
@@ -47,7 +48,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     public conditionalDate: ConditionalDate,
     private NotificationService: WindowsNotificationService,
     private cdr: ChangeDetectorRef,
-    private broadcastService: BroadcastService
+    private broadcastService: BroadcastService,
+    private summerNotificationDisplayMapper: SummerNotificationDisplayMapperService
   ) {
   }
 
@@ -59,6 +61,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.notificationSubscription) this.notificationSubscription.unsubscribe();
     if (this.fixNotificationSubscription) this.fixNotificationSubscription.unsubscribe();
     if (this.hubConnectionStateSubscription) this.hubConnectionStateSubscription.unsubscribe();
+    if (this.notificationHistorySubscription) this.notificationHistorySubscription.unsubscribe();
     if (this.signalRRecoveredTimer) clearTimeout(this.signalRRecoveredTimer);
     if (this.lifetimeInterval) {
       clearInterval(this.lifetimeInterval);
@@ -77,6 +80,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   fixNotificationSubscription!: Subscription;
   hubConnectionStateSubscription!: Subscription;
   ramadanPrefSubscription!: Subscription;
+  notificationHistorySubscription!: Subscription;
 
   gropName: any;
   gropName$ = new Subject<string>();
@@ -170,30 +174,18 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.NotificationService.requestNotificationPermission();
 
     this.notificationSubscription = assignSubscription(this.notificationSubscription, this.signalRService.Notification$, (notification: any) => {
-      const notificationBody = String(notification?.notification ?? notification?.Notification ?? '');
-      const notificationTitle = String(notification?.title ?? notification?.Title ?? '');
-      const notificationSender = String(notification?.sender ?? 'Connect');
-      const isCapacitySignal = `${notificationTitle} ${notificationBody}`.toUpperCase().includes('SUMMER_CAPACITY_UPDATED|');
+      const displayNotification = this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto;
+      const notificationBody = String(displayNotification?.notification ?? '').trim();
+      const notificationTitle = String(displayNotification?.title ?? '').trim();
+      const notificationSender = String(displayNotification?.sender ?? 'Connect').trim() || 'Connect';
+      const notificationTime = displayNotification?.time ?? notification?.time;
 
-      if (isCapacitySignal) {
-        const capacityNotification = {
-          ...notification,
-          title: 'تحديث سعات المصايف',
-          notification: 'تم تحديث السعات المتاحة للحجز.'
-        };
-        this.signalRService.Notification.push(capacityNotification);
-        this.signalRService.primMsgCount++;
-        this.cdr.detectChanges();
-        return;
-      }
-
-      const sev = notification.type == 1 ? 'info' : notification.type == 2 ? 'success' : 'warn';
-      this.signalRService.Notification.push(notification);
+      this.signalRService.Notification.push(displayNotification);
 
       this.signalRService.primMsg.add({
-        severity: sev,
+        severity: this.resolveToastSeverity(displayNotification?.type),
         summary: `${notificationSender} - ${notificationTitle}`,
-        detail: ` ${this.conditionalDate.transform(notification.time, 'full')} :  ${notificationBody}`,
+        detail: ` ${this.conditionalDate.transform(notificationTime, 'full')} :  ${notificationBody}`,
         sticky: false,
         life: 5000
       });
@@ -201,6 +193,26 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       this.NotificationService.showNotification(notificationBody, 'assets/imges/Online.jpg', notificationTitle);
       this.cdr.detectChanges();
     });
+
+    this.notificationHistorySubscription = assignSubscription(
+      this.notificationHistorySubscription,
+      this.signalRService.notificationList$,
+      (notifications: any[]) => {
+        const normalized = (Array.isArray(notifications) ? notifications : [])
+          .map(notification => this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto);
+
+        this.signalRService.Notification = normalized;
+        this.signalRService.primMsgList = normalized.map(notification => ({
+          severity: this.resolveToastSeverity(notification?.type),
+          summary: `${notification?.sender ?? 'Connect'} - ${notification?.title ?? ''}`,
+          detail: ` ${this.conditionalDate.transform(notification?.time ?? null, 'full')} :  ${notification?.notification ?? ''}`,
+          sticky: false,
+          life: 5000
+        }));
+        this.signalRService.primMsgCount = normalized.length;
+        this.cdr.detectChanges();
+      }
+    );
 
     this.gropNameSubscription = assignSubscription(this.gropNameSubscription, this.gropName$, (group: string) => {
       if (group.length > 0) {
@@ -215,6 +227,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
+    this.syncSignalRBannerOffset();
+    setTimeout(() => this.syncSignalRBannerOffset(), 0);
+
     this.lifetimeInterval = setInterval(() => {
       this.connectionLifetimeTooltip = this.signalRService.getConnectionLifetime();
       try {
@@ -246,7 +261,20 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.authService.setRamadanPreference(false);
   }
 
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.syncSignalRBannerOffset();
+  }
+
+  private syncSignalRBannerOffset(): void {
+    const nav = document.querySelector('.p-megamenu') as HTMLElement | null;
+    const navHeight = Math.max(Number(nav?.offsetHeight ?? 74), 60);
+    document.documentElement.style.setProperty('--main-navbar-height', `${navHeight}px`);
+  }
+
   private updateSignalRBannerState(state: string): void {
+    this.syncSignalRBannerOffset();
+
     const normalized = String(state ?? '').trim().toLowerCase();
     const isOnline = normalized === 'online' || normalized === 'connection started';
     const shouldTrack = this.authService.isAuthenticated && !this.authService.isOfflineAuthenticated;
@@ -277,5 +305,16 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     this.wasSignalROnline = true;
+  }
+
+  private resolveToastSeverity(type: unknown): 'info' | 'success' | 'warn' {
+    const normalized = String(type ?? '').trim().toLowerCase();
+    if (normalized === '2' || normalized === 'success') {
+      return 'success';
+    }
+    if (normalized === '3' || normalized === 'warn' || normalized === 'warning') {
+      return 'warn';
+    }
+    return 'info';
   }
 }

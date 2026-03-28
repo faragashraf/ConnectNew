@@ -44,20 +44,20 @@ export class DynamicMetadataService {
             return {
               isSuccess: false,
               data: null,
-              errors: [`لا يوجد تعريف للحقل ${mendKey} داخل ApplicationID = ${appId}.`]
+              errors: [`لا يوجد تعريف للحقل ${mendKey} داخل التطبيق المحدد.`]
             } as DynamicMendJsonResult<T>;
           }),
           catchError(() => of({
             isSuccess: false,
             data: null,
-            errors: [`لا يوجد تعريف للحقل ${mendKey} داخل ApplicationID = ${appId}.`]
+            errors: [`لا يوجد تعريف للحقل ${mendKey} داخل التطبيق المحدد.`]
           } as DynamicMendJsonResult<T>))
         );
       }),
       catchError(() => of({
         isSuccess: false,
         data: null,
-        errors: ['تعذر تحميل ميتاداتا الحقول الديناميكية من الخادم.']
+        errors: ['تعذر تحميل بيانات تعريف الحقول من الخادم.']
       } as DynamicMendJsonResult<T>))
     );
   }

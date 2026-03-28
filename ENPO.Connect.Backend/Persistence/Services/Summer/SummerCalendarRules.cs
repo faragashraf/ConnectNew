@@ -152,7 +152,7 @@ namespace Persistence.Services.Summer
         private static bool TryResolveFromCategoryCatalog(int categoryId, int seasonYear, string waveCode, out DateTime waveStartUtc)
         {
             waveStartUtc = default;
-            if (seasonYear != 2026)
+            if (seasonYear != SummerWorkflowDomainConstants.DefaultSeasonYear)
             {
                 return false;
             }

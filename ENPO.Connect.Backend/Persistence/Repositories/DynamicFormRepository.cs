@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using ENPO.CreateLogFile;
 using ENPO.Dto.HubSync;
 using ENPO.Dto.Utilities;
@@ -12,6 +12,7 @@ using Models.DTO.Common;
 using Models.DTO.Correspondance.AdminCertificates;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.Notifications;
 using Repositories;
 using SignalR.Notification;
 using System;
@@ -33,9 +34,11 @@ namespace Persistence.Repositories
         private readonly RedisConnectionManager _redisManager;
         private readonly SignalRConnectionManager _signalRConnectionManager;
         private readonly MessageRequestService _messageRequestService;
-        public DynamicFormRepository(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, IMapper mapper, IOptions<ApplicationConfig> options, helperService helperService, RedisConnectionManager redisManager, SignalRConnectionManager signalRConnectionManager)
+        private readonly IConnectNotificationService _notificationService;
+        public DynamicFormRepository(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, IMapper mapper, IOptions<ApplicationConfig> options, helperService helperService, RedisConnectionManager redisManager, SignalRConnectionManager signalRConnectionManager, IConnectNotificationService notificationService)
         {
             _signalRConnectionManager = signalRConnectionManager;
+            _notificationService = notificationService;
             _option = options.Value;
             _connectContext = connectContext;
             _attach_HeldContext = attach_HeldContext;
@@ -142,11 +145,11 @@ namespace Persistence.Repositories
             var isSummerCategory = _connectContext.CdCategoryMands
                 .AsNoTracking()
                 .Any(x => x.MendCategory == messageRequest.CategoryCd
-                    && x.MendField == "SummerCamp"
+                    && x.MendField.Contains("SUM2026")
                     && x.MendStat == false);
 
             // instantiate handler and dispatch accordingly
-            var categoryHandler = new HandleEmployeeCategories(_connectContext, _attach_HeldContext, _gPAContext, _helperService, _mapper, _logger, _messageRequestService, _signalRConnectionManager);
+            var categoryHandler = new HandleEmployeeCategories(_connectContext, _attach_HeldContext, _gPAContext, _helperService, _mapper, _logger, _messageRequestService, _signalRConnectionManager, _notificationService);
             if (isSummerCategory)
             {
                 await categoryHandler.SummerRequests(messageRequest, categoryInfo, response);

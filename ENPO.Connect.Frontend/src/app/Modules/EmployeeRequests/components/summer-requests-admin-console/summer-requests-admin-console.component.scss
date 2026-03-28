@@ -198,6 +198,12 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.dashboard-loading-shell {
+  margin-top: 16px;
+  display: grid;
+  gap: 8px;
+}
+
 .metric-card {
   border: 1px solid #d4e4f0;
   border-radius: 16px;
@@ -618,6 +624,11 @@ button.ghost:hover:not(:disabled) {
   font-size: 16px;
 }
 
+.loading-note {
+  color: #0b8a56;
+  font-weight: 700;
+}
+
 .table-wrap {
   overflow: auto;
   border-radius: 16px;
@@ -810,6 +821,10 @@ button.ghost:hover:not(:disabled) {
 .capacity-loading {
   color: #2b5876;
   font-weight: 700;
+}
+
+.capacity-loading.loading-note {
+  color: #0b8a56;
 }
 
 .capacity-error {

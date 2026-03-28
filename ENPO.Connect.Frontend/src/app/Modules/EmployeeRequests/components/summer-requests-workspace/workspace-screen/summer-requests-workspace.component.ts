@@ -1,8 +1,9 @@
 ﻿import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
-import { MessageDto, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
+import { ListRequestModel, MessageDto, RequestedData, SearchKind, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import { SummerWorkflowController } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.service';
 import { AttachmentsController } from 'src/app/shared/services/BackendServices/Attachments/Attachments.service';
@@ -19,6 +20,15 @@ import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
 import { SignalRService } from 'src/app/shared/services/SignalRServices/SignalR.service';
 import {
+  SUMMER_DESTINATION_CATALOG_KEY,
+  SUMMER_DYNAMIC_APPLICATION_ID
+} from '../../summer-shared/core/summer-feature.config';
+import { SUMMER_UI_TEXTS_AR } from '../../summer-shared/core/summer-ui-texts.ar';
+import { SummerRequestRowRefreshService } from '../../summer-shared/core/summer-request-row-refresh.service';
+import { SummerRequestsListPatchService } from '../../summer-shared/core/summer-requests-list-patch.service';
+import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
+import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
+import {
   parseSummerDestinationCatalog,
   SUMMER_PDF_REFERENCE_TITLE,
   SUMMER_SEASON_YEAR,
@@ -27,11 +37,10 @@ import {
 } from '../summer-requests-workspace.config';
 import {
   SUMMER_ALLOWED_ATTACHMENT_EXTENSIONS,
-  SUMMER_FIELD_LABEL_MAP,
+  buildSummerRequestCompanions,
+  buildSummerRequestDetailFields,
   coalesceText,
-  extractCapacityPayloadFromSignal,
   formatLocalDateHour,
-  formatRequestFieldValue,
   formatUtcDateToCairoHour,
   getFieldValueByKeys,
   getStatusClass,
@@ -41,8 +50,8 @@ import {
   parseDateToEpoch,
   parseWaveLabelDate,
   resolveAttachmentId,
-  resolveFieldLabel,
   resolveReplyAuthorName,
+  SummerRequestFieldGridRow,
   toDisplayOrDash
 } from '../summer-requests-workspace.utils';
 
@@ -56,7 +65,7 @@ type FileBucket = 'cancel' | 'payment' | 'transfer';
 export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   readonly seasonYear = SUMMER_SEASON_YEAR;
   readonly pdfReferenceTitle = SUMMER_PDF_REFERENCE_TITLE;
-  readonly dynamicSummerApplicationId = 'SUM2026DYN';
+  readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   readonly dynamicSummerConfigRouteKey = 'admins/summer-requests/dynamic-booking';
   destinations: SummerDestinationConfig[] = [];
   loadingDestinations = false;
@@ -76,6 +85,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   loadingRequests = false;
   loadingSelectedRequestDetails = false;
+  selectedRequestDetailsError = '';
   transferCapacityLoading = false;
 
   requestsFirst = 0;
@@ -88,11 +98,15 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   seasonTransferAlreadyUsed = false;
   transferWaveCapacities: SummerWaveCapacityDto[] = [];
+  activeTabIndex = 0;
+  editRequestId: number | null = null;
 
   private readonly subscriptions = new Subscription();
 
   constructor(
     private readonly fb: FormBuilder,
+    private readonly route: ActivatedRoute,
+    private readonly router: Router,
     private readonly dynamicFormController: DynamicFormController,
     private readonly summerWorkflowController: SummerWorkflowController,
     private readonly dynamicMetadataService: DynamicMetadataService,
@@ -100,7 +114,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     private readonly attchedObjectService: AttchedObjectService,
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
-    private readonly signalRService: SignalRService
+    private readonly signalRService: SignalRService,
+    private readonly summerRealtimeService: SummerRequestsRealtimeService,
+    private readonly rowRefreshService: SummerRequestRowRefreshService,
+    private readonly listPatchService: SummerRequestsListPatchService
   ) {
     this.cancelForm = this.fb.group({
       reason: ['', Validators.maxLength(1000)]
@@ -121,6 +138,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.bindRouteMode();
     this.bindTransferRules();
     this.bindSignalRRefresh();
     this.loadDestinationCatalog();
@@ -136,6 +154,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return undefined;
     }
     return this.myRequests.find(item => item.messageId === this.selectedRequestId);
+  }
+
+  get isEditMode(): boolean {
+    return Number(this.editRequestId ?? 0) > 0;
   }
 
   get transferDestination(): SummerDestinationConfig | undefined {
@@ -192,93 +214,20 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       : 'الخدمة اللحظية غير متصلة (SignalR)';
   }
 
-  get selectedRequestDetailFields(): Array<{ label: string; value: string; instanceGroupId: number }> {
-    const fields = this.selectedRequestDetails?.fields ?? [];
+  get selectedRequestDetailFields(): SummerRequestFieldGridRow[] {
     const currentRequest = this.selectedRequest;
-    return fields
-      .filter(field => String(field.fildTxt ?? '').trim().length > 0)
-      .filter(field => !this.isCompanionFieldKey(String(field.fildKind ?? '').trim()))
-      .map(field => {
-        const fieldKey = String(field.fildKind ?? '').trim();
-        const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
-        let value = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
-
-        if (currentRequest && normalizedFieldKey === 'summercamplabel') {
-          const expectedWaveLabel = this.getWaveLabelByCategoryAndCode(currentRequest.categoryId, currentRequest.waveCode);
-          if (expectedWaveLabel) {
-            value = expectedWaveLabel;
-          }
-        }
-
-        return {
-          label: resolveFieldLabel(fieldKey, SUMMER_FIELD_LABEL_MAP),
-          value,
-          instanceGroupId: Number(field.instanceGroupId ?? 1) || 1
-        };
-      })
-      .sort((a, b) => a.instanceGroupId - b.instanceGroupId || a.label.localeCompare(b.label));
+    return buildSummerRequestDetailFields({
+      fields: this.selectedRequestDetails?.fields,
+      summary: currentRequest ?? null,
+      summaryStatusLabel: currentRequest ? this.getRequestStatusLabel(currentRequest) : '',
+      summaryDateFormatter: this.formatUtcDate.bind(this),
+      resolveWaveLabel: (categoryId, waveCode) => this.getWaveLabelByCategoryAndCode(categoryId, waveCode),
+      resolveDestinationNameById: (categoryId) => this.getDestinationNameByCategoryId(categoryId)
+    });
   }
 
   get selectedRequestCompanions(): Array<{ index: number; name: string; relation: string; nationalId: string; age: string }> {
-    const fields = this.selectedRequestDetails?.fields ?? [];
-    const grouped = new Map<number, { groupId: number; name: string; relation: string; nationalId: string; age: string }>();
-
-    fields.forEach((field, rowIndex) => {
-      const fieldKey = String(field.fildKind ?? '').trim();
-      if (!this.isCompanionFieldKey(fieldKey)) {
-        return;
-      }
-
-      const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
-      const formattedValue = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
-      const rawGroupId = Number(field.instanceGroupId ?? 0);
-      const groupId = Number.isFinite(rawGroupId) && rawGroupId > 0 ? rawGroupId : (10000 + rowIndex);
-
-      if (!grouped.has(groupId)) {
-        grouped.set(groupId, {
-          groupId,
-          name: '',
-          relation: '',
-          nationalId: '',
-          age: ''
-        });
-      }
-
-      const row = grouped.get(groupId);
-      if (!row) {
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymembername')) {
-        row.name = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey === 'familyrelation') {
-        row.relation = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymembernationalid')) {
-        row.nationalId = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymemberage')) {
-        row.age = formattedValue;
-      }
-    });
-
-    return [...grouped.values()]
-      .sort((a, b) => a.groupId - b.groupId)
-      .map((row, index) => ({
-        index: index + 1,
-        name: toDisplayOrDash(row.name),
-        relation: toDisplayOrDash(row.relation),
-        nationalId: toDisplayOrDash(row.nationalId),
-        age: toDisplayOrDash(row.age)
-      }))
-      .filter(row => row.name !== '-' || row.relation !== '-' || row.nationalId !== '-' || row.age !== '-');
+    return buildSummerRequestCompanions(this.selectedRequestDetails?.fields);
   }
 
   get selectedRequestAttachments(): Array<{ id: number; name: string; size: number }> {
@@ -431,8 +380,79 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     this.requestsFirst = (normalizedPage - 1) * this.requestsRows;
   }
 
-  onDynamicBookingCreated(): void {
+  onTabChange(event: { index?: number }): void {
+    const index = Number(event?.index ?? 0);
+    this.activeTabIndex = Number.isFinite(index) && index >= 0 ? Math.floor(index) : 0;
+  }
+
+  onDynamicBookingCreated(savedMessageId?: number): void {
+    const messageId = Number(savedMessageId ?? 0);
+    if (Number.isFinite(messageId) && messageId > 0) {
+      this.selectedRequestId = Math.floor(messageId);
+      this.loadSelectedRequestDetails(this.selectedRequestId);
+    }
+
+    if (this.isEditMode) {
+      this.exitEditMode(true);
+    } else {
+      this.activeTabIndex = 1;
+    }
     this.loadMyRequests();
+  }
+
+  canEditRequest(request: SummerRequestSummaryDto | undefined | null): boolean {
+    if (!request) {
+      return false;
+    }
+
+    if (this.isRejectedStatus(request.status)) {
+      return false;
+    }
+
+    if (String(request.paidAtUtc ?? '').trim().length > 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  getEditBlockedReason(request: SummerRequestSummaryDto | undefined | null): string {
+    if (!request) {
+      return 'لا يمكن تعديل الطلب.';
+    }
+
+    if (this.isRejectedStatus(request.status)) {
+      return 'لا يمكن تعديل طلب ملغي/مرفوض.';
+    }
+
+    if (String(request.paidAtUtc ?? '').trim().length > 0) {
+      return 'لا يمكن تعديل الطلب بعد تسجيل السداد.';
+    }
+
+    return '';
+  }
+
+  openEditRequest(request: SummerRequestSummaryDto | undefined | null): void {
+    if (!request) {
+      return;
+    }
+
+    if (!this.canEditRequest(request)) {
+      const reason = this.getEditBlockedReason(request) || 'لا يمكن تعديل هذا الطلب.';
+      this.msg.msgError('غير متاح', `<h5>${reason}</h5>`, true);
+      return;
+    }
+
+    this.activeTabIndex = 0;
+    this.router.navigate(['/EmployeeRequests/SummerRequests/edit', request.messageId]);
+  }
+
+  exitEditMode(openMyRequestsTab = false): void {
+    this.editRequestId = null;
+    if (openMyRequestsTab) {
+      this.activeTabIndex = 1;
+    }
+    this.router.navigate(['/EmployeeRequests/SummerRequests']);
   }
 
   addFiles(event: Event, bucket: FileBucket): void {
@@ -448,7 +468,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     if (invalidFiles.length > 0) {
       this.msg.msgError(
         'نوع ملف غير مسموح',
-        `<h5>يرجى رفع ملفات PDF أو صور فقط. الملفات غير المقبولة: ${invalidFiles.map(file => file.name).join(' - ')}</h5>`,
+        `<h5>يسمح فقط بملفات PDF أو صور. الملفات غير المسموح بها: ${invalidFiles.map(file => file.name).join(' - ')}</h5>`,
         true
       );
     }
@@ -486,7 +506,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   submitCancel(): void {
     this.cancelForm.markAllAsTouched();
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب أولًا.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.requestSelectionRequiredShort}</h5>`, true);
       return;
     }
 
@@ -498,10 +518,18 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تسجيل الاعتذار بنجاح');
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.cancelCompleted);
           this.cancelForm.reset({ reason: '' });
           this.cancelAttachments = [];
-          this.loadMyRequests();
+          if (response.data) {
+            this.upsertMyRequestSummary(response.data);
+          } else if (this.selectedRequestId) {
+            this.refreshMyRequestRowFromSignal(this.selectedRequestId);
+          }
+          if (this.selectedRequestId) {
+            this.loadSelectedRequestDetails(this.selectedRequestId);
+          }
+          this.loadTransferCapacity();
           return;
         }
 
@@ -524,7 +552,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }
 
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب أولًا.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.requestSelectionRequiredShort}</h5>`, true);
       return;
     }
 
@@ -546,10 +574,17 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تسجيل السداد بنجاح');
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.payCompleted);
           this.paymentForm.reset({ paidAtLocal: '', notes: '' });
           this.paymentAttachments = [];
-          this.loadMyRequests();
+          if (response.data) {
+            this.upsertMyRequestSummary(response.data);
+          } else if (this.selectedRequestId) {
+            this.refreshMyRequestRowFromSignal(this.selectedRequestId);
+          }
+          if (this.selectedRequestId) {
+            this.loadSelectedRequestDetails(this.selectedRequestId);
+          }
           return;
         }
 
@@ -572,18 +607,18 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }
 
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب أولًا.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.requestSelectionRequiredShort}</h5>`, true);
       return;
     }
 
     if (this.seasonTransferAlreadyUsed) {
-      this.msg.msgError('خطأ', '<h5>تم استخدام التحويل مرة واحدة بالفعل خلال الموسم الحالي.</h5>', true);
+      this.msg.msgError('خطأ', '<h5>تم استخدام التحويل بالفعل في الموسم الحالي.</h5>', true);
       return;
     }
 
     const destination = this.transferDestination;
     if (!destination) {
-      this.msg.msgError('خطأ', '<h5>المصيف المستهدف غير صحيح.</h5>', true);
+      this.msg.msgError('خطأ', '<h5>الوجهة المستهدفة غير صالحة.</h5>', true);
       return;
     }
 
@@ -592,7 +627,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const newExtraCount = this.getNumberValue(this.transferForm.get('newExtraCount'));
 
     if (maxFamilyOption > 0 && newFamilyCount !== maxFamilyOption && newExtraCount > 0) {
-      this.msg.msgError('خطأ', '<h5>الأفراد الإضافيون مسموح بهم فقط عند اختيار السعة القصوى.</h5>', true);
+      this.msg.msgError('خطأ', '<h5>الأفراد الإضافيون متاحون فقط عند اختيار السعة القصوى.</h5>', true);
       return;
     }
 
@@ -614,10 +649,18 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تنفيذ التحويل بنجاح');
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.transferCompleted);
           this.transferAttachments = [];
           this.transferForm.patchValue({ notes: '' });
-          this.loadMyRequests();
+          if (response.data) {
+            this.upsertMyRequestSummary(response.data);
+          } else if (this.selectedRequestId) {
+            this.refreshMyRequestRowFromSignal(this.selectedRequestId);
+          }
+          if (this.selectedRequestId) {
+            this.loadSelectedRequestDetails(this.selectedRequestId);
+          }
+          this.loadTransferCapacity();
           return;
         }
 
@@ -634,6 +677,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   selectRequest(messageId: number): void {
     this.selectedRequestId = messageId;
+    this.selectedRequestDetailsError = '';
     const current = this.selectedRequest;
     if (!current) {
       this.selectedRequestDetails = null;
@@ -658,7 +702,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   loadDestinationCatalog(): void {
     this.loadingDestinations = true;
     this.destinationsError = '';
-    this.dynamicMetadataService.getMendJson<unknown>(this.dynamicSummerApplicationId, 'SUM2026_DestinationCatalog').subscribe({
+    this.dynamicMetadataService.getMendJson<unknown>(this.dynamicSummerApplicationId, SUMMER_DESTINATION_CATALOG_KEY).subscribe({
       next: response => {
         if (response?.isSuccess) {
           this.destinations = parseSummerDestinationCatalog(response.data, this.seasonYear);
@@ -671,11 +715,11 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         const errors = Array.isArray(response?.errors) ? response.errors : [];
         this.destinationsError = errors.length > 0
           ? errors.join('<br/>')
-          : 'تعذر تحميل إعدادات المصايف الديناميكية من CDMendTbl.';
+          : SUMMER_UI_TEXTS_AR.errors.destinationCatalogInvalid;
       },
       error: () => {
         this.destinations = [];
-        this.destinationsError = 'تعذر تحميل إعدادات المصايف الديناميكية من الخدمة العامة.';
+        this.destinationsError = SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed;
       },
       complete: () => {
         this.loadingDestinations = false;
@@ -692,6 +736,27 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           this.seasonTransferAlreadyUsed = this.myRequests.some(item => item.transferUsed);
           if (this.requestsFirst >= this.myRequests.length) {
             this.requestsFirst = 0;
+          }
+
+          if (this.isEditMode && this.editRequestId) {
+            const editRequest = this.myRequests.find(item => item.messageId === this.editRequestId);
+            if (!editRequest) {
+              this.msg.msgError('خطأ', '<h5>تعذر العثور على الطلب المطلوب للتعديل ضمن طلباتك الحالية.</h5>', true);
+              this.exitEditMode(true);
+              return;
+            }
+
+            if (!this.canEditRequest(editRequest)) {
+              const reason = this.getEditBlockedReason(editRequest) || 'لا يمكن تعديل هذا الطلب.';
+              this.msg.msgError('غير متاح', `<h5>${reason}</h5>`, true);
+              this.exitEditMode(true);
+              return;
+            }
+
+            if (this.selectedRequestId !== editRequest.messageId) {
+              this.selectedRequestId = editRequest.messageId;
+            }
+            this.loadSelectedRequestDetails(editRequest.messageId);
           }
 
           if (this.selectedRequestId && !this.myRequests.some(item => item.messageId === this.selectedRequestId)) {
@@ -740,7 +805,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   getStatusClass(request: SummerRequestSummaryDto): string {
-    return getStatusClass(request.status);
+    return getStatusClass(String(request?.statusLabel ?? request?.status ?? '').trim());
   }
 
   getStatusLabel(status: string | undefined): string {
@@ -748,6 +813,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   getRequestStatusLabel(request: SummerRequestSummaryDto): string {
+    const explicitLabel = String(request?.statusLabel ?? '').trim();
+    if (explicitLabel.length > 0) {
+      return explicitLabel;
+    }
     return this.getStatusLabel(request?.status);
   }
 
@@ -913,19 +982,111 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     });
   }
 
-  private loadSelectedRequestDetails(messageId: number): void {
-    this.loadingSelectedRequestDetails = true;
-    this.dynamicFormController.getRequestById(messageId).subscribe({
-      next: response => {
-        this.selectedRequestDetails = response?.isSuccess && response.data ? response.data : null;
-      },
-      error: () => {
-        this.selectedRequestDetails = null;
-      },
-      complete: () => {
-        this.loadingSelectedRequestDetails = false;
+  private bindRouteMode(): void {
+    const routeSub = this.route.paramMap.subscribe(params => {
+      const parsedId = this.parsePositiveInt(params.get('id'));
+      this.editRequestId = parsedId;
+
+      if (parsedId) {
+        this.activeTabIndex = 0;
+        const matched = this.myRequests.find(item => item.messageId === parsedId);
+        if (matched) {
+          this.selectedRequestId = matched.messageId;
+          this.loadSelectedRequestDetails(matched.messageId);
+        }
+        return;
       }
     });
+
+    this.subscriptions.add(routeSub);
+  }
+
+  private loadSelectedRequestDetails(messageId: number): void {
+    this.loadingSelectedRequestDetails = true;
+    this.selectedRequestDetailsError = '';
+    let fallbackTriggered = false;
+    this.dynamicFormController.getRequestById(messageId).subscribe({
+      next: response => {
+        if (response?.isSuccess && response.data) {
+          this.selectedRequestDetails = this.normalizeLoadedRequestDetails(response.data, messageId);
+          this.selectedRequestDetailsError = '';
+          return;
+        }
+
+        fallbackTriggered = true;
+        this.tryLoadSelectedRequestDetailsFromMyRequestsFeed(messageId, response?.errors);
+      },
+      error: () => {
+        fallbackTriggered = true;
+        this.tryLoadSelectedRequestDetailsFromMyRequestsFeed(messageId);
+      },
+      complete: () => {
+        if (!fallbackTriggered) {
+          this.loadingSelectedRequestDetails = false;
+        }
+      }
+    });
+  }
+
+  private tryLoadSelectedRequestDetailsFromMyRequestsFeed(
+    messageId: number,
+    primaryErrors?: Array<{ message?: string }>
+  ): void {
+    this.loadingSelectedRequestDetails = true;
+    const collectedErrors: Array<{ message?: string }> = [...(primaryErrors ?? [])];
+    const queries = this.buildDynamicMyRequestsQueries(messageId);
+    let resolved = false;
+
+    const runAttempt = (index: number): void => {
+      if (resolved) {
+        return;
+      }
+
+      if (index >= queries.length) {
+        this.selectedRequestDetails = null;
+        this.selectedRequestDetailsError = this.resolveRequestDetailsErrorMessage(
+          collectedErrors,
+          'تعذر تحميل تفاصيل الطلب من الخدمة حالياً.'
+        );
+        this.loadingSelectedRequestDetails = false;
+        return;
+      }
+
+      this.dynamicFormController.getCorrMyRequest(queries[index]).subscribe({
+        next: response => {
+          const responseErrors = (response?.errors ?? [])
+            .map(item => ({ message: String(item?.message ?? '').trim() }))
+            .filter(item => String(item?.message ?? '').length > 0);
+          if (responseErrors.length > 0) {
+            collectedErrors.push(...responseErrors);
+          }
+
+          const rawItems = Array.isArray(response?.data) ? response.data : [];
+          const normalizedMessages = rawItems
+            .map(item => this.normalizeLoadedRequestDetails(item, messageId))
+            .filter((item): item is MessageDto => !!item);
+
+          const matched = normalizedMessages.find(item => Number(item.messageId ?? 0) === messageId);
+          if (matched) {
+            resolved = true;
+            this.selectedRequestDetails = matched;
+            this.selectedRequestDetailsError = '';
+          }
+        },
+        error: () => {
+          collectedErrors.push({ message: 'تعذر الوصول لخدمة الطلبات أثناء محاولة التحميل البديلة.' });
+        },
+        complete: () => {
+          if (resolved) {
+            this.loadingSelectedRequestDetails = false;
+            return;
+          }
+          runAttempt(index + 1);
+        }
+      });
+    };
+
+    runAttempt(0);
   }
 
   private bindTransferRules(): void {
@@ -1014,38 +1175,76 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private bindSignalRRefresh(): void {
-    const signalSub = this.signalRService.Notification$.subscribe(notification => {
-      const title = String((notification as unknown as { title?: string; Title?: string })?.title
-        ?? (notification as unknown as { title?: string; Title?: string })?.Title
-        ?? '');
-      const body = String((notification as unknown as { notification?: string; Notification?: string })?.notification
-        ?? (notification as unknown as { notification?: string; Notification?: string })?.Notification
-        ?? '');
-      const text = `${title} ${body}`.toLowerCase();
-
-      const capacityPayload = extractCapacityPayloadFromSignal([body, title]);
-      if (capacityPayload) {
-        this.refreshCapacityFromSignal(capacityPayload);
-      }
-
-      if (text.includes('summer') || text.includes('booking') || text.includes('capacity') || text.includes('مصيف') || text.includes('حجز') || text.includes('إتاحة')) {
-        this.loadMyRequests();
+    const requestSub = this.summerRealtimeService.requestUpdates$.subscribe(update => {
+      this.refreshMyRequestRowFromSignal(update.messageId);
+      if (this.selectedRequestId && update.messageId === this.selectedRequestId) {
         this.loadTransferCapacity();
+        this.loadSelectedRequestDetails(this.selectedRequestId);
       }
     });
 
-    this.subscriptions.add(signalSub);
+    const capacitySub = this.summerRealtimeService.capacityUpdates$.subscribe(update => {
+      this.refreshCapacityFromSignal(update);
+    });
+
+    this.subscriptions.add(requestSub);
+    this.subscriptions.add(capacitySub);
   }
 
-  private refreshCapacityFromSignal(payload: string): void {
-    const parts = payload.split('|');
-    if (parts.length < 3) {
-      this.loadTransferCapacity();
+  private refreshMyRequestRowFromSignal(messageId: number): void {
+    const targetMessageId = Number(messageId ?? 0);
+    if (!Number.isFinite(targetMessageId) || targetMessageId <= 0) {
       return;
     }
 
-    const categoryId = Number(parts[1]);
-    const waveCode = String(parts[2] ?? '').trim();
+    this.rowRefreshService.refreshOwnerRow(this.seasonYear, targetMessageId).subscribe({
+      next: matched => {
+        if (matched) {
+          this.upsertMyRequestSummary(matched);
+        } else {
+          this.removeMyRequestSummary(targetMessageId);
+        }
+      }
+    });
+  }
+
+  private upsertMyRequestSummary(summary: SummerRequestSummaryDto): void {
+    const messageId = Number(summary?.messageId ?? 0);
+    if (!Number.isFinite(messageId) || messageId <= 0) {
+      return;
+    }
+
+    const patched = this.listPatchService.upsertOwnerRequests(this.myRequests, summary);
+    this.myRequests = patched.items;
+    this.seasonTransferAlreadyUsed = this.myRequests.some(item => item.transferUsed);
+  }
+
+  private removeMyRequestSummary(messageId: number): void {
+    const patched = this.listPatchService.removeByMessageId(this.myRequests, messageId);
+    if (patched.change !== 'removed') {
+      return;
+    }
+
+    this.myRequests = patched.items;
+    this.seasonTransferAlreadyUsed = this.myRequests.some(item => item.transferUsed);
+    if (this.requestsFirst >= this.myRequests.length) {
+      this.requestsFirst = 0;
+    }
+
+    if (this.selectedRequestId === messageId) {
+      this.selectedRequestId = null;
+      this.selectedRequestDetails = null;
+      this.selectedRequestDetailsError = '';
+    }
+  }
+
+  private refreshCapacityFromSignal(update: SummerCapacityRealtimeEvent): void {
+    const categoryId = Number(update?.categoryId ?? 0);
+    const waveCode = String(update?.waveCode ?? '').trim();
+    if (!Number.isFinite(categoryId) || categoryId <= 0 || waveCode.length === 0) {
+      return;
+    }
+
     const transferCategory = this.transferDestination?.categoryId ?? 0;
     const transferWave = String(this.transferForm.get('toWaveCode')?.value ?? '').trim();
 
@@ -1122,6 +1321,11 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     return String(wave?.startsAtLabel ?? '').trim();
   }
 
+  private getDestinationNameByCategoryId(categoryId: number): string {
+    const destination = this.destinations.find(item => item.categoryId === categoryId);
+    return String(destination?.name ?? '').trim();
+  }
+
   private getSelectedActionType(): string {
     const fields = this.selectedRequestDetails?.fields ?? [];
     const action = getFieldValueByKeys(fields, ['Summer_ActionType', 'Summer_AdminLastAction']);
@@ -1134,21 +1338,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   private getSelectedCancelReason(): string {
     const fields = this.selectedRequestDetails?.fields ?? [];
     return String(getFieldValueByKeys(fields, ['Summer_CancelReason']) ?? '').trim();
-  }
-
-  private normalizeDynamicFieldKey(fieldKey: string): string {
-    return String(fieldKey ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-  }
-
-  private isCompanionFieldKey(fieldKey: string): boolean {
-    const normalized = this.normalizeDynamicFieldKey(fieldKey);
-    return normalized.includes('familymembername')
-      || normalized === 'familyrelation'
-      || normalized.includes('familymembernationalid')
-      || normalized.includes('familymemberage');
   }
 
   private toFileParameters(files: File[]): FileParameter[] {
@@ -1172,6 +1361,379 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const numeric = Number(raw);
     return Number.isFinite(numeric) ? numeric : 0;
   }
+
+  private parsePositiveInt(value: unknown): number | null {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null;
+    }
+    return Math.floor(parsed);
+  }
+
+  private normalizeLoadedRequestDetails(raw: unknown, fallbackMessageId?: number): MessageDto | null {
+    const source = this.extractMessagePayload(raw);
+    if (!source) {
+      return null;
+    }
+
+    const normalized: Record<string, unknown> = {
+      ...(source as Record<string, unknown>)
+    };
+
+    const messageId = this.parsePositiveInt(this.readValue(source, [
+      'messageId',
+      'MessageId',
+      'id',
+      'Id',
+      'requestId',
+      'RequestId'
+    ])) ?? this.parsePositiveInt(fallbackMessageId);
+    if (messageId) {
+      normalized['messageId'] = messageId;
+    }
+
+    const fieldsSource = this.readValue(source, [
+      'fields',
+      'Fields',
+      'tkmendFields',
+      'TkmendFields',
+      'tkMendFields',
+      'TkMendFields',
+      'messageFields',
+      'MessageFields',
+      'mendFields',
+      'MendFields'
+    ]);
+    const normalizedFields = this.normalizeLoadedFields(fieldsSource);
+    normalized['fields'] = normalizedFields;
+
+    let categoryCd = this.parsePositiveInt(this.readValue(source, [
+      'categoryCd',
+      'CategoryCd',
+      'categoryID',
+      'CategoryID',
+      'categoryId',
+      'CategoryId',
+      'catId',
+      'CatId'
+    ]));
+
+    if (!categoryCd) {
+      categoryCd = this.parsePositiveInt(getFieldValueByKeys(normalizedFields, ['SummerDestinationId', 'DestinationId']));
+    }
+
+    if (!categoryCd && messageId) {
+      const summary = this.myRequests.find(item => item.messageId === messageId);
+      categoryCd = this.parsePositiveInt(summary?.categoryId);
+    }
+
+    if (categoryCd) {
+      normalized['categoryCd'] = categoryCd;
+    }
+
+    const attachmentsSource = this.readValue(source, [
+      'attachments',
+      'Attachments',
+      'attchShipments',
+      'AttchShipments',
+      'attchShipmentDtos',
+      'AttchShipmentDtos'
+    ]);
+    normalized['attachments'] = this.extractArray(attachmentsSource);
+
+    const repliesSource = this.readValue(source, [
+      'replies',
+      'Replies',
+      'replyDtos',
+      'ReplyDtos'
+    ]);
+    normalized['replies'] = this.extractArray(repliesSource);
+
+    return normalized as unknown as MessageDto;
+  }
+
+  private normalizeLoadedFields(rawFields: unknown): TkmendField[] {
+    return this.extractArray(rawFields).map(item => {
+      if (!item || typeof item !== 'object') {
+        return {
+          fildSql: 0,
+          fildRelted: 0,
+          fildKind: '',
+          fildTxt: '',
+          instanceGroupId: 1,
+          mendSql: 0,
+          mendCategory: 0,
+          mendStat: false,
+          mendGroup: 0,
+          applicationId: '',
+          groupName: '',
+          isExtendable: false,
+          groupWithInRow: 0
+        } as TkmendField;
+      }
+
+      const row = item as Record<string, unknown>;
+      const instanceGroupId = Number(
+        this.readValue(row, [
+          'instanceGroupId',
+          'InstanceGroupId',
+          'instance_group_id',
+          'Instance_Group_Id'
+        ])
+        ?? 1
+      );
+      const mendGroup = Number(
+        this.readValue(row, [
+          'mendGroup',
+          'MendGroup',
+          'groupId',
+          'GroupId',
+          'mend_group'
+        ])
+        ?? 0
+      );
+      const mendCategory = Number(
+        this.readValue(row, [
+          'mendCategory',
+          'MendCategory',
+          'categoryCd',
+          'CategoryCd',
+          'categoryId',
+          'CategoryId'
+        ])
+        ?? 0
+      );
+      const fildSql = Number(
+        this.readValue(row, [
+          'fildSql',
+          'FildSql',
+          'fieldSql',
+          'FieldSql',
+          'id',
+          'Id'
+        ])
+        ?? 0
+      );
+      const fildRelted = Number(
+        this.readValue(row, [
+          'fildRelted',
+          'FildRelted',
+          'fieldRelated',
+          'FieldRelated'
+        ])
+        ?? 0
+      );
+
+      return {
+        ...(row as unknown as TkmendField),
+        fildSql: Number.isFinite(fildSql) ? Math.floor(fildSql) : 0,
+        fildRelted: Number.isFinite(fildRelted) ? Math.floor(fildRelted) : 0,
+        fildKind: String(this.readValue(row, [
+          'fildKind',
+          'FildKind',
+          'fieldKind',
+          'FieldKind',
+          'mendField',
+          'MendField',
+          'field_name',
+          'Field_Name'
+        ]) ?? '').trim(),
+        fildTxt: String(this.readValue(row, [
+          'fildTxt',
+          'FildTxt',
+          'fieldTxt',
+          'FieldTxt',
+          'fieldValue',
+          'FieldValue',
+          'fildValue',
+          'FildValue',
+          'value',
+          'Value',
+          'txt',
+          'Txt'
+        ]) ?? '').trim(),
+        instanceGroupId: Number.isFinite(instanceGroupId) && instanceGroupId > 0 ? Math.floor(instanceGroupId) : 1,
+        mendGroup: Number.isFinite(mendGroup) ? Math.floor(mendGroup) : 0,
+        mendCategory: Number.isFinite(mendCategory) ? Math.floor(mendCategory) : 0
+      } as TkmendField;
+    });
+  }
+
+  private extractMessagePayload(raw: unknown): Record<string, unknown> | null {
+    if (raw === null || raw === undefined) {
+      return null;
+    }
+
+    if (typeof raw === 'string') {
+      const text = raw.trim();
+      if (!text) {
+        return null;
+      }
+
+      try {
+        return this.extractMessagePayload(JSON.parse(text));
+      } catch {
+        return null;
+      }
+    }
+
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        const nested = this.extractMessagePayload(item);
+        if (nested) {
+          return nested;
+        }
+      }
+      return null;
+    }
+
+    if (typeof raw !== 'object') {
+      return null;
+    }
+
+    const source = raw as Record<string, unknown>;
+    const nested = this.readValue(source, [
+      'message',
+      'Message',
+      'messageDto',
+      'MessageDto',
+      'request',
+      'Request',
+      'item',
+      'Item'
+    ]);
+    const nestedRecord = this.extractMessagePayload(nested);
+    if (nestedRecord) {
+      return nestedRecord;
+    }
+
+    return source;
+  }
+
+  private extractArray(value: unknown): unknown[] {
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (!value || typeof value !== 'object') {
+      return [];
+    }
+
+    const record = value as Record<string, unknown>;
+    const nested = this.readValue(record, [
+      '$values',
+      'values',
+      'Values',
+      'items',
+      'Items',
+      'list',
+      'List',
+      'data',
+      'Data',
+      'rows',
+      'Rows'
+    ]);
+    if (Array.isArray(nested)) {
+      return nested;
+    }
+
+    const numericKeys = Object.keys(record)
+      .filter(key => /^[0-9]+$/.test(key))
+      .sort((a, b) => Number(a) - Number(b));
+
+    if (numericKeys.length > 0) {
+      return numericKeys.map(key => record[key]);
+    }
+
+    return [];
+  }
+
+  private readValue(source: Record<string, unknown>, keys: string[]): unknown {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        return source[key];
+      }
+    }
+
+    const normalizedLookup = new Map<string, unknown>();
+    Object.keys(source).forEach(key => {
+      normalizedLookup.set(this.normalizeObjectLookupKey(key), source[key]);
+    });
+
+    for (const key of keys) {
+      const normalized = this.normalizeObjectLookupKey(key);
+      if (normalizedLookup.has(normalized)) {
+        return normalizedLookup.get(normalized);
+      }
+    }
+
+    return undefined;
+  }
+
+  private normalizeObjectLookupKey(value: string): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+  }
+
+  private buildDynamicMyRequestsQueries(messageId: number): ListRequestModel[] {
+    const summary = this.myRequests.find(item => item.messageId === messageId);
+    const summaryCategoryId = this.parsePositiveInt(summary?.categoryId) ?? 0;
+    const categoryCandidates = summaryCategoryId > 0 ? [summaryCategoryId, 0] : [0];
+    const typeCandidates = [0, 1, 2, 4];
+    const seen = new Set<string>();
+    const queries: ListRequestModel[] = [];
+
+    categoryCandidates.forEach(categoryCd => {
+      typeCandidates.forEach(type => {
+        const key = `${type}|${categoryCd}`;
+        if (seen.has(key)) {
+          return;
+        }
+        seen.add(key);
+        queries.push(this.buildDynamicMyRequestsQuery(type, categoryCd));
+      });
+    });
+
+    return queries;
+  }
+
+  private buildDynamicMyRequestsQuery(type = 0, categoryCd = 0): ListRequestModel {
+    return {
+      pageNumber: 1,
+      pageSize: 5000,
+      status: 5,
+      categoryCd,
+      type,
+      requestedData: RequestedData.MyRequest,
+      search: {
+        isSearch: false,
+        searchKind: SearchKind.NoSearch,
+        searchField: '',
+        searchText: '',
+        searchType: ''
+      }
+    };
+  }
+
+  private resolveRequestDetailsErrorMessage(
+    errors: Array<{ message?: string }> | undefined,
+    fallback: string
+  ): string {
+    const combined = (errors ?? [])
+      .map(item => String(item?.message ?? '').trim())
+      .filter(item => item.length > 0)
+      .join(' | ');
+
+    const normalized = combined.toLowerCase();
+    if (normalized.includes('attch_shipment') && normalized.includes('invalid object name')) {
+      return 'تعذر تحميل تفاصيل الطلب بسبب مشكلة بجدول المرفقات في قاعدة البيانات (Attch_shipment). برجاء مراجعة الـ Backend.';
+    }
+
+    return combined || fallback;
+  }
 }
+
 
 

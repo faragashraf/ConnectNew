@@ -1,60 +1,30 @@
-import { Injectable } from '@angular/core';
+﻿import { Injectable } from '@angular/core';
 import { AbstractControl, FormArray, FormGroup, Validators } from '@angular/forms';
 import { CdCategoryMandDto, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { ComponentConfig, defaultModel, userConfigFromLocalStorage } from 'src/app/shared/models/Component.Config.model';
 import { GenericFormsService, GroupInfo, selection } from 'src/app/Modules/GenericComponents/GenericForms.service';
 import { SummerDestinationConfig } from './summer-requests-workspace.config';
-
-export type SummerFieldAliasMap = {
-  waveCode: string[];
-  waveLabel: string[];
-  stayMode: string[];
-  familyCount: string[];
-  extraCount: string[];
-  proxyMode: string[];
-  ownerName: string[];
-  ownerFileNumber: string[];
-  ownerNationalId: string[];
-  ownerPhone: string[];
-  ownerExtraPhone: string[];
-  notes: string[];
-  companionName: string[];
-  companionRelation: string[];
-  companionNationalId: string[];
-  companionAge: string[];
-  seasonYear: string[];
-  destinationId: string[];
-  destinationName: string[];
-};
+import {
+  createDefaultSummerFieldAliases,
+  SummerFieldAliasMap
+} from '../summer-shared/core/summer-field-aliases';
 
 @Injectable()
 export class SummerDynamicFormEngineService {
-  aliases: SummerFieldAliasMap = {
-    waveCode: ['SummerCamp', 'WaveCode'],
-    waveLabel: ['SummerCampLabel', 'WaveLabel'],
-    stayMode: ['SummerStayMode', 'StayMode'],
-    familyCount: ['FamilyCount'],
-    extraCount: ['Over_Count', 'ExtraCount'],
-    proxyMode: ['SummerProxyMode', 'ProxyMode'],
-    ownerName: ['Emp_Name', 'EmployeeName', 'EmpName', 'OwnerName'],
-    ownerFileNumber: ['Emp_Id', 'EmployeeFileNumber', 'FileNumber'],
-    ownerNationalId: ['NationalId', 'EmployeeNationalId', 'National_ID'],
-    ownerPhone: ['PhoneNumber', 'Phone', 'MobileNumber', 'Mobile', 'PhoneWhats'],
-    ownerExtraPhone: ['ExtraPhoneNumber', 'SecondaryPhone', 'AlternatePhone'],
-    notes: ['Description', 'Notes'],
-    companionName: ['FamilyMember_Name'],
-    companionRelation: ['FamilyRelation'],
-    companionNationalId: ['FamilyMember_NationalId'],
-    companionAge: ['FamilyMember_Age'],
-    seasonYear: ['SummerSeasonYear'],
-    destinationId: ['SummerDestinationId'],
-    destinationName: ['SummerDestinationName']
-  };
+  private readonly otherRelationTokens = new Set<string>([
+    'أخرى',
+    'اخرى',
+    'اخري',
+    'OTHER'
+  ]);
+  private readonly childRelationTokens = new Set<string>(['ابن', 'ابنة', 'SON', 'DAUGHTER']);
+
+  aliases: SummerFieldAliasMap = createDefaultSummerFieldAliases();
 
   createFormConfig(): ComponentConfig {
     return new ComponentConfig({
       routeKey: 'admins/summer-requests/dynamic-booking',
-      componentTitle: 'إنشاء طلب مصيف ديناميكي',
+      componentTitle: 'إنشاء طلب مصيف',
       showViewToggle: false,
       formDisplayOption: 'fullscreen',
       isNew: true,
@@ -65,7 +35,7 @@ export class SummerDynamicFormEngineService {
       listRequestModel: { ...defaultModel },
       userConfiguration: { ...userConfigFromLocalStorage },
       submitButtonText: 'تسجيل طلب المصيف',
-      submissionLabel: 'تسجيل ديناميكي',
+      submissionLabel: 'تسجيل الطلب',
       fieldsConfiguration: {
         isDivDisabled: false,
         dateFormat: 'yy/mm/dd',
@@ -242,22 +212,14 @@ export class SummerDynamicFormEngineService {
   }
 
   ensureAgeRule(form: FormGroup, genericFormService: GenericFormsService, relationControlName: string): void {
-    const relation = this.resolveControlByName(form, relationControlName);
-    if (!relation) {
+    const relationContext = this.resolveControlByName(form, relationControlName);
+    if (!relationContext) {
       return;
     }
 
-    const relationValue = String(relation.value ?? '').trim();
-    const requiresAge = relationValue === 'ابن' || relationValue === 'ابنة';
-    const relationIndex = this.parseControlName(relationControlName).index;
-
-    let ageControl: AbstractControl | null = null;
-    for (const alias of this.aliases.companionAge) {
-      ageControl = this.resolveControlByName(form, `${alias}|${relationIndex}`);
-      if (ageControl) {
-        break;
-      }
-    }
+    const requiresAge = this.isChildRelation(relationContext.control.value);
+    let ageControl = this.resolveCompanionAgeControl(relationContext.formArray);
+    ageControl ??= this.resolveControl(form, genericFormService, this.aliases.companionAge);
 
     if (!ageControl) {
       return;
@@ -267,10 +229,46 @@ export class SummerDynamicFormEngineService {
       ageControl.enable({ emitEvent: false });
       ageControl.setValidators([Validators.required, Validators.min(0)]);
     } else {
+      ageControl.setValue(null, { emitEvent: false });
       ageControl.clearValidators();
+      ageControl.disable({ emitEvent: false });
     }
 
     ageControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  ensureRelationOtherRule(form: FormGroup, genericFormService: GenericFormsService, relationControlName: string): void {
+    const relationContext = this.resolveControlByName(form, relationControlName);
+    if (!relationContext) {
+      return;
+    }
+
+    const requiresRelationText = this.isOtherRelation(relationContext.control.value);
+    let relationOtherControl = this.resolveCompanionControl(relationContext.formArray, this.aliases.companionRelationOther);
+    relationOtherControl ??= this.resolveControl(form, genericFormService, this.aliases.companionRelationOther);
+
+    if (!relationOtherControl) {
+      return;
+    }
+
+    if (requiresRelationText) {
+      relationOtherControl.enable({ emitEvent: false });
+      relationOtherControl.setValidators([Validators.required]);
+    } else {
+      relationOtherControl.setValue('', { emitEvent: false });
+      relationOtherControl.clearValidators();
+      relationOtherControl.disable({ emitEvent: false });
+    }
+
+    relationOtherControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  isChildRelation(value: unknown): boolean {
+    return this.childRelationTokens.has(this.normalizeRelationValue(value));
+  }
+
+  isOtherRelation(value: unknown): boolean {
+    return this.otherRelationTokens.has(this.normalizeRelationValue(value));
   }
 
   collectRequestFields(form: FormGroup, genericFormService: GenericFormsService, groups: GroupInfo[], categoryId: number, applicationId: string): TkmendField[] {
@@ -340,7 +338,7 @@ export class SummerDynamicFormEngineService {
     );
   }
 
-  private resolveControlByName(form: FormGroup, controlName: string): AbstractControl | null {
+  private resolveControlByName(form: FormGroup, controlName: string): { control: AbstractControl; formArray: FormArray } | null {
     for (const key of Object.keys(form.controls)) {
       const control = form.controls[key];
       if (!(control instanceof FormArray)) {
@@ -350,14 +348,39 @@ export class SummerDynamicFormEngineService {
       for (const rowControl of control.controls) {
         const row = rowControl as FormGroup;
         if (row.contains(controlName)) {
-          return row.get(controlName);
+          const resolved = row.get(controlName);
+          if (resolved) {
+            return { control: resolved, formArray: control };
+          }
         }
       }
     }
 
     return null;
   }
+  private resolveCompanionAgeControl(formArray: FormArray): AbstractControl | null {
+    return this.resolveCompanionControl(formArray, this.aliases.companionAge);
+  }
 
+  private resolveCompanionControl(formArray: FormArray, aliases: readonly string[]): AbstractControl | null {
+    const normalizedAliases = aliases.map(alias => String(alias ?? '').trim().toLowerCase());
+    for (const rowControl of formArray.controls) {
+      const row = rowControl as FormGroup;
+      const controlName = Object.keys(row.controls)[0];
+      const base = this.parseControlName(controlName).base.toLowerCase();
+      if (normalizedAliases.some(alias => alias === base)) {
+        return row.get(controlName);
+      }
+    }
+    return null;
+  }
+
+  private normalizeRelationValue(value: unknown): string {
+    return String(value ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+  }
   private toSafeString(value: unknown): string {
     if (value === null || value === undefined) {
       return '';
@@ -407,3 +430,4 @@ export class SummerDynamicFormEngineService {
     });
   }
 }
+

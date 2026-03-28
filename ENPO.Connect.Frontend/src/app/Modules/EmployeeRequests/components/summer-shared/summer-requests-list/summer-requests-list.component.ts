@@ -133,6 +133,10 @@ export class SummerRequestsListComponent {
     return [...baseOptions, this.resolvedPageSize].sort((a, b) => a - b);
   }
 
+  get skeletonRowCount(): number {
+    return Math.min(8, Math.max(4, this.resolvedPageSize || 5));
+  }
+
   trackByRequest(_index: number, request: SummerRequestSummaryDto): number {
     return Number(request?.messageId ?? 0) || _index;
   }

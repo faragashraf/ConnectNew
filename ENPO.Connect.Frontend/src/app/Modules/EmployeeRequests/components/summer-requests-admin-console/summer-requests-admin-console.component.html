@@ -14,8 +14,15 @@
 
   <section class="scope-panel" *ngIf="loadingDestinations">
     <div class="scope-row">
-      <small>جاري تحميل إعدادات المصايف...</small>
+      <small class="loading-note">جاري تحميل إعدادات المصايف...</small>
     </div>
+    <app-summer-skeleton
+      [variant]="'cards'"
+      [columns]="3"
+      [cards]="3"
+      [showTitle]="false"
+      [ariaLabel]="'جاري تحميل إعدادات المصايف'">
+    </app-summer-skeleton>
   </section>
 
   <section class="scope-panel" *ngIf="!loadingDestinations && destinationsError.length > 0">
@@ -68,22 +75,27 @@
       <strong>{{ stats.totalRequests }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('New')" (click)="applyStatusQuickFilter('New')">
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('جديد')" (click)="applyStatusQuickFilter('جديد')">
       <span>جديد</span>
       <strong>{{ stats.newCount }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('InProgress')" (click)="applyStatusQuickFilter('InProgress')">
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('جاري التنفيذ')" (click)="applyStatusQuickFilter('جاري التنفيذ')">
       <span>جاري التنفيذ</span>
       <strong>{{ stats.inProgressCount }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('Replied')" (click)="applyStatusQuickFilter('Replied')">
-      <span>تم الرد/اعتماد</span>
-      <strong>{{ stats.repliedCount }}</strong>
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('رد إداري')" (click)="applyStatusQuickFilter('رد إداري')">
+      <span>رد إداري</span>
+      <strong>{{ getDashboardStatusCount('رد إداري', 'تم الرد') }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('Rejected')" (click)="applyStatusQuickFilter('Rejected')">
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('اعتماد نهائي')" (click)="applyStatusQuickFilter('اعتماد نهائي')">
+      <span>اعتماد نهائي</span>
+      <strong>{{ getDashboardStatusCount('اعتماد نهائي') }}</strong>
+    </article>
+
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('مرفوض')" (click)="applyStatusQuickFilter('مرفوض')">
       <span>مرفوض/ملغي</span>
       <strong>{{ stats.rejectedCount }}</strong>
     </article>
@@ -105,8 +117,15 @@
   </section>
 
   <ng-template #dashboardLoading>
-    <section class="dashboard-grid">
-      <article class="metric-card"><span>جاري تحميل الإحصاءات...</span><strong>{{ loadingDashboard ? '...' : '-' }}</strong></article>
+    <section class="dashboard-loading-shell">
+      <small class="loading-note">جاري تحميل الإحصاءات...</small>
+      <app-summer-skeleton
+        [variant]="'dashboard'"
+        [columns]="4"
+        [cards]="8"
+        [showTitle]="false"
+        [ariaLabel]="'جاري تحميل الإحصاءات'">
+      </app-summer-skeleton>
     </section>
   </ng-template>
 
@@ -234,7 +253,14 @@
 
       <p class="capacity-error" *ngIf="capacityErrorText.length > 0">{{ capacityErrorText }}</p>
 
-      <div class="capacity-loading" *ngIf="loadingWaveCapacity">جاري تحميل بيان الإتاحة...</div>
+      <div class="capacity-loading loading-note" *ngIf="loadingWaveCapacity">جاري تحميل بيان الإتاحة...</div>
+      <app-summer-skeleton
+        *ngIf="loadingWaveCapacity"
+        [variant]="'capacity'"
+        [rows]="4"
+        [showTitle]="false"
+        [ariaLabel]="'جاري تحميل بيان الإتاحة'">
+      </app-summer-skeleton>
 
       <div class="capacity-table-wrap" *ngIf="!loadingWaveCapacity && capacityRows.length > 0">
         <table class="capacity-table">
@@ -295,8 +321,17 @@
       <section class="request-details">
         <header>
           <h4>تفاصيل الطلب المختار</h4>
-          <small *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
+          <small class="loading-note" *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
         </header>
+
+        <app-summer-skeleton
+          *ngIf="loadingDetails"
+          [variant]="'details'"
+          [columns]="4"
+          [cards]="8"
+          [rows]="3"
+          [ariaLabel]="'جاري تحميل تفاصيل الطلب المختار'">
+        </app-summer-skeleton>
 
         <ng-container *ngIf="!loadingDetails">
           <app-summer-request-fields-grid
@@ -355,7 +390,7 @@
             <span>تنفيذ إجباري (عند الحاجة)</span>
           </label>
 
-          <ng-container *ngIf="actionForm.get('actionCode')?.value === 'APPROVE_TRANSFER'">
+          <ng-container *ngIf="isTransferActionSelected">
             <label>
               <span>المصيف المستهدف</span>
               <select formControlName="toCategoryId">

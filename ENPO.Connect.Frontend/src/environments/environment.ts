@@ -16,11 +16,6 @@ export const environment = {
   favicon: 'assets/brand/favicon-dev.ico',
   
   OTPApplicationName: 'CONNECT - TEST',
-  useLocalMockAuth: true,
-  disableSignalRInLocalMock: false,
-  localMockAuthPath: '/api/LocalAuth/DevLogin',
-  localMockUserId: 'test',
-  localMockPassword: 'test123',
 
   // ConnectApiURL: BaseUrl + "/Connect_API",
   // LandTransportationApiURL: BaseUrl + "/Connect_API",
@@ -34,17 +29,26 @@ export const environment = {
   
   // ConnectApiURL: `${MainDomain}/Applications/Connect_API`,
   LandTransportationApiURL: `${MainDomain}/Applications/Connect_API`,
-  DomainAuthURL: `${MainDomain}/Applications/Domain_Authorization`,
+  // DomainAuthURL: `${MainDomain}/Applications/Domain_Authorization`,
   SSoURL: `${MainDomain}/Applications/SSO`,
-  // PowerBi: `${MainDomain}/Applications/PowerBi`,
+  PowerBi: `${MainDomain}/Applications/PowerBi`,
   // SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
-
-  SignalRHubServer: `http://localhost/GlobalHubSync`,
-  PowerBi: `http://localhost/PowerBi`,
-  // LandTransportationApiURL: `http://localhost:8888`,
-  ConnectApiURL: `http://localhost:8888`,
-  // DomainAuthURL:  "https://localhost:8998",
+  
+SignalRHubServer: `https://sync.webserver.local`,  // LandTransportationApiURL: `http://localhost:8888`,
+  ConnectApiURL: `https://connect.webserver.local`,
+  DomainAuthURL:  "https://auth.webserver.local",
   // PowerBi: "http://localhost:8020",
   // PublicationsUrl: "http://localhost:5269",
+  
+  // Home
+  
+  // DomainAuthURL: 'http://localhost/Domain_Authorization',
+
+  summerFeature: {
+    seasonYear: 2026,
+    dynamicApplicationId: 'SUM2026DYN',
+    destinationCatalogKey: 'SUM2026_DestinationCatalog',
+    pdfReferenceTitle: 'مواعيد الافواج موسم صيف 2026.pdf'
+  }
 };
 

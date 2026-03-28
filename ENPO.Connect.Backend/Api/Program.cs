@@ -1,10 +1,11 @@
-using Core;
+﻿using Core;
 using Api.HostedServices;
 using ENPO.CreateLogFile;
 using ENPO.CustomSwagger;
 using ENPO.Dto.Utilities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Internal;
@@ -16,17 +17,11 @@ using Models.DTO.Common;
 using Persistence.Data;
 using Persistence.HelperServices;
 using Persistence.Services;
+using Persistence.Services.Notifications;
 using Persistence.UnitOfWorks;
 using SignalR.Notification;
 using System.Reflection;
 using System.Text;
-
-// Ensure Oracle client sessions use UTF-8 on hosts that do not have NLS_LANG configured.
-const string oracleNlsLang = "AMERICAN_AMERICA.AL32UTF8";
-if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("NLS_LANG")))
-{
-    Environment.SetEnvironmentVariable("NLS_LANG", oracleNlsLang);
-}
 
 string AllowAllCors = "AllowAll";
 var builder = WebApplication.CreateBuilder(args);
@@ -63,9 +58,16 @@ builder.Services.AddOptions<ApplicationConfig>().BindConfiguration(nameof(Applic
 
 builder.Services.AddSingleton<ApplicationConfig>(sp =>
        sp.GetRequiredService<IOptions<ApplicationConfig>>().Value);
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddScoped<helperService>();
 builder.Services.AddScoped<SummerWorkflowService>();
+builder.Services.AddScoped<IConnectNotificationService, ConnectNotificationService>();
 builder.Services.AddHostedService<SummerPaymentAutoCancellationHostedService>();
 builder.Services.AddSingleton<ENPOCreateLogFile>(provider => new ENPOCreateLogFile("YourStringValue", "YourSecondStringValue", FileExtension.txt));
 
@@ -74,12 +76,16 @@ builder.Services.AddHttpContextAccessor();
 // Bind the ApplicationConfig section manually
 var applicationConfig = new ApplicationConfig();
 builder.Configuration.GetSection(nameof(ApplicationConfig)).Bind(applicationConfig);
+var chatHubUrl = BuildAbsoluteUrl(
+    builder.Configuration["AppUrls:PublicBaseUrl"],
+    builder.Configuration["Routes:ChatHub"],
+    "Routes:ChatHub");
 
 builder.Services.AddSingleton<SignalRConnectionManager>(sp =>
 {
     var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
     return new SignalRConnectionManager(
-        applicationConfig.HubServerIP,
+        chatHubUrl,
         httpContextAccessor,
         applicationConfig.tokenOptions.Key, "App.Connect", "Connect", "Connect");
 });
@@ -215,8 +221,35 @@ using (var scope = app.Services.CreateScope())
         var pendingList = pending?.ToList() ?? new System.Collections.Generic.List<string>();
         Console.WriteLine($"[StartupMigrations] Pending migrations: {(pendingList.Count > 0 ? string.Join(",", pendingList) : "<none>")}");
 
-        connectContext.Database.Migrate();
-        Console.WriteLine("[StartupMigrations] Database.Migrate() completed successfully.");
+        //// Ensure CDMend.ApplicationID allows NULL to avoid migration-insert failures when seed data
+        //try
+        //{
+        //    var dbConnection = connectContext.Database.GetDbConnection();
+        //    try
+        //    {
+        //        dbConnection.Open();
+        //        using (var cmd = dbConnection.CreateCommand())
+        //        {
+        //            // If the ApplicationID column exists, alter it to allow NULLs. This prevents migrations that re-insert seed data
+        //            // from failing due to NOT NULL constraint. If the column doesn't exist this statement is skipped.
+        //            cmd.CommandText = @"IF COL_LENGTH('dbo.CDMend','ApplicationID') IS NOT NULL BEGIN ALTER TABLE dbo.CDMend ALTER COLUMN ApplicationID NVARCHAR(10) NULL END";
+        //            cmd.ExecuteNonQuery();
+        //        }
+        //    }
+        //    finally
+        //    {
+        //        try { dbConnection.Close(); } catch { }
+        //    }
+        //}
+        //catch (Exception exAlter)
+        //{
+        //    var loggerFactoryLocal = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
+        //    var loggerLocal = loggerFactoryLocal?.CreateLogger("StartupMigrations:SchemaAdjust");
+        //    loggerLocal?.LogWarning(exAlter, "Could not ensure CDMend.ApplicationID is nullable before migrations. Continuing to migrations.");
+        //}
+
+        //connectContext.Database.Migrate();
+        //Console.WriteLine("[StartupMigrations] Database.Migrate() completed successfully.");
     }
     catch (Exception ex)
     {
@@ -229,7 +262,9 @@ using (var scope = app.Services.CreateScope())
 
 // Use the custom middleware
 //app.UseMiddleware<RequestValidationMiddleware>();
-app.UseCors("AllowAll");
+app.UseForwardedHeaders();
+app.UseHttpsRedirection();
+app.UseCors(AllowAllCors);
 
 app.UseRouting();
 
@@ -244,27 +279,19 @@ app.UseAuthentication();
 
 app.UseAuthorization();
 
-var disableSignalRStartup = app.Configuration.GetValue<bool>("LocalDevelopment:DisableSignalRStartup");
-if (!disableSignalRStartup)
-{
-    // Start the SignalR connection
-    var signalRConnectionManager = app.Services.GetRequiredService<SignalRConnectionManager>();
+// Start the SignalR connection
+var signalRConnectionManager = app.Services.GetRequiredService<SignalRConnectionManager>();
 
-    // Register events for starting and stopping the SignalR connection
-    app.Lifetime.ApplicationStarted.Register(async () =>
-    {
-        await signalRConnectionManager.StartConnectionAsync();
-    });
-
-    app.Lifetime.ApplicationStopping.Register(async () =>
-    {
-        await signalRConnectionManager.StopConnectionAsync();
-    });
-}
-else
+// Register events for starting and stopping the SignalR connection
+app.Lifetime.ApplicationStarted.Register(async () =>
 {
-    Console.WriteLine("[Startup] SignalR startup connection is disabled by LocalDevelopment:DisableSignalRStartup.");
-}
+    await signalRConnectionManager.StartConnectionAsync();
+});
+
+app.Lifetime.ApplicationStopping.Register(async () =>
+{
+    await signalRConnectionManager.StopConnectionAsync();
+});
 
 
 app.UseEndpoints(endpoints =>
@@ -274,3 +301,34 @@ app.UseEndpoints(endpoints =>
 
 app.MapControllers();
 app.Run();
+
+static string BuildAbsoluteUrl(string? publicBaseUrl, string? routePath, string routePathConfigKey)
+{
+    if (string.IsNullOrWhiteSpace(publicBaseUrl))
+    {
+        throw new InvalidOperationException("AppUrls:PublicBaseUrl is required.");
+    }
+
+    if (!Uri.TryCreate(publicBaseUrl, UriKind.Absolute, out var baseUri))
+    {
+        throw new InvalidOperationException($"AppUrls:PublicBaseUrl '{publicBaseUrl}' is not a valid absolute URL.");
+    }
+
+    if (!string.Equals(baseUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("AppUrls:PublicBaseUrl must use HTTPS.");
+    }
+
+    if (string.IsNullOrWhiteSpace(routePath))
+    {
+        throw new InvalidOperationException($"{routePathConfigKey} is required.");
+    }
+
+    var normalizedRoutePath = routePath.Trim();
+    if (!normalizedRoutePath.StartsWith('/'))
+    {
+        normalizedRoutePath = $"/{normalizedRoutePath}";
+    }
+
+    return new Uri(baseUri, normalizedRoutePath).ToString();
+}

@@ -50,7 +50,7 @@
 
   <h2>سلوكيات مهمة</h2>
   <ul>
-    <li>اكتشاف المتحكمات ديناميكياً وبناء قائمة بالـ endpoints ومعاملاتها.</li>
+    <li>اكتشاف المتحكمات تلقائياً وبناء قائمة بالـ endpoints ومعاملاتها.</li>
     <li>تمييز معاملات الـ body عن معاملات الـ query لبناء placeholders.</li>
     <li>تطبيق أشكال DTO تلقائياً لتمكين تحرير أجسام الطلبات.</li>
     <li>دعم <code>wrapBodyAsArray</code> و <code>populateMethod</code> و <code>populateArgs</code>.</li>

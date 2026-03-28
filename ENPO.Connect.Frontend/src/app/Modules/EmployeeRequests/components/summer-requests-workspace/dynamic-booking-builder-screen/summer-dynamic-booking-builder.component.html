@@ -1,12 +1,9 @@
-<section class="dynamic-booking-shell" dir="rtl">
+﻿<section class="dynamic-booking-shell" dir="rtl">
   <div class="dynamic-head">
     <div class="head-content">
-      <h3>إنشاء طلب جديد (ديناميكي)</h3>
-      <p>المكوّن مبني على بيانات تعريف من الجداول الديناميكية مع الحفاظ على قواعد المصايف.</p>
-    </div>
-    <div class="app-id-pill">
-      <span>معرّف التطبيق</span>
-      <strong>{{ resolvedApplicationId }}</strong>
+      <h3>{{ isEditMode ? ('تعديل طلب المصيف #' + editRequestId) : 'إنشاء طلب جديد' }}</h3>
+      <p *ngIf="!isEditMode">النموذج يعتمد على بيانات التعريف مع الحفاظ على قواعد المصايف.</p>
+      <p *ngIf="isEditMode">يتم تحميل بيانات الطلب الحالي لتعديلها ثم حفظ التغييرات.</p>
     </div>
   </div>
 
@@ -16,7 +13,7 @@
       <select
         [ngModel]="selectedDestinationId"
         (ngModelChange)="onDestinationChanged($event)"
-        [disabled]="loadingMetadata || submitting">
+        [disabled]="loadingMetadata || submitting || isEditMode">
         <option [ngValue]="null">اختر</option>
         <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">
           {{ destination.name }}
@@ -24,6 +21,10 @@
       </select>
     </label>
     <small class="meta-error" *ngIf="metadataError.length > 0">{{ metadataError }}</small>
+    <small class="meta-error" *ngIf="editRequestError.length > 0">{{ editRequestError }}</small>
+    <small class="mode-note" *ngIf="isEditMode && editRequestError.length === 0 && !loadingEditRequest">
+      يتم تعديل الطلب رقم #{{ editRequestId }}.
+    </small>
   </div>
 
   <div class="danger-alert" *ngIf="bookingValidationAlerts.length > 0">
@@ -35,7 +36,7 @@
 
   <section class="capacity-overview" *ngIf="selectedDestination">
     <h4>الإتاحة اللحظية للفوج المختار</h4>
-    <small *ngIf="bookingCapacityLoading">جاري تحديث الإتاحة...</small>
+    <small class="loading-note" *ngIf="bookingCapacityLoading">جاري تحديث الإتاحة...</small>
     <div class="capacity-grid" *ngIf="bookingCapacitySummary.length > 0">
       <article class="capacity-card" *ngFor="let row of bookingCapacitySummary">
         <span>سعة {{ row.familyCount }}</span>
@@ -48,15 +49,27 @@
     </p>
   </section>
 
-  <div class="loading" *ngIf="loadingMetadata">جاري تحميل بيانات التعريف الديناميكية...</div>
+  <ng-container *ngIf="loadingMetadata || loadingEditRequest">
+    <div class="loading loading-note">
+      {{ loadingMetadata ? 'جاري تحميل بيانات التعريف...' : 'جاري تحميل بيانات الطلب للتعديل...' }}
+    </div>
+    <app-summer-skeleton
+      [variant]="'form'"
+      [columns]="2"
+      [rows]="6"
+      [showTitle]="false"
+      [ariaLabel]="'جاري تحميل بيانات النموذج'">
+    </app-summer-skeleton>
+  </ng-container>
 
   <app-generic-dynamic-form-details
-    *ngIf="selectedDestination && customFilteredCategoryMand.length > 0"
+    *ngIf="!loadingEditRequest && selectedDestination && customFilteredCategoryMand.length > 0"
     [config]="formConfig"
     [messageDto]="messageDto"
     [customFilteredCategoryMand]="customFilteredCategoryMand"
     [unitTree]="[]"
     [fileParameters]="fileParameters"
+    [submitDisabled]="submitDisabled"
     [isCurrentUser]="true"
     (ticketFormChange)="onTicketFormChange($event)"
     (submitFormChange)="submitDynamicBooking($event)"
@@ -64,7 +77,7 @@
     (fileUploadEvent)="onFileUpload($event)">
   </app-generic-dynamic-form-details>
 
-  <div class="empty-state" *ngIf="!loadingMetadata && selectedDestination && customFilteredCategoryMand.length === 0">
-    لا توجد حقول ديناميكية مرتبطة بالمصيف المختار ضمن معرّف التطبيق الحالي.
+  <div class="empty-state" *ngIf="!loadingMetadata && !loadingEditRequest && selectedDestination && customFilteredCategoryMand.length === 0">
+    لا توجد حقول مرتبطة بالمصيف المختار ضمن معرّف التطبيق الحالي.
   </div>
 </section>

@@ -18,7 +18,22 @@ import { AttchedObjectService } from 'src/app/shared/services/helper/attched-obj
 import { DynamicMetadataService } from 'src/app/shared/services/helper/dynamic-metadata.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
-import { SignalRService } from 'src/app/shared/services/SignalRServices/SignalR.service';
+import {
+  SUMMER_DESTINATION_CATALOG_KEY,
+  SUMMER_DYNAMIC_APPLICATION_ID
+} from '../summer-shared/core/summer-feature.config';
+import {
+  normalizeSummerAdminActionCode,
+  SUMMER_ADMIN_ACTION,
+  SummerAdminActionCode
+} from '../summer-shared/core/summer-action-codes';
+import { SUMMER_UI_TEXTS_AR } from '../summer-shared/core/summer-ui-texts.ar';
+import { SummerRequestsRealtimeService } from '../summer-shared/core/summer-requests-realtime.service';
+import {
+  SummerCapacityRealtimeEvent,
+  SummerRequestRealtimeEvent
+} from '../summer-shared/core/summer-realtime-event.models';
+import { SummerAdminRealtimePatchService } from '../summer-shared/core/summer-admin-realtime-patch.service';
 import {
   parseSummerDestinationCatalog,
   SUMMER_SEASON_YEAR,
@@ -26,9 +41,11 @@ import {
   SummerWaveDefinition
 } from '../summer-requests-workspace/summer-requests-workspace.config';
 import {
-  formatRequestFieldValue,
-  resolveFieldLabel,
-  SUMMER_FIELD_LABEL_MAP
+  buildSummerRequestCompanions,
+  buildSummerRequestDetailFields,
+  getStatusClass as resolveSummerStatusClass,
+  getStatusLabel as resolveSummerStatusLabel,
+  SummerRequestFieldGridRow
 } from '../summer-requests-workspace/summer-requests-workspace.utils';
 
 @Component({
@@ -38,17 +55,20 @@ import {
 })
 export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   readonly seasonYear = SUMMER_SEASON_YEAR;
-  readonly dynamicSummerApplicationId = 'SUM2026DYN';
+  readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   destinations: SummerDestinationConfig[] = [];
   loadingDestinations = false;
   destinationsError = '';
 
   readonly statusOptions = [
     { value: '', label: 'الكل' },
-    { value: 'New', label: 'جديد' },
-    { value: 'InProgress', label: 'جاري التنفيذ' },
-    { value: 'Replied', label: 'تم الرد/اعتماد' },
-    { value: 'Rejected', label: 'مرفوض/ملغي' }
+    { value: 'جديد', label: 'جديد' },
+    { value: 'جاري التنفيذ', label: 'جاري التنفيذ' },
+    { value: 'رد إداري', label: 'رد إداري' },
+    { value: 'اعتماد نهائي', label: 'اعتماد نهائي' },
+    { value: 'TRANSFER_REVIEW_REQUIRED', label: 'يتطلب مراجعة بعد التحويل' },
+    { value: 'تم الرد', label: 'تم الرد (عام)' },
+    { value: 'مرفوض', label: 'مرفوض/ملغي' }
   ];
 
   readonly paymentStateOptions = [
@@ -58,11 +78,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: 'OverdueUnpaid', label: 'متأخر وغير مسدد' }
   ];
 
-  readonly actionOptions = [
-    { value: 'COMMENT', label: 'تعليق / رد إداري' },
-    { value: 'FINAL_APPROVE', label: 'اعتماد نهائي' },
-    { value: 'MANUAL_CANCEL', label: 'إلغاء يدوي' },
-    { value: 'APPROVE_TRANSFER', label: 'اعتماد تحويل' }
+  readonly actionOptions: Array<{ value: SummerAdminActionCode; label: string }> = [
+    { value: SUMMER_ADMIN_ACTION.COMMENT, label: 'تعليق / رد إداري' },
+    { value: SUMMER_ADMIN_ACTION.FINAL_APPROVE, label: 'اعتماد نهائي' },
+    { value: SUMMER_ADMIN_ACTION.MANUAL_CANCEL, label: 'إلغاء يدوي' },
+    // { value: 'APPROVE_TRANSFER', label: 'اعتماد تحويل' }
   ];
 
   filtersForm: FormGroup;
@@ -86,6 +106,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   requestsTotalPages = 1;
 
   readonly pageSizeOptions = [5, 10, 25, 50];
+  private readonly allowedAdminActionCodes = new Set<SummerAdminActionCode>([
+    SUMMER_ADMIN_ACTION.FINAL_APPROVE,
+    SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
+    SUMMER_ADMIN_ACTION.COMMENT,
+    SUMMER_ADMIN_ACTION.APPROVE_TRANSFER
+  ]);
 
   capacityDialogVisible = false;
   loadingWaveCapacity = false;
@@ -99,6 +125,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   private readonly allowedAttachmentExtensions = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
   private readonly subscriptions = new Subscription();
   private requestsLoadVersion = 0;
+  private dashboardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly fb: FormBuilder,
@@ -109,7 +136,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     private readonly attchedObjectService: AttchedObjectService,
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
-    private readonly signalRService: SignalRService
+    private readonly summerRealtimeService: SummerRequestsRealtimeService,
+    private readonly adminRealtimePatchService: SummerAdminRealtimePatchService
   ) {
     this.filtersForm = this.fb.group({
       categoryId: [null],
@@ -123,7 +151,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     });
 
     this.actionForm = this.fb.group({
-      actionCode: ['COMMENT', Validators.required],
+      actionCode: [SUMMER_ADMIN_ACTION.COMMENT, Validators.required],
       comment: ['', Validators.maxLength(2000)],
       force: [false],
       toCategoryId: [null],
@@ -141,13 +169,17 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.dashboardRefreshTimer) {
+      clearTimeout(this.dashboardRefreshTimer);
+      this.dashboardRefreshTimer = null;
+    }
     this.subscriptions.unsubscribe();
   }
 
   loadDestinationCatalog(): void {
     this.loadingDestinations = true;
     this.destinationsError = '';
-    this.dynamicMetadataService.getMendJson<unknown>(this.dynamicSummerApplicationId, 'SUM2026_DestinationCatalog').subscribe({
+    this.dynamicMetadataService.getMendJson<unknown>(this.dynamicSummerApplicationId, SUMMER_DESTINATION_CATALOG_KEY).subscribe({
       next: response => {
         if (response?.isSuccess) {
           this.destinations = parseSummerDestinationCatalog(response.data, this.seasonYear);
@@ -162,13 +194,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         const errors = Array.isArray(response?.errors) ? response.errors : [];
         this.destinationsError = errors.length > 0
           ? errors.join('<br/>')
-          : 'تعذر تحميل إعدادات المصايف الديناميكية من CDMendTbl.';
+          : SUMMER_UI_TEXTS_AR.errors.destinationCatalogInvalid;
         this.loadDashboard();
         this.loadRequests();
       },
       error: () => {
         this.destinations = [];
-        this.destinationsError = 'تعذر تحميل إعدادات المصايف الديناميكية من الخدمة العامة.';
+        this.destinationsError = SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed;
         this.loadDashboard();
         this.loadRequests();
       },
@@ -353,98 +385,25 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       .sort((a, b) => this.getWaveOrder(a.code) - this.getWaveOrder(b.code));
   }
 
-  get selectedRequestFields(): Array<{ label: string; value: string; groupId: number }> {
-    const fields = this.selectedRequestDetails?.fields ?? [];
+  get selectedRequestFields(): SummerRequestFieldGridRow[] {
     const currentRequest = this.selectedRequest;
-    return fields
-      .filter(field => String(field.fildTxt ?? '').trim().length > 0)
-      .filter(field => !this.isCompanionFieldKey(String(field.fildKind ?? '').trim()))
-      .map(field => {
-        const fieldKey = String(field.fildKind ?? '').trim();
-        const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
-        let value = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
-
-        if (currentRequest && normalizedFieldKey === 'summercamplabel') {
-          const expectedWaveLabel = this.getWaveLabelByCategoryAndCode(currentRequest.categoryId, currentRequest.waveCode);
-          if (expectedWaveLabel) {
-            value = expectedWaveLabel;
-          }
-        }
-
-        return {
-          label: resolveFieldLabel(fieldKey, SUMMER_FIELD_LABEL_MAP),
-          value,
-          groupId: Number(field.instanceGroupId ?? 1) || 1
-        };
-      })
-      .sort((a, b) => a.groupId - b.groupId || a.label.localeCompare(b.label));
+    return buildSummerRequestDetailFields({
+      fields: this.selectedRequestDetails?.fields,
+      summary: currentRequest ?? null,
+      summaryStatusLabel: currentRequest ? this.getRequestStatusLabel(currentRequest) : '',
+      summaryDateFormatter: this.formatDate.bind(this),
+      resolveWaveLabel: (categoryId, waveCode) => this.getWaveLabelByCategoryAndCode(categoryId, waveCode),
+      resolveDestinationNameById: (categoryId) => this.getDestinationNameByCategoryId(categoryId)
+    });
   }
 
   get selectedRequestCompanions(): Array<{ index: number; name: string; relation: string; nationalId: string; age: string }> {
-    const fields = this.selectedRequestDetails?.fields ?? [];
-    const grouped = new Map<number, { groupId: number; name: string; relation: string; nationalId: string; age: string }>();
+    return buildSummerRequestCompanions(this.selectedRequestDetails?.fields);
+  }
 
-    fields.forEach((field, rowIndex) => {
-      const fieldKey = String(field.fildKind ?? '').trim();
-      if (!this.isCompanionFieldKey(fieldKey)) {
-        return;
-      }
-
-      const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
-      const formattedValue = formatRequestFieldValue(fieldKey, String(field.fildTxt ?? '').trim());
-      const rawGroupId = Number(field.instanceGroupId ?? 0);
-      const groupId = Number.isFinite(rawGroupId) && rawGroupId > 0 ? rawGroupId : (10000 + rowIndex);
-
-      if (!grouped.has(groupId)) {
-        grouped.set(groupId, {
-          groupId,
-          name: '',
-          relation: '',
-          nationalId: '',
-          age: ''
-        });
-      }
-
-      const row = grouped.get(groupId);
-      if (!row) {
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymembername')) {
-        row.name = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey === 'familyrelation') {
-        row.relation = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymembernationalid')) {
-        row.nationalId = formattedValue;
-        return;
-      }
-
-      if (normalizedFieldKey.includes('familymemberage')) {
-        row.age = formattedValue;
-      }
-    });
-
-    const toDisplay = (value: string): string => {
-      const normalized = String(value ?? '').trim();
-      return normalized.length > 0 ? normalized : '-';
-    };
-
-    return [...grouped.values()]
-      .sort((a, b) => a.groupId - b.groupId)
-      .map((row, index) => ({
-        index: index + 1,
-        name: toDisplay(row.name),
-        relation: toDisplay(row.relation),
-        nationalId: toDisplay(row.nationalId),
-        age: toDisplay(row.age)
-      }))
-      .filter(row => row.name !== '-' || row.relation !== '-' || row.nationalId !== '-' || row.age !== '-');
+  get isTransferActionSelected(): boolean {
+    const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
+    return normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER;
   }
 
   get selectedRequestReplies(): Array<{ id: number; author: string; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
@@ -673,7 +632,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   openWaveCapacityDialog(): void {
     if (!this.canOpenWaveCapacityDialog) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار المصيف والفوج أولاً.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidWaveCapacityScope}</h5>`, true);
       return;
     }
 
@@ -821,25 +780,30 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   submitAdminAction(): void {
     this.actionForm.markAllAsTouched();
     if (this.actionForm.invalid) {
-      this.msg.msgError('خطأ', '<h5>يرجى استكمال بيانات الإجراء الإداري.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidAdminActionData}</h5>`, true);
       return;
     }
 
     if (!this.selectedRequestId) {
-      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب أولاً.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.requestSelectionRequired}</h5>`, true);
       return;
     }
 
     const raw = this.actionForm.getRawValue();
-    const actionCode = String(raw.actionCode ?? '').trim();
+    const actionCode = this.normalizeActionCode(raw.actionCode);
 
-    if (actionCode === 'APPROVE_TRANSFER' && (!raw.toCategoryId || !String(raw.toWaveCode ?? '').trim())) {
-      this.msg.msgError('خطأ', '<h5>بيانات التحويل غير مكتملة.</h5>', true);
+    if (!actionCode) {
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.unsupportedAdminAction}</h5>`, true);
+      return;
+    }
+
+    if (actionCode === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER && (!raw.toCategoryId || !String(raw.toWaveCode ?? '').trim())) {
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidTransferData}</h5>`, true);
       return;
     }
 
     this.submittingAction = true;
-    this.spinner.show('جاري تنفيذ الإجراء الإداري ...');
+    this.spinner.show(SUMMER_UI_TEXTS_AR.loading.adminAction);
     this.summerWorkflowController.executeAdminAction({
       messageId: this.selectedRequestId,
       actionCode,
@@ -853,13 +817,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         if (response?.isSuccess) {
-          this.msg.msgSuccess('تم تنفيذ الإجراء الإداري بنجاح');
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.adminActionCompleted);
           this.actionAttachments = [];
           this.actionForm.patchValue({ comment: '', force: false });
-          this.loadRequests();
-          this.loadDashboard();
           if (this.selectedRequestId) {
-            this.loadSelectedRequestDetails(this.selectedRequestId);
+            this.applyRealtimeRequestUpdate(this.createLocalRequestUpdateEvent(this.selectedRequestId, 'UPDATE'));
           }
         } else {
           this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
@@ -905,11 +867,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   downloadAttachment(attachmentId: number, fileName: string): void {
     if (!attachmentId || attachmentId <= 0) {
-      this.msg.msgError('خطأ', '<h5>لا يمكن تنزيل هذا المرفق لعدم توفر معرف صالح.</h5>', true);
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.attachmentDownloadMissingId}</h5>`, true);
       return;
     }
 
-    this.spinner.show('جاري تنزيل المرفق ...');
+    this.spinner.show(SUMMER_UI_TEXTS_AR.loading.attachmentDownload);
     this.attachmentsController.downloadDocument(attachmentId).subscribe({
       next: response => {
         const fileContent = String(response?.data ?? '').trim();
@@ -921,7 +883,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         this.msg.msgError('خطأ', `<h5>${this.collectErrors(response) || 'تعذر تنزيل المرفق.'}</h5>`, true);
       },
       error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تنزيل المرفق حالياً.</h5>', true);
+        this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.attachmentDownloadFailed}</h5>`, true);
       },
       complete: () => {
         this.spinner.hide();
@@ -943,7 +905,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     const hour = String(date.getHours()).padStart(2, '0');
-    return `${day}/${month}/${year} ${hour}:00`;
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${year} ${hour}:${minute}`;
   }
 
   isPaymentOverdue(request: SummerRequestSummaryDto): boolean {
@@ -980,17 +943,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   getStatusClass(item: SummerRequestSummaryDto): string {
-    const status = String(item.status ?? '').toLowerCase();
-    if (status.includes('rejected')) {
-      return 'status-bad';
-    }
-    if (status.includes('replied')) {
-      return 'status-good';
-    }
-    if (status.includes('inprogress')) {
+    const workflowStateCode = String(item?.workflowStateCode ?? '').trim().toUpperCase();
+    if (item?.needsTransferReview || workflowStateCode === 'TRANSFER_REVIEW_REQUIRED') {
       return 'status-mid';
     }
-    return 'status-neutral';
+
+    return resolveSummerStatusClass(String(item?.statusLabel ?? item?.status ?? '').trim());
   }
 
   getRequestStatusLabel(item: SummerRequestSummaryDto): string {
@@ -999,8 +957,27 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return statusLabel;
     }
 
-    const status = String(item?.status ?? '').trim();
-    return status.length > 0 ? status : '-';
+    return resolveSummerStatusLabel(String(item?.status ?? '').trim());
+  }
+
+  getDashboardStatusCount(...statusTokens: string[]): number {
+    const normalizedTokens = new Set(
+      statusTokens
+        .map(token => this.normalizeSearchToken(token))
+        .filter(token => token.length > 0)
+    );
+
+    if (!this.dashboard || normalizedTokens.size === 0) {
+      return 0;
+    }
+
+    return (this.dashboard.byStatus ?? [])
+      .filter(item => {
+        const labelToken = this.normalizeSearchToken(item?.statusLabel);
+        const codeToken = this.normalizeSearchToken(item?.statusCode);
+        return normalizedTokens.has(labelToken) || normalizedTokens.has(codeToken);
+      })
+      .reduce((total, item) => total + (Number(item?.count ?? 0) || 0), 0);
   }
 
   getDestinationCount(categoryId: number): number {
@@ -1039,7 +1016,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return false;
     }
 
-    return /[\u0600-\u06FF]/.test(text);
+    return /[؀-ۿ]/.test(text);
   }
 
   trackByDestinationChip(_index: number, item: { categoryId: number }): number {
@@ -1061,7 +1038,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   private bindActionRules(): void {
     const actionCodeSub = this.actionForm.get('actionCode')?.valueChanges.subscribe(value => {
-      const normalized = String(value ?? '').trim().toUpperCase();
+      const normalized = this.normalizeActionCode(value);
       const toCategoryControl = this.actionForm.get('toCategoryId');
       const toWaveControl = this.actionForm.get('toWaveCode');
       const familyControl = this.actionForm.get('newFamilyCount');
@@ -1071,7 +1048,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         return;
       }
 
-      if (normalized === 'APPROVE_TRANSFER') {
+      const currentValue = String(value ?? '').trim();
+      if (normalized && currentValue !== normalized) {
+        this.actionForm.patchValue({ actionCode: normalized }, { emitEvent: false });
+      }
+
+      if (normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER) {
         toCategoryControl.setValidators([Validators.required]);
         toWaveControl.setValidators([Validators.required]);
         familyControl.setValidators([Validators.required, Validators.min(1)]);
@@ -1122,6 +1104,34 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Mirrors backend NormalizeActionCode:
+   * FINAL_APPROVE | MANUAL_CANCEL | COMMENT | APPROVE_TRANSFER
+   */
+  private normalizeActionCode(actionCode: unknown): SummerAdminActionCode | '' {
+    const normalized = normalizeSummerAdminActionCode(actionCode);
+    if (normalized) {
+      return normalized;
+    }
+
+    const direct = String(actionCode ?? '').trim() as SummerAdminActionCode;
+    if (this.allowedAdminActionCodes.has(direct)) {
+      return direct;
+    }
+
+    return '';
+  }
+
+  private normalizeSearchToken(value: unknown): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ى/g, 'ي')
+      .replace(/[\s\-]+/g, '')
+      .replace(/[^a-z0-9_؀-ۿ]/g, '');
+  }
+
   private bindFilterDependencies(): void {
     const categorySub = this.filtersForm.get('categoryId')?.valueChanges.subscribe(value => {
       const selectedCategoryId = Number(value ?? 0) || 0;
@@ -1170,25 +1180,94 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   private bindSignalRefresh(): void {
-    const signalSub = this.signalRService.Notification$.subscribe(notification => {
-      const title = String((notification as { title?: string; Title?: string })?.title
-        ?? (notification as { title?: string; Title?: string })?.Title
-        ?? '');
-      const body = String((notification as { notification?: string; Notification?: string })?.notification
-        ?? (notification as { notification?: string; Notification?: string })?.Notification
-        ?? '');
+    const requestSub = this.summerRealtimeService.requestUpdates$.subscribe(update => {
+      this.applyRealtimeRequestUpdate(update);
+      this.scheduleDashboardRefresh();
+    });
 
-      const text = `${title} ${body}`.toUpperCase();
-      if (text.includes('SUMMER') || text.includes('مصيف')) {
-        this.loadDashboard();
-        this.loadRequests();
-        if (this.capacityDialogVisible) {
-          this.refreshWaveCapacity(true);
+    const capacitySub = this.summerRealtimeService.capacityUpdates$.subscribe(update => {
+      this.refreshWaveCapacityFromSignal(update);
+    });
+
+    this.subscriptions.add(requestSub);
+    this.subscriptions.add(capacitySub);
+  }
+
+  private refreshWaveCapacityFromSignal(update: SummerCapacityRealtimeEvent): void {
+    if (!this.capacityDialogVisible || !this.capacityScopeCategoryId || !this.capacityScopeWaveCode) {
+      return;
+    }
+
+    const categoryId = Number(update?.categoryId ?? 0);
+    const waveCode = String(update?.waveCode ?? '').trim();
+    if (!Number.isFinite(categoryId) || categoryId <= 0 || waveCode.length === 0) {
+      return;
+    }
+
+    if (categoryId === this.capacityScopeCategoryId && waveCode === this.capacityScopeWaveCode) {
+      this.refreshWaveCapacity(true);
+    }
+  }
+
+  private applyRealtimeRequestUpdate(update: SummerRequestRealtimeEvent): void {
+    const targetMessageId = Number(update?.messageId ?? 0);
+    if (!Number.isFinite(targetMessageId) || targetMessageId <= 0) {
+      return;
+    }
+
+    const raw = this.filtersForm.getRawValue();
+    this.adminRealtimePatchService.applyRequestUpdate(this.seasonYear, update, {
+      requests: this.requests,
+      totalCount: this.requestsTotalCount,
+      pageNumber: this.requestsPageNumber,
+      pageSize: this.requestsPageSize,
+      selectedRequestId: this.selectedRequestId
+    }, {
+      categoryId: raw.categoryId,
+      waveCode: String(raw.waveCode ?? '').trim(),
+      status: String(raw.status ?? '').trim(),
+      paymentState: String(raw.paymentState ?? '').trim(),
+      employeeId: String(raw.employeeId ?? '').trim(),
+      search: String(raw.search ?? '').trim()
+    }).subscribe({
+      next: patched => {
+        this.requests = patched.requests;
+        this.requestsTotalCount = patched.totalCount;
+        this.selectedRequestId = patched.selectedRequestId;
+
+        if (patched.selectedWasRemoved) {
+          this.selectedRequestDetails = null;
+        }
+
+        if (patched.selectedWasUpdated && this.selectedRequestId) {
+          this.loadSelectedRequestDetails(this.selectedRequestId);
         }
       }
     });
+  }
 
-    this.subscriptions.add(signalSub);
+  private createLocalRequestUpdateEvent(messageId: number, action = 'UPDATE'): SummerRequestRealtimeEvent {
+    const safeMessageId = Number(messageId ?? 0);
+    const normalizedAction = String(action ?? '').trim().toUpperCase() || 'UPDATE';
+    return {
+      kind: 'request',
+      messageId: Number.isFinite(safeMessageId) && safeMessageId > 0 ? Math.floor(safeMessageId) : 0,
+      action: normalizedAction,
+      raw: `LOCAL_SUMMER_REQUEST_UPDATED|${safeMessageId}|${normalizedAction}|${Date.now()}`,
+      signature: `local-request|${safeMessageId}|${normalizedAction}`,
+      emittedAtEpochMs: Date.now()
+    };
+  }
+
+  private scheduleDashboardRefresh(): void {
+    if (this.dashboardRefreshTimer) {
+      clearTimeout(this.dashboardRefreshTimer);
+    }
+
+    this.dashboardRefreshTimer = setTimeout(() => {
+      this.dashboardRefreshTimer = null;
+      this.loadDashboard();
+    }, 250);
   }
 
   private patchActionDefaultsForSelectedRequest(): void {
@@ -1198,7 +1277,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     this.actionForm.patchValue({
-      actionCode: 'COMMENT',
+      actionCode: SUMMER_ADMIN_ACTION.COMMENT,
       comment: '',
       force: false,
       toCategoryId: request.categoryId,
@@ -1228,7 +1307,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       .map(item => String(item?.message ?? '').trim())
       .filter(item => item.length > 0);
 
-    return errors.length ? errors.join('<br/>') : 'حدث خطأ غير متوقع.';
+    return errors.length ? errors.join('<br/>') : SUMMER_UI_TEXTS_AR.errors.generic;
   }
 
   private toFileParameters(files: File[]): FileParameter[] {
@@ -1282,19 +1361,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return String(wave?.startsAtLabel ?? '').trim();
   }
 
-  private normalizeDynamicFieldKey(fieldKey: string): string {
-    return String(fieldKey ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-  }
-
-  private isCompanionFieldKey(fieldKey: string): boolean {
-    const normalized = this.normalizeDynamicFieldKey(fieldKey);
-    return normalized.includes('familymembername')
-      || normalized === 'familyrelation'
-      || normalized.includes('familymembernationalid')
-      || normalized.includes('familymemberage');
+  private getDestinationNameByCategoryId(categoryId: number): string {
+    const destination = this.destinations.find(item => item.categoryId === categoryId);
+    return String(destination?.name ?? '').trim();
   }
 
   private isRejectedStatus(status: string | undefined): boolean {

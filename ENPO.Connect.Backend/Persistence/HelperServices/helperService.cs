@@ -2,7 +2,6 @@ using AutoMapper;
 using Dapper;
 using DocumentFormat.OpenXml.Wordprocessing;
 using ENPO.CreateLogFile;
-using ENPO.Dto.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
@@ -526,9 +525,18 @@ namespace Persistence.HelperServices
                 var fields = await _connectContext.TkmendFields
                     .Where(field => field.FildRelted == message.MessageId)
                     .ToListAsync();
-                var attachments = await _attach_HeldContext.AttchShipments
-                    .Where(attachment => attachment.AttchId == message.MessageId)
-                    .ToListAsync();
+                List<AttchShipment> attachments;
+                try
+                {
+                    attachments = await _attach_HeldContext.AttchShipments
+                        .Where(attachment => attachment.AttchId == message.MessageId)
+                        .ToListAsync();
+                }
+                catch (Exception ex) when (IsMissingAttachmentTableError(ex))
+                {
+                    attachments = new List<AttchShipment>();
+                    _logger.AppendLine($"[WARN] GetMessageRequestById({messageId}): attachments table is unavailable. {ex.Message}");
+                }
 
                 var replies = await _connectContext.Replies
                     .Where(reply => reply.MessageId == message.MessageId)
@@ -539,11 +547,25 @@ namespace Persistence.HelperServices
                     .Select(reply => reply.ReplyId)
                     .ToList();
 
-                var replyAttachments = replyIds.Count > 0
-                    ? await _attach_HeldContext.AttchShipments
-                        .Where(attachment => replyIds.Contains(attachment.AttchId))
-                        .ToListAsync()
-                    : new List<AttchShipment>();
+                List<AttchShipment> replyAttachments;
+                if (replyIds.Count <= 0)
+                {
+                    replyAttachments = new List<AttchShipment>();
+                }
+                else
+                {
+                    try
+                    {
+                        replyAttachments = await _attach_HeldContext.AttchShipments
+                            .Where(attachment => replyIds.Contains(attachment.AttchId))
+                            .ToListAsync();
+                    }
+                    catch (Exception ex) when (IsMissingAttachmentTableError(ex))
+                    {
+                        replyAttachments = new List<AttchShipment>();
+                        _logger.AppendLine($"[WARN] GetMessageRequestById({messageId}): reply attachments table is unavailable. {ex.Message}");
+                    }
+                }
 
                 var authorIds = replies
                     .Select(reply => (reply.AuthorId ?? string.Empty).Trim())
@@ -654,6 +676,24 @@ namespace Persistence.HelperServices
                 response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
             }
             return response;
+        }
+
+        private static bool IsMissingAttachmentTableError(Exception exception)
+        {
+            Exception? current = exception;
+            while (current != null)
+            {
+                var message = current.Message ?? string.Empty;
+                if (message.Contains("Invalid object name", StringComparison.OrdinalIgnoreCase)
+                    && message.Contains("Attch_shipment", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                current = current.InnerException;
+            }
+
+            return false;
         }
 
         public async Task GetDepartments(InternalCommunicationDto internalDto)

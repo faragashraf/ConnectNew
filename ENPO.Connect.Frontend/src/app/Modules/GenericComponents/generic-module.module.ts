@@ -52,7 +52,6 @@ import { FooterComponent } from '../AdminCertificates/components/Shared/footer/f
 import { HeaderComponent } from '../AdminCertificates/components/Shared/header/header.component';
 import { RemittancesComponent } from '../AdminCertificates/components/Shared/Remittances/remittances.component';
 import { OtpCodeInputComponent } from 'src/app/shared/components/otp-code-input/otp-code-input.component';
-import { CompleteRequestComponent } from '../EmployeeRequests/complete-request/complete-request.component';
 
 @NgModule({
   declarations: [
@@ -80,7 +79,6 @@ import { CompleteRequestComponent } from '../EmployeeRequests/complete-request/c
     /** Admin Cer components */
     PrePrintFormComponent,
 
-    CompleteRequestComponent,
     MainFormComponent,
     FooterComponent,
     HeaderComponent,
@@ -137,7 +135,6 @@ OtpCodeInputComponent,
     /** Admin Cer components */
     PrePrintFormComponent,
     
-    CompleteRequestComponent,
 
     FooterComponent,
     HeaderComponent,

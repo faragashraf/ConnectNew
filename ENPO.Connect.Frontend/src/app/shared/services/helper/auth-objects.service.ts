@@ -377,7 +377,7 @@ export class AuthObjectsService {
         label: '',
         items: [
           { label: 'الملف الشخصي', icon: 'pi pi-user', iconStyle: { color: '#2563eb' }, command: () => { this.Profie(); } },
-          { label: 'طلباتي', icon: 'pi pi-list', iconStyle: { color: '#0ea5a4' }, command: () => { this.router.navigate(['/EmployeeRequests/MyRequests']); } },
+          { label: 'طلبات المصايف', icon: 'pi pi-list', iconStyle: { color: '#0ea5a4' }, command: () => { this.router.navigate(['/EmployeeRequests/SummerRequests']); } },
           {
             label: 'تحديث النظام', icon: 'pi pi-refresh', iconStyle: { color: '#f59e0b' }, command: () => {
               this.soundService.performClearCacheAndReload();
@@ -552,9 +552,9 @@ export class AuthObjectsService {
     const fullUrl = (typeof window !== 'undefined' && window.location && window.location.href) ? window.location.href : this.router.url;
     console.log('SignOut - fullUrl:', fullUrl, ' router.url:', this.router.url);
     if (!skipNavigate && !fullUrl.includes('mainLayOut')) {
-      const currentPath = typeof window !== 'undefined' ? window.location.pathname + window.location.search : this.router.url;
+      const currentPath = this.resolveCurrentAppPath();
       this.router.navigate(['/Auth/Login'], {
-        queryParams: { returnUrl: currentPath === '/' ? '/Home' : currentPath }
+        queryParams: { returnUrl: currentPath }
       });
     }
     localStorage.removeItem('ConnectToken');
@@ -567,6 +567,26 @@ export class AuthObjectsService {
     this.currentUser = '';
     this.items1 = this._static;
   }
+
+  private resolveCurrentAppPath(): string {
+    const routerPath = String(this.router.url ?? '').trim();
+    if (routerPath && routerPath !== '/') {
+      return routerPath;
+    }
+
+    if (typeof window !== 'undefined' && window.location) {
+      const hash = String(window.location.hash ?? '').trim();
+      if (hash.startsWith('#/')) {
+        return hash.substring(1);
+      }
+      if (hash.startsWith('#')) {
+        return `/${hash.substring(1)}`;
+      }
+    }
+
+    return '/Home';
+  }
+
   returnAllFunc(): any[] {
     const allFunc: string[] = this.jwtHelper.decodeToken(localStorage.getItem('ConnectToken') as string).functions
     if (allFunc != undefined)

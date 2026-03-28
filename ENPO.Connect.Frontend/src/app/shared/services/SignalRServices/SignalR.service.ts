@@ -12,6 +12,7 @@ import { WindowsNotificationService } from '../helper/windowsNotification.servic
 import { SpinnerService } from '../helper/spinner.service';
 import { AuthObjectsService } from '../helper/auth-objects.service';
 import { ConditionalDate } from '../../Pipe/Conditional-date.pipe';
+import { SummerNotificationDisplayMapperService } from 'src/app/Modules/EmployeeRequests/components/summer-shared/core/summer-notification-display-mapper.service';
 
 export enum NotificationType {
   info = 'Info',
@@ -56,6 +57,10 @@ export interface UserDataDto {
   unreadCount?: number;
 }
 
+type OrgUnitWithCountDto = {
+  unitId?: number | string | null;
+};
+
 @Injectable({
   providedIn: 'root'
 })
@@ -65,6 +70,7 @@ export class SignalRService {
   userAuth: string = '';
   userRName: string = '';
   groupName: string = environment.OTPApplicationName; // <-- Make group name generic
+  private readonly summerBroadcastGroups: string[] = ['CONNECT', 'CONNECT - TEST'];
 
   constructor(
     public authservice: AuthObjectsService,
@@ -72,7 +78,8 @@ export class SignalRService {
     private jwtHelper: JwtHelperService,
     private msgsService: MsgsService, public primMsg: MessageService,
     private router: Router, private conditionalDate: ConditionalDate,
-    private spinnerService: SpinnerService) { }
+    private spinnerService: SpinnerService,
+    private summerNotificationDisplayMapper: SummerNotificationDisplayMapperService) { }
 
 
   fixNotificationOnRecieve$ = new Subject<boolean>(); //Subscribe from app.component, and next from HubSync.component
@@ -90,6 +97,8 @@ export class SignalRService {
   notificationList$ = new Subject<any[]>();
   primMsgList: any[] = [];
   primMsgCount: number = 0
+  private readonly notificationDedupeWindowMs = 2500;
+  private readonly recentNotificationSignatures = new Map<string, number>();
 
   hubConnectionState$ = new BehaviorSubject<string>('Disconnected');
   hubConnectionState: string = '';
@@ -186,6 +195,38 @@ export class SignalRService {
         .padStart(2, '0')}`;
     }
   }
+
+  private getUnitGroupNamesFromAuthObject(): string[] {
+    const authObject = this.authservice.getAuthObject() as { vwOrgUnitsWithCounts?: OrgUnitWithCountDto[] } | null;
+    const orgUnits = Array.isArray(authObject?.vwOrgUnitsWithCounts) ? authObject!.vwOrgUnitsWithCounts : [];
+    const groups = new Set<string>();
+
+    orgUnits.forEach(unit => {
+      const groupName = String(unit?.unitId ?? '').trim();
+      if (groupName.length > 0) {
+        groups.add(groupName);
+      }
+    });
+
+    return Array.from(groups);
+  }
+
+  private async registerUserGroups(): Promise<void> {
+    const groups = new Set<string>();
+    const defaultGroup = String(this.groupName ?? '').trim();
+    if (defaultGroup.length > 0) {
+      groups.add(defaultGroup);
+    }
+
+    this.summerBroadcastGroups
+      .map(group => String(group ?? '').trim())
+      .filter(group => group.length > 0)
+      .forEach(group => groups.add(group));
+
+    this.getUnitGroupNamesFromAuthObject().forEach(group => groups.add(group));
+    await Promise.all(Array.from(groups).map(group => this.AddUserTogroup(group)));
+  }
+
   startConnection() {
     this.userAuth = this.authservice.returnCurrentUser();
     this.userRName = this.authservice.returnCurrentUserName();
@@ -219,6 +260,7 @@ export class SignalRService {
 
         this.spinnerService.hide();
         await this.hubConnectionState$.next('Connection Started')
+        await this.registerUserGroups();
 
         const token = localStorage.getItem('ConnectToken') as string;
         // console.log('RefreshToken',token)
@@ -258,16 +300,17 @@ export class SignalRService {
     this.hubConnection.onreconnected(async () => {
       this.connectionStartTime = Date.now(); // <-- Set start time here
       await this.hubConnectionState$.next('Online')
+      await this.registerUserGroups();
     });
 
     this.hubConnection.on('Connected', async () => {
       this.connectionStartTime = Date.now(); // <-- Set start time here
       await this.hubConnectionState$.next('Online')
-      await this.AddUserTogroup(this.groupName) // Use generic group name
+      await this.registerUserGroups();
       console.log('XXXXXXXXXXXX')
     });
     this.hubConnection.on('AddListedAppPatternAsync', async () => {
-      await this.AddUserTogroup(this.groupName) // Use generic group name
+      await this.registerUserGroups();
     });
     this.hubConnection.on('ForceDisconnectRequest', (customUser, currentIp) => {
       let msg = '';
@@ -317,7 +360,9 @@ export class SignalRService {
       }).catch(error => console.log(error))
     });
     this.hubConnection.on('ReciveNotification', (Notification) => {
-      this.Notification$.next(Notification)
+      if (this.shouldEmitNotification(Notification as NotificationDto)) {
+        this.Notification$.next(Notification)
+      }
     });
     this.hubConnection.on('RecieveHistory', (UserChatHistory, UserHistory: any) => {
       this.messages$.next(UserHistory)
@@ -353,12 +398,13 @@ export class SignalRService {
       this.primMsgCount = 0;
 
       notifications.forEach((notification: NotificationDto) => {
+        const displayNotification = this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto;
         // let sev = notification.type == info ? 'info' : notification.type == '2' ? 'success' : 'warn'
-        this.Notification.push(notification)
+        this.Notification.push(displayNotification)
         let _notification = {
-          severity: notification.type,
-          summary: `${notification.sender} - ${notification.title}`,
-          detail: ` ${this.conditionalDate.transform(notification?.time ?? null, "full")} :  ${notification.notification}`,
+          severity: displayNotification.type,
+          summary: `${displayNotification.sender} - ${displayNotification.title}`,
+          detail: ` ${this.conditionalDate.transform(displayNotification?.time ?? null, "full")} :  ${displayNotification.notification}`,
           sticky: false,
           life: 5000 // notificat
         }
@@ -386,16 +432,9 @@ export class SignalRService {
     ///////////////////////////////////////////////////////////////////////////////////////
   }
   stopChatConnection() {
-    if (!this.hubConnection || typeof (this.hubConnection as any).stop !== 'function') {
-      return;
-    }
     this.hubConnection.stop().catch(error => console.log(error))
   }
   async RefreshToken(token: string) {
-    if (!this.hubConnection || typeof (this.hubConnection as any).invoke !== 'function') {
-      return;
-    }
-
     return this.hubConnection.invoke('RefreshToken', token)
       .catch(error => console.log(error));
   }
@@ -476,6 +515,38 @@ export class SignalRService {
   async ForceDisconnectCurrentSession(userId: string) {
     return this.hubConnection.invoke('ForceDisconnectCurrentSession', userId)
       .catch(error => console.log(error));
+  }
+
+  private shouldEmitNotification(notification: NotificationDto): boolean {
+    const payload = notification as NotificationDto & {
+      Notification?: string;
+      Title?: string;
+      Sender?: string;
+      Type?: string;
+      Category?: string;
+    };
+
+    const body = String(payload?.notification ?? payload?.Notification ?? '').trim();
+    const title = String(payload?.title ?? payload?.Title ?? '').trim();
+    const sender = String(payload?.sender ?? payload?.Sender ?? '').trim();
+    const type = String(payload?.type ?? payload?.Type ?? '').trim();
+    const category = String(payload?.category ?? payload?.Category ?? '').trim();
+    if (!body && !title) {
+      return true;
+    }
+
+    const signature = `${type}|${category}|${sender}|${title}|${body}`;
+    const now = Date.now();
+
+    this.recentNotificationSignatures.forEach((timestamp, key) => {
+      if (now - timestamp > this.notificationDedupeWindowMs) {
+        this.recentNotificationSignatures.delete(key);
+      }
+    });
+
+    const previous = this.recentNotificationSignatures.get(signature);
+    this.recentNotificationSignatures.set(signature, now);
+    return !(previous && (now - previous) <= this.notificationDedupeWindowMs);
   }
 
 

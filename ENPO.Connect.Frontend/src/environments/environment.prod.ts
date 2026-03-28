@@ -12,11 +12,6 @@ export const environment = {
   favicon: 'assets/brand/favicon.ico',
 
 OTPApplicationName: 'CONNECT',
-  useLocalMockAuth: false,
-  disableSignalRInLocalMock: false,
-  localMockAuthPath: '/api/LocalAuth/DevLogin',
-  localMockUserId: 'test',
-  localMockPassword: 'test123',
 
   ConnectApiURL: `${MainDomain}/Applications/Connect_API`,
   LandTransportationApiURL: `${MainDomain}/Applications/Connect_API`,
@@ -25,4 +20,11 @@ OTPApplicationName: 'CONNECT',
   PowerBi: `${MainDomain}/Applications/PowerBi`,
   SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
   PublicationsUrl: `${MainDomain}/Applications/publicationsApi`,
+
+  summerFeature: {
+    seasonYear: 2026,
+    dynamicApplicationId: 'SUM2026DYN',
+    destinationCatalogKey: 'SUM2026_DestinationCatalog',
+    pdfReferenceTitle: 'مواعيد الافواج موسم صيف 2026.pdf'
+  }
 };

@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="../styles.css">
 
 <div class="doc-hero">
-  <h1>مدير الحقول الديناميكية</h1>
+  <h1>مدير الحقول</h1>
   <div class="badge">مكوّن إداري</div>
 </div>
 

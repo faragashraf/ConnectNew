@@ -21,6 +21,7 @@
               class="group-row">
               <ng-container *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)">
                 <app-generic-form-array
+                  *ngIf="shouldRenderControl(ctrlName, group.formArrayName)"
                   [controlFullName]="ctrlName"
                   [index]="i"
                   [filtered_CategoryMand]="group.fields"
@@ -56,6 +57,7 @@
               class="group-row">
               <ng-container *ngFor="let ctrlName of genericFormService.getControlNamesFromGroup(mandFiled)">
                 <app-generic-form-array
+                  *ngIf="shouldRenderControl(ctrlName, instance.formArrayName)"
                   [controlFullName]="ctrlName"
                   [index]="i"
                   [filtered_CategoryMand]="instance.fields"
@@ -93,7 +95,7 @@
         pButton
         type="submit"
         class="save-btn"
-        [disabled]="ticketForm.invalid">
+        [disabled]="ticketForm.invalid || submitDisabled">
         {{ config.submitButtonText || 'تسجيل الطلب' }}
       </button>
     </div>
@@ -102,6 +104,6 @@
 
 <ng-template #emptyState>
   <div class="empty-state">
-    لا توجد حقول ديناميكية متاحة.
+    لا توجد حقول متاحة.
   </div>
 </ng-template>

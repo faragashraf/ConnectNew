@@ -16,6 +16,9 @@ public class SummerRequestSummaryDto
     public string EmployeeExtraPhone { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string StatusLabel { get; set; } = string.Empty;
+    public string WorkflowStateCode { get; set; } = string.Empty;
+    public string WorkflowStateLabel { get; set; } = string.Empty;
+    public bool NeedsTransferReview { get; set; }
     public DateTime? CreatedAt { get; set; }
     public DateTime? PaymentDueAtUtc { get; set; }
     public DateTime? PaidAtUtc { get; set; }
@@ -93,6 +96,7 @@ public class SummerTransferRequest
 public class SummerAdminRequestsQuery
 {
     public int SeasonYear { get; set; } = 2026;
+    public int? MessageId { get; set; }
     public int? CategoryId { get; set; }
     public string? WaveCode { get; set; }
     public string? Status { get; set; }

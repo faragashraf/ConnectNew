@@ -2166,403 +2166,6 @@
     }
   },
   {
-    "showFormSignature": true,
-    "submitButtonText": "تسجيل",
-    "submissionLabel": "طلبك محل اهتمام وتقدير\nبرجاء إستيفاء إيصالات السداد في موعد أقصاه يومين عمل\nفي حالة عدم إستيفاء إيصالات السداد\nسيتم إلغاء الطلب بشكل تلقائي من خلال النظام\n\nمع تحيات الإدارة العامة للشئون المعنوية",
-    "showViewToggle": false,
-    "formDisplayOption": "tabs",
-    "requestsarray": [
-      {
-        "method": "dynamicFormController.getMandatoryAll",
-        "args": [
-          "this.config.genericFormName"
-        ],
-        "requestsSelectionFields": [],
-        "arrName": "this.genericFormService.cdCategoryMandDto",
-        "wrapBodyAsArray": false,
-        "populateMethod": null,
-        "populateArgs": []
-      },
-      {
-        "method": "dynamicFormController.getMandatoryMetaDate",
-        "args": [
-          "this.config.genericFormName"
-        ],
-        "requestsSelectionFields": [],
-        "arrName": "this.genericFormService.cdmendDto",
-        "wrapBodyAsArray": false,
-        "populateMethod": null,
-        "populateArgs": []
-      },
-      {
-        "method": "dynamicFormController.getAllCategories",
-        "args": [
-          "this.config.genericFormName"
-        ],
-        "requestsSelectionFields": [],
-        "arrName": "this.genericFormService.cdcategoryDtos",
-        "wrapBodyAsArray": false,
-        "populateMethod": "populateTreeGeneric",
-        "populateArgs": [
-          "catId",
-          "catParent",
-          "catName",
-          "this.categoryTree",
-          false,
-          true
-        ]
-      }
-    ],
-    "attachmentConfig": {
-      "showAttachmentSection": true,
-      "AllowedExtensions": [
-        ".pdf",
-        ".jpg",
-        ".png"
-      ],
-      "maximumFileSize": 2,
-      "isMandatory": false,
-      "maxFileCount": 0,
-      "allowAdd": true,
-      "allowMultiple": true
-    },
-    "allowStatusChange": false,
-    "allowDefaultNextResponsibleSectorID": false,
-    "statusChangeOptions": [],
-    "pageSizes": [],
-    "tkCategoryCds": [
-      {
-        "key": 124,
-        "value": "التظلمات"
-      }
-    ],
-    "showAttachmentSection": false,
-    "AllowedExtensions": [
-      ".doc",
-      ".pdf",
-      ".docx"
-    ],
-    "maximumFileSize": 2,
-    "routeKey": "EmployeeRequests/SummerRequests",
-    "componentTitle": "تسجيل طلب جديد",
-    "genericFormName": "ENPO",
-    "menuId": 2,
-    "listRequestModel": {
-      "pageNumber": 1,
-      "pageSize": 5,
-      "status": 5,
-      "categoryCd": 0,
-      "type": 4,
-      "requestedData": 0,
-      "search": {
-        "searchKind": 0,
-        "searchField": "",
-        "searchText": "",
-        "searchType": ""
-      }
-    },
-    "globalFilterFields": [],
-    "isNew": true,
-    "userConfiguration": {
-      "currentUser": "84621",
-      "currentUserName": "أشرف فرج الله عبد الباقي",
-      "userGroup": ""
-    },
-    "fieldsConfiguration": {
-      "isDivDisabled": false,
-      "useDefaultRadioView": false,
-      "isNotRequired": false,
-      "isCategoryTreeMode": false,
-      "sticky": false
-    },
-    "deadStatus": [
-      4
-    ],
-    "totalRecords": 0,
-    "tableColumns": [],
-    "selectedNodeKey": "",
-    "tableFields": [],
-    "unitId": []
-  },
-  {
-    "showFormSignature": false,
-    "submitButtonText": "تسجيل",
-    "submissionLabel": "",
-    "showViewToggle": false,
-    "formDisplayOption": "tabs",
-    "requestsarray": [
-      {
-        "method": "powerBiController.getGenericDataById",
-        "args": [
-          50,
-          0
-        ],
-        "requestsSelectionFields": [
-          "Summer_Destination"
-        ],
-        "arrName": "",
-        "wrapBodyAsArray": false,
-        "populateMethod": null,
-        "populateArgs": []
-      },
-      {
-        "method": "powerBiController.getGenericDataById",
-        "args": [
-          52,
-          0
-        ],
-        "requestsSelectionFields": [
-          "FamilyCount"
-        ],
-        "arrName": "",
-        "wrapBodyAsArray": false,
-        "populateMethod": null,
-        "populateArgs": []
-      },
-      {
-        "method": "administrativeCertificateController.getAllRequests",
-        "args": [
-          {
-            "pageNumber": 1,
-            "pageSize": 5,
-            "status": 5,
-            "categoryCd": 0,
-            "type": 2,
-            "requestedData": 0,
-            "search": {
-              "isSearch": false,
-              "searchKind": 0,
-              "searchField": "",
-              "searchText": "",
-              "searchType": ""
-            }
-          }
-        ],
-        "requestsSelectionFields": [],
-        "arrName": "this.messageDtos",
-        "wrapBodyAsArray": false,
-        "populateMethod": null,
-        "populateArgs": []
-      },
-      {
-        "method": "dynamicFormController.getMandatoryAll",
-        "args": [
-          "this.config.genericFormName"
-        ],
-        "requestsSelectionFields": [],
-        "arrName": "this.genericFormService.cdCategoryMandDto",
-        "wrapBodyAsArray": false,
-        "populateMethod": null,
-        "populateArgs": []
-      },
-      {
-        "method": "dynamicFormController.getMandatoryMetaDate",
-        "args": [
-          "this.config.genericFormName"
-        ],
-        "requestsSelectionFields": [],
-        "arrName": "this.genericFormService.cdmendDto",
-        "wrapBodyAsArray": false,
-        "populateMethod": null,
-        "populateArgs": []
-      },
-      {
-        "method": "dynamicFormController.getAllCategories",
-        "args": [
-          "this.config.genericFormName"
-        ],
-        "requestsSelectionFields": [],
-        "arrName": "this.genericFormService.cdcategoryDtos",
-        "wrapBodyAsArray": false,
-        "populateMethod": "populateTreeGeneric",
-        "populateArgs": [
-          "catId",
-          "catParent",
-          "catName",
-          "this.categoryTree",
-          true,
-          true
-        ]
-      }
-    ],
-    "attachmentConfig": {
-      "showAttachmentSection": true,
-      "AllowedExtensions": [
-        ".pdf"
-      ],
-      "maximumFileSize": 2,
-      "isMandatory": true,
-      "maxFileCount": 2,
-      "allowAdd": false,
-      "allowMultiple": false
-    },
-    "allowStatusChange": true,
-    "allowDefaultNextResponsibleSectorID": true,
-    "statusChangeOptions": [
-      {
-        "label": "جديد",
-        "value": 0
-      },
-      {
-        "label": "مرفوض",
-        "value": 1
-      },
-      {
-        "label": "موافقة مبدئية",
-        "value": 2
-      },
-      {
-        "label": "تم الإستيفاء",
-        "value": 3
-      },
-      {
-        "label": "تمت الموافقة",
-        "value": 4
-      }
-    ],
-    "pageSizes": [
-      5,
-      10,
-      25
-    ],
-    "tkCategoryCds": [
-      {
-        "key": 147,
-        "value": "مرسى مطروح"
-      },
-      {
-        "key": 148,
-        "value": "راس البر"
-      },
-      {
-        "key": 149,
-        "value": "بور فؤاد"
-      }
-    ],
-    "showAttachmentSection": true,
-    "AllowedExtensions": [
-      ".pdf",
-      ".doc"
-    ],
-    "maximumFileSize": 2,
-    "routeKey": "EmployeeRequests/Summer2026Management",
-    "componentTitle": "طلبات حجز مصيف 2026",
-    "genericFormName": "ENPO",
-    "menuId": 2,
-    "listRequestModel": {
-      "pageNumber": 1,
-      "pageSize": 5,
-      "status": 5,
-      "categoryCd": 0,
-      "type": 2,
-      "requestedData": 0,
-      "search": {
-        "searchKind": 0,
-        "searchField": "",
-        "searchText": "",
-        "searchType": ""
-      }
-    },
-    "globalFilterFields": [],
-    "isNew": false,
-    "userConfiguration": {
-      "currentUser": "84621",
-      "currentUserName": "أشرف فرج الله عبد الباقي",
-      "userGroup": "وسط و شمال القاهرة - خدمة العملاء"
-    },
-    "fieldsConfiguration": {
-      "isDivDisabled": true,
-      "useDefaultRadioView": false,
-      "isNotRequired": false,
-      "isCategoryTreeMode": true,
-      "sticky": true
-    },
-    "deadStatus": [
-      1,
-      4
-    ],
-    "totalRecords": 0,
-    "tableColumns": [],
-    "selectedNodeKey": "",
-    "tableFields": [
-      {
-        "header": "الرقم المرجعي",
-        "field": "requestRef",
-        "useRequester": false,
-        "width": "15",
-        "sortable": false,
-        "visible": true,
-        "renderAsStatus": false
-      },
-      {
-        "header": "نوع الطلب",
-        "field": "categoryCd",
-        "useRequester": false,
-        "width": "15",
-        "sortable": false,
-        "visible": true,
-        "renderAsStatus": false
-      },
-      {
-        "header": "الحالة",
-        "field": "status",
-        "useRequester": false,
-        "width": "15",
-        "sortable": false,
-        "visible": true,
-        "renderAsStatus": true
-      },
-      {
-        "header": "تاريخ الإنشاء",
-        "field": "createdDate",
-        "useRequester": false,
-        "width": "15",
-        "sortable": false,
-        "visible": true,
-        "renderAsStatus": false
-      },
-      {
-        "header": "الوجهة",
-        "field": "Summer_Destination",
-        "useRequester": true,
-        "width": "15",
-        "sortable": false,
-        "visible": true,
-        "renderAsStatus": false
-      },
-      {
-        "header": "الاسم",
-        "field": "Emp_Name",
-        "useRequester": true,
-        "width": "5",
-        "sortable": false,
-        "visible": true,
-        "renderAsStatus": false
-      },
-      {
-        "header": "عدد الأفراد",
-        "field": "FamilyCount",
-        "useRequester": true,
-        "width": "15",
-        "sortable": false,
-        "visible": true,
-        "renderAsStatus": false
-      },
-      {
-        "header": "الفوج",
-        "field": "SummerCamp",
-        "useRequester": true,
-        "width": "5",
-        "sortable": false,
-        "visible": true,
-        "renderAsStatus": false
-      }
-    ],
-    "unitId": [
-      0
-    ]
-  },
-  {
     "showFormSignature": false,
     "submitButtonText": "Submit",
     "submissionLabel": "",
@@ -2921,7 +2524,7 @@
   {
     "showFormSignature": false,
     "submitButtonText": "تسجيل طلب المصيف",
-    "submissionLabel": "تسجيل ديناميكي",
+    "submissionLabel": "تسجيل الطلب",
     "showViewToggle": false,
     "formDisplayOption": "tabs",
     "requestsarray": [],
@@ -2946,9 +2549,26 @@
     "allowDefaultNextResponsibleSectorID": false,
     "statusChangeOptions": [],
     "pageSizes": [],
-    "tkCategoryCds": [],
+    "tkCategoryCds": [
+      {
+        "key": 102,
+        "value": "بريدية"
+      },
+      {
+        "key": 103,
+        "value": "حكومية"
+      },
+      {
+        "key": 104,
+        "value": "مالية"
+      },
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
     "routeKey": "admins/summer-requests/dynamic-booking",
-    "componentTitle": "إنشاء طلب مصيف ديناميكي",
+    "componentTitle": "إنشاء طلب مصيف",
     "genericFormName": "SUM2026DYN",
     "menuId": 0,
     "listRequestModel": {
@@ -2984,25 +2604,63 @@
     "dynamicFormSettings": {
       "applicationId": "SUM2026DYN",
       "aliases": {
-        "waveCode": ["SUM2026_WaveCode"],
-        "waveLabel": ["SUM2026_WaveLabel"],
-        "stayMode": ["SUM2026_StayMode"],
-        "familyCount": ["SUM2026_FamilyCount"],
-        "extraCount": ["SUM2026_ExtraCount"],
-        "proxyMode": ["SUM2026_ProxyMode"],
-        "ownerName": ["SUM2026_OwnerName"],
-        "ownerFileNumber": ["SUM2026_OwnerFileNumber"],
-        "ownerNationalId": ["SUM2026_OwnerNationalId"],
-        "ownerPhone": ["SUM2026_OwnerPhone"],
-        "ownerExtraPhone": ["SUM2026_OwnerExtraPhone"],
-        "notes": ["SUM2026_Notes"],
-        "companionName": ["SUM2026_CompanionName"],
-        "companionRelation": ["SUM2026_CompanionRelation"],
-        "companionNationalId": ["SUM2026_CompanionNationalId"],
-        "companionAge": ["SUM2026_CompanionAge"],
-        "seasonYear": ["SUM2026_SeasonYear"],
-        "destinationId": ["SUM2026_DestinationId"],
-        "destinationName": ["SUM2026_DestinationName"]
+        "waveCode": [
+          "SUM2026_WaveCode"
+        ],
+        "waveLabel": [
+          "SUM2026_WaveLabel"
+        ],
+        "stayMode": [
+          "SUM2026_StayMode"
+        ],
+        "familyCount": [
+          "SUM2026_FamilyCount"
+        ],
+        "extraCount": [
+          "SUM2026_ExtraCount"
+        ],
+        "proxyMode": [
+          "SUM2026_ProxyMode"
+        ],
+        "ownerName": [
+          "SUM2026_OwnerName"
+        ],
+        "ownerFileNumber": [
+          "SUM2026_OwnerFileNumber"
+        ],
+        "ownerNationalId": [
+          "SUM2026_OwnerNationalId"
+        ],
+        "ownerPhone": [
+          "SUM2026_OwnerPhone"
+        ],
+        "ownerExtraPhone": [
+          "SUM2026_OwnerExtraPhone"
+        ],
+        "notes": [
+          "SUM2026_Notes"
+        ],
+        "companionName": [
+          "SUM2026_CompanionName"
+        ],
+        "companionRelation": [
+          "SUM2026_CompanionRelation"
+        ],
+        "companionNationalId": [
+          "SUM2026_CompanionNationalId"
+        ],
+        "companionAge": [
+          "SUM2026_CompanionAge"
+        ],
+        "seasonYear": [
+          "SUM2026_SeasonYear"
+        ],
+        "destinationId": [
+          "SUM2026_DestinationId"
+        ],
+        "destinationName": [
+          "SUM2026_DestinationName"
+        ]
       }
     },
     "deadStatus": [],

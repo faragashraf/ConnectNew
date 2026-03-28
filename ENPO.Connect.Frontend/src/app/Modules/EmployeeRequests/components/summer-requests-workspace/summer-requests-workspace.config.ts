@@ -1,4 +1,9 @@
-﻿export interface SummerWaveDefinition {
+﻿import {
+  SUMMER_DEFAULT_SEASON_YEAR,
+  SUMMER_PDF_REFERENCE_TITLE_DEFAULT
+} from '../summer-shared/core/summer-feature.config';
+
+export interface SummerWaveDefinition {
   code: string;
   startsAtLabel: string;
   startsAtIso?: string;
@@ -30,8 +35,8 @@ export interface SummerDestinationCatalogPayload {
   destinations?: SummerDestinationConfig[];
 }
 
-export const SUMMER_SEASON_YEAR = 2026;
-export const SUMMER_PDF_REFERENCE_TITLE = 'مواعيد الافواج موسم صيف 2026.pdf';
+export const SUMMER_SEASON_YEAR = SUMMER_DEFAULT_SEASON_YEAR;
+export const SUMMER_PDF_REFERENCE_TITLE = SUMMER_PDF_REFERENCE_TITLE_DEFAULT;
 
 function normalizeWaveOrder(code: string): number {
   const digits = String(code ?? '')
@@ -124,3 +129,4 @@ export function parseSummerDestinationCatalog(
 
   return [...uniqueByCategory.values()].sort((a, b) => a.categoryId - b.categoryId);
 }
+

@@ -7,7 +7,7 @@
 
   <section class="layout-grid">
     <aside class="policy-panel">
-      <h2 style="margin-bottom: 1rem;">قواعد المصايف</h2>
+      <h2 style="margin-bottom: 1rem;">تعليمات المصايف</h2>
       <p class="rule-alert">
         قاعدة السداد: مهلة السداد هي يوم عمل واحد من وقت تسجيل الطلب.
       </p>
@@ -50,20 +50,39 @@
     </aside>
 
     <main class="workspace-panel">
-      <p-tabView>
-        <p-tabPanel header="إنشاء طلب جديد">
+      <p-tabView [activeIndex]="activeTabIndex" (onChange)="onTabChange($event)">
+        <p-tabPanel [header]="isEditMode ? ('تعديل الطلب #' + editRequestId) : 'إنشاء طلب جديد'">
+          <div class="edit-banner" *ngIf="isEditMode">
+            <div>
+              <h4>وضع تعديل الطلب</h4>
+              <p>يتم الآن تعديل الطلب رقم #{{ editRequestId }}.</p>
+            </div>
+            <button type="button" class="ghost" (click)="exitEditMode()">
+              العودة لإنشاء طلب جديد
+            </button>
+          </div>
+
           <ng-container *ngIf="destinations.length > 0; else destinationCatalogState">
             <app-summer-dynamic-booking-builder
               [destinations]="destinations"
               [seasonYear]="seasonYear"
               [applicationId]="dynamicSummerApplicationId"
               [configRouteKey]="dynamicSummerConfigRouteKey"
-              (bookingCreated)="onDynamicBookingCreated()">
+              [editRequestId]="editRequestId"
+              (bookingCreated)="onDynamicBookingCreated($event)">
             </app-summer-dynamic-booking-builder>
           </ng-container>
           <ng-template #destinationCatalogState>
             <div class="empty-state">
-              <h3 *ngIf="loadingDestinations">جاري تحميل إعدادات المصايف...</h3>
+              <h3 class="loading-note" *ngIf="loadingDestinations">جاري تحميل إعدادات المصايف...</h3>
+              <app-summer-skeleton
+                *ngIf="loadingDestinations"
+                [variant]="'cards'"
+                [columns]="3"
+                [cards]="6"
+                [showTitle]="false"
+                [ariaLabel]="'جاري تحميل إعدادات المصايف'">
+              </app-summer-skeleton>
               <h3 *ngIf="!loadingDestinations && destinationsError.length > 0">تعذر تحميل إعدادات المصايف</h3>
               <p *ngIf="!loadingDestinations && destinationsError.length > 0">{{ destinationsError }}</p>
             </div>
@@ -73,9 +92,14 @@
         <p-tabPanel header="طلباتي بالموسم">
           <div class="requests-head">
             <h3>طلبات الموسم {{ seasonYear }}</h3>
-            <button type="button" class="ghost" (click)="loadMyRequests()" [disabled]="loadingRequests">
-              {{ loadingRequests ? 'جاري التحديث...' : 'تحديث' }}
-            </button>
+            <div class="requests-head-actions">
+              <button type="button" class="ghost" (click)="loadMyRequests()" [disabled]="loadingRequests">
+                {{ loadingRequests ? 'جاري التحديث...' : 'تحديث' }}
+              </button>
+              <button *ngIf="isEditMode" type="button" class="ghost" (click)="exitEditMode(true)">
+                إلغاء وضع التعديل
+              </button>
+            </div>
           </div>
 
           <app-summer-requests-list
@@ -98,9 +122,36 @@
 
           <section class="request-details" *ngIf="selectedRequestId">
             <header>
-              <h4>تفاصيل الطلب المختار</h4>
-              <small *ngIf="loadingSelectedRequestDetails">جاري تحميل التفاصيل...</small>
+              <div class="request-details-head">
+                <h4>تفاصيل الطلب المختار</h4>
+                <small class="loading-note" *ngIf="loadingSelectedRequestDetails">جاري تحميل التفاصيل...</small>
+                <small class="warn" *ngIf="!loadingSelectedRequestDetails && selectedRequestDetailsError.length > 0">
+                  {{ selectedRequestDetailsError }}
+                </small>
+              </div>
+              <button
+                *ngIf="selectedRequest as request"
+                type="button"
+                class="ghost edit-request-btn"
+                [disabled]="!canEditRequest(request)"
+                (click)="openEditRequest(request)">
+                {{ canEditRequest(request) ? 'تعديل الطلب' : 'التعديل غير متاح' }}
+              </button>
             </header>
+            <p class="warn" *ngIf="selectedRequest as request">
+              <ng-container *ngIf="!canEditRequest(request) && getEditBlockedReason(request).length > 0">
+                {{ getEditBlockedReason(request) }}
+              </ng-container>
+            </p>
+
+            <app-summer-skeleton
+              *ngIf="loadingSelectedRequestDetails"
+              [variant]="'details'"
+              [columns]="4"
+              [cards]="8"
+              [rows]="3"
+              [ariaLabel]="'جاري تحميل تفاصيل الطلب المختار'">
+            </app-summer-skeleton>
 
             <ng-container *ngIf="!loadingSelectedRequestDetails">
               <app-summer-request-fields-grid
@@ -140,7 +191,7 @@
           </section>
         </p-tabPanel>
 
-        <p-tabPanel header="الاعتذار / السداد / التحويل">
+        <p-tabPanel header="السداد / التحويل / الاعتذار">
           <ng-container *ngIf="selectedRequest as request; else emptyRequestState">
             <div class="selected-request">
               <h3>الطلب المحدد: #{{ request.messageId }} - {{ request.requestRef }}</h3>
@@ -151,35 +202,6 @@
             </div>
 
             <div class="workflow-grid">
-              <form [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
-                <h4>الاعتذار عن الحجز</h4>
-                <p class="warn" *ngIf="!isCancelActionClosed(request)">{{ getCancelWindowNote() }}</p>
-                <label>
-                  <span class="optional-label">سبب الاعتذار</span>
-                  <textarea rows="3" formControlName="reason" placeholder="سبب الاعتذار (اختياري)"></textarea>
-                </label>
-                <label class="file-picker compact">
-                  <span>إرفاق مستندات الاعتذار</span>
-                  <input type="file" accept=".pdf,image/*" multiple (change)="addFiles($event, 'cancel')" />
-                </label>
-                <div class="file-list" *ngIf="cancelAttachments.length > 0">
-                  <div class="file-chip" *ngFor="let file of cancelAttachments; let i = index">
-                    <span>{{ file.name }}</span>
-                    <button type="button" (click)="removeFile('cancel', i)">حذف</button>
-                  </div>
-                </div>
-                <p class="warn" *ngIf="getCancelClosedMessage(request) as cancelClosedMessage">
-                  <ng-container *ngIf="cancelClosedMessage.length > 0">{{ cancelClosedMessage }}</ng-container>
-                </p>
-                <button type="submit" class="danger" [disabled]="submittingCancel || isCancelActionClosed(request) || isCancelBlockedByWindow()">
-                  {{ isCancelActionClosed(request)
-                    ? 'الاعتذار غير متاح'
-                    : (isCancelBlockedByWindow()
-                      ? 'انتهت مهلة الاعتذار لهذا الفوج'
-                      : (submittingCancel ? 'جاري التنفيذ...' : 'تنفيذ الاعتذار')) }}
-                </button>
-              </form>
-
               <form [formGroup]="paymentForm" class="workflow-card" (ngSubmit)="submitPayment()">
                 <h4>تسجيل السداد</h4>
                 <label>
@@ -264,6 +286,35 @@
                 </p>
                 <button type="submit" class="primary" [disabled]="submittingTransfer || transferForm.invalid || !isTransferAvailable(request)">
                   {{ !isTransferAvailable(request) ? 'التحويل غير متاح' : (submittingTransfer ? 'جاري التنفيذ...' : 'تنفيذ التحويل') }}
+                </button>
+              </form>
+
+                            <form [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
+                <h4>الاعتذار عن الحجز</h4>
+                <p class="warn" *ngIf="!isCancelActionClosed(request)">{{ getCancelWindowNote() }}</p>
+                <label>
+                  <span class="optional-label">سبب الاعتذار</span>
+                  <textarea rows="3" formControlName="reason" placeholder="سبب الاعتذار (اختياري)"></textarea>
+                </label>
+                <label class="file-picker compact">
+                  <span>إرفاق مستندات الاعتذار</span>
+                  <input type="file" accept=".pdf,image/*" multiple (change)="addFiles($event, 'cancel')" />
+                </label>
+                <div class="file-list" *ngIf="cancelAttachments.length > 0">
+                  <div class="file-chip" *ngFor="let file of cancelAttachments; let i = index">
+                    <span>{{ file.name }}</span>
+                    <button type="button" (click)="removeFile('cancel', i)">حذف</button>
+                  </div>
+                </div>
+                <p class="warn" *ngIf="getCancelClosedMessage(request) as cancelClosedMessage">
+                  <ng-container *ngIf="cancelClosedMessage.length > 0">{{ cancelClosedMessage }}</ng-container>
+                </p>
+                <button type="submit" class="danger" [disabled]="submittingCancel || isCancelActionClosed(request) || isCancelBlockedByWindow()">
+                  {{ isCancelActionClosed(request)
+                    ? 'الاعتذار غير متاح'
+                    : (isCancelBlockedByWindow()
+                      ? 'انتهت مهلة الاعتذار لهذا الفوج'
+                      : (submittingCancel ? 'جاري التنفيذ...' : 'تنفيذ الاعتذار')) }}
                 </button>
               </form>
             </div>

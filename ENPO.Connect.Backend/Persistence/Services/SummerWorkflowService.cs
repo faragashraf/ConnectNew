@@ -1,9 +1,11 @@
 ﻿using System.Data;
+using System.Text;
 using System.Text.Json;
 using ENPO.Dto.HubSync;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Options;
 using Models.Attachment;
 using Models.Correspondance;
 using Models.DTO.Common;
@@ -11,8 +13,8 @@ using Models.DTO.Correspondance.Enums;
 using Models.DTO.Correspondance.Summer;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.Notifications;
 using Persistence.Services.Summer;
-using SignalR.Notification;
 
 namespace Persistence.Services
 {
@@ -20,12 +22,27 @@ namespace Persistence.Services
     {
         private readonly ConnectContext _connectContext;
         private readonly Attach_HeldContext _attachHeldContext;
+        private readonly GPAContext _gPAContext;
         private readonly helperService _helperService;
-        private readonly SignalRConnectionManager _signalRConnectionManager;
+        private readonly IConnectNotificationService _notificationService;
+        private readonly ApplicationConfig _applicationConfig;
 
         private const int CapacityLockTimeoutMs = 15000;
-        private const string SummerDynamicApplicationId = "SUM2026DYN";
-        private const string SummerDestinationCatalogMend = "SUM2026_DestinationCatalog";
+        private const string SummerDynamicApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId;
+        private const string SummerDestinationCatalogMend = SummerWorkflowDomainConstants.DestinationCatalogMend;
+        private const string TransferReviewRequiredCode = SummerWorkflowDomainConstants.TransferReviewRequiredCode;
+        private const string TransferReviewResolvedCode = SummerWorkflowDomainConstants.TransferReviewResolvedCode;
+        private static readonly string[] WaveCodeFieldKinds = SummerWorkflowDomainConstants.WaveCodeFieldKinds;
+        private static readonly string[] WaveLabelFieldKinds = SummerWorkflowDomainConstants.WaveLabelFieldKinds;
+        private static readonly string[] FamilyCountFieldKinds = SummerWorkflowDomainConstants.FamilyCountFieldKinds;
+        private static readonly string[] ExtraCountFieldKinds = SummerWorkflowDomainConstants.ExtraCountFieldKinds;
+        private static readonly string[] DestinationIdFieldKinds = SummerWorkflowDomainConstants.DestinationIdFieldKinds;
+        private static readonly string[] DestinationNameFieldKinds = SummerWorkflowDomainConstants.DestinationNameFieldKinds;
+        private static readonly string[] EmployeeIdFieldKinds = SummerWorkflowDomainConstants.EmployeeIdFieldKinds;
+        private static readonly string[] EmployeeNameFieldKinds = SummerWorkflowDomainConstants.EmployeeNameFieldKinds;
+        private static readonly string[] EmployeeNationalIdFieldKinds = SummerWorkflowDomainConstants.EmployeeNationalIdFieldKinds;
+        private static readonly string[] EmployeePhoneFieldKinds = SummerWorkflowDomainConstants.EmployeePhoneFieldKinds;
+        private static readonly string[] EmployeeExtraPhoneFieldKinds = SummerWorkflowDomainConstants.EmployeeExtraPhoneFieldKinds;
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -35,16 +52,20 @@ namespace Persistence.Services
         public SummerWorkflowService(
             ConnectContext connectContext,
             Attach_HeldContext attachHeldContext,
+            GPAContext gpaContext,
             helperService helperService,
-            SignalRConnectionManager signalRConnectionManager)
+            IConnectNotificationService notificationService,
+            IOptions<ApplicationConfig> options)
         {
             _connectContext = connectContext;
             _attachHeldContext = attachHeldContext;
+            _gPAContext = gpaContext;
             _helperService = helperService;
-            _signalRConnectionManager = signalRConnectionManager;
+            _notificationService = notificationService;
+            _applicationConfig = options?.Value ?? new ApplicationConfig();
         }
 
-        public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear)
+        public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear, int? messageId = null)
         {
             var response = new CommonResponse<IEnumerable<SummerRequestSummaryDto>>();
             try
@@ -68,9 +89,11 @@ namespace Persistence.Services
                     return response;
                 }
 
+                var scopedMessageId = messageId.HasValue && messageId.Value > 0 ? messageId.Value : 0;
                 var messages = await _connectContext.Messages
                     .AsNoTracking()
-                    .Where(m => summerCategoryIds.Contains(m.CategoryCd))
+                    .Where(m => summerCategoryIds.Contains(m.CategoryCd)
+                        && (scopedMessageId <= 0 || m.MessageId == scopedMessageId))
                     .OrderByDescending(m => m.CreatedDate)
                     .ToListAsync();
 
@@ -95,7 +118,7 @@ namespace Persistence.Services
                 foreach (var message in messages)
                 {
                     var messageFields = fields.Where(f => f.FildRelted == message.MessageId).ToList();
-                    var employeeId = GetFirstFieldValue(messageFields, "Emp_Id", "EmployeeFileNumber", "FileNumber", "EmployeeId");
+                    var employeeId = GetFirstFieldValue(messageFields, EmployeeIdFieldKinds);
                     var createdByUser = string.Equals(message.CreatedBy, userId, StringComparison.OrdinalIgnoreCase);
                     var forEmployee = string.Equals(employeeId, userId, StringComparison.OrdinalIgnoreCase);
                     if (!createdByUser && !forEmployee)
@@ -109,20 +132,30 @@ namespace Persistence.Services
                         continue;
                     }
 
+                    var workflowStateCode = GetFieldValue(messageFields, "Summer_WorkflowState") ?? string.Empty;
+                    var workflowStateLabel = ResolveWorkflowStateLabel(workflowStateCode);
+                    var needsTransferReview = string.Equals(
+                        workflowStateCode,
+                        TransferReviewRequiredCode,
+                        StringComparison.OrdinalIgnoreCase);
+
                     summaries.Add(new SummerRequestSummaryDto
                     {
                         MessageId = message.MessageId,
                         RequestRef = message.RequestRef ?? string.Empty,
                         CategoryId = message.CategoryCd,
                         CategoryName = categories.TryGetValue(message.CategoryCd, out var categoryName) ? categoryName : string.Empty,
-                        WaveCode = GetFieldValue(messageFields, "SummerCamp") ?? string.Empty,
+                        WaveCode = GetFirstFieldValue(messageFields, WaveCodeFieldKinds),
                         EmployeeId = employeeId,
-                        EmployeeName = GetFirstFieldValue(messageFields, "Emp_Name", "EmployeeName", "Name", "ArabicName", "DisplayName"),
-                        EmployeeNationalId = GetFirstFieldValue(messageFields, "NationalId", "NationalID", "NATIONAL_ID", "national_id", "NID", "IDNumber"),
-                        EmployeePhone = GetFirstFieldValue(messageFields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
-                        EmployeeExtraPhone = GetFirstFieldValue(messageFields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
+                        EmployeeName = GetFirstFieldValue(messageFields, EmployeeNameFieldKinds),
+                        EmployeeNationalId = GetFirstFieldValue(messageFields, EmployeeNationalIdFieldKinds),
+                        EmployeePhone = GetFirstFieldValue(messageFields, EmployeePhoneFieldKinds),
+                        EmployeeExtraPhone = GetFirstFieldValue(messageFields, EmployeeExtraPhoneFieldKinds),
                         Status = message.Status.ToString(),
-                        StatusLabel = message.Status.GetDescription(),
+                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
+                        WorkflowStateCode = workflowStateCode,
+                        WorkflowStateLabel = workflowStateLabel,
+                        NeedsTransferReview = needsTransferReview,
                         CreatedAt = message.CreatedDate,
                         PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaymentDueAtUtc")),
                         PaidAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaidAtUtc")),
@@ -140,15 +173,32 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetAdminRequestsAsync(SummerAdminRequestsQuery query)
+        public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetAdminRequestsAsync(SummerAdminRequestsQuery query, string userId)
         {
             var response = new CommonResponse<IEnumerable<SummerRequestSummaryDto>>();
             query ??= new SummerAdminRequestsQuery();
             try
             {
+                var normalizedUserId = (userId ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(normalizedUserId))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "معرف المستخدم مطلوب." });
+                    return response;
+                }
+
                 var seasonYear = query.SeasonYear <= 0 ? DateTime.UtcNow.Year : query.SeasonYear;
                 var pageNumber = query.PageNumber <= 0 ? 1 : query.PageNumber;
                 var pageSize = query.PageSize <= 0 ? 50 : query.PageSize;
+
+                var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+                if (!userUnitIds.Any())
+                {
+                    response.Data = Array.Empty<SummerRequestSummaryDto>();
+                    response.TotalCount = 0;
+                    response.PageNumber = pageNumber;
+                    response.PageSize = pageSize;
+                    return response;
+                }
 
                 var summerRules = await GetSummerRulesAsync(seasonYear);
                 var summerCategoryIds = summerRules.Keys.ToList();
@@ -160,9 +210,15 @@ namespace Persistence.Services
                     response.PageSize = pageSize;
                     return response;
                 }
+                var scopedMessageId = query.MessageId.HasValue && query.MessageId.Value > 0
+                    ? query.MessageId.Value
+                    : 0;
                 var messages = await _connectContext.Messages
                     .AsNoTracking()
-                    .Where(m => summerCategoryIds.Contains(m.CategoryCd))
+                    .Where(m => summerCategoryIds.Contains(m.CategoryCd)
+                        && (scopedMessageId <= 0 || m.MessageId == scopedMessageId)
+                        && (userUnitIds.Contains(m.CurrentResponsibleSectorId ?? string.Empty)
+                            || userUnitIds.Contains(m.AssignedSectorId ?? string.Empty)))
                     .OrderByDescending(m => m.CreatedDate)
                     .ToListAsync();
 
@@ -196,20 +252,30 @@ namespace Persistence.Services
                         continue;
                     }
 
+                    var workflowStateCode = GetFieldValue(messageFields, "Summer_WorkflowState") ?? string.Empty;
+                    var workflowStateLabel = ResolveWorkflowStateLabel(workflowStateCode);
+                    var needsTransferReview = string.Equals(
+                        workflowStateCode,
+                        TransferReviewRequiredCode,
+                        StringComparison.OrdinalIgnoreCase);
+
                     summaries.Add(new SummerRequestSummaryDto
                     {
                         MessageId = message.MessageId,
                         RequestRef = message.RequestRef ?? string.Empty,
                         CategoryId = message.CategoryCd,
                         CategoryName = categories.TryGetValue(message.CategoryCd, out var categoryName) ? categoryName : string.Empty,
-                        WaveCode = GetFieldValue(messageFields, "SummerCamp") ?? string.Empty,
-                        EmployeeId = GetFirstFieldValue(messageFields, "Emp_Id", "EmployeeFileNumber", "FileNumber", "EmployeeId"),
-                        EmployeeName = GetFirstFieldValue(messageFields, "Emp_Name", "EmployeeName", "Name", "ArabicName", "DisplayName"),
-                        EmployeeNationalId = GetFirstFieldValue(messageFields, "NationalId", "NationalID", "NATIONAL_ID", "national_id", "NID", "IDNumber"),
-                        EmployeePhone = GetFirstFieldValue(messageFields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
-                        EmployeeExtraPhone = GetFirstFieldValue(messageFields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
+                        WaveCode = GetFirstFieldValue(messageFields, WaveCodeFieldKinds),
+                        EmployeeId = GetFirstFieldValue(messageFields, EmployeeIdFieldKinds),
+                        EmployeeName = GetFirstFieldValue(messageFields, EmployeeNameFieldKinds),
+                        EmployeeNationalId = GetFirstFieldValue(messageFields, EmployeeNationalIdFieldKinds),
+                        EmployeePhone = GetFirstFieldValue(messageFields, EmployeePhoneFieldKinds),
+                        EmployeeExtraPhone = GetFirstFieldValue(messageFields, EmployeeExtraPhoneFieldKinds),
                         Status = message.Status.ToString(),
-                        StatusLabel = message.Status.GetDescription(),
+                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
+                        WorkflowStateCode = workflowStateCode,
+                        WorkflowStateLabel = workflowStateLabel,
+                        NeedsTransferReview = needsTransferReview,
                         CreatedAt = message.CreatedDate,
                         PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaymentDueAtUtc")),
                         PaidAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaidAtUtc")),
@@ -256,7 +322,12 @@ namespace Persistence.Services
                         {
                             var statusToken = NormalizeSearchToken(item.Status);
                             var statusLabelToken = NormalizeSearchToken(item.StatusLabel);
-                            if (!statusToken.Contains(normalizedStatus) && !statusLabelToken.Contains(normalizedStatus))
+                            var workflowStateToken = NormalizeSearchToken(item.WorkflowStateCode);
+                            var workflowStateLabelToken = NormalizeSearchToken(item.WorkflowStateLabel);
+                            if (!statusToken.Contains(normalizedStatus)
+                                && !statusLabelToken.Contains(normalizedStatus)
+                                && !workflowStateToken.Contains(normalizedStatus)
+                                && !workflowStateLabelToken.Contains(normalizedStatus))
                             {
                                 return false;
                             }
@@ -271,17 +342,25 @@ namespace Persistence.Services
                             && item.PaymentDueAtUtc.Value < nowUtc
                             && ResolveMessageStatus(item.Status) != MessageStatus.Rejected;
 
-                        if (normalizedPaymentState is "paid" && !isPaid)
+                        var isPaidFilter = normalizedPaymentState is "paid" or "مسدد";
+                        var isUnpaidFilter = normalizedPaymentState is "unpaid" or "غيرمسدد";
+                        var isOverdueUnpaidFilter = normalizedPaymentState is
+                            "overdue"
+                            or "overdueunpaid"
+                            or "متاخرغيرمسدد"
+                            or "متأخرغيرمسدد";
+
+                        if (isPaidFilter && !isPaid)
                         {
                             return false;
                         }
 
-                        if (normalizedPaymentState is "unpaid" && isPaid)
+                        if (isUnpaidFilter && isPaid)
                         {
                             return false;
                         }
 
-                        if (normalizedPaymentState is "overdue" or "overdueunpaid" && !isOverdueUnpaid)
+                        if (isOverdueUnpaidFilter && !isOverdueUnpaid)
                         {
                             return false;
                         }
@@ -290,7 +369,7 @@ namespace Persistence.Services
                     if (!string.IsNullOrWhiteSpace(normalizedSearch))
                     {
                         var haystack = NormalizeSearchToken(
-                            $"{item.RequestRef} {item.EmployeeName} {item.EmployeeId} {item.EmployeeNationalId} {item.EmployeePhone} {item.CategoryName} {item.WaveCode}");
+                            $"{item.MessageId} {item.RequestRef} {item.EmployeeName} {item.EmployeeId} {item.EmployeeNationalId} {item.EmployeePhone} {item.CategoryName} {item.WaveCode}");
                         if (!haystack.Contains(normalizedSearch))
                         {
                             return false;
@@ -316,7 +395,35 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerAdminDashboardDto>> GetAdminDashboardAsync(int seasonYear, int? categoryId = null, string? waveCode = null)
+        private async Task<List<string>> GetActiveUserUnitIdsAsync(string userId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return new List<string>();
+            }
+
+            var now = DateTime.Now.Date;
+            var unitIds = await _gPAContext.UserPositions
+                .AsNoTracking()
+                .Where(position =>
+                    position.UserId == normalizedUserId
+                    && position.IsActive != false
+                    && (!position.StartDate.HasValue || position.StartDate.Value <= now)
+                    && (!position.EndDate.HasValue || position.EndDate.Value >= now))
+                .Select(position => position.UnitId)
+                .Distinct()
+                .ToListAsync();
+
+            return unitIds
+                .Select(unitId => unitId.ToString())
+                .Select(unitId => (unitId ?? string.Empty).Trim())
+                .Where(unitId => unitId.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        public async Task<CommonResponse<SummerAdminDashboardDto>> GetAdminDashboardAsync(string userId, int seasonYear, int? categoryId = null, string? waveCode = null)
         {
             var response = new CommonResponse<SummerAdminDashboardDto>();
             try
@@ -330,7 +437,7 @@ namespace Persistence.Services
                     WaveCode = normalizedWaveCode,
                     PageNumber = 1,
                     PageSize = int.MaxValue
-                });
+                }, userId);
 
                 if (!listResponse.IsSuccess)
                 {
@@ -398,11 +505,11 @@ namespace Persistence.Services
                         .OrderByDescending(g => g.Count)
                         .ToList(),
                     ByStatus = requests
-                        .GroupBy(r => ResolveMessageStatus(r.Status))
+                        .GroupBy(r => ResolveDashboardStatusLabel(r))
                         .Select(g => new SummerDashboardStatusBucketDto
                         {
-                            StatusCode = g.Key.ToString(),
-                            StatusLabel = g.Key.GetDescription(),
+                            StatusCode = ResolveDashboardStatusCode(g.Key),
+                            StatusLabel = g.Key,
                             Count = g.Count()
                         })
                         .OrderByDescending(g => g.Count)
@@ -448,7 +555,8 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (actionCode == "APPROVE_TRANSFER")
+                var comment = (request.Comment ?? string.Empty).Trim();
+                if (actionCode == SummerAdminActionCatalog.Codes.ApproveTransfer)
                 {
                     if (!request.ToCategoryId.HasValue || string.IsNullOrWhiteSpace(request.ToWaveCode))
                     {
@@ -477,6 +585,10 @@ namespace Persistence.Services
                     }
 
                     response.Data = transferResponse.Data;
+                    if (transferResponse.Data != null)
+                    {
+                        await NotifyEmployeeOnAdminActionAsync(transferResponse.Data, actionCode, comment, includeSignalR: false);
+                    }
                     return response;
                 }
 
@@ -489,14 +601,13 @@ namespace Persistence.Services
                 }
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
-                var comment = (request.Comment ?? string.Empty).Trim();
 
                 await using var connectTx = await _connectContext.Database.BeginTransactionAsync(IsolationLevel.Serializable);
                 await using var attachTx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
                 try
                 {
                     var replyMessage = string.Empty;
-                    if (actionCode == "FINAL_APPROVE")
+                    if (actionCode == SummerAdminActionCatalog.Codes.FinalApprove)
                     {
                         if (message.Status == MessageStatus.Rejected && !request.Force)
                         {
@@ -507,33 +618,62 @@ namespace Persistence.Services
                         }
 
                         message.Status = MessageStatus.Replied;
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", "FINAL_APPROVE");
+                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.FinalApprove);
                         UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         if (!string.IsNullOrWhiteSpace(comment))
                         {
                             UpsertField(fields, message.MessageId, "Summer_AdminComment", comment);
                         }
 
+                        var paymentStatusToken = NormalizeSearchToken(GetFieldValue(fields, "Summer_PaymentStatus"));
+                        var needsRePaymentToken = NormalizeSearchToken(GetFieldValue(fields, "Summer_TransferRequiresRePayment"));
+                        var shouldRestorePaidState = paymentStatusToken == "pendingpayment"
+                            || needsRePaymentToken == "true"
+                            || needsRePaymentToken == "1";
+                        var restorePaidNote = string.Empty;
+                        if (shouldRestorePaidState)
+                        {
+                            var paidAt = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")) ?? DateTime.UtcNow;
+                            UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PAID");
+                            UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", paidAt.ToString("o"));
+                            UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
+                            UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", "تم اعتماد الطلب نهائيًا من الإدارة، وتمت إعادة حالة السداد إلى مسدد.");
+                            restorePaidNote = " وتمت إعادة حالة السداد إلى مسدد تلقائياً.";
+                        }
+
+                        if (IsTransferReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(TransferReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
                         replyMessage = string.IsNullOrWhiteSpace(comment)
-                            ? "تم اعتماد الطلب نهائياً من إدارة المصايف."
-                            : $"تم اعتماد الطلب نهائياً من إدارة المصايف. تعليق الإدارة: {comment}";
+                            ? $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote}"
+                            : $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote} تعليق الإدارة: {comment}";
                     }
-                    else if (actionCode == "MANUAL_CANCEL")
+                    else if (actionCode == SummerAdminActionCatalog.Codes.ManualCancel)
                     {
                         message.Status = MessageStatus.Rejected;
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", "MANUAL_CANCEL");
+                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.ManualCancel);
                         UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_CancelReason", string.IsNullOrWhiteSpace(comment) ? "إلغاء يدوي من إدارة المصايف." : comment);
                         UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "CANCELLED_ADMIN");
+                        if (IsTransferReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(TransferReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
 
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? "تم إلغاء الطلب يدويًا من إدارة المصايف."
                             : $"تم إلغاء الطلب يدويًا من إدارة المصايف. السبب: {comment}";
                     }
-                    else if (actionCode == "COMMENT")
+                    else if (actionCode == SummerAdminActionCatalog.Codes.Comment)
                     {
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", "COMMENT");
+                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.Comment);
                         UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? "تم تسجيل تعليق إداري على الطلب."
@@ -562,25 +702,17 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(request.MessageId);
-
-                var employeeId = response.Data.EmployeeId;
-                if (!string.IsNullOrWhiteSpace(employeeId))
+                if (response.Data != null)
                 {
-                    await _signalRConnectionManager.SendNotificationToUser(employeeId, new NotificationDto
-                    {
-                        Notification = "تم تنفيذ إجراء إداري على طلب المصيف الخاص بك.",
-                        type = NotificationType.info,
-                        Title = "إدارة طلبات المصايف",
-                        time = DateTime.Now,
-                        sender = "Connect",
-                        Category = NotificationCategory.Business
-                    });
+                    await NotifyEmployeeOnAdminActionAsync(response.Data, actionCode, comment, includeSignalR: false);
                 }
 
-                if (actionCode == "MANUAL_CANCEL")
+                if (actionCode == SummerAdminActionCatalog.Codes.ManualCancel && response.Data != null)
                 {
                     await PublishCapacityUpdateAsync(response.Data.CategoryId, response.Data.WaveCode, "ADMIN_CANCEL");
                 }
+
+                await PublishRequestUpdateAsync(request.MessageId, actionCode);
             }
             catch (Exception ex)
             {
@@ -736,20 +868,8 @@ namespace Persistence.Services
                 var summary = await BuildSummaryAsync(message.MessageId);
                 response.Data = summary;
 
-                if (!string.IsNullOrWhiteSpace(summary.EmployeeId))
-                {
-                    await _signalRConnectionManager.SendNotificationToUser(summary.EmployeeId, new NotificationDto
-                    {
-                        Notification = "تم تسجيل الاعتذار عن الحجز بنجاح.",
-                        type = NotificationType.info,
-                        Title = "تحديث طلب المصيف",
-                        time = DateTime.Now,
-                        sender = "Connect",
-                        Category = NotificationCategory.Business
-                    });
-                }
-
                 await PublishCapacityUpdateAsync(summary.CategoryId, summary.WaveCode, "CANCEL");
+                await PublishRequestUpdateAsync(summary.MessageId, "CANCEL");
             }
             catch (Exception ex)
             {
@@ -828,6 +948,7 @@ namespace Persistence.Services
                     UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PAID");
                     UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", paidAt.ToString("o"));
                     UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", dueAt.ToString("o"));
+                    UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
                     if (!string.IsNullOrWhiteSpace(request.Notes))
                     {
                         UpsertField(fields, message.MessageId, "Summer_PaymentNotes", request.Notes.Trim());
@@ -855,6 +976,7 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(message.MessageId);
+                await PublishRequestUpdateAsync(message.MessageId, "PAY");
             }
             catch (Exception ex)
             {
@@ -902,6 +1024,13 @@ namespace Persistence.Services
                 var normalizedTargetWave = request.ToWaveCode.Trim();
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
+                var paymentStatus = (GetFieldValue(fields, "Summer_PaymentStatus") ?? string.Empty).Trim();
+                var paidAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc"));
+                var adminLastAction = (GetFieldValue(fields, "Summer_AdminLastAction") ?? string.Empty).Trim();
+                var wasPaid = paidAtUtc.HasValue || string.Equals(paymentStatus, "PAID", StringComparison.OrdinalIgnoreCase);
+                var wasFinalApproved = string.Equals(adminLastAction, SummerAdminActionCatalog.Codes.FinalApprove, StringComparison.OrdinalIgnoreCase)
+                    || message.Status == MessageStatus.Replied;
+                var requiresTransferReview = wasPaid || wasFinalApproved;
                 var transferCount = ParseInt(GetFieldValue(fields, "Summer_TransferCount"), 0);
                 if (transferCount > 0)
                 {
@@ -909,7 +1038,7 @@ namespace Persistence.Services
                     return response;
                 }
 
-                var employeeId = GetFieldValue(fields, "Emp_Id") ?? string.Empty;
+                var employeeId = GetFirstFieldValue(fields, EmployeeIdFieldKinds);
                 if (string.IsNullOrWhiteSpace(employeeId))
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "رقم ملف الموظف مطلوب." });
@@ -924,14 +1053,29 @@ namespace Persistence.Services
                     return response;
                 }
 
-                var newFamilyCount = request.NewFamilyCount ?? ParseInt(GetFieldValue(fields, "FamilyCount"), 0);
-                var newExtraCount = request.NewExtraCount ?? ParseInt(GetFieldValue(fields, "Over_Count"), 0);
+                var currentFamilyCount = ParseInt(GetFirstFieldValue(fields, "FamilyCount", "SUM2026_FamilyCount"), 0);
+                var currentExtraCount = ParseInt(GetFirstFieldValue(fields, "Over_Count", "SUM2026_ExtraCount", "ExtraCount"), 0);
+                var newFamilyCount = request.NewFamilyCount ?? currentFamilyCount;
+                var newExtraCount = request.NewExtraCount ?? currentExtraCount;
+                var familyCompositionChanged = newFamilyCount != currentFamilyCount || newExtraCount != currentExtraCount;
+                var requiresRePayment = wasPaid && familyCompositionChanged;
 
                 if (!summerRules.TryGetValue(request.ToCategoryId, out var rule))
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "المصيف المستهدف غير مُعد في النظام." });
                     return response;
                 }
+
+                var targetCategoryName = await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .Where(c => c.CatId == request.ToCategoryId)
+                    .Select(c => c.CatName)
+                    .FirstOrDefaultAsync();
+
+                var targetCategoryDisplayName = string.IsNullOrWhiteSpace(targetCategoryName)
+                    ? $"رقم {request.ToCategoryId}"
+                    : targetCategoryName.Trim();
+                var targetWaveLabel = normalizedTargetWave;
 
                 if (newFamilyCount <= 0 || !rule.CapacityByFamily.ContainsKey(newFamilyCount))
                 {
@@ -987,13 +1131,16 @@ namespace Persistence.Services
                     }
 
                     var fromCategory = message.CategoryCd;
-                    var fromWave = GetFieldValue(fields, "SummerCamp") ?? string.Empty;
+                    var fromWave = GetFirstFieldValue(fields, "SummerCamp", "SUM2026_WaveCode", "WaveCode");
 
                     message.CategoryCd = request.ToCategoryId;
 
-                    UpsertField(fields, message.MessageId, "SummerCamp", normalizedTargetWave);
-                    UpsertField(fields, message.MessageId, "FamilyCount", newFamilyCount.ToString());
-                    UpsertField(fields, message.MessageId, "Over_Count", newExtraCount.ToString());
+                    UpsertFieldRange(fields, message.MessageId, WaveCodeFieldKinds, normalizedTargetWave);
+                    UpsertFieldRange(fields, message.MessageId, WaveLabelFieldKinds, targetWaveLabel);
+                    UpsertFieldRange(fields, message.MessageId, FamilyCountFieldKinds, newFamilyCount.ToString());
+                    UpsertFieldRange(fields, message.MessageId, ExtraCountFieldKinds, newExtraCount.ToString());
+                    UpsertFieldRange(fields, message.MessageId, DestinationIdFieldKinds, request.ToCategoryId.ToString());
+                    UpsertFieldRange(fields, message.MessageId, DestinationNameFieldKinds, targetCategoryDisplayName);
                     UpsertField(fields, message.MessageId, "Summer_ActionType", "TRANSFER");
                     UpsertField(fields, message.MessageId, "Summer_TransferCount", "1");
                     UpsertField(fields, message.MessageId, "Summer_TransferFromCategory", fromCategory.ToString());
@@ -1001,12 +1148,32 @@ namespace Persistence.Services
                     UpsertField(fields, message.MessageId, "Summer_TransferToCategory", request.ToCategoryId.ToString());
                     UpsertField(fields, message.MessageId, "Summer_TransferToWave", normalizedTargetWave);
                     UpsertField(fields, message.MessageId, "Summer_TransferredAtUtc", DateTime.UtcNow.ToString("o"));
+                    if (requiresTransferReview)
+                    {
+                        message.Status = MessageStatus.InProgress;
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewRequiredCode);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(TransferReviewRequiredCode));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateReason", ResolveTransferReviewReason(wasPaid, wasFinalApproved));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                    }
+                    if (requiresRePayment)
+                    {
+                        var reopenedDueAt = SummerCalendarRules.CalculatePaymentDueUtc(DateTime.UtcNow);
+                        UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PENDING_PAYMENT");
+                        UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", string.Empty);
+                        UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", reopenedDueAt.ToString("o"));
+                        UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "true");
+                        UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", "تم تغيير عدد الأفراد بعد السداد، ويلزم إعادة السداد.");
+                    }
 
+                    var rePaymentNote = requiresRePayment
+                        ? " تم تغيير عدد الأفراد بعد السداد، وتمت إعادة فتح السداد لاستكمال الإجراءات."
+                        : string.Empty;
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
                         string.IsNullOrWhiteSpace(request.Notes)
-                            ? $"تم تحويل الطلب إلى المصيف {request.ToCategoryId} والفوج {normalizedTargetWave}."
-                            : $"تم تحويل الطلب إلى المصيف {request.ToCategoryId} والفوج {normalizedTargetWave}. الملاحظات: {request.Notes.Trim()}",
+                            ? $"تم تحويل الطلب إلى مصيف {targetCategoryDisplayName} والفوج {normalizedTargetWave}.{rePaymentNote}"
+                            : $"تم تحويل الطلب إلى مصيف {targetCategoryDisplayName} والفوج {normalizedTargetWave}.{rePaymentNote} الملاحظات: {request.Notes.Trim()}",
                         userId,
                         ip,
                         request.files);
@@ -1019,6 +1186,7 @@ namespace Persistence.Services
                     response.Data = await BuildSummaryAsync(message.MessageId);
                     await PublishCapacityUpdateAsync(fromCategory, fromWave, "TRANSFER_FROM");
                     await PublishCapacityUpdateAsync(request.ToCategoryId, normalizedTargetWave, "TRANSFER_TO");
+                    await PublishRequestUpdateAsync(message.MessageId, "TRANSFER");
                 }
                 catch
                 {
@@ -1064,6 +1232,8 @@ namespace Persistence.Services
                 var notifyEmployeeId = string.Empty;
                 var notifyCategoryId = 0;
                 var notifyWaveCode = string.Empty;
+                var notifyDueAtUtc = (DateTime?)null;
+                var cancelledMessageId = 0;
                 var wasAutoCancelled = false;
 
                 await using var connectTx = await _connectContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -1113,9 +1283,11 @@ namespace Persistence.Services
                     await _connectContext.SaveChangesAsync(cancellationToken);
                     await connectTx.CommitAsync(cancellationToken);
 
-                    notifyEmployeeId = GetFieldValue(fields, "Emp_Id") ?? string.Empty;
+                    notifyEmployeeId = GetFirstFieldValue(fields, EmployeeIdFieldKinds);
                     notifyCategoryId = message.CategoryCd;
                     notifyWaveCode = GetFieldValue(fields, "SummerCamp") ?? string.Empty;
+                    notifyDueAtUtc = dueAt;
+                    cancelledMessageId = message.MessageId;
                     wasAutoCancelled = true;
                     autoCancelledCount += 1;
                 }
@@ -1129,23 +1301,183 @@ namespace Persistence.Services
                     continue;
                 }
 
-                if (!string.IsNullOrWhiteSpace(notifyEmployeeId))
+                SummerRequestSummaryDto? autoCancelledSummary = null;
+                if (cancelledMessageId > 0)
                 {
-                    await _signalRConnectionManager.SendNotificationToUser(notifyEmployeeId, new NotificationDto
+                    try
                     {
-                        Notification = "تم إلغاء الطلب تلقائياً بسبب عدم السداد خلال مهلة يوم العمل.",
-                        type = NotificationType.info,
-                        Title = "إلغاء تلقائي لطلب المصيف",
-                        time = DateTime.Now,
-                        sender = "Connect",
-                        Category = NotificationCategory.Business
-                    });
+                        autoCancelledSummary = await BuildSummaryAsync(cancelledMessageId);
+                    }
+                    catch
+                    {
+                        // Best effort only.
+                    }
+                }
+
+                if (autoCancelledSummary != null)
+                {
+                    notifyEmployeeId = string.IsNullOrWhiteSpace(autoCancelledSummary.EmployeeId) ? notifyEmployeeId : autoCancelledSummary.EmployeeId;
+                    notifyCategoryId = autoCancelledSummary.CategoryId > 0 ? autoCancelledSummary.CategoryId : notifyCategoryId;
+                    notifyWaveCode = string.IsNullOrWhiteSpace(autoCancelledSummary.WaveCode) ? notifyWaveCode : autoCancelledSummary.WaveCode;
+                    await NotifyEmployeeOnAutoCancelAsync(autoCancelledSummary, notifyDueAtUtc, includeSignalR: false);
                 }
 
                 await PublishCapacityUpdateAsync(notifyCategoryId, notifyWaveCode, "AUTO_CANCEL");
+                await PublishRequestUpdateAsync(cancelledMessageId, "AUTO_CANCEL");
             }
 
             return autoCancelledCount;
+        }
+
+        private async Task NotifyEmployeeOnAdminActionAsync(
+            SummerRequestSummaryDto summary,
+            string actionCode,
+            string? comment,
+            bool includeSignalR = true)
+        {
+            if (summary == null)
+            {
+                return;
+            }
+
+            var templates = _applicationConfig.NotificationChannels?.Summer ?? new SummerNotificationTemplates();
+            var placeholders = BuildNotificationPlaceholders(
+                summary,
+                ResolveAdminActionLabel(actionCode),
+                string.IsNullOrWhiteSpace(comment) ? string.Empty : $"تعليق الإدارة: {comment.Trim()}",
+                null);
+
+            var smsTemplate = string.IsNullOrWhiteSpace(templates.AdminActionSmsTemplate)
+                ? "عزيزي {FirstName}، تم تحديث طلب المصيف {RequestRef}. نوع الإجراء: {ActionLabel}. {AdminCommentLine}"
+                : templates.AdminActionSmsTemplate;
+
+            var signalRTemplate = string.IsNullOrWhiteSpace(templates.AdminActionSignalRTemplate)
+                ? "تم تحديث طلب المصيف {RequestRef} من إدارة المصايف. نوع الإجراء: {ActionLabel}."
+                : templates.AdminActionSignalRTemplate;
+
+            var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+            var signalRMessage = _notificationService.RenderTemplate(signalRTemplate, placeholders);
+            var signalRTitle = string.IsNullOrWhiteSpace(templates.AdminActionSignalRTitle)
+                ? "إدارة طلبات المصايف"
+                : templates.AdminActionSignalRTitle;
+
+            await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
+        }
+
+        private async Task NotifyEmployeeOnAutoCancelAsync(
+            SummerRequestSummaryDto summary,
+            DateTime? paymentDueAtUtc,
+            bool includeSignalR = true)
+        {
+            if (summary == null)
+            {
+                return;
+            }
+
+            var templates = _applicationConfig.NotificationChannels?.Summer ?? new SummerNotificationTemplates();
+            var placeholders = BuildNotificationPlaceholders(summary, string.Empty, string.Empty, paymentDueAtUtc);
+
+            var smsTemplate = string.IsNullOrWhiteSpace(templates.AutoCancelSmsTemplate)
+                ? "عزيزي {FirstName}، تم إلغاء طلب المصيف {RequestRef} تلقائياً لعدم استكمال السداد قبل {PaymentDueAtUtc}."
+                : templates.AutoCancelSmsTemplate;
+
+            var signalRTemplate = string.IsNullOrWhiteSpace(templates.AutoCancelSignalRTemplate)
+                ? "تم إلغاء طلب المصيف {RequestRef} تلقائياً بسبب انتهاء مهلة السداد."
+                : templates.AutoCancelSignalRTemplate;
+
+            var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+            var signalRMessage = _notificationService.RenderTemplate(signalRTemplate, placeholders);
+            var signalRTitle = string.IsNullOrWhiteSpace(templates.AutoCancelSignalRTitle)
+                ? "إلغاء تلقائي لطلب المصيف"
+                : templates.AutoCancelSignalRTitle;
+
+            await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
+        }
+
+        private async Task DispatchSummerNotificationsAsync(
+            SummerRequestSummaryDto summary,
+            string smsMessage,
+            string signalRMessage,
+            string signalRTitle,
+            bool includeSignalR)
+        {
+            var mobile = ResolvePreferredMobile(summary.EmployeePhone, summary.EmployeeExtraPhone);
+            if (!string.IsNullOrWhiteSpace(mobile) && !string.IsNullOrWhiteSpace(smsMessage))
+            {
+                await _notificationService.SendSmsAsync(new SmsDispatchRequest
+                {
+                    MobileNumber = mobile,
+                    Message = smsMessage,
+                    UserId = string.IsNullOrWhiteSpace(summary.EmployeeId) ? "SYSTEM" : summary.EmployeeId.Trim(),
+                    ReferenceNo = string.IsNullOrWhiteSpace(summary.RequestRef) ? $"SUMMER-{summary.MessageId}" : summary.RequestRef.Trim()
+                });
+            }
+
+            if (!includeSignalR || string.IsNullOrWhiteSpace(summary.EmployeeId) || string.IsNullOrWhiteSpace(signalRMessage))
+            {
+                return;
+            }
+
+            await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
+            {
+                UserId = summary.EmployeeId.Trim(),
+                Notification = signalRMessage,
+                Title = signalRTitle,
+                Type = NotificationType.info,
+                Category = NotificationCategory.Business,
+                Sender = "Connect",
+                Time = DateTime.Now
+            });
+        }
+
+        private static IReadOnlyDictionary<string, string?> BuildNotificationPlaceholders(
+            SummerRequestSummaryDto summary,
+            string actionLabel,
+            string adminCommentLine,
+            DateTime? paymentDueAtUtc)
+        {
+            return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["FirstName"] = ResolveFirstName(summary.EmployeeName),
+                ["EmployeeName"] = summary.EmployeeName,
+                ["EmployeeId"] = summary.EmployeeId,
+                ["RequestRef"] = summary.RequestRef,
+                ["MessageId"] = summary.MessageId.ToString(),
+                ["CategoryName"] = summary.CategoryName,
+                ["CategoryId"] = summary.CategoryId.ToString(),
+                ["WaveCode"] = summary.WaveCode,
+                ["ActionLabel"] = actionLabel,
+                ["AdminCommentLine"] = adminCommentLine,
+                ["PaymentDueAtUtc"] = paymentDueAtUtc.HasValue ? $"{paymentDueAtUtc.Value:yyyy-MM-dd HH:mm} UTC" : string.Empty
+            };
+        }
+
+        private static string ResolveAdminActionLabel(string actionCode)
+        {
+            return SummerAdminActionCatalog.ResolveLabel(actionCode);
+        }
+
+        private static string ResolvePreferredMobile(string? primary, string? secondary)
+        {
+            var first = (primary ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(first))
+            {
+                return first;
+            }
+
+            return (secondary ?? string.Empty).Trim();
+        }
+
+        private static string ResolveFirstName(string? fullName)
+        {
+            var normalized = (fullName ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return "عميلنا العزيز";
+            }
+
+            var parts = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length == 0 ? normalized : parts[0];
         }
 
         private async Task<bool> HasEmployeeUsedTransferInSeasonAsync(
@@ -1183,7 +1515,7 @@ namespace Persistence.Services
             foreach (var group in byMessage)
             {
                 var messageFields = group.ToList();
-                var employee = GetFieldValue(messageFields, "Emp_Id") ?? string.Empty;
+                var employee = GetFirstFieldValue(messageFields, EmployeeIdFieldKinds);
                 if (!string.Equals(employee, employeeId, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -1220,14 +1552,17 @@ namespace Persistence.Services
 
             return await _connectContext.TkmendFields
                 .AsNoTracking()
-                .AnyAsync(f => activeMessageIds.Contains(f.FildRelted) && f.FildKind == "Emp_Id" && f.FildTxt == employeeId);
+                .AnyAsync(f => activeMessageIds.Contains(f.FildRelted)
+                               && (f.FildKind == "Emp_Id" || f.FildKind == "SUM2026_OwnerFileNumber")
+                               && f.FildTxt == employeeId);
         }
 
         private async Task<List<int>> GetActiveMessageIdsForWaveAsync(int categoryId, string waveCode, int? excludedMessageId = null)
         {
             var matchingWaveMessageIds = await _connectContext.TkmendFields
                 .AsNoTracking()
-                .Where(f => f.FildKind == "SummerCamp" && f.FildTxt == waveCode)
+                .Where(f => (f.FildKind == "SummerCamp" || f.FildKind == "SUM2026_WaveCode" || f.FildKind == "WaveCode")
+                            && f.FildTxt == waveCode)
                 .Select(f => f.FildRelted)
                 .Distinct()
                 .ToListAsync();
@@ -1278,7 +1613,8 @@ namespace Persistence.Services
 
             var familyFields = await _connectContext.TkmendFields
                 .AsNoTracking()
-                .Where(f => activeMessageIds.Contains(f.FildRelted) && f.FildKind == "FamilyCount")
+                .Where(f => activeMessageIds.Contains(f.FildRelted)
+                            && (f.FildKind == "FamilyCount" || f.FildKind == "SUM2026_FamilyCount"))
                 .ToListAsync();
 
             var usedUnits = familyFields
@@ -1349,22 +1685,113 @@ SELECT @result;
                 Category = NotificationCategory.Business
             };
 
-            foreach (var group in SummerNotificationGroups)
+            await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
             {
-                try
-                {
-                    await _signalRConnectionManager.SendNotificationToGroup(group, notification);
-                }
-                catch
-                {
-                    // Best effort only.
-                }
+                GroupNames = SummerNotificationGroups,
+                Notification = notification.Notification,
+                Type = notification.type,
+                Title = notification.Title,
+                Time = notification.time,
+                Sender = notification.sender,
+                Category = notification.Category ?? NotificationCategory.Business
+            });
+        }
+
+        private async Task PublishRequestUpdateAsync(int messageId, string action)
+        {
+            if (messageId <= 0)
+            {
+                return;
             }
+
+            var normalizedAction = string.IsNullOrWhiteSpace(action)
+                ? "UPDATE"
+                : action.Trim().ToUpperInvariant();
+            var messageText = $"SUMMER_REQUEST_UPDATED|{messageId}|{normalizedAction}|{DateTime.UtcNow:o}";
+            var notification = new NotificationDto
+            {
+                Notification = messageText,
+                type = NotificationType.info,
+                Title = "تحديث طلبات المصايف",
+                time = DateTime.Now,
+                sender = "Connect",
+                Category = NotificationCategory.Business
+            };
+
+            var responsibleGroups = await ResolveResponsibleAdminGroupsAsync(messageId);
+            if (responsibleGroups.Count > 0)
+            {
+                await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+                {
+                    GroupNames = responsibleGroups,
+                    Notification = notification.Notification,
+                    Type = notification.type,
+                    Title = notification.Title,
+                    Time = notification.time,
+                    Sender = notification.sender,
+                    Category = notification.Category ?? NotificationCategory.Business
+                });
+            }
+
+            var ownerEmployeeId = await ResolveRequestOwnerEmployeeIdAsync(messageId);
+            if (!string.IsNullOrWhiteSpace(ownerEmployeeId))
+            {
+                await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
+                {
+                    UserId = ownerEmployeeId,
+                    Notification = notification.Notification,
+                    Title = notification.Title,
+                    Type = notification.type,
+                    Time = notification.time,
+                    Sender = notification.sender,
+                    Category = notification.Category ?? NotificationCategory.Business
+                });
+            }
+        }
+
+        private async Task<List<string>> ResolveResponsibleAdminGroupsAsync(int messageId)
+        {
+            var sectorData = await _connectContext.Messages
+                .AsNoTracking()
+                .Where(message => message.MessageId == messageId)
+                .Select(message => new
+                {
+                    CurrentResponsibleSectorId = message.CurrentResponsibleSectorId,
+                    AssignedSectorId = message.AssignedSectorId
+                })
+                .FirstOrDefaultAsync();
+
+            if (sectorData == null)
+            {
+                return new List<string>();
+            }
+
+            return new[] { sectorData.CurrentResponsibleSectorId, sectorData.AssignedSectorId }
+                .Where(sector => !string.IsNullOrWhiteSpace(sector))
+                .Select(sector => sector!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private async Task<string> ResolveRequestOwnerEmployeeIdAsync(int messageId)
+        {
+            if (messageId <= 0)
+            {
+                return string.Empty;
+            }
+
+            var fields = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(field => field.FildRelted == messageId)
+                .ToListAsync();
+
+            return GetFirstFieldValue(fields, EmployeeIdFieldKinds).Trim();
         }
 
         private async Task AddReplyWithAttachmentsAsync(int messageId, string message, string userId, string ip, List<IFormFile>? files)
         {
-            var reply = _helperService.CreateReply(messageId, message, userId, userId, ip);
+            var normalizedMessage = NormalizePotentialMojibake(message);
+            var reply = _helperService.CreateReply(messageId, normalizedMessage, userId, userId, ip);
             await _connectContext.Replies.AddAsync(reply);
 
             if (files != null && files.Any())
@@ -1395,20 +1822,30 @@ SELECT @result;
                 .Select(c => c.CatName)
                 .FirstOrDefaultAsync() ?? string.Empty;
 
+            var workflowStateCode = GetFieldValue(fields, "Summer_WorkflowState") ?? string.Empty;
+            var workflowStateLabel = ResolveWorkflowStateLabel(workflowStateCode);
+            var needsTransferReview = string.Equals(
+                workflowStateCode,
+                TransferReviewRequiredCode,
+                StringComparison.OrdinalIgnoreCase);
+
             return new SummerRequestSummaryDto
             {
                 MessageId = message.MessageId,
                 RequestRef = message.RequestRef ?? string.Empty,
                 CategoryId = message.CategoryCd,
                 CategoryName = categoryName,
-                WaveCode = GetFieldValue(fields, "SummerCamp") ?? string.Empty,
-                EmployeeId = GetFirstFieldValue(fields, "Emp_Id", "EmployeeFileNumber", "FileNumber", "EmployeeId"),
-                EmployeeName = GetFirstFieldValue(fields, "Emp_Name", "EmployeeName", "Name", "ArabicName", "DisplayName"),
-                EmployeeNationalId = GetFirstFieldValue(fields, "NationalId", "NationalID", "NATIONAL_ID", "national_id", "NID", "IDNumber"),
-                EmployeePhone = GetFirstFieldValue(fields, "PhoneNumber", "MobileNumber", "PhoneNo", "Phone_No", "MobilePhone", "phone"),
-                EmployeeExtraPhone = GetFirstFieldValue(fields, "ExtraPhoneNumber", "SecondaryPhone", "AlternatePhone"),
+                WaveCode = GetFirstFieldValue(fields, WaveCodeFieldKinds),
+                EmployeeId = GetFirstFieldValue(fields, EmployeeIdFieldKinds),
+                EmployeeName = GetFirstFieldValue(fields, EmployeeNameFieldKinds),
+                EmployeeNationalId = GetFirstFieldValue(fields, EmployeeNationalIdFieldKinds),
+                EmployeePhone = GetFirstFieldValue(fields, EmployeePhoneFieldKinds),
+                EmployeeExtraPhone = GetFirstFieldValue(fields, EmployeeExtraPhoneFieldKinds),
                 Status = message.Status.ToString(),
-                StatusLabel = message.Status.GetDescription(),
+                StatusLabel = ResolveSummaryStatusLabel(message.Status, fields, needsTransferReview, workflowStateLabel),
+                WorkflowStateCode = workflowStateCode,
+                WorkflowStateLabel = workflowStateLabel,
+                NeedsTransferReview = needsTransferReview,
                 CreatedAt = message.CreatedDate,
                 PaymentDueAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaymentDueAtUtc")),
                 PaidAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")),
@@ -1416,7 +1853,7 @@ SELECT @result;
             };
         }
 
-        private async Task<Dictionary<int, SummerRule>> GetSummerRulesAsync(int seasonYear = 2026, string? applicationId = null)
+        private async Task<Dictionary<int, SummerRule>> GetSummerRulesAsync(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear, string? applicationId = null)
         {
             var destinations = await GetSummerDestinationConfigsAsync(seasonYear, applicationId);
             var rules = new Dictionary<int, SummerRule>();
@@ -1601,6 +2038,7 @@ SELECT @result;
 
         private void UpsertField(List<TkmendField> fields, int messageId, string kind, string value)
         {
+            var normalizedValue = NormalizePotentialMojibake(value);
             var existing = fields.FirstOrDefault(f => string.Equals(f.FildKind, kind, StringComparison.OrdinalIgnoreCase));
             if (existing == null)
             {
@@ -1608,7 +2046,7 @@ SELECT @result;
                 {
                     FildRelted = messageId,
                     FildKind = kind,
-                    FildTxt = value,
+                    FildTxt = normalizedValue,
                     InstanceGroupId = 1
                 };
                 fields.Add(field);
@@ -1616,8 +2054,83 @@ SELECT @result;
             }
             else
             {
-                existing.FildTxt = value;
+                existing.FildTxt = normalizedValue;
             }
+        }
+
+        private void UpsertFieldRange(List<TkmendField> fields, int messageId, IEnumerable<string> kinds, string value)
+        {
+            if (kinds == null)
+            {
+                return;
+            }
+
+            foreach (var kind in kinds)
+            {
+                if (string.IsNullOrWhiteSpace(kind))
+                {
+                    continue;
+                }
+
+                UpsertField(fields, messageId, kind.Trim(), value);
+            }
+        }
+
+        private static string NormalizePotentialMojibake(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return value?.Trim() ?? string.Empty;
+            }
+
+            var text = value.Trim();
+            if (!LooksLikeMojibake(text))
+            {
+                return text;
+            }
+
+            try
+            {
+                var latin1 = Encoding.GetEncoding("ISO-8859-1");
+                var bytes = latin1.GetBytes(text);
+                var decoded = Encoding.UTF8.GetString(bytes).Trim();
+                if (ContainsArabicLetters(decoded) && !LooksLikeMojibake(decoded))
+                {
+                    return decoded;
+                }
+            }
+            catch
+            {
+                // keep original text when conversion fails
+            }
+
+            return text;
+        }
+
+        private static bool LooksLikeMojibake(string text)
+        {
+            return text.IndexOf('Ø') >= 0
+                || text.IndexOf('Ù') >= 0
+                || text.IndexOf('Ã') >= 0
+                || text.IndexOf('Ð') >= 0
+                || text.IndexOf('�') >= 0;
+        }
+
+        private static bool ContainsArabicLetters(string text)
+        {
+            foreach (var ch in text)
+            {
+                if ((ch >= '؀' && ch <= 'ۿ')
+                    || (ch >= 'ݐ' && ch <= 'ݿ')
+                    || (ch >= 'ࢠ' && ch <= 'ࣿ')
+                    || (ch >= 'ﭐ' && ch <= '﷿')
+                    || (ch >= 'ﹰ' && ch <= '﻿'))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool ValidateAllowedAttachmentExtensions<T>(List<IFormFile>? files, CommonResponse<T> response)
@@ -1682,17 +2195,99 @@ SELECT @result;
             return MessageStatus.New;
         }
 
-        private static string NormalizeActionCode(string? actionCode)
+        private static bool IsTransferReviewRequired(IEnumerable<TkmendField> fields)
         {
-            var token = NormalizeSearchToken(actionCode);
-            return token switch
+            var workflowState = GetFieldValue(fields, "Summer_WorkflowState") ?? string.Empty;
+            return string.Equals(workflowState, TransferReviewRequiredCode, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ResolveWorkflowStateLabel(string? workflowStateCode)
+        {
+            var normalized = (workflowStateCode ?? string.Empty).Trim().ToUpperInvariant();
+            return normalized switch
             {
-                "finalapprove" or "approve" or "اعتمادنهائي" or "اعتماد" => "FINAL_APPROVE",
-                "manualcancel" or "cancel" or "الغاءيدوي" or "الغاء" => "MANUAL_CANCEL",
-                "comment" or "reply" or "تعليق" or "رد" => "COMMENT",
-                "approvetransfer" or "transferapprove" or "اعتمادالتحويل" => "APPROVE_TRANSFER",
+                TransferReviewRequiredCode => "يتطلب مراجعة بعد التحويل",
+                TransferReviewResolvedCode => "تمت مراجعة التحويل",
                 _ => string.Empty
             };
+        }
+
+        private static string ResolveTransferReviewReason(bool wasPaid, bool wasFinalApproved)
+        {
+            if (wasPaid && wasFinalApproved)
+            {
+                return "تم التحويل بعد السداد وبعد الاعتماد النهائي، ويلزم متابعة إدارية.";
+            }
+
+            if (wasPaid)
+            {
+                return "تم التحويل بعد سداد الطلب، ويلزم متابعة إدارية.";
+            }
+
+            if (wasFinalApproved)
+            {
+                return "تم التحويل بعد الاعتماد النهائي، ويلزم متابعة إدارية.";
+            }
+
+            return "تم التحويل ويلزم متابعة إدارية.";
+        }
+
+        private static string ResolveSummaryStatusLabel(
+            MessageStatus messageStatus,
+            IEnumerable<TkmendField> fields,
+            bool needsTransferReview,
+            string workflowStateLabel)
+        {
+            if (needsTransferReview && !string.IsNullOrWhiteSpace(workflowStateLabel))
+            {
+                return workflowStateLabel;
+            }
+
+            var adminAction = NormalizeActionCode(GetFieldValue(fields, "Summer_AdminLastAction"));
+            return adminAction switch
+            {
+                SummerAdminActionCatalog.Codes.FinalApprove => "اعتماد نهائي",
+                SummerAdminActionCatalog.Codes.Comment => "رد إداري",
+                SummerAdminActionCatalog.Codes.ManualCancel => "إلغاء يدوي",
+                SummerAdminActionCatalog.Codes.ApproveTransfer => "اعتماد تحويل",
+                _ => messageStatus.GetDescription()
+            };
+        }
+
+        private static string ResolveDashboardStatusLabel(SummerRequestSummaryDto request)
+        {
+            var explicitLabel = (request?.StatusLabel ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(explicitLabel))
+            {
+                return explicitLabel;
+            }
+
+            var status = ResolveMessageStatus(request?.Status);
+            return status.GetDescription();
+        }
+
+        private static string ResolveDashboardStatusCode(string label)
+        {
+            var token = NormalizeSearchToken(label);
+            return token switch
+            {
+                "جديد" => "NEW",
+                "جاريالتنفيذ" => "IN_PROGRESS",
+                "ردإداري" or "رداداري" => "ADMIN_REPLY",
+                "تمالرد" => "REPLIED",
+                "اعتمادنهائي" => SummerAdminActionCatalog.Codes.FinalApprove,
+                "اعتمادتحويل" => SummerAdminActionCatalog.Codes.ApproveTransfer,
+                "الغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
+                "مرفوض" or "ملغي" => "REJECTED",
+                "يتطلبمراجعةبعدالتحويل" => TransferReviewRequiredCode,
+                "تمتمراجعةالتحويل" => TransferReviewResolvedCode,
+                _ => token.ToUpperInvariant()
+            };
+        }
+
+        private static string NormalizeActionCode(string? actionCode)
+        {
+            return SummerAdminActionCatalog.Normalize(actionCode);
         }
 
         private static string NormalizeSearchToken(string? value)

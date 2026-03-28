@@ -25,27 +25,6 @@
   font-size: 0.95rem;
 }
 
-.app-id-pill {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.2rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: 10px;
-  background: #ffffff;
-  border: 1px dashed #c4d3e4;
-}
-
-.app-id-pill span {
-  font-size: 0.75rem;
-  color: #526c83;
-}
-
-.app-id-pill strong {
-  color: #0b4f88;
-  font-family: Consolas, 'Courier New', monospace;
-}
-
 .top-controls {
   display: grid;
   gap: 0.5rem;
@@ -133,8 +112,18 @@
   color: #b33131;
 }
 
+.mode-note {
+  color: #37576f;
+  font-weight: 600;
+}
+
 .loading,
 .empty-state,
 .muted {
   color: #526c83;
+}
+
+.loading-note {
+  color: #0b8a56;
+  font-weight: 700;
 }

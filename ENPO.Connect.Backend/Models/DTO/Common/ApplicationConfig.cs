@@ -10,11 +10,11 @@ namespace Models.DTO.Common
     public class ApplicationConfig
     {
         public string AdminIps { get; set; } = "";
-        public string HubServerIP { get; set; } = "";
         public FtpOptions FtpOptions { get; set; } = new FtpOptions();
         public MailAccountOptions MailOptions { get; set; } = new MailAccountOptions();
         public SLAConfiguration SLAConfiguration { get; set; } = new SLAConfiguration();
         public ApiOptions ApiOptions { get; set; } = new ApiOptions();
+        public NotificationChannelsOptions NotificationChannels { get; set; } = new NotificationChannelsOptions();
         public TokenOptions tokenOptions { get; set; } = new TokenOptions();
     }
 
@@ -47,6 +47,41 @@ namespace Models.DTO.Common
         public string EventSMSARejected { get; set; }
         public List<string> LtraExcelColumns { get; set; }
     }
+
+    public class NotificationChannelsOptions
+    {
+        public SmsChannelOptions Sms { get; set; } = new SmsChannelOptions();
+        public SummerNotificationTemplates Summer { get; set; } = new SummerNotificationTemplates();
+    }
+
+    public class SmsChannelOptions
+    {
+        public bool Enabled { get; set; } = true;
+        public string ServiceName { get; set; } = "CONNECT SUMMER REQUESTS";
+        public string DefaultReferenceNo { get; set; } = "SUMMER";
+        public string Provider { get; set; } = "ENQUEUE";
+        public string MultiMessagesUserName { get; set; } = "";
+        public string MultiMessagesPassword { get; set; } = "";
+    }
+
+    public class SummerNotificationTemplates
+    {
+        public string AdminActionSmsTemplate { get; set; } =
+            "السيد/ة {FirstName}، تم تحديث طلب المصيف رقم {RequestRef}. الإجراء: {ActionLabel}. المصيف: {CategoryName}، الفوج: {WaveCode}. {AdminCommentLine}";
+
+        public string AutoCancelSmsTemplate { get; set; } =
+            "السيد/ة {FirstName}، نحيطكم علماً بأنه تم إلغاء طلب المصيف رقم {RequestRef} تلقائياً لعدم السداد قبل الموعد النهائي {PaymentDueAtUtc}. يمكنكم تقديم طلب جديد وفق الإتاحة الحالية.";
+
+        public string AdminActionSignalRTemplate { get; set; } =
+            "تم تنفيذ إجراء إداري ({ActionLabel}) على طلب المصيف رقم {RequestRef}. {AdminCommentLine}";
+
+        public string AutoCancelSignalRTemplate { get; set; } =
+            "تم إلغاء طلب المصيف رقم {RequestRef} تلقائياً لعدم السداد قبل الموعد النهائي {PaymentDueAtUtc}.";
+
+        public string AdminActionSignalRTitle { get; set; } = "إدارة طلبات المصايف";
+        public string AutoCancelSignalRTitle { get; set; } = "إلغاء تلقائي لطلب المصيف";
+    }
+
     public class TokenOptions
     {
 

@@ -42,6 +42,9 @@ export interface SummerRequestSummaryDto {
   employeeExtraPhone: string;
   status: string;
   statusLabel: string;
+  workflowStateCode: string;
+  workflowStateLabel: string;
+  needsTransferReview: boolean;
   createdAt?: string;
   paymentDueAtUtc?: string;
   paidAtUtc?: string;
@@ -110,6 +113,7 @@ export interface SummerTransferFormRequest {
 
 export interface SummerAdminRequestsQuery {
   seasonYear: number;
+  messageId?: number | null;
   categoryId?: number | null;
   waveCode?: string;
   status?: string;
