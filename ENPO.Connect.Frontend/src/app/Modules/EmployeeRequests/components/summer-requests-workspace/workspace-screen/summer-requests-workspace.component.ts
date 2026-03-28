@@ -350,6 +350,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     replyId: number;
     message: string;
     authorName: string;
+    isAdminAction: boolean;
     createdDate?: string;
     attachments: Array<{ id: number; name: string; size: number }>;
   }> {
@@ -361,6 +362,8 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           message?: unknown;
           authorName?: unknown;
           authorId?: unknown;
+          isAdminAction?: unknown;
+          IsAdminAction?: unknown;
           createdDate?: unknown;
           attchShipmentDtos?: Array<{ attchId?: unknown; id?: unknown; attchNm?: unknown; attchSize?: unknown }>;
         };
@@ -372,6 +375,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
             String(replyAny.authorName ?? '').trim(),
             String(replyAny.authorId ?? '').trim()
           ),
+          isAdminAction: this.parseReplyAdminFlag(replyAny.isAdminAction ?? replyAny.IsAdminAction),
           createdDate: replyAny.createdDate ? String(replyAny.createdDate) : undefined,
           attachments: (replyAny.attchShipmentDtos ?? [])
             .map(item => ({
@@ -1443,6 +1447,15 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return null;
     }
     return Math.floor(parsed);
+  }
+
+  private parseReplyAdminFlag(value: unknown): boolean {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return normalized === 'true' || normalized === '1';
   }
 
   private refreshPaymentDateValidation(): void {

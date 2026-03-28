@@ -28,6 +28,7 @@ export const SUMMER_UI_TEXTS_AR = {
   labels: {
     summerUpdateTitle: 'تحديث طلبات المصايف',
     adminConsoleTitle: 'إدارة طلبات المصايف',
-    capacityTitle: 'تحديث سعات المصايف'
+    capacityTitle: 'تحديث سعات المصايف',
+    summerManagementSuffix: 'إدارة المصايف'
   }
 } as const;

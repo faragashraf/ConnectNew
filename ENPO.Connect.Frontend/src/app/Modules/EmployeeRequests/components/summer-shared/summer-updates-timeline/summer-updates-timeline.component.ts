@@ -1,4 +1,5 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { SUMMER_UI_TEXTS_AR } from '../core/summer-ui-texts.ar';
 
 type AttachmentItem = {
   id?: number;
@@ -11,6 +12,7 @@ type UpdateItem = {
   replyId?: number;
   author?: string;
   authorName?: string;
+  isAdminAction?: unknown;
   message?: string;
   created?: string;
   createdDate?: string;
@@ -23,6 +25,8 @@ type UpdateItem = {
   styleUrls: ['./summer-updates-timeline.component.scss']
 })
 export class SummerUpdatesTimelineComponent {
+  private readonly adminActorSuffixText = SUMMER_UI_TEXTS_AR.labels.summerManagementSuffix;
+
   @Input() title = 'سجل التحديثات';
   @Input() emptyMessage = 'لا توجد تحديثات مسجلة حتى الآن.';
   @Input() updates: UpdateItem[] = [];
@@ -38,7 +42,8 @@ export class SummerUpdatesTimelineComponent {
 
   resolveAuthor(item: UpdateItem): string {
     const author = String(item?.authorName ?? item?.author ?? '').trim();
-    return author.length > 0 ? author : 'غير معروف';
+    const resolvedAuthor = author.length > 0 ? author : 'غير معروف';
+    return this.formatAuthorDisplayName(resolvedAuthor, this.resolveIsAdminAction(item));
   }
 
   resolveMessage(item: UpdateItem): string {
@@ -94,5 +99,28 @@ export class SummerUpdatesTimelineComponent {
       name: this.resolveAttachmentName(item)
     });
   }
-}
 
+  private resolveIsAdminAction(item: UpdateItem): boolean {
+    const value = item?.isAdminAction;
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return normalized === 'true' || normalized === '1';
+  }
+
+  private formatAuthorDisplayName(author: string, isAdminAction: boolean): string {
+    if (!isAdminAction) {
+      return author;
+    }
+
+    const normalizedSuffix = `- ${this.adminActorSuffixText}`.replace(/\s+/g, ' ').trim();
+    const normalizedAuthor = String(author ?? '').replace(/\s+/g, ' ').trim();
+    if (normalizedAuthor.endsWith(normalizedSuffix)) {
+      return author;
+    }
+
+    return `${author} - ${this.adminActorSuffixText}`;
+  }
+}

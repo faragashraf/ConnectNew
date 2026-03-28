@@ -53,6 +53,8 @@ namespace Models.DTO.Correspondance.Replies
 
         public DateTime CreatedDate { get; set; }
 
+        public bool? IsAdminAction { get; set; }
+
         public List<AttchShipmentDto>? AttchShipmentDtos { get; set; } = new List<AttchShipmentDto>();
 
     }

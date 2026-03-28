@@ -406,12 +406,14 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER;
   }
 
-  get selectedRequestReplies(): Array<{ id: number; author: string; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
+  get selectedRequestReplies(): Array<{ id: number; author: string; isAdminAction: boolean; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
     const replies = this.selectedRequestDetails?.replies ?? [];
     return replies
       .map(reply => ({
         id: Number(reply.replyId ?? 0) || 0,
         author: String(reply.authorName ?? reply.authorId ?? 'غير محدد').trim() || 'غير محدد',
+        isAdminAction: this.parseReplyAdminFlag((reply as { isAdminAction?: unknown; IsAdminAction?: unknown }).isAdminAction
+          ?? (reply as { isAdminAction?: unknown; IsAdminAction?: unknown }).IsAdminAction),
         message: String(reply.message ?? '').trim(),
         created: reply.createdDate as unknown as string,
         attachments: (reply.attchShipmentDtos ?? []).map(item => ({
@@ -1347,6 +1349,15 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+
+  private parseReplyAdminFlag(value: unknown): boolean {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return normalized === 'true' || normalized === '1';
   }
 
   private getWaveOrder(code: string): number {
