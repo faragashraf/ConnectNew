@@ -307,7 +307,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     const validationAlerts = this.validateBookingRules(destination);
     if (this.ticketForm.invalid || validationAlerts.length > 0) {
       this.bookingValidationAlerts = validationAlerts.length > 0 ? validationAlerts : ['يرجى استكمال الحقول الإلزامية بشكل صحيح.'];
-      this.msg.msgError('خطأ', '<h5>يرجى مراجعة قواعد التحقق وإكمال البيانات.</h5>', true);
+      this.msg.msgError('خطأ', '<h5>يرجى مراجعة قواعد التحقق اعلي الصفحة وإكمال البيانات</h5>', true);
       return;
     }
 
