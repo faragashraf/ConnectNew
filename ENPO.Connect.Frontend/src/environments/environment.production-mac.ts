@@ -17,7 +17,7 @@ export const environment = {
   SSoURL: 'https://auth.webserver.local',
   PowerBi: 'https://powerbi.webserver.local',
   SignalRHubServer: 'https://sync.webserver.local',
-  PublicationsUrl: 'https://publications.webserver.local',
+  PublicationsUrl: 'https://connect.webserver.local',
 
   summerFeature: {
     seasonYear: 2026,

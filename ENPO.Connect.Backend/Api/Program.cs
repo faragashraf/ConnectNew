@@ -67,6 +67,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 builder.Services.AddScoped<helperService>();
 builder.Services.AddScoped<SummerWorkflowService>();
+builder.Services.AddScoped<PublicationsWorkflowService>();
 builder.Services.AddScoped<IConnectNotificationService, ConnectNotificationService>();
 builder.Services.AddHostedService<SummerPaymentAutoCancellationHostedService>();
 builder.Services.AddSingleton<ENPOCreateLogFile>(provider => new ENPOCreateLogFile("YourStringValue", "YourSecondStringValue", FileExtension.txt));

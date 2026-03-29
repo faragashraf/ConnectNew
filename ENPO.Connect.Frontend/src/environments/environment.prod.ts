@@ -19,7 +19,7 @@ OTPApplicationName: 'CONNECT',
   SSoURL: `${MainDomain}/Applications/SSO`,
   PowerBi: `${MainDomain}/Applications/PowerBi`,
   SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
-  PublicationsUrl: `${MainDomain}/Applications/publicationsApi`,
+  PublicationsUrl: `${MainDomain}/Applications/Connect_API`,
 
   summerFeature: {
     seasonYear: 2026,

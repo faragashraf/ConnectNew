@@ -22,7 +22,7 @@ export const environment = {
   SSoURL: `${MainDomain}/Applications/SSO`,
   PowerBi: `${MainDomain}/Applications/PowerBi`,
   SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
-  PublicationsUrl: `http://10.10.31.52/publicationsApi`,
+  PublicationsUrl: `${MainDomain}/Applications/Connect_API`,
 
   summerFeature: {
     seasonYear: 2026,

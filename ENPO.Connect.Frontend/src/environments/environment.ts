@@ -24,7 +24,7 @@ export const environment = {
   // PowerBi: BaseUrl + "/PowerBi",
   // PowerBi: "http://10.10.31.155/PowerBi",
   // SignalRHubServer: `http://10.10.31.52/GlobalHubSync`,
-  PublicationsUrl: `http://10.10.31.52/publicationsApi`,
+  PublicationsUrl: `https://connect.webserver.local`,
   // PublicationsUrl: `http://localhost:5269`,
   
   // ConnectApiURL: `${MainDomain}/Applications/Connect_API`,
@@ -51,4 +51,3 @@ SignalRHubServer: `https://sync.webserver.local`,  // LandTransportationApiURL: 
     pdfReferenceTitle: 'مواعيد الافواج موسم صيف 2026.pdf'
   }
 };
-
