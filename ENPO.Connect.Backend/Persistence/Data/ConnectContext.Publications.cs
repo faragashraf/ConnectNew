@@ -8,6 +8,7 @@ public partial class ConnectContext
     public virtual DbSet<PublicationRequestType> PublicationRequestTypes { get; set; }
     public virtual DbSet<PublicationDepartmentRequestType> PublicationDepartmentRequestTypes { get; set; }
     public virtual DbSet<PublicationRequest> PublicationRequests { get; set; }
+    public virtual DbSet<PublicationRequestHistory> PublicationRequestHistories { get; set; }
     public virtual DbSet<PublicationAdminDepartment> PublicationAdminDepartments { get; set; }
     public virtual DbSet<PublicationSerialCounter> PublicationSerialCounters { get; set; }
 
@@ -85,6 +86,27 @@ public partial class ConnectContext
                 .WithMany(e => e.Requests)
                 .HasForeignKey(e => e.PublicationRequestTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PublicationRequestHistory>(entity =>
+        {
+            entity.ToTable("PUB_RequestHistory");
+            entity.HasKey(e => e.PublicationRequestHistoryId);
+            entity.Property(e => e.PublicationRequestHistoryId).HasColumnName("PublicationRequestHistoryID");
+            entity.Property(e => e.MessageId).HasColumnName("MessageID");
+            entity.Property(e => e.ActionCode).HasMaxLength(40);
+            entity.Property(e => e.FromStatus).HasMaxLength(30);
+            entity.Property(e => e.ToStatus).HasMaxLength(30);
+            entity.Property(e => e.ActionBy).HasMaxLength(100);
+            entity.Property(e => e.ActionAtUtc).HasColumnType("datetime").HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.ReplyId).HasColumnName("ReplyID");
+
+            entity.HasIndex(e => new { e.MessageId, e.ActionAtUtc });
+            entity.HasIndex(e => e.ToStatus);
+            entity.HasOne(e => e.PublicationRequest)
+                .WithMany(e => e.Histories)
+                .HasForeignKey(e => e.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PublicationAdminDepartment>(entity =>

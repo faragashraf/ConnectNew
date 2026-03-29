@@ -9,9 +9,20 @@ public static class PublicationWorkflowStatuses
     public const string Draft = "Draft";
     public const string Submitted = "Submitted";
     public const string UnderReview = "UnderReview";
-    public const string Returned = "Returned";
+    public const string ReturnedForEdit = "ReturnedForEdit";
+    public const string LegacyReturned = "Returned";
     public const string Rejected = "Rejected";
     public const string Approved = "Approved";
+
+    public static readonly string[] All =
+    {
+        Draft,
+        Submitted,
+        UnderReview,
+        ReturnedForEdit,
+        Rejected,
+        Approved
+    };
 }
 
 public class PublicationRequestTypeDto
@@ -112,6 +123,20 @@ public class PublicationRequestDetailsDto
 {
     public PublicationRequestSummaryDto Summary { get; set; } = new();
     public MessageDto? MessageDetails { get; set; }
+    public List<PublicationRequestHistoryDto> History { get; set; } = new();
+}
+
+public class PublicationRequestHistoryDto
+{
+    public int PublicationRequestHistoryId { get; set; }
+    public int MessageId { get; set; }
+    public string ActionCode { get; set; } = string.Empty;
+    public string? FromStatus { get; set; }
+    public string ToStatus { get; set; } = string.Empty;
+    public string? Comment { get; set; }
+    public string ActionBy { get; set; } = string.Empty;
+    public DateTime ActionAtUtc { get; set; }
+    public int? ReplyId { get; set; }
 }
 
 public class PublicationDashboardDto
@@ -120,6 +145,7 @@ public class PublicationDashboardDto
     public int DraftCount { get; set; }
     public int SubmittedCount { get; set; }
     public int UnderReviewCount { get; set; }
+    public int PendingReviewCount { get; set; }
     public int ReturnedCount { get; set; }
     public int RejectedCount { get; set; }
     public int ApprovedCount { get; set; }

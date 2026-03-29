@@ -1,6 +1,7 @@
 using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Models.Attachment;
@@ -38,6 +39,7 @@ public class PublicationsWorkflowService
     public async Task<CommonResponse<IEnumerable<PublicationRequestTypeDto>>> GetAllowedRequestTypesAsync(string userId)
     {
         var response = new CommonResponse<IEnumerable<PublicationRequestTypeDto>>();
+
         try
         {
             var userUnitIds = await GetActiveUserUnitIdsAsync(userId);
@@ -47,7 +49,7 @@ public class PublicationsWorkflowService
                 return response;
             }
 
-            var allowedTypes = await (
+            response.Data = await (
                 from map in _connectContext.PublicationDepartmentRequestTypes.AsNoTracking()
                 join requestType in _connectContext.PublicationRequestTypes.AsNoTracking()
                     on map.PublicationRequestTypeId equals requestType.PublicationRequestTypeId
@@ -67,20 +69,22 @@ public class PublicationsWorkflowService
                 })
                 .Distinct()
                 .ToListAsync();
-
-            response.Data = allowedTypes;
         }
         catch (Exception ex)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
 
         return response;
     }
 
-    public async Task<CommonResponse<IEnumerable<PublicationSearchableFieldDto>>> GetSearchableFieldsAsync(string userId, int? publicationRequestTypeId = null, bool adminView = false)
+    public async Task<CommonResponse<IEnumerable<PublicationSearchableFieldDto>>> GetSearchableFieldsAsync(
+        string userId,
+        int? publicationRequestTypeId = null,
+        bool adminView = false)
     {
         var response = new CommonResponse<IEnumerable<PublicationSearchableFieldDto>>();
+
         try
         {
             var fields = new List<PublicationSearchableFieldDto>
@@ -89,7 +93,7 @@ public class PublicationsWorkflowService
                 new() { FieldKey = "RequestRef", FieldLabel = "المرجع الداخلي", IsDynamic = false },
                 new() { FieldKey = "Subject", FieldLabel = "الموضوع", IsDynamic = false },
                 new() { FieldKey = "PublicationNumber", FieldLabel = "رقم النشر", IsDynamic = false },
-                new() { FieldKey = "WorkflowStatus", FieldLabel = "الحالة", IsDynamic = false },
+                new() { FieldKey = "WorkflowStatus", FieldLabel = "حالة الطلب", IsDynamic = false },
                 new() { FieldKey = "CreatedBy", FieldLabel = "مقدم الطلب", IsDynamic = false }
             };
 
@@ -101,44 +105,44 @@ public class PublicationsWorkflowService
                     .Where(x => x.PublicationRequestTypeId == publicationRequestTypeId.Value && x.IsActive)
                     .Select(x => x.CategoryId)
                     .FirstOrDefaultAsync();
+
                 if (categoryId > 0)
                 {
                     categoryIds.Add(categoryId);
                 }
             }
+            else if (adminView && await IsPublicationAdminAsync(userId))
+            {
+                var adminCategories = await _connectContext.PublicationRequestTypes
+                    .AsNoTracking()
+                    .Where(x => x.IsActive)
+                    .Select(x => x.CategoryId)
+                    .Distinct()
+                    .ToListAsync();
+
+                foreach (var category in adminCategories)
+                {
+                    categoryIds.Add(category);
+                }
+            }
             else
             {
-                if (adminView && await IsPublicationAdminAsync(userId))
+                var userUnitIds = await GetActiveUserUnitIdsAsync(userId);
+                var allowedCategories = await (
+                    from map in _connectContext.PublicationDepartmentRequestTypes.AsNoTracking()
+                    join requestType in _connectContext.PublicationRequestTypes.AsNoTracking()
+                        on map.PublicationRequestTypeId equals requestType.PublicationRequestTypeId
+                    where map.IsActive
+                        && map.CanCreate
+                        && requestType.IsActive
+                        && userUnitIds.Contains(map.DepartmentUnitId)
+                    select requestType.CategoryId)
+                    .Distinct()
+                    .ToListAsync();
+
+                foreach (var category in allowedCategories)
                 {
-                    var adminCategories = await _connectContext.PublicationRequestTypes
-                        .AsNoTracking()
-                        .Where(x => x.IsActive)
-                        .Select(x => x.CategoryId)
-                        .Distinct()
-                        .ToListAsync();
-                    foreach (var item in adminCategories)
-                    {
-                        categoryIds.Add(item);
-                    }
-                }
-                else
-                {
-                    var userUnitIds = await GetActiveUserUnitIdsAsync(userId);
-                    var allowedCategories = await (
-                        from map in _connectContext.PublicationDepartmentRequestTypes.AsNoTracking()
-                        join requestType in _connectContext.PublicationRequestTypes.AsNoTracking()
-                            on map.PublicationRequestTypeId equals requestType.PublicationRequestTypeId
-                        where map.IsActive
-                            && map.CanCreate
-                            && requestType.IsActive
-                            && userUnitIds.Contains(map.DepartmentUnitId)
-                        select requestType.CategoryId)
-                        .Distinct()
-                        .ToListAsync();
-                    foreach (var item in allowedCategories)
-                    {
-                        categoryIds.Add(item);
-                    }
+                    categoryIds.Add(category);
                 }
             }
 
@@ -169,7 +173,7 @@ public class PublicationsWorkflowService
         }
         catch (Exception ex)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
 
         return response;
@@ -178,6 +182,7 @@ public class PublicationsWorkflowService
     public async Task<CommonResponse<IEnumerable<PublicationRequestTypeDto>>> GetPublicationTypeListAsync(int pageNumber, int pageSize)
     {
         var response = new CommonResponse<IEnumerable<PublicationRequestTypeDto>>();
+
         try
         {
             var safePageNumber = pageNumber <= 0 ? 1 : pageNumber;
@@ -209,7 +214,7 @@ public class PublicationsWorkflowService
         }
         catch (Exception ex)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
 
         return response;
@@ -218,6 +223,7 @@ public class PublicationsWorkflowService
     public async Task<CommonResponse<PublicationRequestTypeDto>> SavePublicationTypeAsync(string? nameAr, string? nameEn)
     {
         var response = new CommonResponse<PublicationRequestTypeDto>();
+
         try
         {
             var normalizedNameAr = (nameAr ?? string.Empty).Trim();
@@ -250,6 +256,7 @@ public class PublicationsWorkflowService
                 .OrderBy(x => x.CatId)
                 .Select(x => x.CatId)
                 .FirstOrDefaultAsync();
+
             if (categoryId <= 0)
             {
                 categoryId = await _connectContext.Cdcategories
@@ -259,6 +266,7 @@ public class PublicationsWorkflowService
                     .Select(x => x.CatId)
                     .FirstOrDefaultAsync();
             }
+
             if (categoryId <= 0)
             {
                 response.Errors.Add(new Error { Code = "404", Message = "لا توجد فئة منشورات مفعلة في النظام." });
@@ -271,8 +279,7 @@ public class PublicationsWorkflowService
                 .Select(x => (int?)x.DisplayOrder)
                 .MaxAsync() ?? 0) + 1;
 
-            var normalizedCodePart = Regex.Replace(normalizedNameAr.ToUpperInvariant(), "[^A-Z0-9]+", "_")
-                .Trim('_');
+            var normalizedCodePart = Regex.Replace(normalizedNameAr.ToUpperInvariant(), "[^A-Z0-9]+", "_").Trim('_');
             if (string.IsNullOrWhiteSpace(normalizedCodePart))
             {
                 normalizedCodePart = "TYPE";
@@ -297,6 +304,7 @@ public class PublicationsWorkflowService
                 DisplayOrder = nextDisplayOrder,
                 CreatedAtUtc = DateTime.UtcNow
             };
+
             await _connectContext.PublicationRequestTypes.AddAsync(entity);
             await _connectContext.SaveChangesAsync();
 
@@ -312,7 +320,7 @@ public class PublicationsWorkflowService
         }
         catch (Exception ex)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
 
         return response;
@@ -323,6 +331,7 @@ public class PublicationsWorkflowService
         var attachment = await _attachHeldContext.AttchShipments
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == attachmentId);
+
         if (attachment?.AttchImg == null || attachment.AttchImg.Length == 0)
         {
             return null;
@@ -331,7 +340,10 @@ public class PublicationsWorkflowService
         return Convert.ToBase64String(attachment.AttchImg);
     }
 
-    public async Task<CommonResponse<PublicationRequestDetailsDto>> CreateRequestAsync(PublicationCreateRequest request, string userId, string ip)
+    public async Task<CommonResponse<PublicationRequestDetailsDto>> CreateRequestAsync(
+        PublicationCreateRequest request,
+        string userId,
+        string ip)
     {
         var response = new CommonResponse<PublicationRequestDetailsDto>();
         IDbContextTransaction? connectTrx = null;
@@ -394,6 +406,7 @@ public class PublicationsWorkflowService
             connectTrx = await _connectContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
             attachTrx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
 
+            var nowUtc = DateTime.UtcNow;
             var messageId = _helperService.GetSequenceNextValue("Seq_Tickets");
             var categoryInfo = _helperService.GetType(requestType.CategoryId);
             var messageType = categoryInfo?.ParentCategory?.CatId ?? 1;
@@ -408,9 +421,9 @@ public class PublicationsWorkflowService
                 CreatedBy = userId,
                 AssignedSectorId = selectedDepartmentUnitId.ToString(CultureInfo.InvariantCulture),
                 CurrentResponsibleSectorId = selectedDepartmentUnitId.ToString(CultureInfo.InvariantCulture),
-                CreatedDate = DateTime.UtcNow,
+                CreatedDate = nowUtc,
                 RequestRef = BuildInternalReference(messageId),
-                Type = Convert.ToByte(Math.Clamp(messageType, byte.MinValue, byte.MaxValue)),
+                Type = Convert.ToByte(Math.Clamp(messageType, byte.MinValue, byte.MaxValue), CultureInfo.InvariantCulture),
                 CategoryCd = requestType.CategoryId
             };
             await _connectContext.Messages.AddAsync(message);
@@ -439,6 +452,7 @@ public class PublicationsWorkflowService
                         InstanceGroupId = x.InstanceGroupId ?? 1
                     })
                     .ToList();
+
                 if (sanitizedFields.Any())
                 {
                     await _connectContext.TkmendFields.AddRangeAsync(sanitizedFields);
@@ -461,12 +475,22 @@ public class PublicationsWorkflowService
                 PublicationRequestTypeId = requestType.PublicationRequestTypeId,
                 DepartmentUnitId = selectedDepartmentUnitId,
                 WorkflowStatus = PublicationWorkflowStatuses.Draft,
-                CreatedAtUtc = DateTime.UtcNow,
+                CreatedAtUtc = nowUtc,
                 CreatedBy = userId,
                 LastActionBy = userId,
-                LastActionAtUtc = DateTime.UtcNow
+                LastActionAtUtc = nowUtc
             };
             await _connectContext.PublicationRequests.AddAsync(publicationRequest);
+
+            await RecordHistoryAsync(
+                messageId,
+                PublicationHistoryActions.CreateDraft,
+                fromStatus: null,
+                toStatus: PublicationWorkflowStatuses.Draft,
+                comment: replyText,
+                actionBy: userId,
+                actionAtUtc: nowUtc,
+                replyId: reply.ReplyId);
 
             await _connectContext.SaveChangesAsync();
             await _attachHeldContext.SaveChangesAsync();
@@ -481,17 +505,23 @@ public class PublicationsWorkflowService
             {
                 await attachTrx.RollbackAsync();
             }
+
             if (connectTrx != null)
             {
                 await connectTrx.RollbackAsync();
             }
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
 
         return response;
     }
 
-    public async Task<CommonResponse<PublicationRequestDetailsDto>> EditRequestAsync(int messageId, PublicationEditRequest request, string userId, string ip)
+    public async Task<CommonResponse<PublicationRequestDetailsDto>> EditRequestAsync(
+        int messageId,
+        PublicationEditRequest request,
+        string userId,
+        string ip)
     {
         var response = new CommonResponse<PublicationRequestDetailsDto>();
         IDbContextTransaction? connectTrx = null;
@@ -513,7 +543,8 @@ public class PublicationsWorkflowService
                 return response;
             }
 
-            var message = await _connectContext.Messages.FirstOrDefaultAsync(x => x.MessageId == messageId);
+            var message = await _connectContext.Messages
+                .FirstOrDefaultAsync(x => x.MessageId == messageId);
             if (message == null)
             {
                 response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
@@ -526,7 +557,8 @@ public class PublicationsWorkflowService
                 return response;
             }
 
-            if (!CanEditStatus(publicationRequest.WorkflowStatus))
+            var currentStatus = NormalizeWorkflowStatus(publicationRequest.WorkflowStatus);
+            if (!CanEditStatus(currentStatus))
             {
                 response.Errors.Add(new Error { Code = "409", Message = "لا يمكن تعديل الطلب في الحالة الحالية." });
                 return response;
@@ -543,7 +575,10 @@ public class PublicationsWorkflowService
             }
 
             var userUnitIds = await GetActiveUserUnitIdsAsync(userId);
-            var selectedDepartmentUnitId = await ResolveDepartmentUnitIdAsync(request.DepartmentUnitId ?? publicationRequest.DepartmentUnitId, userUnitIds, response);
+            var selectedDepartmentUnitId = await ResolveDepartmentUnitIdAsync(
+                request.DepartmentUnitId ?? publicationRequest.DepartmentUnitId,
+                userUnitIds,
+                response);
             if (!response.IsSuccess)
             {
                 return response;
@@ -576,17 +611,20 @@ public class PublicationsWorkflowService
             connectTrx = await _connectContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
             attachTrx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
 
+            var nowUtc = DateTime.UtcNow;
+
             message.Subject = request.Subject?.Trim();
             message.Description = request.Description?.Trim();
             message.CategoryCd = requestType.CategoryId;
             message.AssignedSectorId = selectedDepartmentUnitId.ToString(CultureInfo.InvariantCulture);
             message.CurrentResponsibleSectorId = selectedDepartmentUnitId.ToString(CultureInfo.InvariantCulture);
-            message.LastModifiedDate = DateTime.UtcNow;
+            message.LastModifiedDate = nowUtc;
 
             publicationRequest.PublicationRequestTypeId = requestType.PublicationRequestTypeId;
             publicationRequest.DepartmentUnitId = selectedDepartmentUnitId;
+            publicationRequest.WorkflowStatus = currentStatus;
             publicationRequest.LastActionBy = userId;
-            publicationRequest.LastActionAtUtc = DateTime.UtcNow;
+            publicationRequest.LastActionAtUtc = nowUtc;
 
             var existingFields = await _connectContext.TkmendFields
                 .Where(x => x.FildRelted == messageId)
@@ -609,6 +647,7 @@ public class PublicationsWorkflowService
                         InstanceGroupId = x.InstanceGroupId ?? 1
                     })
                     .ToList();
+
                 if (updatedFields.Any())
                 {
                     await _connectContext.TkmendFields.AddRangeAsync(updatedFields);
@@ -636,6 +675,18 @@ public class PublicationsWorkflowService
                 }
             }
 
+            await RecordHistoryAsync(
+                messageId,
+                currentStatus == PublicationWorkflowStatuses.Draft
+                    ? PublicationHistoryActions.EditDraft
+                    : PublicationHistoryActions.EditReturnedRequest,
+                fromStatus: currentStatus,
+                toStatus: currentStatus,
+                comment: replyText,
+                actionBy: userId,
+                actionAtUtc: nowUtc,
+                replyId: reply.ReplyId);
+
             await _connectContext.SaveChangesAsync();
             await _attachHeldContext.SaveChangesAsync();
             await connectTrx.CommitAsync();
@@ -649,11 +700,13 @@ public class PublicationsWorkflowService
             {
                 await attachTrx.RollbackAsync();
             }
+
             if (connectTrx != null)
             {
                 await connectTrx.RollbackAsync();
             }
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
 
         return response;
@@ -665,8 +718,9 @@ public class PublicationsWorkflowService
             messageId,
             userId,
             ip,
-            PublicationWorkflowStatuses.Submitted,
-            comment ?? "تم إرسال طلب النشر.",
+            targetStatus: PublicationWorkflowStatuses.Submitted,
+            defaultReplyMessage: comment ?? "تم إرسال طلب النشر.",
+            actionCode: PublicationHistoryActions.Submit,
             adminOnly: false,
             validateCreator: true);
     }
@@ -677,43 +731,59 @@ public class PublicationsWorkflowService
             messageId,
             userId,
             ip,
-            PublicationWorkflowStatuses.UnderReview,
-            comment ?? "تم بدء مراجعة طلب النشر.",
+            targetStatus: PublicationWorkflowStatuses.UnderReview,
+            defaultReplyMessage: comment ?? "تم بدء مراجعة طلب النشر.",
+            actionCode: PublicationHistoryActions.StartReview,
             adminOnly: true,
             validateCreator: false);
     }
 
-    public Task<CommonResponse<PublicationRequestDetailsDto>> ReturnAsync(int messageId, PublicationActionRequest request, string userId, string ip)
+    public Task<CommonResponse<PublicationRequestDetailsDto>> ReturnAsync(
+        int messageId,
+        PublicationActionRequest request,
+        string userId,
+        string ip)
     {
         return TransitionAsync(
             messageId,
             userId,
             ip,
-            PublicationWorkflowStatuses.Returned,
-            request.Comment ?? "تم إرجاع طلب النشر للتعديل.",
+            targetStatus: PublicationWorkflowStatuses.ReturnedForEdit,
+            defaultReplyMessage: request.Comment ?? "تم إرجاع طلب النشر للتعديل.",
+            actionCode: PublicationHistoryActions.ReturnForEdit,
             adminOnly: true,
             validateCreator: false,
             attachments: request.files);
     }
 
-    public Task<CommonResponse<PublicationRequestDetailsDto>> RejectAsync(int messageId, PublicationActionRequest request, string userId, string ip)
+    public Task<CommonResponse<PublicationRequestDetailsDto>> RejectAsync(
+        int messageId,
+        PublicationActionRequest request,
+        string userId,
+        string ip)
     {
         return TransitionAsync(
             messageId,
             userId,
             ip,
-            PublicationWorkflowStatuses.Rejected,
-            request.Comment ?? "تم رفض طلب النشر.",
+            targetStatus: PublicationWorkflowStatuses.Rejected,
+            defaultReplyMessage: request.Comment ?? "تم رفض طلب النشر.",
+            actionCode: PublicationHistoryActions.Reject,
             adminOnly: true,
             validateCreator: false,
             attachments: request.files);
     }
 
-    public async Task<CommonResponse<PublicationRequestDetailsDto>> ApproveAsync(int messageId, PublicationApproveRequest request, string userId, string ip)
+    public async Task<CommonResponse<PublicationRequestDetailsDto>> ApproveAsync(
+        int messageId,
+        PublicationApproveRequest request,
+        string userId,
+        string ip)
     {
         var response = new CommonResponse<PublicationRequestDetailsDto>();
         IDbContextTransaction? connectTrx = null;
         IDbContextTransaction? attachTrx = null;
+
         try
         {
             var isAdmin = await IsPublicationAdminAsync(userId);
@@ -731,21 +801,23 @@ public class PublicationsWorkflowService
                 return response;
             }
 
-            var message = await _connectContext.Messages.FirstOrDefaultAsync(x => x.MessageId == messageId);
+            var message = await _connectContext.Messages
+                .FirstOrDefaultAsync(x => x.MessageId == messageId);
             if (message == null)
             {
                 response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
                 return response;
             }
 
-            if (publicationRequest.WorkflowStatus == PublicationWorkflowStatuses.Approved
+            var currentStatus = NormalizeWorkflowStatus(publicationRequest.WorkflowStatus);
+            if (currentStatus == PublicationWorkflowStatuses.Approved
                 && !string.IsNullOrWhiteSpace(publicationRequest.PublicationNumber))
             {
                 response.Data = await BuildRequestDetailsAsync(messageId, userId);
                 return response;
             }
 
-            if (!CanTransition(publicationRequest.WorkflowStatus, PublicationWorkflowStatuses.Approved))
+            if (!CanTransition(currentStatus, PublicationWorkflowStatuses.Approved))
             {
                 response.Errors.Add(new Error { Code = "409", Message = "لا يمكن اعتماد الطلب من الحالة الحالية." });
                 return response;
@@ -760,10 +832,9 @@ public class PublicationsWorkflowService
             attachTrx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
 
             var nowUtc = DateTime.UtcNow;
-            (int publicationYear, int publicationSerial, string publicationNumber) numberInfo;
             if (string.IsNullOrWhiteSpace(publicationRequest.PublicationNumber))
             {
-                numberInfo = await AllocatePublicationNumberAsync(nowUtc);
+                var numberInfo = await AllocatePublicationNumberAsync(nowUtc);
                 publicationRequest.PublicationYear = numberInfo.publicationYear;
                 publicationRequest.PublicationSerial = numberInfo.publicationSerial;
                 publicationRequest.PublicationNumber = numberInfo.publicationNumber;
@@ -800,6 +871,16 @@ public class PublicationsWorkflowService
 
             publicationRequest.FinalApprovalReplyId = reply.ReplyId;
 
+            await RecordHistoryAsync(
+                messageId,
+                PublicationHistoryActions.Approve,
+                fromStatus: currentStatus,
+                toStatus: PublicationWorkflowStatuses.Approved,
+                comment: replyText,
+                actionBy: userId,
+                actionAtUtc: nowUtc,
+                replyId: reply.ReplyId);
+
             await _connectContext.SaveChangesAsync();
             await _attachHeldContext.SaveChangesAsync();
             await connectTrx.CommitAsync();
@@ -813,20 +894,25 @@ public class PublicationsWorkflowService
             {
                 await attachTrx.RollbackAsync();
             }
+
             if (connectTrx != null)
             {
                 await connectTrx.RollbackAsync();
             }
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
 
         return response;
     }
 
-    public async Task<CommonResponse<IEnumerable<PublicationRequestSummaryDto>>> GetRequestsAsync(PublicationRequestsQuery query, string userId)
+    public async Task<CommonResponse<IEnumerable<PublicationRequestSummaryDto>>> GetRequestsAsync(
+        PublicationRequestsQuery query,
+        string userId)
     {
         var response = new CommonResponse<IEnumerable<PublicationRequestSummaryDto>>();
         query ??= new PublicationRequestsQuery();
+
         try
         {
             var pageNumber = query.PageNumber <= 0 ? 1 : query.PageNumber;
@@ -848,11 +934,7 @@ public class PublicationsWorkflowService
                     RequestType = requestType
                 };
 
-            if (query.AdminView && isAdmin)
-            {
-                // Publication admins can view all requests in Phase 1 dashboard/list.
-            }
-            else
+            if (!query.AdminView || !isAdmin)
             {
                 requestQuery = requestQuery.Where(x => x.Publication.CreatedBy.ToUpper() == normalizedUserId.ToUpper());
             }
@@ -869,7 +951,17 @@ public class PublicationsWorkflowService
 
             if (!string.IsNullOrWhiteSpace(query.WorkflowStatus))
             {
-                requestQuery = requestQuery.Where(x => x.Publication.WorkflowStatus == query.WorkflowStatus);
+                var targetStatus = NormalizeWorkflowStatus(query.WorkflowStatus);
+                if (targetStatus == PublicationWorkflowStatuses.ReturnedForEdit)
+                {
+                    requestQuery = requestQuery.Where(x =>
+                        x.Publication.WorkflowStatus == PublicationWorkflowStatuses.ReturnedForEdit
+                        || x.Publication.WorkflowStatus == PublicationWorkflowStatuses.LegacyReturned);
+                }
+                else
+                {
+                    requestQuery = requestQuery.Where(x => x.Publication.WorkflowStatus == targetStatus);
+                }
             }
 
             if (query.CreatedFromUtc.HasValue)
@@ -925,7 +1017,17 @@ public class PublicationsWorkflowService
                 }
                 else if (string.Equals(fieldKey, "WorkflowStatus", StringComparison.OrdinalIgnoreCase))
                 {
-                    requestQuery = requestQuery.Where(x => (x.Publication.WorkflowStatus ?? string.Empty).ToUpper() == normalizedSearchText);
+                    var workflowStatusSearch = NormalizeWorkflowStatus(searchText);
+                    if (workflowStatusSearch == PublicationWorkflowStatuses.ReturnedForEdit)
+                    {
+                        requestQuery = requestQuery.Where(x =>
+                            x.Publication.WorkflowStatus == PublicationWorkflowStatuses.ReturnedForEdit
+                            || x.Publication.WorkflowStatus == PublicationWorkflowStatuses.LegacyReturned);
+                    }
+                    else
+                    {
+                        requestQuery = requestQuery.Where(x => x.Publication.WorkflowStatus == workflowStatusSearch);
+                    }
                 }
                 else if (string.Equals(fieldKey, "CreatedBy", StringComparison.OrdinalIgnoreCase))
                 {
@@ -950,20 +1052,21 @@ public class PublicationsWorkflowService
                         var fieldsQuery = _connectContext.TkmendFields
                             .AsNoTracking()
                             .Where(x => x.FildKind == fieldKey && x.FildTxt != null);
+
                         fieldsQuery = searchType switch
                         {
                             "Equal" => fieldsQuery.Where(x => x.FildTxt!.ToUpper() == normalizedSearchText),
                             "Start With" => fieldsQuery.Where(x => x.FildTxt!.ToUpper().StartsWith(normalizedSearchText)),
                             _ => fieldsQuery.Where(x => x.FildTxt!.ToUpper().Contains(normalizedSearchText))
                         };
+
                         var messageIdsQuery = fieldsQuery.Select(x => x.FildRelted);
                         requestQuery = requestQuery.Where(x => messageIdsQuery.Contains(x.Publication.MessageId));
                     }
                 }
             }
 
-            var totalCount = await requestQuery.CountAsync();
-            response.TotalCount = totalCount;
+            response.TotalCount = await requestQuery.CountAsync();
             response.PageNumber = pageNumber;
             response.PageSize = pageSize;
 
@@ -976,7 +1079,11 @@ public class PublicationsWorkflowService
 
             var messageIds = page.Select(x => x.Publication.MessageId).ToList();
             var departmentIds = page.Select(x => x.Publication.DepartmentUnitId).Distinct().ToList();
-            var creatorIds = page.Select(x => x.Publication.CreatedBy).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToList();
+            var creatorIds = page
+                .Select(x => x.Publication.CreatedBy)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct()
+                .ToList();
 
             var departments = await _gpaContext.VwOrgUnitsWithCounts
                 .AsNoTracking()
@@ -994,7 +1101,10 @@ public class PublicationsWorkflowService
                 .ToListAsync();
             var creatorNameById = creators
                 .GroupBy(x => x.UserId, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(x => x.Key, x => x.First().ArabicName ?? x.Key, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.First().ArabicName ?? x.Key,
+                    StringComparer.OrdinalIgnoreCase);
 
             Dictionary<int, List<TkmendField>> dynamicFieldsByMessageId = new();
             if (query.IncludeDynamicFields && messageIds.Any())
@@ -1003,6 +1113,7 @@ public class PublicationsWorkflowService
                     .AsNoTracking()
                     .Where(x => messageIds.Contains(x.FildRelted))
                     .ToListAsync();
+
                 dynamicFieldsByMessageId = fields
                     .GroupBy(x => x.FildRelted)
                     .ToDictionary(x => x.Key, x => x.ToList());
@@ -1010,6 +1121,7 @@ public class PublicationsWorkflowService
 
             response.Data = page.Select(x =>
             {
+                var normalizedStatus = NormalizeWorkflowStatus(x.Publication.WorkflowStatus);
                 var summary = new PublicationRequestSummaryDto
                 {
                     MessageId = x.Publication.MessageId,
@@ -1019,7 +1131,7 @@ public class PublicationsWorkflowService
                         ? creatorName
                         : (x.Publication.CreatedBy ?? string.Empty),
                     CreatedAtUtc = x.Publication.CreatedAtUtc,
-                    WorkflowStatus = x.Publication.WorkflowStatus,
+                    WorkflowStatus = normalizedStatus,
                     PublicationNumber = x.Publication.PublicationNumber,
                     PublicationRequestTypeId = x.Publication.PublicationRequestTypeId,
                     PublicationRequestTypeNameAr = x.RequestType.NameAr,
@@ -1029,19 +1141,25 @@ public class PublicationsWorkflowService
                         : x.Publication.DepartmentUnitId.ToString(CultureInfo.InvariantCulture),
                     CategoryId = x.RequestType.CategoryId,
                     CanEdit = string.Equals(x.Publication.CreatedBy, normalizedUserId, StringComparison.OrdinalIgnoreCase)
-                        && CanEditStatus(x.Publication.WorkflowStatus),
-                    CanReview = query.AdminView && isAdmin
+                        && CanEditStatus(normalizedStatus),
+                    CanReview = query.AdminView
+                        && isAdmin
+                        && (normalizedStatus == PublicationWorkflowStatuses.Submitted
+                            || normalizedStatus == PublicationWorkflowStatuses.UnderReview)
                 };
-                if (query.IncludeDynamicFields && dynamicFieldsByMessageId.TryGetValue(x.Publication.MessageId, out var fields))
+
+                if (query.IncludeDynamicFields
+                    && dynamicFieldsByMessageId.TryGetValue(x.Publication.MessageId, out var fields))
                 {
                     summary.Fields = fields;
                 }
+
                 return summary;
             }).ToList();
         }
         catch (Exception ex)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
 
         return response;
@@ -1051,6 +1169,7 @@ public class PublicationsWorkflowService
     {
         var response = new CommonResponse<PublicationDashboardDto>();
         query ??= new PublicationDashboardQuery();
+
         try
         {
             var isAdmin = await IsPublicationAdminAsync(userId);
@@ -1097,22 +1216,32 @@ public class PublicationsWorkflowService
                 .Select(x => (x.ApprovedAtUtc!.Value - x.SubmittedAtUtc!.Value).TotalHours)
                 .ToList();
 
-            var data = new PublicationDashboardDto
+            var draftCount = allItems.Count(x => NormalizeWorkflowStatus(x.WorkflowStatus) == PublicationWorkflowStatuses.Draft);
+            var submittedCount = allItems.Count(x => NormalizeWorkflowStatus(x.WorkflowStatus) == PublicationWorkflowStatuses.Submitted);
+            var underReviewCount = allItems.Count(x => NormalizeWorkflowStatus(x.WorkflowStatus) == PublicationWorkflowStatuses.UnderReview);
+            var returnedCount = allItems.Count(x => NormalizeWorkflowStatus(x.WorkflowStatus) == PublicationWorkflowStatuses.ReturnedForEdit);
+            var rejectedCount = allItems.Count(x => NormalizeWorkflowStatus(x.WorkflowStatus) == PublicationWorkflowStatuses.Rejected);
+            var approvedCount = allItems.Count(x => NormalizeWorkflowStatus(x.WorkflowStatus) == PublicationWorkflowStatuses.Approved);
+
+            response.Data = new PublicationDashboardDto
             {
                 TotalCount = allItems.Count,
-                DraftCount = allItems.Count(x => x.WorkflowStatus == PublicationWorkflowStatuses.Draft),
-                SubmittedCount = allItems.Count(x => x.WorkflowStatus == PublicationWorkflowStatuses.Submitted),
-                UnderReviewCount = allItems.Count(x => x.WorkflowStatus == PublicationWorkflowStatuses.UnderReview),
-                ReturnedCount = allItems.Count(x => x.WorkflowStatus == PublicationWorkflowStatuses.Returned),
-                RejectedCount = allItems.Count(x => x.WorkflowStatus == PublicationWorkflowStatuses.Rejected),
-                ApprovedCount = allItems.Count(x => x.WorkflowStatus == PublicationWorkflowStatuses.Approved),
+                DraftCount = draftCount,
+                SubmittedCount = submittedCount,
+                UnderReviewCount = underReviewCount,
+                PendingReviewCount = submittedCount + underReviewCount,
+                ReturnedCount = returnedCount,
+                RejectedCount = rejectedCount,
+                ApprovedCount = approvedCount,
                 AvgApprovalHours = approvedDurations.Count == 0 ? 0 : Math.Round(approvedDurations.Average(), 2),
                 ByDepartment = allItems
                     .GroupBy(x => x.DepartmentUnitId)
                     .OrderByDescending(x => x.Count())
                     .Select(x => new PublicationDashboardBucketDto
                     {
-                        Key = unitNameById.TryGetValue(x.Key, out var unitName) ? unitName : x.Key.ToString(CultureInfo.InvariantCulture),
+                        Key = unitNameById.TryGetValue(x.Key, out var unitName)
+                            ? unitName
+                            : x.Key.ToString(CultureInfo.InvariantCulture),
                         Count = x.Count()
                     })
                     .ToList(),
@@ -1121,24 +1250,26 @@ public class PublicationsWorkflowService
                     .OrderByDescending(x => x.Count())
                     .Select(x => new PublicationDashboardBucketDto
                     {
-                        Key = requestTypeNameById.TryGetValue(x.Key, out var requestTypeName) ? requestTypeName : x.Key.ToString(CultureInfo.InvariantCulture),
+                        Key = requestTypeNameById.TryGetValue(x.Key, out var requestTypeName)
+                            ? requestTypeName
+                            : x.Key.ToString(CultureInfo.InvariantCulture),
                         Count = x.Count()
                     })
                     .ToList()
             };
-
-            response.Data = data;
         }
         catch (Exception ex)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
+
         return response;
     }
 
     public async Task<CommonResponse<PublicationRequestDetailsDto>> GetRequestDetailsAsync(int messageId, string userId)
     {
         var response = new CommonResponse<PublicationRequestDetailsDto>();
+
         try
         {
             var details = await BuildRequestDetailsAsync(messageId, userId);
@@ -1152,8 +1283,9 @@ public class PublicationsWorkflowService
         }
         catch (Exception ex)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
+
         return response;
     }
 
@@ -1163,9 +1295,10 @@ public class PublicationsWorkflowService
         string ip,
         string targetStatus,
         string defaultReplyMessage,
+        string actionCode,
         bool adminOnly,
         bool validateCreator,
-        List<Microsoft.AspNetCore.Http.IFormFile>? attachments = null)
+        List<IFormFile>? attachments = null)
     {
         var response = new CommonResponse<PublicationRequestDetailsDto>();
         IDbContextTransaction? connectTrx = null;
@@ -1191,7 +1324,8 @@ public class PublicationsWorkflowService
                 return response;
             }
 
-            var message = await _connectContext.Messages.FirstOrDefaultAsync(x => x.MessageId == messageId);
+            var message = await _connectContext.Messages
+                .FirstOrDefaultAsync(x => x.MessageId == messageId);
             if (message == null)
             {
                 response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
@@ -1204,7 +1338,9 @@ public class PublicationsWorkflowService
                 return response;
             }
 
-            if (!CanTransition(publicationRequest.WorkflowStatus, targetStatus))
+            var currentStatus = NormalizeWorkflowStatus(publicationRequest.WorkflowStatus);
+            var normalizedTarget = NormalizeWorkflowStatus(targetStatus);
+            if (!CanTransition(currentStatus, normalizedTarget))
             {
                 response.Errors.Add(new Error { Code = "409", Message = "الانتقال بين الحالات غير مسموح." });
                 return response;
@@ -1219,10 +1355,11 @@ public class PublicationsWorkflowService
             attachTrx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
 
             var nowUtc = DateTime.UtcNow;
-            publicationRequest.WorkflowStatus = targetStatus;
+            publicationRequest.WorkflowStatus = normalizedTarget;
             publicationRequest.LastActionBy = userId;
             publicationRequest.LastActionAtUtc = nowUtc;
-            switch (targetStatus)
+
+            switch (normalizedTarget)
             {
                 case PublicationWorkflowStatuses.Submitted:
                     publicationRequest.SubmittedAtUtc = nowUtc;
@@ -1230,7 +1367,7 @@ public class PublicationsWorkflowService
                 case PublicationWorkflowStatuses.UnderReview:
                     publicationRequest.ReviewedAtUtc = nowUtc;
                     break;
-                case PublicationWorkflowStatuses.Returned:
+                case PublicationWorkflowStatuses.ReturnedForEdit:
                     publicationRequest.ReturnedAtUtc = nowUtc;
                     break;
                 case PublicationWorkflowStatuses.Rejected:
@@ -1238,7 +1375,7 @@ public class PublicationsWorkflowService
                     break;
             }
 
-            message.Status = ToMessageStatus(targetStatus);
+            message.Status = ToMessageStatus(normalizedTarget);
             message.LastModifiedDate = nowUtc;
 
             var reply = _helperService.CreateReply(
@@ -1259,9 +1396,18 @@ public class PublicationsWorkflowService
                 }
             }
 
+            await RecordHistoryAsync(
+                messageId,
+                actionCode,
+                fromStatus: currentStatus,
+                toStatus: normalizedTarget,
+                comment: defaultReplyMessage,
+                actionBy: userId,
+                actionAtUtc: nowUtc,
+                replyId: reply.ReplyId);
+
             await _connectContext.SaveChangesAsync();
             await _attachHeldContext.SaveChangesAsync();
-
             await connectTrx.CommitAsync();
             await attachTrx.CommitAsync();
 
@@ -1273,11 +1419,13 @@ public class PublicationsWorkflowService
             {
                 await attachTrx.RollbackAsync();
             }
+
             if (connectTrx != null)
             {
                 await connectTrx.RollbackAsync();
             }
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+
+            response.Errors.Add(new Error { Code = ex.HResult.ToString(CultureInfo.InvariantCulture), Message = ex.Message });
         }
 
         return response;
@@ -1306,7 +1454,8 @@ public class PublicationsWorkflowService
         }
 
         var isAdmin = await IsPublicationAdminAsync(userId);
-        var canView = isAdmin || string.Equals(publicationProjection.Publication.CreatedBy, userId, StringComparison.OrdinalIgnoreCase);
+        var canView = isAdmin
+            || string.Equals(publicationProjection.Publication.CreatedBy, userId, StringComparison.OrdinalIgnoreCase);
         if (!canView)
         {
             return null;
@@ -1316,11 +1465,13 @@ public class PublicationsWorkflowService
             .AsNoTracking()
             .Where(x => x.UnitId == publicationProjection.Publication.DepartmentUnitId)
             .Select(x => x.UnitName)
-            .FirstOrDefaultAsync() ?? publicationProjection.Publication.DepartmentUnitId.ToString(CultureInfo.InvariantCulture);
+            .FirstOrDefaultAsync()
+            ?? publicationProjection.Publication.DepartmentUnitId.ToString(CultureInfo.InvariantCulture);
 
         var messageResponse = new CommonResponse<MessageDto>();
         await _helperService.GetMessageRequestById(messageId, messageResponse);
 
+        var normalizedStatus = NormalizeWorkflowStatus(publicationProjection.Publication.WorkflowStatus);
         var summary = new PublicationRequestSummaryDto
         {
             MessageId = publicationProjection.Publication.MessageId,
@@ -1328,7 +1479,7 @@ public class PublicationsWorkflowService
             Description = publicationProjection.Message.Description,
             CreatedBy = publicationProjection.Publication.CreatedBy,
             CreatedAtUtc = publicationProjection.Publication.CreatedAtUtc,
-            WorkflowStatus = publicationProjection.Publication.WorkflowStatus,
+            WorkflowStatus = normalizedStatus,
             PublicationNumber = publicationProjection.Publication.PublicationNumber,
             PublicationRequestTypeId = publicationProjection.Publication.PublicationRequestTypeId,
             PublicationRequestTypeNameAr = publicationProjection.RequestType.NameAr,
@@ -1336,18 +1487,41 @@ public class PublicationsWorkflowService
             DepartmentUnitName = departmentName,
             CategoryId = publicationProjection.RequestType.CategoryId,
             CanEdit = string.Equals(publicationProjection.Publication.CreatedBy, userId, StringComparison.OrdinalIgnoreCase)
-                && CanEditStatus(publicationProjection.Publication.WorkflowStatus),
+                && CanEditStatus(normalizedStatus),
             CanReview = isAdmin
         };
+
+        var history = await _connectContext.PublicationRequestHistories
+            .AsNoTracking()
+            .Where(x => x.MessageId == messageId)
+            .OrderBy(x => x.ActionAtUtc)
+            .ThenBy(x => x.PublicationRequestHistoryId)
+            .Select(x => new PublicationRequestHistoryDto
+            {
+                PublicationRequestHistoryId = x.PublicationRequestHistoryId,
+                MessageId = x.MessageId,
+                ActionCode = x.ActionCode,
+                FromStatus = NormalizeWorkflowStatus(x.FromStatus),
+                ToStatus = NormalizeWorkflowStatus(x.ToStatus),
+                Comment = x.Comment,
+                ActionBy = x.ActionBy,
+                ActionAtUtc = x.ActionAtUtc,
+                ReplyId = x.ReplyId
+            })
+            .ToListAsync();
 
         return new PublicationRequestDetailsDto
         {
             Summary = summary,
-            MessageDetails = messageResponse.Data
+            MessageDetails = messageResponse.Data,
+            History = history
         };
     }
 
-    private async Task<decimal> ResolveDepartmentUnitIdAsync(decimal? requestedDepartmentUnitId, List<decimal> userUnitIds, CommonResponse<PublicationRequestDetailsDto> response)
+    private async Task<decimal> ResolveDepartmentUnitIdAsync(
+        decimal? requestedDepartmentUnitId,
+        List<decimal> userUnitIds,
+        CommonResponse<PublicationRequestDetailsDto> response)
     {
         if (!requestedDepartmentUnitId.HasValue || requestedDepartmentUnitId.Value <= 0)
         {
@@ -1369,9 +1543,13 @@ public class PublicationsWorkflowService
         return requestedDepartmentUnitId.Value;
     }
 
-    private async Task ValidateDynamicFieldsAsync(int categoryId, List<TkmendField>? fields, CommonResponse<PublicationRequestDetailsDto> response)
+    private async Task ValidateDynamicFieldsAsync(
+        int categoryId,
+        List<TkmendField>? fields,
+        CommonResponse<PublicationRequestDetailsDto> response)
     {
         fields ??= new List<TkmendField>();
+
         var normalizedFields = fields
             .Where(x => !string.IsNullOrWhiteSpace(x.FildKind))
             .ToDictionary(x => x.FildKind!.Trim(), x => x.FildTxt?.Trim(), StringComparer.OrdinalIgnoreCase);
@@ -1389,7 +1567,7 @@ public class PublicationsWorkflowService
 
         var metadata = await _connectContext.Cdmends
             .AsNoTracking()
-            .Where(x => categoryMands.Contains(x.CdmendTxt))
+            .Where(x => x.ApplicationId == PublicationDynamicApplicationId && categoryMands.Contains(x.CdmendTxt))
             .ToListAsync();
         var metadataByKey = metadata
             .GroupBy(x => x.CdmendTxt, StringComparer.OrdinalIgnoreCase)
@@ -1422,7 +1600,10 @@ public class PublicationsWorkflowService
         }
     }
 
-    private static void ValidateMinMaxByDataType(Cdmend mend, string value, CommonResponse<PublicationRequestDetailsDto> response)
+    private static void ValidateMinMaxByDataType(
+        Cdmend mend,
+        string value,
+        CommonResponse<PublicationRequestDetailsDto> response)
     {
         var dataType = (mend.CdmendDatatype ?? string.Empty).Trim().ToLowerInvariant();
         var label = mend.CDMendLbl ?? mend.CdmendTxt;
@@ -1462,6 +1643,7 @@ public class PublicationsWorkflowService
                     Message = $"قيمة الحقل ({label}) يجب ألا تزيد عن {maxNumeric}."
                 });
             }
+
             return;
         }
 
@@ -1490,7 +1672,7 @@ public class PublicationsWorkflowService
     private async Task<List<decimal>> GetActiveUserUnitIdsAsync(string userId)
     {
         var today = DateTime.Today;
-        var unitIds = await _gpaContext.UserPositions
+        return await _gpaContext.UserPositions
             .AsNoTracking()
             .Where(x =>
                 x.UserId.ToUpper() == userId.ToUpper()
@@ -1500,8 +1682,6 @@ public class PublicationsWorkflowService
             .Select(x => x.UnitId)
             .Distinct()
             .ToListAsync();
-
-        return unitIds;
     }
 
     private async Task<bool> IsPublicationAdminAsync(string userId)
@@ -1573,54 +1753,140 @@ END";
         }
     }
 
-    private static MessageStatus ToMessageStatus(string workflowStatus)
+    private async Task RecordHistoryAsync(
+        int messageId,
+        string actionCode,
+        string? fromStatus,
+        string toStatus,
+        string? comment,
+        string actionBy,
+        DateTime actionAtUtc,
+        int? replyId)
     {
-        return workflowStatus switch
+        await _connectContext.PublicationRequestHistories.AddAsync(new PublicationRequestHistory
+        {
+            MessageId = messageId,
+            ActionCode = actionCode,
+            FromStatus = NormalizeWorkflowStatus(fromStatus),
+            ToStatus = NormalizeWorkflowStatus(toStatus),
+            Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim(),
+            ActionBy = actionBy,
+            ActionAtUtc = actionAtUtc,
+            ReplyId = replyId
+        });
+    }
+
+    private static string ToMessageStatusToken(string? workflowStatus)
+    {
+        return NormalizeWorkflowStatus(workflowStatus);
+    }
+
+    private static MessageStatus ToMessageStatus(string? workflowStatus)
+    {
+        return ToMessageStatusToken(workflowStatus) switch
         {
             PublicationWorkflowStatuses.Draft => MessageStatus.New,
             PublicationWorkflowStatuses.Submitted => MessageStatus.InProgress,
             PublicationWorkflowStatuses.UnderReview => MessageStatus.InProgress,
-            PublicationWorkflowStatuses.Returned => MessageStatus.Replied,
+            PublicationWorkflowStatuses.ReturnedForEdit => MessageStatus.Replied,
             PublicationWorkflowStatuses.Rejected => MessageStatus.Rejected,
             PublicationWorkflowStatuses.Approved => MessageStatus.Printed,
             _ => MessageStatus.InProgress
         };
     }
 
-    private static bool CanEditStatus(string workflowStatus)
+    private static bool CanEditStatus(string? workflowStatus)
     {
-        return workflowStatus == PublicationWorkflowStatuses.Draft
-               || workflowStatus == PublicationWorkflowStatuses.Returned;
+        var normalized = NormalizeWorkflowStatus(workflowStatus);
+        return normalized == PublicationWorkflowStatuses.Draft
+               || normalized == PublicationWorkflowStatuses.ReturnedForEdit;
     }
 
-    private static bool CanTransition(string currentStatus, string targetStatus)
+    private static bool CanTransition(string? currentStatus, string? targetStatus)
     {
-        if (string.Equals(currentStatus, targetStatus, StringComparison.OrdinalIgnoreCase))
+        var current = NormalizeWorkflowStatus(currentStatus);
+        var target = NormalizeWorkflowStatus(targetStatus);
+
+        if (string.Equals(current, target, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        return currentStatus switch
+        return current switch
         {
-            PublicationWorkflowStatuses.Draft => targetStatus == PublicationWorkflowStatuses.Submitted,
-            PublicationWorkflowStatuses.Submitted => targetStatus == PublicationWorkflowStatuses.UnderReview
-                                                     || targetStatus == PublicationWorkflowStatuses.Returned
-                                                     || targetStatus == PublicationWorkflowStatuses.Rejected
-                                                     || targetStatus == PublicationWorkflowStatuses.Approved,
-            PublicationWorkflowStatuses.UnderReview => targetStatus == PublicationWorkflowStatuses.Returned
-                                                       || targetStatus == PublicationWorkflowStatuses.Rejected
-                                                       || targetStatus == PublicationWorkflowStatuses.Approved,
-            PublicationWorkflowStatuses.Returned => targetStatus == PublicationWorkflowStatuses.Submitted
-                                                    || targetStatus == PublicationWorkflowStatuses.Rejected,
+            PublicationWorkflowStatuses.Draft => target == PublicationWorkflowStatuses.Submitted,
+            PublicationWorkflowStatuses.Submitted => target == PublicationWorkflowStatuses.UnderReview
+                                                     || target == PublicationWorkflowStatuses.ReturnedForEdit
+                                                     || target == PublicationWorkflowStatuses.Rejected
+                                                     || target == PublicationWorkflowStatuses.Approved,
+            PublicationWorkflowStatuses.UnderReview => target == PublicationWorkflowStatuses.ReturnedForEdit
+                                                       || target == PublicationWorkflowStatuses.Rejected
+                                                       || target == PublicationWorkflowStatuses.Approved,
+            PublicationWorkflowStatuses.ReturnedForEdit => target == PublicationWorkflowStatuses.Submitted
+                                                           || target == PublicationWorkflowStatuses.Rejected,
             PublicationWorkflowStatuses.Rejected => false,
-            PublicationWorkflowStatuses.Approved => targetStatus == PublicationWorkflowStatuses.Approved,
+            PublicationWorkflowStatuses.Approved => target == PublicationWorkflowStatuses.Approved,
             _ => false
         };
+    }
+
+    private static string NormalizeWorkflowStatus(string? workflowStatus)
+    {
+        var status = (workflowStatus ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return PublicationWorkflowStatuses.Draft;
+        }
+
+        if (string.Equals(status, PublicationWorkflowStatuses.LegacyReturned, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, PublicationWorkflowStatuses.ReturnedForEdit, StringComparison.OrdinalIgnoreCase))
+        {
+            return PublicationWorkflowStatuses.ReturnedForEdit;
+        }
+
+        if (string.Equals(status, PublicationWorkflowStatuses.Draft, StringComparison.OrdinalIgnoreCase))
+        {
+            return PublicationWorkflowStatuses.Draft;
+        }
+
+        if (string.Equals(status, PublicationWorkflowStatuses.Submitted, StringComparison.OrdinalIgnoreCase))
+        {
+            return PublicationWorkflowStatuses.Submitted;
+        }
+
+        if (string.Equals(status, PublicationWorkflowStatuses.UnderReview, StringComparison.OrdinalIgnoreCase))
+        {
+            return PublicationWorkflowStatuses.UnderReview;
+        }
+
+        if (string.Equals(status, PublicationWorkflowStatuses.Rejected, StringComparison.OrdinalIgnoreCase))
+        {
+            return PublicationWorkflowStatuses.Rejected;
+        }
+
+        if (string.Equals(status, PublicationWorkflowStatuses.Approved, StringComparison.OrdinalIgnoreCase))
+        {
+            return PublicationWorkflowStatuses.Approved;
+        }
+
+        return status;
     }
 
     private static string BuildInternalReference(int messageId)
     {
         var now = DateTime.UtcNow;
         return $"PUBL-{now:yyyyMMdd}-{messageId}";
+    }
+
+    private static class PublicationHistoryActions
+    {
+        public const string CreateDraft = "CreateDraft";
+        public const string EditDraft = "EditDraft";
+        public const string EditReturnedRequest = "EditReturnedRequest";
+        public const string Submit = "Submit";
+        public const string StartReview = "StartReview";
+        public const string ReturnForEdit = "ReturnForEdit";
+        public const string Reject = "Reject";
+        public const string Approve = "Approve";
     }
 }

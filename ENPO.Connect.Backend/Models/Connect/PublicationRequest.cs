@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Models.Correspondance;
 
@@ -25,4 +26,5 @@ public partial class PublicationRequest
 
     public virtual Message Message { get; set; } = null!;
     public virtual PublicationRequestType PublicationRequestType { get; set; } = null!;
+    public virtual ICollection<PublicationRequestHistory> Histories { get; set; } = new List<PublicationRequestHistory>();
 }
