@@ -28,7 +28,7 @@ const routes: Routes = [
     path: SUMMER_FEATURE_ROUTES.adminConsole,
     component: SummerRequestsAdminConsoleComponent,
     canActivate: [AuthNewGuardService], data: {
-      func: 'ConnectAdminFunc',
+      func: 'SummerAdminFunc',
       configRouteKey: 'Admin/SummerRequestsManagement'
     }
   }, {

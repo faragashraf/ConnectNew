@@ -1006,7 +1006,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
   private refreshProxyModeAccess(): void {
     try {
-      this.canUseProxyRegistration = this.authObjectsService.checkAuthFun('ConnectAdminFunc');
+      this.canUseProxyRegistration = this.authObjectsService.checkAuthFun('SummerAdminFunc');
     } catch {
       this.canUseProxyRegistration = false;
     }
