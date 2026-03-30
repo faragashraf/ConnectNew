@@ -17,13 +17,21 @@ const SUMMER_ADMIN_ACTION_ALIAS_MAP: Record<string, SummerAdminActionCode> = {
   manualcancel: SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
   manual_cancel: SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
   cancel: SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
+  reject: SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
   الغاءيدوي: SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
   الغاء: SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
+  رفض: SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
 
   comment: SUMMER_ADMIN_ACTION.COMMENT,
   reply: SUMMER_ADMIN_ACTION.COMMENT,
+  note: SUMMER_ADMIN_ACTION.COMMENT,
+  admin_note: SUMMER_ADMIN_ACTION.COMMENT,
+  administrative_note: SUMMER_ADMIN_ACTION.COMMENT,
   تعليق: SUMMER_ADMIN_ACTION.COMMENT,
   رد: SUMMER_ADMIN_ACTION.COMMENT,
+  ملاحظة: SUMMER_ADMIN_ACTION.COMMENT,
+  ملاحظه: SUMMER_ADMIN_ACTION.COMMENT,
+  ملاحظةادارية: SUMMER_ADMIN_ACTION.COMMENT,
 
   approvetransfer: SUMMER_ADMIN_ACTION.APPROVE_TRANSFER,
   transferapprove: SUMMER_ADMIN_ACTION.APPROVE_TRANSFER,
@@ -44,4 +52,3 @@ export function normalizeSummerAdminActionCode(actionCode: unknown): SummerAdmin
   const normalized = normalizeSearchToken(actionCode);
   return SUMMER_ADMIN_ACTION_ALIAS_MAP[normalized] ?? '';
 }
-

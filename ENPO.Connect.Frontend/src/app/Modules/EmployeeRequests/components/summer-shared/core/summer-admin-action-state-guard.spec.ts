@@ -1,0 +1,28 @@
+import { isAdminActionAllowedForCurrentStatus, resolveBlockedActionForCurrentStatus } from './summer-admin-action-state-guard';
+
+describe('summer-admin-action-state-guard', () => {
+  it('blocks manual cancel when status is already rejected/cancelled', () => {
+    expect(isAdminActionAllowedForCurrentStatus('MANUAL_CANCEL', 'Rejected')).toBeFalse();
+    expect(isAdminActionAllowedForCurrentStatus('MANUAL_CANCEL', 'مرفوض')).toBeFalse();
+    expect(resolveBlockedActionForCurrentStatus('Cancelled')).toBe('MANUAL_CANCEL');
+  });
+
+  it('blocks final approve when status is already approved/replied', () => {
+    expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'Replied')).toBeFalse();
+    expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'اعتماد نهائي')).toBeFalse();
+    expect(resolveBlockedActionForCurrentStatus('approved')).toBe('FINAL_APPROVE');
+  });
+
+  it('always allows comment/reply/note style actions regardless of current state', () => {
+    expect(isAdminActionAllowedForCurrentStatus('COMMENT', 'Rejected')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('reply', 'Rejected')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('note', 'Replied')).toBeTrue();
+  });
+
+  it('matches the state-flow rule: pending -> approved -> rejected -> approved, then approving again is blocked', () => {
+    expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'New')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('MANUAL_CANCEL', 'Replied')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'Rejected')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'Replied')).toBeFalse();
+  });
+});

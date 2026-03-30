@@ -27,6 +27,7 @@ import {
   SUMMER_ADMIN_ACTION,
   SummerAdminActionCode
 } from '../summer-shared/core/summer-action-codes';
+import { isAdminActionAllowedForCurrentStatus } from '../summer-shared/core/summer-admin-action-state-guard';
 import { SUMMER_UI_TEXTS_AR } from '../summer-shared/core/summer-ui-texts.ar';
 import { SummerRequestsRealtimeService } from '../summer-shared/core/summer-requests-realtime.service';
 import {
@@ -404,6 +405,24 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   get isTransferActionSelected(): boolean {
     const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
     return normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER;
+  }
+
+  get isSelectedActionBlockedByCurrentState(): boolean {
+    const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
+    if (!normalized) {
+      return false;
+    }
+    return this.isActionBlockedByCurrentState(normalized);
+  }
+
+  isActionBlockedByCurrentState(actionCode: SummerAdminActionCode): boolean {
+    const currentRequest = this.selectedRequest;
+    if (!currentRequest) {
+      return false;
+    }
+
+    const currentState = String(currentRequest.statusLabel ?? currentRequest.status ?? '').trim();
+    return !isAdminActionAllowedForCurrentStatus(actionCode, currentState);
   }
 
   get selectedRequestReplies(): Array<{ id: number; author: string; isAdminAction: boolean; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
@@ -796,6 +815,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     if (!actionCode) {
       this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.unsupportedAdminAction}</h5>`, true);
+      return;
+    }
+
+    if (this.isActionBlockedByCurrentState(actionCode)) {
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.duplicateAdminActionState}</h5>`, true);
       return;
     }
 

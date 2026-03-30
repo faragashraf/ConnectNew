@@ -28,8 +28,8 @@ namespace Persistence.Services.Summer
             return token switch
             {
                 "finalapprove" or "approve" or "اعتمادنهائي" or "اعتماد" or "final_approve" => Codes.FinalApprove,
-                "manual_cancel" or "manualcancel" or "cancel" or "الغاءيدوي" or "الغاء" => Codes.ManualCancel,
-                "comment" or "reply" or "تعليق" or "رد" => Codes.Comment,
+                "manual_cancel" or "manualcancel" or "cancel" or "reject" or "rejection" or "الغاءيدوي" or "الغاء" or "رفض" => Codes.ManualCancel,
+                "comment" or "reply" or "note" or "admin_note" or "administrative_note" or "تعليق" or "رد" or "ملاحظة" or "ملاحظه" or "ملاحظةادارية" => Codes.Comment,
                 "approvetransfer" or "approve_transfer" or "transferapprove" or "اعتمادالتحويل" => Codes.ApproveTransfer,
                 _ => string.Empty
             };

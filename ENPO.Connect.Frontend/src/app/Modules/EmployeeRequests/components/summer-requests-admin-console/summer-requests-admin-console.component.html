@@ -376,9 +376,18 @@
           <label>
             <span>نوع الإجراء</span>
             <select formControlName="actionCode">
-              <option *ngFor="let action of actionOptions" [ngValue]="action.value">{{ action.label }}</option>
+              <option
+                *ngFor="let action of actionOptions"
+                [ngValue]="action.value"
+                [disabled]="isActionBlockedByCurrentState(action.value)">
+                {{ action.label }}
+              </option>
             </select>
           </label>
+
+          <small class="help-text" *ngIf="isSelectedActionBlockedByCurrentState">
+            لا يمكن تنفيذ نفس الإجراء مرة أخرى لأن الطلب بالفعل في هذه الحالة.
+          </small>
 
           <label>
             <span>تعليق الإدارة</span>
@@ -433,7 +442,7 @@
             </div>
           </div>
 
-          <button type="submit" class="primary" [disabled]="submittingAction || actionForm.invalid">
+          <button type="submit" class="primary" [disabled]="submittingAction || actionForm.invalid || isSelectedActionBlockedByCurrentState">
             {{ submittingAction ? 'جاري التنفيذ...' : 'تنفيذ الإجراء' }}
           </button>
         </form>

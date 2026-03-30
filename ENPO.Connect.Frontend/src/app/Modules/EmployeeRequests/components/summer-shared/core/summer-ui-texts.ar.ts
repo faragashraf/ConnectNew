@@ -9,6 +9,7 @@ export const SUMMER_UI_TEXTS_AR = {
     destinationCatalogLoadFailed: 'تعذر تحميل إعدادات المصايف من الخدمة العامة.',
     destinationCatalogInvalid: 'تعذر تحميل إعدادات المصايف من CDMendTbl.',
     unsupportedAdminAction: 'نوع الإجراء الإداري غير مدعوم.',
+    duplicateAdminActionState: 'لا يمكن تنفيذ نفس الإجراء مرة أخرى لأن الطلب بالفعل في هذه الحالة.',
     invalidAdminActionData: 'يرجى استكمال بيانات الإجراء الإداري.',
     invalidTransferData: 'بيانات التحويل غير مكتملة.',
     invalidWaveCapacityScope: 'يرجى اختيار المصيف والفوج أولاً.',

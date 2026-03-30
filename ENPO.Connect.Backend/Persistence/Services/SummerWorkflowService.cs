@@ -31,6 +31,8 @@ namespace Persistence.Services
         private readonly ILogger<SummerWorkflowService> _logger;
 
         private const int CapacityLockTimeoutMs = 15000;
+        private const int AdminActionGateTimeoutMs = 10000;
+        private const int AdminActionLockTimeoutMs = 15000;
         private const string SummerDynamicApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId;
         private const string SummerDestinationCatalogMend = SummerWorkflowDomainConstants.DestinationCatalogMend;
         private const string TransferReviewRequiredCode = SummerWorkflowDomainConstants.TransferReviewRequiredCode;
@@ -57,6 +59,7 @@ namespace Persistence.Services
             ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"
         };
         private static readonly TimeZoneInfo SummerBusinessTimeZone = ResolveSummerBusinessTimeZone();
+        private static readonly SummerAdminActionExecutionGate AdminActionExecutionGate = new();
         private const string DefaultRequestUpdateSource = "SUMMER_WORKFLOW";
 
         public SummerWorkflowService(
@@ -599,7 +602,9 @@ namespace Persistence.Services
                 }
 
                 var summerRules = await GetSummerRulesAsync();
-                var message = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
+                var message = await _connectContext.Messages
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
                 if (message == null || !summerRules.ContainsKey(message.CategoryCd))
                 {
                     response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
@@ -620,6 +625,68 @@ namespace Persistence.Services
                 }
 
                 var comment = (request.Comment ?? string.Empty).Trim();
+                var attemptedAtUtc = DateTime.UtcNow;
+
+                await using var adminActionGateLease = await AdminActionExecutionGate.TryEnterAsync(request.MessageId, AdminActionGateTimeoutMs);
+                if (adminActionGateLease == null)
+                {
+                    _logger.LogWarning(
+                        "Summer admin action blocked by in-process concurrency gate. MessageId={MessageId}, UserId={UserId}, AttemptedAction={AttemptedAction}, CurrentStatus={CurrentStatus}, AttemptedAtUtc={AttemptedAtUtc}",
+                        request.MessageId,
+                        userId,
+                        actionCode,
+                        message.Status,
+                        attemptedAtUtc);
+                    response.Errors.Add(new Error
+                    {
+                        Code = "409",
+                        Message = "تعذر تنفيذ الإجراء حالياً لوجود عملية متزامنة على نفس الطلب. برجاء المحاولة بعد ثوانٍ."
+                    });
+                    return response;
+                }
+
+                if (!await AcquireAdminActionLockAsync(request.MessageId))
+                {
+                    _logger.LogWarning(
+                        "Summer admin action blocked by database lock timeout. MessageId={MessageId}, UserId={UserId}, AttemptedAction={AttemptedAction}, CurrentStatus={CurrentStatus}, AttemptedAtUtc={AttemptedAtUtc}",
+                        request.MessageId,
+                        userId,
+                        actionCode,
+                        message.Status,
+                        attemptedAtUtc);
+                    response.Errors.Add(new Error
+                    {
+                        Code = "409",
+                        Message = "تعذر تنفيذ الإجراء حالياً لوجود عملية متزامنة على نفس الطلب. برجاء المحاولة بعد ثوانٍ."
+                    });
+                    return response;
+                }
+
+                var messageToProcess = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
+                if (messageToProcess == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    return response;
+                }
+
+                if (SummerAdminActionStateGuard.ShouldBlockDuplicateStateTransition(actionCode, messageToProcess.Status))
+                {
+                    _logger.LogWarning(
+                        "Summer admin action blocked due to duplicate state transition. MessageId={MessageId}, UserId={UserId}, AttemptedAction={AttemptedAction}, CurrentStatus={CurrentStatus}, AttemptedAtUtc={AttemptedAtUtc}",
+                        request.MessageId,
+                        userId,
+                        actionCode,
+                        messageToProcess.Status,
+                        attemptedAtUtc);
+                    response.Errors.Add(new Error
+                    {
+                        Code = "409",
+                        Message = SummerAdminActionStateGuard.DuplicateStateTransitionMessage
+                    });
+                    return response;
+                }
+
+                message = messageToProcess;
                 if (actionCode == SummerAdminActionCatalog.Codes.ApproveTransfer)
                 {
                     if (!request.ToCategoryId.HasValue || string.IsNullOrWhiteSpace(request.ToWaveCode))
@@ -1844,6 +1911,45 @@ SELECT @result;
             var timeoutParam = command.CreateParameter();
             timeoutParam.ParameterName = "@timeout";
             timeoutParam.Value = CapacityLockTimeoutMs;
+            command.Parameters.Add(timeoutParam);
+
+            var resultObject = await command.ExecuteScalarAsync();
+            var resultCode = Convert.ToInt32(resultObject ?? -999);
+            return resultCode >= 0;
+        }
+
+        private async Task<bool> AcquireAdminActionLockAsync(int messageId)
+        {
+            if (messageId <= 0)
+            {
+                return false;
+            }
+
+            var connection = _connectContext.Database.GetDbConnection();
+            if (connection.State != ConnectionState.Open)
+            {
+                await connection.OpenAsync();
+            }
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = @"
+DECLARE @result int;
+EXEC @result = sp_getapplock
+    @Resource = @resource,
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Session',
+    @LockTimeout = @timeout;
+SELECT @result;
+";
+
+            var resourceParam = command.CreateParameter();
+            resourceParam.ParameterName = "@resource";
+            resourceParam.Value = $"SUMMER_ADMIN_ACTION_{messageId}";
+            command.Parameters.Add(resourceParam);
+
+            var timeoutParam = command.CreateParameter();
+            timeoutParam.ParameterName = "@timeout";
+            timeoutParam.Value = AdminActionLockTimeoutMs;
             command.Parameters.Add(timeoutParam);
 
             var resultObject = await command.ExecuteScalarAsync();
