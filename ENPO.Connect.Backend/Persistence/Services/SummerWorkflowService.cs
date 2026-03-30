@@ -297,7 +297,10 @@ namespace Persistence.Services
 
                 var normalizedWaveCode = (query.WaveCode ?? string.Empty).Trim();
                 var normalizedEmployeeId = (query.EmployeeId ?? string.Empty).Trim();
+                var requestedStatusRaw = (query.Status ?? string.Empty).Trim();
                 var normalizedStatus = NormalizeSearchToken(query.Status);
+                var requestedMessageStatus = ResolveRequestedStatusMessageStatus(requestedStatusRaw);
+                var requestedStatusCode = ResolveDashboardStatusCode(requestedStatusRaw);
                 var normalizedPaymentState = NormalizeSearchToken(query.PaymentState);
                 var normalizedSearch = NormalizeSearchToken(query.Search);
                 var nowUtc = DateTime.UtcNow;
@@ -323,7 +326,7 @@ namespace Persistence.Services
 
                     if (!string.IsNullOrWhiteSpace(normalizedStatus))
                     {
-                        if (byte.TryParse(query.Status, out var statusByte))
+                        if (byte.TryParse(requestedStatusRaw, out var statusByte))
                         {
                             if ((byte)ResolveMessageStatus(item.Status) != statusByte)
                             {
@@ -332,16 +335,26 @@ namespace Persistence.Services
                         }
                         else
                         {
-                            var statusToken = NormalizeSearchToken(item.Status);
-                            var statusLabelToken = NormalizeSearchToken(item.StatusLabel);
-                            var workflowStateToken = NormalizeSearchToken(item.WorkflowStateCode);
-                            var workflowStateLabelToken = NormalizeSearchToken(item.WorkflowStateLabel);
-                            if (!statusToken.Contains(normalizedStatus)
-                                && !statusLabelToken.Contains(normalizedStatus)
-                                && !workflowStateToken.Contains(normalizedStatus)
-                                && !workflowStateLabelToken.Contains(normalizedStatus))
+                            var itemMessageStatus = ResolveMessageStatus(item.Status);
+                            var itemStatusCode = ResolveDashboardStatusCode(ResolveDashboardStatusLabel(item));
+                            var matchedByCanonicalStatus =
+                                (requestedMessageStatus.HasValue && itemMessageStatus == requestedMessageStatus.Value)
+                                || (!string.IsNullOrWhiteSpace(requestedStatusCode)
+                                    && string.Equals(itemStatusCode, requestedStatusCode, StringComparison.OrdinalIgnoreCase));
+
+                            if (!matchedByCanonicalStatus)
                             {
-                                return false;
+                                var statusToken = NormalizeSearchToken(item.Status);
+                                var statusLabelToken = NormalizeSearchToken(item.StatusLabel);
+                                var workflowStateToken = NormalizeSearchToken(item.WorkflowStateCode);
+                                var workflowStateLabelToken = NormalizeSearchToken(item.WorkflowStateLabel);
+                                if (!statusToken.Contains(normalizedStatus)
+                                    && !statusLabelToken.Contains(normalizedStatus)
+                                    && !workflowStateToken.Contains(normalizedStatus)
+                                    && !workflowStateLabelToken.Contains(normalizedStatus))
+                                {
+                                    return false;
+                                }
                             }
                         }
                     }
@@ -2532,21 +2545,50 @@ SELECT @result;
             return status.GetDescription();
         }
 
+        private static MessageStatus? ResolveRequestedStatusMessageStatus(string? requestedStatus)
+        {
+            var raw = (requestedStatus ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return null;
+            }
+
+            if (Enum.TryParse<MessageStatus>(raw, true, out var parsedStatus))
+            {
+                return parsedStatus;
+            }
+
+            if (byte.TryParse(raw, out var statusByte)
+                && Enum.IsDefined(typeof(MessageStatus), statusByte))
+            {
+                return (MessageStatus)statusByte;
+            }
+
+            var token = NormalizeSearchToken(raw);
+            return token switch
+            {
+                "new" or "جديد" => MessageStatus.New,
+                "inprogress" or "in_progress" or "جاريالتنفيذ" => MessageStatus.InProgress,
+                "replied" or "تمالرد" => MessageStatus.Replied,
+                _ => null
+            };
+        }
+
         private static string ResolveDashboardStatusCode(string label)
         {
             var token = NormalizeSearchToken(label);
             return token switch
             {
-                "جديد" => "NEW",
-                "جاريالتنفيذ" => "IN_PROGRESS",
-                "ردإداري" or "رداداري" => "ADMIN_REPLY",
-                "تمالرد" => "REPLIED",
-                "اعتمادنهائي" => SummerAdminActionCatalog.Codes.FinalApprove,
-                "اعتمادتحويل" => SummerAdminActionCatalog.Codes.ApproveTransfer,
-                "الغاءيدوي" or "إلغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
-                "مرفوض" or "ملغي" => "REJECTED",
-                "يتطلبمراجعةبعدالتحويل" => TransferReviewRequiredCode,
-                "تمتمراجعةالتحويل" => TransferReviewResolvedCode,
+                "new" or "جديد" => "NEW",
+                "inprogress" or "in_progress" or "جاريالتنفيذ" => "IN_PROGRESS",
+                "adminreply" or "admin_reply" or "reply" or "ردإداري" or "رداداري" => "ADMIN_REPLY",
+                "replied" or "تمالرد" => "REPLIED",
+                "finalapprove" or "final_approve" or "اعتمادنهائي" => SummerAdminActionCatalog.Codes.FinalApprove,
+                "approvetransfer" or "approve_transfer" or "اعتمادتحويل" => SummerAdminActionCatalog.Codes.ApproveTransfer,
+                "manualcancel" or "manual_cancel" or "الغاءيدوي" or "إلغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
+                "rejected" or "مرفوض" or "ملغي" or "مرفوض/ملغي" => "REJECTED",
+                "يتطلبمراجعةبعدالتحويل" or "transferreviewrequired" or "transfer_review_required" => TransferReviewRequiredCode,
+                "تمتمراجعةالتحويل" or "transferreviewresolved" or "transfer_review_resolved" => TransferReviewResolvedCode,
                 _ => token.ToUpperInvariant()
             };
         }
