@@ -488,7 +488,11 @@ namespace Persistence.Services
                     NewCount = requests.Count(r => ResolveMessageStatus(r.Status) == MessageStatus.New),
                     InProgressCount = requests.Count(r => ResolveMessageStatus(r.Status) == MessageStatus.InProgress),
                     RepliedCount = requests.Count(r => ResolveMessageStatus(r.Status) == MessageStatus.Replied),
-                    RejectedCount = requests.Count(r => ResolveMessageStatus(r.Status) == MessageStatus.Rejected),
+                    RejectedCount = requests.Count(r =>
+                        string.Equals(
+                            ResolveDashboardStatusCode(ResolveDashboardStatusLabel(r)),
+                            "REJECTED",
+                            StringComparison.OrdinalIgnoreCase)),
                     PaidCount = requests.Count(r => r.PaidAtUtc.HasValue),
                     UnpaidCount = requests.Count(r => !r.PaidAtUtc.HasValue),
                     OverdueUnpaidCount = requests.Count(r =>
@@ -2539,7 +2543,7 @@ SELECT @result;
                 "تمالرد" => "REPLIED",
                 "اعتمادنهائي" => SummerAdminActionCatalog.Codes.FinalApprove,
                 "اعتمادتحويل" => SummerAdminActionCatalog.Codes.ApproveTransfer,
-                "الغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
+                "الغاءيدوي" or "إلغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
                 "مرفوض" or "ملغي" => "REJECTED",
                 "يتطلبمراجعةبعدالتحويل" => TransferReviewRequiredCode,
                 "تمتمراجعةالتحويل" => TransferReviewResolvedCode,
