@@ -149,7 +149,7 @@ namespace Persistence.Repositories
                     && x.MendStat == false);
 
             // instantiate handler and dispatch accordingly
-            var categoryHandler = new HandleEmployeeCategories(_connectContext, _attach_HeldContext, _gPAContext, _helperService, _mapper, _logger, _messageRequestService, _signalRConnectionManager, _notificationService);
+            var categoryHandler = new HandleEmployeeCategories(_connectContext, _attach_HeldContext, _gPAContext, _helperService, _mapper, _logger, _messageRequestService, _notificationService);
             if (isSummerCategory)
             {
                 await categoryHandler.SummerRequests(messageRequest, categoryInfo, response);

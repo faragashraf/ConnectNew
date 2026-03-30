@@ -30,7 +30,7 @@ namespace Persistence.Services.Summer
                 "finalapprove" or "approve" or "اعتمادنهائي" or "اعتماد" or "final_approve" => Codes.FinalApprove,
                 "manual_cancel" or "manualcancel" or "cancel" or "الغاءيدوي" or "الغاء" => Codes.ManualCancel,
                 "comment" or "reply" or "تعليق" or "رد" => Codes.Comment,
-                "approvetransfer" or "transferapprove" or "اعتمادالتحويل" => Codes.ApproveTransfer,
+                "approvetransfer" or "approve_transfer" or "transferapprove" or "اعتمادالتحويل" => Codes.ApproveTransfer,
                 _ => string.Empty
             };
         }
@@ -44,4 +44,3 @@ namespace Persistence.Services.Summer
         }
     }
 }
-

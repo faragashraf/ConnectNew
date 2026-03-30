@@ -1,4 +1,4 @@
-const MainDomain = 'https://10.10.31.52/';
+const MainDomain = 'https://test.egyptpost.gov.eg';
 
 
 // Ashraf faragalaah

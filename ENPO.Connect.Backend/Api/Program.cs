@@ -80,6 +80,7 @@ var chatHubUrl = BuildAbsoluteUrl(
     builder.Configuration["AppUrls:PublicBaseUrl"],
     builder.Configuration["Routes:ChatHub"],
     "Routes:ChatHub");
+Console.WriteLine($"[Startup] Resolved ChatHub URL: {chatHubUrl}");
 
 builder.Services.AddSingleton<SignalRConnectionManager>(sp =>
 {
@@ -325,10 +326,28 @@ static string BuildAbsoluteUrl(string? publicBaseUrl, string? routePath, string 
     }
 
     var normalizedRoutePath = routePath.Trim();
-    if (!normalizedRoutePath.StartsWith('/'))
+    if (Uri.TryCreate(normalizedRoutePath, UriKind.Absolute, out var absoluteRouteUri)
+        && (string.Equals(absoluteRouteUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(absoluteRouteUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
     {
-        normalizedRoutePath = $"/{normalizedRoutePath}";
+        return absoluteRouteUri.ToString();
     }
 
-    return new Uri(baseUri, normalizedRoutePath).ToString();
+    normalizedRoutePath = normalizedRoutePath.Trim('/');
+    if (normalizedRoutePath.Length == 0)
+    {
+        throw new InvalidOperationException($"{routePathConfigKey} is invalid.");
+    }
+
+    var basePath = baseUri.AbsolutePath.TrimEnd('/');
+    var combinedPath = string.IsNullOrWhiteSpace(basePath) || basePath == "/"
+        ? $"/{normalizedRoutePath}"
+        : $"{basePath}/{normalizedRoutePath}";
+
+    var builder = new UriBuilder(baseUri)
+    {
+        Path = combinedPath
+    };
+
+    return builder.Uri.ToString();
 }

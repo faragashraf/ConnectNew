@@ -11,7 +11,7 @@ export const environment = {
   titleSuffix: '',
   favicon: 'assets/brand/favicon.ico',
 
-  OTPApplicationName: 'CONNECT - Test',
+  OTPApplicationName: 'CONNECT - TEST',
 
   ConnectApiURL: `${MainDomain}/Applications/Connect_API`,
   LandTransportationApiURL: `${MainDomain}/Applications/Connect_API`,

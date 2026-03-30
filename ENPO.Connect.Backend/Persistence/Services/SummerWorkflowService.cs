@@ -57,6 +57,7 @@ namespace Persistence.Services
             ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"
         };
         private static readonly TimeZoneInfo SummerBusinessTimeZone = ResolveSummerBusinessTimeZone();
+        private const string DefaultRequestUpdateSource = "SUMMER_WORKFLOW";
 
         public SummerWorkflowService(
             ConnectContext connectContext,
@@ -556,6 +557,12 @@ namespace Persistence.Services
                     return response;
                 }
 
+                _logger.LogInformation(
+                    "Summer admin action started. MessageId={MessageId}, ActionCode={ActionCode}, AdminUserId={AdminUserId}",
+                    request.MessageId,
+                    actionCode,
+                    userId);
+
                 if (!_helperService.ValidateFileSizes(request.files, response))
                 {
                     return response;
@@ -563,6 +570,27 @@ namespace Persistence.Services
 
                 if (!ValidateAllowedAttachmentExtensions(request.files, response))
                 {
+                    return response;
+                }
+
+                var summerRules = await GetSummerRulesAsync();
+                var message = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
+                if (message == null || !summerRules.ContainsKey(message.CategoryCd))
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    return response;
+                }
+
+                if (!await CanUserManageMessageAsync(userId, message))
+                {
+                    _logger.LogWarning(
+                        "Summer admin action rejected due to missing admin scope. MessageId={MessageId}, ActionCode={ActionCode}, UserId={UserId}, AssignedSectorId={AssignedSectorId}, CurrentResponsibleSectorId={CurrentResponsibleSectorId}",
+                        message.MessageId,
+                        actionCode,
+                        userId,
+                        message.AssignedSectorId,
+                        message.CurrentResponsibleSectorId);
+                    response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بتنفيذ هذا الإجراء على الطلب." });
                     return response;
                 }
 
@@ -584,7 +612,7 @@ namespace Persistence.Services
                         NewExtraCount = request.NewExtraCount,
                         Notes = request.Comment,
                         files = request.files
-                    }, userId, ip);
+                    }, userId, ip, notifyResponsibleAdmins: false, notifyOwner: true);
 
                     if (!transferResponse.IsSuccess)
                     {
@@ -600,14 +628,12 @@ namespace Persistence.Services
                     {
                         await NotifyEmployeeOnAdminActionAsync(transferResponse.Data, actionCode, comment, includeSignalR: false);
                     }
-                    return response;
-                }
 
-                var summerRules = await GetSummerRulesAsync();
-                var message = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
-                if (message == null || !summerRules.ContainsKey(message.CategoryCd))
-                {
-                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    _logger.LogInformation(
+                        "Summer admin transfer action completed. MessageId={MessageId}, ActionCode={ActionCode}, NotifiedOwnerOnly={NotifiedOwnerOnly}",
+                        request.MessageId,
+                        actionCode,
+                        true);
                     return response;
                 }
 
@@ -723,7 +749,12 @@ namespace Persistence.Services
                     await PublishCapacityUpdateAsync(response.Data.CategoryId, response.Data.WaveCode, "ADMIN_CANCEL");
                 }
 
-                await PublishRequestUpdateAsync(request.MessageId, actionCode);
+                await PublishRequestUpdateAsync(
+                    request.MessageId,
+                    actionCode,
+                    notifyResponsibleAdmins: false,
+                    notifyOwner: true,
+                    source: "ADMIN_ACTION");
             }
             catch (Exception ex)
             {
@@ -731,6 +762,32 @@ namespace Persistence.Services
             }
 
             return response;
+        }
+
+        private async Task<bool> CanUserManageMessageAsync(string userId, Message message)
+        {
+            if (message == null)
+            {
+                return false;
+            }
+
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return false;
+            }
+
+            var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+            if (!userUnitIds.Any())
+            {
+                return false;
+            }
+
+            var assignedSectorId = (message.AssignedSectorId ?? string.Empty).Trim();
+            var currentResponsibleSectorId = (message.CurrentResponsibleSectorId ?? string.Empty).Trim();
+
+            return userUnitIds.Contains(assignedSectorId, StringComparer.OrdinalIgnoreCase)
+                || userUnitIds.Contains(currentResponsibleSectorId, StringComparer.OrdinalIgnoreCase);
         }
 
         public async Task<CommonResponse<IEnumerable<SummerWaveCapacityDto>>> GetWaveCapacityAsync(int categoryId, string waveCode)
@@ -880,7 +937,7 @@ namespace Persistence.Services
                 response.Data = summary;
 
                 await PublishCapacityUpdateAsync(summary.CategoryId, summary.WaveCode, "CANCEL");
-                await PublishRequestUpdateAsync(summary.MessageId, "CANCEL");
+                await PublishRequestUpdateAsync(summary.MessageId, "CANCEL", source: "OWNER_CANCEL");
             }
             catch (Exception ex)
             {
@@ -1037,7 +1094,7 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(message.MessageId);
-                await PublishRequestUpdateAsync(message.MessageId, "PAY");
+                await PublishRequestUpdateAsync(message.MessageId, "PAY", source: "OWNER_PAY");
             }
             catch (Exception ex)
             {
@@ -1047,7 +1104,12 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerRequestSummaryDto>> TransferAsync(SummerTransferRequest request, string userId, string ip)
+        public async Task<CommonResponse<SummerRequestSummaryDto>> TransferAsync(
+            SummerTransferRequest request,
+            string userId,
+            string ip,
+            bool notifyResponsibleAdmins = true,
+            bool notifyOwner = true)
         {
             var response = new CommonResponse<SummerRequestSummaryDto>();
             request ??= new SummerTransferRequest();
@@ -1247,7 +1309,12 @@ namespace Persistence.Services
                     response.Data = await BuildSummaryAsync(message.MessageId);
                     await PublishCapacityUpdateAsync(fromCategory, fromWave, "TRANSFER_FROM");
                     await PublishCapacityUpdateAsync(request.ToCategoryId, normalizedTargetWave, "TRANSFER_TO");
-                    await PublishRequestUpdateAsync(message.MessageId, "TRANSFER");
+                    await PublishRequestUpdateAsync(
+                        message.MessageId,
+                        "TRANSFER",
+                        notifyResponsibleAdmins: notifyResponsibleAdmins,
+                        notifyOwner: notifyOwner,
+                        source: "TRANSFER");
                 }
                 catch
                 {
@@ -1384,7 +1451,7 @@ namespace Persistence.Services
                 }
 
                 await PublishCapacityUpdateAsync(notifyCategoryId, notifyWaveCode, "AUTO_CANCEL");
-                await PublishRequestUpdateAsync(cancelledMessageId, "AUTO_CANCEL");
+                await PublishRequestUpdateAsync(cancelledMessageId, "AUTO_CANCEL", source: "AUTO_CANCEL");
             }
 
             return autoCancelledCount;
@@ -1422,6 +1489,12 @@ namespace Persistence.Services
                 ? "إدارة طلبات المصايف"
                 : templates.AdminActionSignalRTitle;
 
+            _logger.LogInformation(
+                "Summer admin-action notification prepared. MessageId={MessageId}, ActionCode={ActionCode}, EmployeeId={EmployeeId}, IncludeSignalR={IncludeSignalR}",
+                summary.MessageId,
+                actionCode,
+                summary.EmployeeId,
+                includeSignalR);
             await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
         }
 
@@ -1465,6 +1538,11 @@ namespace Persistence.Services
             var mobile = ResolvePreferredMobile(summary.EmployeePhone, summary.EmployeeExtraPhone);
             if (!string.IsNullOrWhiteSpace(mobile) && !string.IsNullOrWhiteSpace(smsMessage))
             {
+                _logger.LogInformation(
+                    "Summer SMS notification dispatch. MessageId={MessageId}, EmployeeId={EmployeeId}, Mobile={Mobile}",
+                    summary.MessageId,
+                    summary.EmployeeId,
+                    mobile);
                 await _notificationService.SendSmsAsync(new SmsDispatchRequest
                 {
                     MobileNumber = mobile,
@@ -1473,12 +1551,32 @@ namespace Persistence.Services
                     ReferenceNo = string.IsNullOrWhiteSpace(summary.RequestRef) ? $"SUMMER-{summary.MessageId}" : summary.RequestRef.Trim()
                 });
             }
+            else
+            {
+                _logger.LogInformation(
+                    "Summer SMS notification skipped. MessageId={MessageId}, EmployeeId={EmployeeId}, HasMobile={HasMobile}, HasSmsMessage={HasSmsMessage}",
+                    summary.MessageId,
+                    summary.EmployeeId,
+                    !string.IsNullOrWhiteSpace(mobile),
+                    !string.IsNullOrWhiteSpace(smsMessage));
+            }
 
             if (!includeSignalR || string.IsNullOrWhiteSpace(summary.EmployeeId) || string.IsNullOrWhiteSpace(signalRMessage))
             {
+                _logger.LogInformation(
+                    "Summer SignalR notification skipped. MessageId={MessageId}, EmployeeId={EmployeeId}, IncludeSignalR={IncludeSignalR}, HasSignalRMessage={HasSignalRMessage}",
+                    summary.MessageId,
+                    summary.EmployeeId,
+                    includeSignalR,
+                    !string.IsNullOrWhiteSpace(signalRMessage));
                 return;
             }
 
+            _logger.LogInformation(
+                "Summer SignalR notification dispatch to owner. MessageId={MessageId}, EmployeeId={EmployeeId}, Title={Title}",
+                summary.MessageId,
+                summary.EmployeeId,
+                signalRTitle);
             await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
             {
                 UserId = summary.EmployeeId.Trim(),
@@ -1746,7 +1844,7 @@ SELECT @result;
                 Category = NotificationCategory.Business
             };
 
-            await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+            var dispatchResponse = await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
             {
                 GroupNames = SummerNotificationGroups,
                 Notification = notification.Notification,
@@ -1756,12 +1854,46 @@ SELECT @result;
                 Sender = notification.sender,
                 Category = notification.Category ?? NotificationCategory.Business
             });
+
+            if (!dispatchResponse.IsSuccess)
+            {
+                var errors = string.Join(" | ", dispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                _logger.LogWarning(
+                    "Summer capacity update publish encountered errors. CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, Errors={Errors}",
+                    categoryId,
+                    waveCode,
+                    action,
+                    errors);
+                return;
+            }
+
+            _logger.LogInformation(
+                "Summer capacity update published. CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, Groups={Groups}",
+                categoryId,
+                waveCode,
+                action,
+                string.Join(",", SummerNotificationGroups));
         }
 
-        private async Task PublishRequestUpdateAsync(int messageId, string action)
+        private async Task PublishRequestUpdateAsync(
+            int messageId,
+            string action,
+            bool notifyResponsibleAdmins = true,
+            bool notifyOwner = true,
+            string? source = null)
         {
             if (messageId <= 0)
             {
+                return;
+            }
+
+            if (!notifyResponsibleAdmins && !notifyOwner)
+            {
+                _logger.LogWarning(
+                    "Summer request update skipped because no recipients were selected. MessageId={MessageId}, Action={Action}, Source={Source}",
+                    messageId,
+                    action,
+                    source ?? DefaultRequestUpdateSource);
                 return;
             }
 
@@ -1779,10 +1911,16 @@ SELECT @result;
                 Category = NotificationCategory.Business
             };
 
-            var responsibleGroups = await ResolveResponsibleAdminGroupsAsync(messageId);
-            if (responsibleGroups.Count > 0)
+            var effectiveSource = string.IsNullOrWhiteSpace(source) ? DefaultRequestUpdateSource : source.Trim();
+            var responsibleGroups = new List<string>();
+            if (notifyResponsibleAdmins)
             {
-                await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+                responsibleGroups = await ResolveResponsibleAdminGroupsAsync(messageId);
+            }
+
+            if (notifyResponsibleAdmins && responsibleGroups.Count > 0)
+            {
+                var groupsDispatchResponse = await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
                 {
                     GroupNames = responsibleGroups,
                     Notification = notification.Notification,
@@ -1792,12 +1930,37 @@ SELECT @result;
                     Sender = notification.sender,
                     Category = notification.Category ?? NotificationCategory.Business
                 });
+
+                if (!groupsDispatchResponse.IsSuccess)
+                {
+                    var errors = string.Join(" | ", groupsDispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.LogWarning(
+                        "Summer request update publish to admin groups failed. MessageId={MessageId}, Action={Action}, Source={Source}, Groups={Groups}, Errors={Errors}",
+                        messageId,
+                        normalizedAction,
+                        effectiveSource,
+                        string.Join(",", responsibleGroups),
+                        errors);
+                }
+            }
+            else if (notifyResponsibleAdmins)
+            {
+                _logger.LogWarning(
+                    "Summer request update publish found no responsible admin groups. MessageId={MessageId}, Action={Action}, Source={Source}",
+                    messageId,
+                    normalizedAction,
+                    effectiveSource);
             }
 
-            var ownerEmployeeId = await ResolveRequestOwnerEmployeeIdAsync(messageId);
-            if (!string.IsNullOrWhiteSpace(ownerEmployeeId))
+            var ownerEmployeeId = string.Empty;
+            if (notifyOwner)
             {
-                await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
+                ownerEmployeeId = await ResolveRequestOwnerEmployeeIdAsync(messageId);
+            }
+
+            if (notifyOwner && !string.IsNullOrWhiteSpace(ownerEmployeeId))
+            {
+                var ownerDispatchResponse = await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
                 {
                     UserId = ownerEmployeeId,
                     Notification = notification.Notification,
@@ -1807,7 +1970,37 @@ SELECT @result;
                     Sender = notification.sender,
                     Category = notification.Category ?? NotificationCategory.Business
                 });
+
+                if (!ownerDispatchResponse.IsSuccess)
+                {
+                    var errors = string.Join(" | ", ownerDispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.LogWarning(
+                        "Summer request update publish to owner failed. MessageId={MessageId}, Action={Action}, Source={Source}, OwnerEmployeeId={OwnerEmployeeId}, Errors={Errors}",
+                        messageId,
+                        normalizedAction,
+                        effectiveSource,
+                        ownerEmployeeId,
+                        errors);
+                }
             }
+            else if (notifyOwner)
+            {
+                _logger.LogWarning(
+                    "Summer request update publish skipped owner because owner employee id is missing. MessageId={MessageId}, Action={Action}, Source={Source}",
+                    messageId,
+                    normalizedAction,
+                    effectiveSource);
+            }
+
+            _logger.LogInformation(
+                "Summer request update published. MessageId={MessageId}, Action={Action}, Source={Source}, NotifyResponsibleAdmins={NotifyResponsibleAdmins}, AdminGroups={AdminGroups}, NotifyOwner={NotifyOwner}, OwnerEmployeeId={OwnerEmployeeId}",
+                messageId,
+                normalizedAction,
+                effectiveSource,
+                notifyResponsibleAdmins,
+                responsibleGroups.Count > 0 ? string.Join(",", responsibleGroups) : string.Empty,
+                notifyOwner,
+                ownerEmployeeId);
         }
 
         private async Task<List<string>> ResolveResponsibleAdminGroupsAsync(int messageId)

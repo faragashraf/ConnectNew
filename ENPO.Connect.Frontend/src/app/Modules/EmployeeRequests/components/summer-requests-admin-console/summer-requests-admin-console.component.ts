@@ -82,7 +82,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: SUMMER_ADMIN_ACTION.COMMENT, label: 'تعليق / رد إداري' },
     { value: SUMMER_ADMIN_ACTION.FINAL_APPROVE, label: 'اعتماد نهائي' },
     { value: SUMMER_ADMIN_ACTION.MANUAL_CANCEL, label: 'إلغاء يدوي' },
-    // { value: 'APPROVE_TRANSFER', label: 'اعتماد تحويل' }
+    { value: SUMMER_ADMIN_ACTION.APPROVE_TRANSFER, label: 'اعتماد تحويل' }
   ];
 
   filtersForm: FormGroup;
@@ -825,6 +825,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           if (this.selectedRequestId) {
             this.applyRealtimeRequestUpdate(this.createLocalRequestUpdateEvent(this.selectedRequestId, 'UPDATE'));
           }
+          this.scheduleDashboardRefresh();
         } else {
           this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
         }
@@ -1235,6 +1236,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       next: patched => {
         this.requests = patched.requests;
         this.requestsTotalCount = patched.totalCount;
+        this.requestsTotalPages = Math.max(1, Math.ceil(this.requestsTotalCount / Math.max(1, this.requestsPageSize)));
+        if (this.requestsPageNumber > this.requestsTotalPages) {
+          this.requestsPageNumber = this.requestsTotalPages;
+          this.filtersForm.patchValue({ pageNumber: this.requestsPageNumber }, { emitEvent: false });
+        }
         this.selectedRequestId = patched.selectedRequestId;
 
         if (patched.selectedWasRemoved) {

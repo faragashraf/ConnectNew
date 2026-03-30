@@ -35,7 +35,6 @@ namespace Persistence.Services
         private readonly IMapper _mapper;
         private readonly ENPOCreateLogFile _logger;
         private readonly MessageRequestService _messageRequestService;
-        private readonly SignalRConnectionManager _signalRConnectionManager;
         private readonly IConnectNotificationService _notificationService;
         private const int CapacityLockTimeoutMs = 15000;
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
@@ -71,7 +70,7 @@ namespace Persistence.Services
             "Summer_AdminComment"
         };
 
-        public HandleEmployeeCategories(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, helperService helperService, IMapper mapper, ENPOCreateLogFile logger, MessageRequestService messageRequestService, SignalRConnectionManager signalRConnectionManager, IConnectNotificationService notificationService)
+        public HandleEmployeeCategories(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, helperService helperService, IMapper mapper, ENPOCreateLogFile logger, MessageRequestService messageRequestService, IConnectNotificationService notificationService)
         {
             _connectContext = connectContext;
             _attach_HeldContext = attach_HeldContext;
@@ -80,7 +79,6 @@ namespace Persistence.Services
             _mapper = mapper;
             _logger = logger ?? new ENPOCreateLogFile("C:\\Connect_Log", "HandleEmployeeCategories_Log" + DateTime.Today.ToString("dd-MMM-yyyy"), FileExtension.txt);
             _messageRequestService = messageRequestService ?? throw new ArgumentNullException(nameof(messageRequestService));
-            _signalRConnectionManager = signalRConnectionManager ?? throw new ArgumentNullException(nameof(signalRConnectionManager));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         }
 
@@ -428,42 +426,23 @@ namespace Persistence.Services
         private async Task PostCommitActionsAsync(MessageRequest messageRequest, Reply reply, CategoryWithParent categoryInfo)
         {
             var category = categoryInfo?.ParentCategory;
-
-            var userId = messageRequest?.CreatedBy;
-            if (string.IsNullOrEmpty(userId))
-            {
-                _logger.AppendLine("PostCommitActionsAsync: CreatedBy is null or empty; skipping notification.");
-                return;
-            }
-
             var requestRef = messageRequest?.RequestRef ?? string.Empty;
             var catName = category?.CatName ?? string.Empty;
             var isEditOperation = !string.IsNullOrWhiteSpace(reply?.Message)
                 && reply.Message.Contains("تعديل", StringComparison.OrdinalIgnoreCase);
 
-            var notificationText = isEditOperation
-                ? $"تم حفظ تعديل طلب المصيف '{catName}' برقم مرجع {requestRef}."
-                : $"تم إنشاء طلب المصيف '{catName}' برقم مرجع {requestRef} وإرساله للتنفيذ.";
-            var notificationTitle = isEditOperation ? "تم تعديل طلب مصيف" : "تم إنشاء طلب مصيف";
-
-            await _signalRConnectionManager.SendNotificationToUser(userId, new NotificationDto
-            {
-                Notification = notificationText,
-                type = NotificationType.info,
-                Title = notificationTitle,
-                time = DateTime.Now,
-                sender = "Connect",
-                Category = NotificationCategory.Business
-            });
-
-            var targetAdminGroup = ResolveResponsibleAdminGroupName(messageRequest);
+            var targetAdminGroups = ResolveResponsibleAdminGroups(messageRequest);
             var updatedMessageId = reply?.MessageId ?? 0;
             var requestUpdatePayload = BuildSummerRequestUpdatedPayload(updatedMessageId, isEditOperation ? "EDIT" : "CREATE");
-            if (!string.IsNullOrWhiteSpace(targetAdminGroup) && !string.IsNullOrWhiteSpace(requestUpdatePayload))
+
+            _logger.AppendLine(
+                $"PostCommitActionsAsync: summer request update prepared. MessageId={updatedMessageId}, Action={(isEditOperation ? "EDIT" : "CREATE")}, CreatedBy={messageRequest?.CreatedBy}, AdminGroups={(targetAdminGroups.Count > 0 ? string.Join(",", targetAdminGroups) : "NONE")}, RequestRef={requestRef}, Category={catName}.");
+
+            if (targetAdminGroups.Count > 0 && !string.IsNullOrWhiteSpace(requestUpdatePayload))
             {
-                await _notificationService.SendSignalRToGroupAsync(new SignalRGroupDispatchRequest
+                var dispatchResponse = await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
                 {
-                    GroupName = targetAdminGroup,
+                    GroupNames = targetAdminGroups,
                     Notification = requestUpdatePayload,
                     Title = "تحديث طلبات المصايف",
                     Type = NotificationType.info,
@@ -471,6 +450,18 @@ namespace Persistence.Services
                     Sender = "Connect",
                     Time = DateTime.Now
                 });
+
+                if (!dispatchResponse.IsSuccess)
+                {
+                    var errors = string.Join(" | ", dispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.AppendLine(
+                        $"PostCommitActionsAsync: failed to dispatch summer admin update. MessageId={updatedMessageId}, Groups={string.Join(",", targetAdminGroups)}, Errors={errors}.");
+                }
+                else
+                {
+                    _logger.AppendLine(
+                        $"PostCommitActionsAsync: dispatched summer admin update. MessageId={updatedMessageId}, Groups={string.Join(",", targetAdminGroups)}.");
+                }
             }
             else
             {
@@ -493,21 +484,18 @@ namespace Persistence.Services
             return $"SUMMER_REQUEST_UPDATED|{messageId}|{normalizedAction}|{DateTime.UtcNow:o}";
         }
 
-        private static string? ResolveResponsibleAdminGroupName(MessageRequest? messageRequest)
+        private static List<string> ResolveResponsibleAdminGroups(MessageRequest? messageRequest)
         {
             if (messageRequest == null)
             {
-                return null;
+                return new List<string>();
             }
 
-            var responsible = (messageRequest.CurrentResponsibleSectorId ?? string.Empty).Trim();
-            if (!string.IsNullOrWhiteSpace(responsible))
-            {
-                return responsible;
-            }
-
-            var assigned = (messageRequest.AssignedSectorId ?? string.Empty).Trim();
-            return string.IsNullOrWhiteSpace(assigned) ? null : assigned;
+            return new[] { messageRequest.CurrentResponsibleSectorId, messageRequest.AssignedSectorId }
+                .Select(sector => (sector ?? string.Empty).Trim())
+                .Where(sector => sector.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         private static bool IsUniqueConstraintViolation(string message)
