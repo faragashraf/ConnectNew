@@ -107,9 +107,31 @@ builder.Services.AddAuthentication(opt =>
         ValidateAudience = false,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        ClockSkew = TimeSpan.FromSeconds(30),
         ValidIssuer = applicationConfig.tokenOptions.Issuer,
         ValidAudience = applicationConfig.tokenOptions.Audience!,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(applicationConfig.tokenOptions.Key)),
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnAuthenticationFailed = context =>
+        {
+            if (!context.Response.HasStarted)
+            {
+                context.Response.Headers["X-Auth-Error-Code"] =
+                    context.Exception is SecurityTokenExpiredException ? "token_expired" : "token_invalid";
+            }
+            return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            if (!context.Response.HasStarted && !context.Response.Headers.ContainsKey("X-Auth-Error-Code"))
+            {
+                context.Response.Headers["X-Auth-Error-Code"] = "token_unauthorized";
+            }
+            return Task.CompletedTask;
+        }
     };
 });
 
@@ -187,6 +209,7 @@ builder.Services.AddCors(options =>
            builder => builder.SetIsOriginAllowed(origin => true)
                              .AllowAnyHeader()
                              .AllowAnyMethod()
+                             .WithExposedHeaders("X-Auth-Error-Code")
                              .AllowCredentials()
                              );
 });

@@ -5,7 +5,7 @@ import { MessageService } from 'primeng/api';
 import { JwtHelperService } from '@auth0/angular-jwt';
 import { Router } from '@angular/router';
 import { MsgsService } from '../helper/msgs.service';
-import { BehaviorSubject, interval, Subject, Subscription } from 'rxjs';
+import { BehaviorSubject, firstValueFrom, interval, Subject, Subscription, take, timeout } from 'rxjs';
 import { ChatModel } from '../../models/ChatModel';
 import { Message } from '../../models/Message';
 import { WindowsNotificationService } from '../helper/windowsNotification.service';
@@ -97,6 +97,7 @@ export class SignalRService {
   notificationList$ = new Subject<any[]>();
   primMsgList: any[] = [];
   primMsgCount: number = 0
+  private refreshTokenResponse$ = new Subject<string>();
   private readonly notificationDedupeWindowMs = 2500;
   private readonly recentNotificationSignatures = new Map<string, number>();
 
@@ -349,6 +350,7 @@ export class SignalRService {
       localStorage.setItem('ConnectToken', _token)
       const exp = 1800; // 30 minutes in seconds
       this.startSessionTimer(exp);
+      this.refreshTokenResponse$.next(_token);
     });
 
     this.hubConnection.on('LogOut', () => {
@@ -437,6 +439,26 @@ export class SignalRService {
   async RefreshToken(token: string) {
     return this.hubConnection.invoke('RefreshToken', token)
       .catch(error => console.log(error));
+  }
+
+  async requestTokenRefresh(token: string, timeoutMs: number = 5000): Promise<string> {
+    if (!token || !token.trim()) {
+      throw new Error('Token is required to refresh session');
+    }
+
+    if (!this.hubConnection || this.hubConnection.state !== signalR.HubConnectionState.Connected) {
+      throw new Error('SignalR connection is not available for token refresh');
+    }
+
+    const waitForRefreshToken = firstValueFrom(
+      this.refreshTokenResponse$.pipe(
+        take(1),
+        timeout({ first: timeoutMs })
+      )
+    );
+
+    await this.RefreshToken(token);
+    return await waitForRefreshToken;
   }
   async SendMessage(_content: string) {
     const message: Message = {

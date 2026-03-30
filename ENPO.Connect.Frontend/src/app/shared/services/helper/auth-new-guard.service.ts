@@ -38,26 +38,7 @@ export class AuthNewGuardService {
       return false;
     }
 
-    // 🔹 2. Check Expiration
-    try {
-      if (this.jwtHelper.isTokenExpired(token)) {
-        this.msgsService.msgError(
-          "لقد انتهت صلاحية الجلسه<br><br>يرجى إعادة تسجيل الدخول",
-          "",
-          true
-        );
-
-        this.authService.SignOut(true);
-        this.redirectToLogin(currentUrl);
-        return false;
-      }
-    } catch (error) {
-      this.authService.SignOut(true);
-      this.redirectToLogin(currentUrl);
-      return false;
-    }
-
-    // 🔹 3. Authorization (Generic func check)
+    // 🔹 2. Authorization (Generic func check)
     const requiredFunc = route.data?.['func'];
 
     if (requiredFunc) {
