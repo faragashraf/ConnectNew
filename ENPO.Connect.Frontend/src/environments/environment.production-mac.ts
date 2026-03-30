@@ -1,4 +1,4 @@
-const MainDomain = 'https://test.egyptpost.gov.eg/';
+const MainDomain = 'https://test.egyptpost.gov.eg';
 
 export const environment = {
   production: true,
