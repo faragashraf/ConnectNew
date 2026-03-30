@@ -22,6 +22,7 @@ using System;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Persistence.Services
@@ -688,13 +689,32 @@ SELECT @result;
                 return;
             }
 
-            var messageText = $"SUMMER_CAPACITY_UPDATED|{categoryId}|{waveCode.Trim()}|{action}|{DateTime.UtcNow:o}";
+            var normalizedWaveCode = waveCode.Trim();
+            var normalizedAction = string.IsNullOrWhiteSpace(action)
+                ? "UPDATE"
+                : action.Trim().ToUpperInvariant();
+            var emittedAtUtc = DateTime.UtcNow;
+            var destinationName = await ResolveSummerDestinationNameAsync(categoryId);
+            var batchNumber = ResolveSummerBatchNumber(normalizedWaveCode);
+
+            var messageText = JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["event"] = "SUMMER_CAPACITY_UPDATED",
+                ["destinationId"] = categoryId,
+                ["destinationName"] = destinationName,
+                ["waveCode"] = normalizedWaveCode,
+                ["batchNumber"] = batchNumber,
+                ["action"] = normalizedAction,
+                ["emittedAt"] = emittedAtUtc,
+                ["sender"] = "Connect",
+                ["title"] = "إدارة طلبات المصايف"
+            });
             var notification = new NotificationDto
             {
                 Notification = messageText,
                 type = NotificationType.info,
-                Title = "تحديث سعات المصايف",
-                time = DateTime.Now,
+                Title = "إدارة طلبات المصايف",
+                time = emittedAtUtc,
                 sender = "Connect",
                 Category = NotificationCategory.Business
             };
@@ -709,6 +729,32 @@ SELECT @result;
                 Sender = notification.sender,
                 Category = notification.Category ?? NotificationCategory.Business
             });
+        }
+
+        private async Task<string> ResolveSummerDestinationNameAsync(int categoryId)
+        {
+            var destinationName = await _connectContext.Cdcategories
+                .AsNoTracking()
+                .Where(category => category.CatId == categoryId)
+                .Select(category => category.CatName)
+                .FirstOrDefaultAsync();
+
+            destinationName = Convert.ToString(destinationName ?? string.Empty).Trim();
+            return destinationName.Length > 0
+                ? destinationName
+                : $"المصيف رقم {categoryId}";
+        }
+
+        private static string ResolveSummerBatchNumber(string waveCode)
+        {
+            var normalized = Convert.ToString(waveCode ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return "-";
+            }
+
+            var digitsOnly = new string(normalized.Where(char.IsDigit).ToArray());
+            return digitsOnly.Length > 0 ? digitsOnly : normalized;
         }
 
         private static string? GetFieldValue(IEnumerable<TkmendField>? fields, string fieldKind)

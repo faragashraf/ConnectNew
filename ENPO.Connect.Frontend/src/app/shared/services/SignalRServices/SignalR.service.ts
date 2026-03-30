@@ -399,22 +399,24 @@ export class SignalRService {
       this.Notification = [];
       this.primMsgCount = 0;
 
-      notifications.forEach((notification: NotificationDto) => {
-        const displayNotification = this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto;
-        // let sev = notification.type == info ? 'info' : notification.type == '2' ? 'success' : 'warn'
-        this.Notification.push(displayNotification)
+      const normalizedNotifications = (Array.isArray(notifications) ? notifications : [])
+        .map(notification => this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto)
+        .sort((a, b) => this.toEpochMs(b?.time) - this.toEpochMs(a?.time));
+
+      normalizedNotifications.forEach((displayNotification: NotificationDto) => {
+        this.Notification.push(displayNotification);
         let _notification = {
           severity: displayNotification.type,
-          summary: `${displayNotification.sender} - ${displayNotification.title}`,
-          detail: ` ${this.conditionalDate.transform(displayNotification?.time ?? null, "full")} :  ${displayNotification.notification}`,
+          summary: this.summerNotificationDisplayMapper.buildToastSummary(displayNotification as any),
+          detail: `${this.conditionalDate.transform(displayNotification?.time ?? null, "full")}`,
           sticky: false,
           life: 5000 // notificat
-        }
-        this.primMsgList.push(_notification)
+        };
+        this.primMsgList.push(_notification);
 
-        this.primMsgCount++
-      })
-      this.notificationList$.next(notifications)
+        this.primMsgCount++;
+      });
+      this.notificationList$.next(normalizedNotifications as any[]);
     });
     this.hubConnection.on('RecieveTypingState', (NewMessage: Message) => {
       if (NewMessage.to == this.userAuth) {
@@ -569,6 +571,11 @@ export class SignalRService {
     const previous = this.recentNotificationSignatures.get(signature);
     this.recentNotificationSignatures.set(signature, now);
     return !(previous && (now - previous) <= this.notificationDedupeWindowMs);
+  }
+
+  private toEpochMs(value: unknown): number {
+    const epoch = new Date(value as any).getTime();
+    return Number.isFinite(epoch) ? epoch : 0;
   }
 
 

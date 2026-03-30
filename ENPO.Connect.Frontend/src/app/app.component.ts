@@ -172,13 +172,14 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       const notificationTime = displayNotification?.time ?? notification?.time;
       const osNotificationTitle = notificationTitle || notificationSender || 'Connect';
       const osNotificationBody = notificationBody || notificationTitle || 'لديك إشعار جديد';
+      const toastSummary = this.summerNotificationDisplayMapper.buildToastSummary(displayNotification as any);
 
-      this.signalRService.Notification.push(displayNotification);
+      this.signalRService.Notification.unshift(displayNotification);
 
       this.signalRService.primMsg.add({
         severity: this.resolveToastSeverity(displayNotification?.type),
-        summary: `${notificationSender} - ${notificationTitle}`,
-        detail: ` ${this.conditionalDate.transform(notificationTime, 'full')} :  ${notificationBody}`,
+        summary: toastSummary,
+        detail: `${this.conditionalDate.transform(notificationTime, 'full')}`,
         sticky: false,
         life: 5000
       });
@@ -204,13 +205,14 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       this.signalRService.notificationList$,
       (notifications: any[]) => {
         const normalized = (Array.isArray(notifications) ? notifications : [])
-          .map(notification => this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto);
+          .map(notification => this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto)
+          .sort((a, b) => this.toEpochMs(b?.time) - this.toEpochMs(a?.time));
 
         this.signalRService.Notification = normalized;
         this.signalRService.primMsgList = normalized.map(notification => ({
           severity: this.resolveToastSeverity(notification?.type),
-          summary: `${notification?.sender ?? 'Connect'} - ${notification?.title ?? ''}`,
-          detail: ` ${this.conditionalDate.transform(notification?.time ?? null, 'full')} :  ${notification?.notification ?? ''}`,
+          summary: this.summerNotificationDisplayMapper.buildToastSummary(notification as any),
+          detail: `${this.conditionalDate.transform(notification?.time ?? null, 'full')}`,
           sticky: false,
           life: 5000
         }));
@@ -321,5 +323,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       return 'warn';
     }
     return 'info';
+  }
+
+  private toEpochMs(value: unknown): number {
+    const epoch = new Date(value as any).getTime();
+    return Number.isFinite(epoch) ? epoch : 0;
   }
 }

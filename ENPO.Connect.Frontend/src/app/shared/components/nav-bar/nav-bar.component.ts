@@ -94,7 +94,8 @@ export class NavBarComponent implements OnInit, AfterViewInit {
     this.selectedTheme = this.themeService.mode;
     this.selectedVisualTheme = this.themeService.visualTheme;
     this.signalRService.primMsg.messageObserver.subscribe((msgs: any) => {
-      this.signalRService.primMsgList = [...this.signalRService.primMsgList, msgs];
+      const payload = Array.isArray(msgs) ? msgs : [msgs];
+      this.signalRService.primMsgList = [...payload, ...this.signalRService.primMsgList];
     });
 
     // Start tour on successful login (Auth/Login -> Home) or page refresh if logged in
@@ -470,6 +471,32 @@ export class NavBarComponent implements OnInit, AfterViewInit {
     }
 
     this.msgsService.msgInfo('تعذر إرسال الإشعار. تحقق من صلاحية الإشعارات في المتصفح والنظام.', 'اختبار إشعار النظام');
+  }
+
+  testSummerCapacityNotification() {
+    const now = new Date();
+    const payload = {
+      event: 'SUMMER_CAPACITY_UPDATED',
+      destinationId: 147,
+      destinationName: 'المصيف التجريبي',
+      waveCode: 'W3',
+      batchNumber: '3',
+      action: 'EDIT',
+      emittedAt: now.toISOString(),
+      sender: 'Connect',
+      title: 'إدارة طلبات المصايف'
+    };
+
+    this.signalRService.Notification$.next({
+      sender: 'Connect',
+      title: 'إدارة طلبات المصايف',
+      notification: JSON.stringify(payload),
+      type: 'Info',
+      category: 'Business',
+      time: now
+    } as any);
+
+    this.msgsService.msgInfo('تم إرسال إشعار سعة مصيف تجريبي عبر نفس مسار الإشعارات اللحظية.', 'اختبار سعة المصيف');
   }
 
   clearCache() {

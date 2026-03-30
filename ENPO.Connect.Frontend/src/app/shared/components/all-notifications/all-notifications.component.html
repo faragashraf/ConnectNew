@@ -1,9 +1,9 @@
 <p-dialog header="جميع الإشعارات" [(visible)]="display" [modal]="true"
     [style]="{width: '60vw', minWidth: '400px','direction': 'rtl'}" [contentStyle]="{'overflow':'auto'}" (onHide)="close()">
     <div class="widget" style="direction: rtl;">
-        <p-table #dt1 [value]="signalRService.Notification" [paginator]="true" [rows]="5" [rowsPerPageOptions]="[5,10,25,50,100 ]"
+        <p-table #dt1 [value]="sortedNotifications" [paginator]="true" [rows]="5" [rowsPerPageOptions]="[5,10,25,50,100 ]"
             currentPageReportTemplate="عرض {first} إلي {last} من  إجمالي {totalRecords}" dataKey="time"
-            rowExpandMode='single' [showCurrentPageReport]="true" [totalRecords]="signalRService.Notification.length"
+            rowExpandMode='single' [showCurrentPageReport]="true" [totalRecords]="sortedNotifications.length"
             [globalFilterFields]="['notification', 'type','title','sender','time']" [filterDelay]="0"
             [responsive]="true" [globalFilter]="search">
             <ng-template pTemplate="caption">

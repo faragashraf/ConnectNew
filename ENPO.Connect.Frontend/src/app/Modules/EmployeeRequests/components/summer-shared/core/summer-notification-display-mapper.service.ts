@@ -93,11 +93,25 @@ export class SummerNotificationDisplayMapperService {
     };
   }
 
+  buildToastSummary(notification: SummerDisplayNotificationDto): string {
+    const sender = this.getText(notification?.sender, 'Connect');
+    const title = this.getText(notification?.title, this.summerTitle);
+    const message = this.getText(notification?.notification, 'تم استلام تحديث جديد.');
+    return `${sender} - ${title}: ${message}`;
+  }
+
   private mapEvent(event: SummerRealtimeEvent): SummerNotificationDisplayResult {
     if (event.kind === 'capacity') {
+      const destinationName = this.getText(
+        event.destinationName,
+        Number.isFinite(Number(event.destinationId ?? 0)) && Number(event.destinationId ?? 0) > 0
+          ? `المصيف رقم ${Number(event.destinationId)}`
+          : 'المصيف غير محدد'
+      );
+      const batchNumber = this.getText(event.batchNumber, this.getText(event.waveCode, '-'));
       return {
         title: this.summerTitle,
-        message: 'تم تحديث سعة الفوج.',
+        message: `تم تحديث سعة الفوج رقم (${batchNumber}) بمصيف (${destinationName})، يرجى مراجعة التفاصيل.`,
         type: 'Info',
         isSummerEvent: true
       };
