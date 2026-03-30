@@ -206,7 +206,7 @@
                 <h4>تسجيل السداد</h4>
                 <label>
                   <span class="required-label">تاريخ ووقت السداد</span>
-                  <input type="datetime-local" step="3600" formControlName="paidAtLocal" [attr.min]="getPaymentMinDateTimeLocal(request)" />
+                  <input type="datetime-local" step="1" formControlName="paidAtLocal" [attr.min]="getPaymentMinDateTimeLocal(request)" />
                 </label>
                 <p class="warn" *ngIf="hasPaymentBeforeRequestCreationError()">{{ paymentBeforeRequestCreationMessage }}</p>
                 <label>

@@ -51,10 +51,11 @@ namespace Persistence.Services
         };
         private static readonly HashSet<string> SystemManagedSummerFieldKinds = new(StringComparer.OrdinalIgnoreCase)
         {
-            "Summer_ActionType",
-            "Summer_PaymentDueAtUtc",
-            "Summer_PaymentStatus",
-            "Summer_PaidAtUtc",
+            SummerWorkflowDomainConstants.ActionTypeFieldKind,
+            SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind,
+            SummerWorkflowDomainConstants.PaymentStatusFieldKind,
+            SummerWorkflowDomainConstants.PaidAtUtcFieldKind,
+            SummerWorkflowDomainConstants.RequestCreatedAtUtcFieldKind,
             "Summer_PaymentNotes",
             "Summer_TransferCount",
             "Summer_TransferFromCategory",
@@ -323,10 +324,14 @@ namespace Persistence.Services
                             requestRefField.FildTxt = messageRequest.RequestRef;
                         }
 
-                        var paymentDueAtUtc = SummerCalendarRules.CalculatePaymentDueUtc(DateTime.UtcNow);
-                        UpsertRequestField(messageRequest.Fields, "Summer_PaymentDueAtUtc", paymentDueAtUtc.ToString("o"));
-                        UpsertRequestField(messageRequest.Fields, "Summer_PaymentStatus", "PENDING_PAYMENT");
+                        var requestCreatedAtUtc = TruncateToWholeSecondUtc(DateTime.UtcNow);
+                        var paymentDueAtUtc = SummerCalendarRules.CalculatePaymentDueUtc(requestCreatedAtUtc);
+                        UpsertRequestField(messageRequest.Fields, SummerWorkflowDomainConstants.RequestCreatedAtUtcFieldKind, requestCreatedAtUtc.ToString("o"));
+                        UpsertRequestField(messageRequest.Fields, SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind, paymentDueAtUtc.ToString("o"));
+                        UpsertRequestField(messageRequest.Fields, SummerWorkflowDomainConstants.PaymentStatusFieldKind, "PENDING_PAYMENT");
                         UpsertRequestField(messageRequest.Fields, "Summer_TransferCount", "0");
+                        _logger.AppendLine(
+                            $"SummerRequests: anchored request created time for message {messageId} at {requestCreatedAtUtc:o}; payment due at {paymentDueAtUtc:o}.");
 
                         replyText = "تم إنشاء طلب المصيف.";
                         capacityAction = "CREATE";
@@ -836,15 +841,21 @@ SELECT @result;
                 })
                 .ToList();
 
-            var hasDateMetadata = await _connectContext.Cdmends
+            var dateFieldKinds = await _connectContext.Cdmends
                 .AsNoTracking()
-                .AnyAsync(x => x.CdmendType != null && x.CdmendType.ToLower() == "date");
+                .Where(x => x.CdmendType != null
+                    && x.CdmendTxt != null
+                    && x.CdmendType.ToLower() == "date")
+                .Select(x => x.CdmendTxt!.Trim())
+                .Distinct()
+                .ToListAsync();
 
-            if (hasDateMetadata)
+            var dateFieldKindSet = new HashSet<string>(dateFieldKinds, StringComparer.OrdinalIgnoreCase);
+            if (dateFieldKindSet.Count > 0)
             {
                 nextFields.ForEach(field =>
                 {
-                    if (!string.IsNullOrWhiteSpace(field.FildTxt))
+                    if (ShouldNormalizeToShortDate(field.FildKind, field.FildTxt, dateFieldKindSet))
                     {
                         field.FildTxt = helperService.NormalizeToShortDate(field.FildTxt);
                     }
@@ -914,6 +925,56 @@ SELECT @result;
             }
 
             return SystemManagedSummerFieldKinds.Contains(fieldKind.Trim());
+        }
+
+        private static bool ShouldNormalizeToShortDate(
+            string? fieldKind,
+            string? fieldValue,
+            HashSet<string> dateFieldKinds)
+        {
+            if (string.IsNullOrWhiteSpace(fieldKind)
+                || string.IsNullOrWhiteSpace(fieldValue)
+                || dateFieldKinds == null
+                || dateFieldKinds.Count == 0)
+            {
+                return false;
+            }
+
+            var normalizedKind = fieldKind.Trim();
+            if (!dateFieldKinds.Contains(normalizedKind))
+            {
+                return false;
+            }
+
+            if (SystemManagedSummerFieldKinds.Contains(normalizedKind))
+            {
+                return false;
+            }
+
+            return !ContainsTimePortion(fieldValue);
+        }
+
+        private static bool ContainsTimePortion(string? fieldValue)
+        {
+            var value = (fieldValue ?? string.Empty).Trim();
+            if (value.Length == 0)
+            {
+                return false;
+            }
+
+            return value.Contains('T', StringComparison.Ordinal)
+                || value.Contains(':', StringComparison.Ordinal)
+                || value.EndsWith("Z", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static DateTime TruncateToWholeSecondUtc(DateTime dateTimeUtc)
+        {
+            var utc = dateTimeUtc.Kind == DateTimeKind.Utc
+                ? dateTimeUtc
+                : dateTimeUtc.ToUniversalTime();
+
+            var ticks = utc.Ticks - (utc.Ticks % TimeSpan.TicksPerSecond);
+            return new DateTime(ticks, DateTimeKind.Utc);
         }
 
         private static bool ValidateAllowedAttachmentExtensions<T>(List<IFormFile>? files, CommonResponse<T> response)

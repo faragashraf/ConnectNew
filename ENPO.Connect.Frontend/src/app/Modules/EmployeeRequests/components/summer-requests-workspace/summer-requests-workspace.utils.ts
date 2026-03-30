@@ -38,6 +38,7 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   Summer_PaymentDueAtUtc: 'مهلة السداد',
   Summer_PaymentStatus: 'حالة السداد',
   Summer_PaidAtUtc: 'تاريخ السداد',
+  Summer_RequestCreatedAtUtc: 'تاريخ إنشاء الطلب (UTC)',
   Summer_TransferCount: 'عدد مرات التحويل',
   Summer_TransferredAtUtc: 'تاريخ التحويل',
   Summer_TransferFromCategory: 'من مصيف',

@@ -76,7 +76,7 @@ public class SummerCancelRequest
 public class SummerPayRequest
 {
     public int MessageId { get; set; }
-    public DateTime? PaidAtUtc { get; set; }
+    public DateTimeOffset? PaidAtUtc { get; set; }
     public bool ForceOverride { get; set; }
     public string? Notes { get; set; }
     public List<IFormFile>? files { get; set; } = new();

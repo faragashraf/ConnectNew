@@ -1,10 +1,12 @@
 ﻿using System.Data;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using ENPO.Dto.HubSync;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Models.Attachment;
 using Models.Correspondance;
@@ -26,12 +28,18 @@ namespace Persistence.Services
         private readonly helperService _helperService;
         private readonly IConnectNotificationService _notificationService;
         private readonly ApplicationConfig _applicationConfig;
+        private readonly ILogger<SummerWorkflowService> _logger;
 
         private const int CapacityLockTimeoutMs = 15000;
         private const string SummerDynamicApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId;
         private const string SummerDestinationCatalogMend = SummerWorkflowDomainConstants.DestinationCatalogMend;
         private const string TransferReviewRequiredCode = SummerWorkflowDomainConstants.TransferReviewRequiredCode;
         private const string TransferReviewResolvedCode = SummerWorkflowDomainConstants.TransferReviewResolvedCode;
+        private const string RequestCreatedAtUtcFieldKind = SummerWorkflowDomainConstants.RequestCreatedAtUtcFieldKind;
+        private const string PaymentDueAtUtcFieldKind = SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind;
+        private const string PaidAtUtcFieldKind = SummerWorkflowDomainConstants.PaidAtUtcFieldKind;
+        private const string PaymentStatusFieldKind = SummerWorkflowDomainConstants.PaymentStatusFieldKind;
+        private const string ActionTypeFieldKind = SummerWorkflowDomainConstants.ActionTypeFieldKind;
         private static readonly string[] WaveCodeFieldKinds = SummerWorkflowDomainConstants.WaveCodeFieldKinds;
         private static readonly string[] WaveLabelFieldKinds = SummerWorkflowDomainConstants.WaveLabelFieldKinds;
         private static readonly string[] FamilyCountFieldKinds = SummerWorkflowDomainConstants.FamilyCountFieldKinds;
@@ -48,6 +56,7 @@ namespace Persistence.Services
         {
             ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"
         };
+        private static readonly TimeZoneInfo SummerBusinessTimeZone = ResolveSummerBusinessTimeZone();
 
         public SummerWorkflowService(
             ConnectContext connectContext,
@@ -55,7 +64,8 @@ namespace Persistence.Services
             GPAContext gpaContext,
             helperService helperService,
             IConnectNotificationService notificationService,
-            IOptions<ApplicationConfig> options)
+            IOptions<ApplicationConfig> options,
+            ILogger<SummerWorkflowService> logger)
         {
             _connectContext = connectContext;
             _attachHeldContext = attachHeldContext;
@@ -63,6 +73,7 @@ namespace Persistence.Services
             _helperService = helperService;
             _notificationService = notificationService;
             _applicationConfig = options?.Value ?? new ApplicationConfig();
+            _logger = logger;
         }
 
         public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear, int? messageId = null)
@@ -156,9 +167,9 @@ namespace Persistence.Services
                         WorkflowStateCode = workflowStateCode,
                         WorkflowStateLabel = workflowStateLabel,
                         NeedsTransferReview = needsTransferReview,
-                        CreatedAt = message.CreatedDate,
-                        PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaymentDueAtUtc")),
-                        PaidAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaidAtUtc")),
+                        CreatedAt = ResolveRequestCreatedAtUtc(message, messageFields),
+                        PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, PaymentDueAtUtcFieldKind)),
+                        PaidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind)),
                         TransferUsed = ParseInt(GetFieldValue(messageFields, "Summer_TransferCount"), 0) > 0
                     });
                 }
@@ -276,9 +287,9 @@ namespace Persistence.Services
                         WorkflowStateCode = workflowStateCode,
                         WorkflowStateLabel = workflowStateLabel,
                         NeedsTransferReview = needsTransferReview,
-                        CreatedAt = message.CreatedDate,
-                        PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaymentDueAtUtc")),
-                        PaidAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaidAtUtc")),
+                        CreatedAt = ResolveRequestCreatedAtUtc(message, messageFields),
+                        PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, PaymentDueAtUtcFieldKind)),
+                        PaidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind)),
                         TransferUsed = ParseInt(GetFieldValue(messageFields, "Summer_TransferCount"), 0) > 0
                     });
                 }
@@ -625,7 +636,7 @@ namespace Persistence.Services
                             UpsertField(fields, message.MessageId, "Summer_AdminComment", comment);
                         }
 
-                        var paymentStatusToken = NormalizeSearchToken(GetFieldValue(fields, "Summer_PaymentStatus"));
+                        var paymentStatusToken = NormalizeSearchToken(GetFieldValue(fields, PaymentStatusFieldKind));
                         var needsRePaymentToken = NormalizeSearchToken(GetFieldValue(fields, "Summer_TransferRequiresRePayment"));
                         var shouldRestorePaidState = paymentStatusToken == "pendingpayment"
                             || needsRePaymentToken == "true"
@@ -633,9 +644,9 @@ namespace Persistence.Services
                         var restorePaidNote = string.Empty;
                         if (shouldRestorePaidState)
                         {
-                            var paidAt = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")) ?? DateTime.UtcNow;
-                            UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PAID");
-                            UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", paidAt.ToString("o"));
+                            var paidAt = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind)) ?? DateTime.UtcNow;
+                            UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "PAID");
+                            UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, paidAt.ToString("o"));
                             UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
                             UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", "تم اعتماد الطلب نهائيًا من الإدارة، وتمت إعادة حالة السداد إلى مسدد.");
                             restorePaidNote = " وتمت إعادة حالة السداد إلى مسدد تلقائياً.";
@@ -659,7 +670,7 @@ namespace Persistence.Services
                         UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_CancelReason", string.IsNullOrWhiteSpace(comment) ? "إلغاء يدوي من إدارة المصايف." : comment);
                         UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
-                        UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "CANCELLED_ADMIN");
+                        UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED_ADMIN");
                         if (IsTransferReviewRequired(fields))
                         {
                             UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
@@ -839,10 +850,10 @@ namespace Persistence.Services
                 try
                 {
                     message.Status = MessageStatus.Rejected;
-                    UpsertField(fields, message.MessageId, "Summer_ActionType", "CANCEL");
+                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, "CANCEL");
                     UpsertField(fields, message.MessageId, "Summer_CancelReason", (request.Reason ?? string.Empty).Trim());
                     UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
-                    UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "CANCELLED");
+                    UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED");
 
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
@@ -927,12 +938,38 @@ namespace Persistence.Services
                 }
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
-                var dueAt = ResolvePaymentDueAtUtc(message, fields);
-                var paidAt = request.PaidAtUtc?.ToUniversalTime() ?? DateTime.UtcNow;
-                var requestCreatedAtUtc = ResolveMessageCreatedAtUtc(message);
+                var rawCreatedAtField = GetFieldValue(fields, RequestCreatedAtUtcFieldKind);
+                var requestCreatedAtRawUtc = ResolveRequestCreatedAtUtc(message, fields);
+                var requestCreatedAtUtc = TruncateToWholeSecondUtc(requestCreatedAtRawUtc);
+                var dueAtRawUtc = ResolvePaymentDueAtUtc(message, fields);
+                var dueAtUtc = TruncateToWholeSecondUtc(dueAtRawUtc);
+                var paidAtRawUtc = request.PaidAtUtc?.UtcDateTime ?? DateTime.UtcNow;
+                var paidAtUtc = TruncateToWholeSecondUtc(paidAtRawUtc);
+                var hasCreatedAtAnchor = ParseDate(rawCreatedAtField).HasValue;
 
-                if (paidAt < requestCreatedAtUtc)
+                _logger.LogInformation(
+                    "Summer payment validation start. MessageId={MessageId}, PaidAtInputRaw={PaidAtInputRaw}, PaidAtRawUtc={PaidAtRawUtc:o}, PaidAtUtc={PaidAtUtc:o}, CreatedAtAnchorRaw={CreatedAtAnchorRaw}, CreatedAtAnchorFound={CreatedAtAnchorFound}, ResolvedCreatedAtRawUtc={ResolvedCreatedAtRawUtc:o}, ResolvedCreatedAtUtc={ResolvedCreatedAtUtc:o}, DueAtRawUtc={DueAtRawUtc:o}, DueAtUtc={DueAtUtc:o}, PaidAtOffset={PaidAtOffset}, PaidAtProvided={PaidAtProvided}",
+                    message.MessageId,
+                    request.PaidAtUtc?.ToString("o"),
+                    paidAtRawUtc,
+                    paidAtUtc,
+                    rawCreatedAtField,
+                    hasCreatedAtAnchor,
+                    requestCreatedAtRawUtc,
+                    requestCreatedAtUtc,
+                    dueAtRawUtc,
+                    dueAtUtc,
+                    request.PaidAtUtc?.Offset.ToString(),
+                    request.PaidAtUtc.HasValue);
+
+                if (paidAtUtc < requestCreatedAtUtc)
                 {
+                    _logger.LogWarning(
+                        "Summer payment rejected: paid date before request creation. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, CreatedAtUtc={CreatedAtUtc:o}, CreatedAtAnchorRaw={CreatedAtAnchorRaw}",
+                        message.MessageId,
+                        paidAtUtc,
+                        requestCreatedAtUtc,
+                        rawCreatedAtField);
                     response.Errors.Add(new Error
                     {
                         Code = "400",
@@ -941,12 +978,18 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (paidAt > dueAt)
+                if (paidAtUtc > dueAtUtc)
                 {
+                    _logger.LogWarning(
+                        "Summer payment rejected: payment window expired. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, DueAtUtc={DueAtUtc:o}, DueAtRawUtc={DueAtRawUtc:o}",
+                        message.MessageId,
+                        paidAtUtc,
+                        dueAtUtc,
+                        dueAtRawUtc);
                     response.Errors.Add(new Error
                     {
                         Code = "400",
-                        Message = $"انتهت مهلة السداد. كان الموعد النهائي {dueAt:yyyy-MM-dd HH:mm} (UTC)."
+                        Message = $"انتهت مهلة السداد. كان الموعد النهائي {dueAtUtc:yyyy-MM-dd HH:mm} (UTC)."
                     });
                     return response;
                 }
@@ -955,10 +998,11 @@ namespace Persistence.Services
                 using var attachTx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
                 try
                 {
-                    UpsertField(fields, message.MessageId, "Summer_ActionType", "PAY");
-                    UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PAID");
-                    UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", paidAt.ToString("o"));
-                    UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", dueAt.ToString("o"));
+                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, "PAY");
+                    UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "PAID");
+                    UpsertField(fields, message.MessageId, RequestCreatedAtUtcFieldKind, requestCreatedAtUtc.ToString("o"));
+                    UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, paidAtUtc.ToString("o"));
+                    UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, dueAtUtc.ToString("o"));
                     UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
                     if (!string.IsNullOrWhiteSpace(request.Notes))
                     {
@@ -978,6 +1022,12 @@ namespace Persistence.Services
                     await _connectContext.SaveChangesAsync();
                     await attachTx.CommitAsync();
                     await connectTx.CommitAsync();
+                    _logger.LogInformation(
+                        "Summer payment accepted. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, CreatedAtUtc={CreatedAtUtc:o}, DueAtUtc={DueAtUtc:o}",
+                        message.MessageId,
+                        paidAtUtc,
+                        requestCreatedAtUtc,
+                        dueAtUtc);
                 }
                 catch
                 {
@@ -1035,8 +1085,8 @@ namespace Persistence.Services
                 var normalizedTargetWave = request.ToWaveCode.Trim();
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
-                var paymentStatus = (GetFieldValue(fields, "Summer_PaymentStatus") ?? string.Empty).Trim();
-                var paidAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc"));
+                var paymentStatus = (GetFieldValue(fields, PaymentStatusFieldKind) ?? string.Empty).Trim();
+                var paidAtUtc = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind));
                 var adminLastAction = (GetFieldValue(fields, "Summer_AdminLastAction") ?? string.Empty).Trim();
                 var wasPaid = paidAtUtc.HasValue || string.Equals(paymentStatus, "PAID", StringComparison.OrdinalIgnoreCase);
                 var wasFinalApproved = string.Equals(adminLastAction, SummerAdminActionCatalog.Codes.FinalApprove, StringComparison.OrdinalIgnoreCase)
@@ -1152,7 +1202,7 @@ namespace Persistence.Services
                     UpsertFieldRange(fields, message.MessageId, ExtraCountFieldKinds, newExtraCount.ToString());
                     UpsertFieldRange(fields, message.MessageId, DestinationIdFieldKinds, request.ToCategoryId.ToString());
                     UpsertFieldRange(fields, message.MessageId, DestinationNameFieldKinds, targetCategoryDisplayName);
-                    UpsertField(fields, message.MessageId, "Summer_ActionType", "TRANSFER");
+                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, "TRANSFER");
                     UpsertField(fields, message.MessageId, "Summer_TransferCount", "1");
                     UpsertField(fields, message.MessageId, "Summer_TransferFromCategory", fromCategory.ToString());
                     UpsertField(fields, message.MessageId, "Summer_TransferFromWave", fromWave);
@@ -1170,9 +1220,9 @@ namespace Persistence.Services
                     if (requiresRePayment)
                     {
                         var reopenedDueAt = SummerCalendarRules.CalculatePaymentDueUtc(DateTime.UtcNow);
-                        UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PENDING_PAYMENT");
-                        UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", string.Empty);
-                        UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", reopenedDueAt.ToString("o"));
+                        UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "PENDING_PAYMENT");
+                        UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, string.Empty);
+                        UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, reopenedDueAt.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "true");
                         UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", "تم تغيير عدد الأفراد بعد السداد، ويلزم إعادة السداد.");
                     }
@@ -1263,7 +1313,7 @@ namespace Persistence.Services
                         .Where(f => f.FildRelted == message.MessageId)
                         .ToListAsync(cancellationToken);
 
-                    if (ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")).HasValue)
+                    if (ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind)).HasValue)
                     {
                         await connectTx.RollbackAsync(cancellationToken);
                         continue;
@@ -1278,11 +1328,11 @@ namespace Persistence.Services
 
                     var autoCancelReason = "تم إلغاء الطلب تلقائياً لعدم السداد خلال مهلة يوم العمل.";
                     message.Status = MessageStatus.Rejected;
-                    UpsertField(fields, message.MessageId, "Summer_ActionType", "AUTO_CANCEL_PAYMENT_TIMEOUT");
+                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, "AUTO_CANCEL_PAYMENT_TIMEOUT");
                     UpsertField(fields, message.MessageId, "Summer_CancelReason", autoCancelReason);
                     UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", nowUtc.ToString("o"));
-                    UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "CANCELLED_AUTO");
-                    UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", dueAt.ToString("o"));
+                    UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED_AUTO");
+                    UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, dueAt.ToString("o"));
 
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
@@ -1857,9 +1907,9 @@ SELECT @result;
                 WorkflowStateCode = workflowStateCode,
                 WorkflowStateLabel = workflowStateLabel,
                 NeedsTransferReview = needsTransferReview,
-                CreatedAt = message.CreatedDate,
-                PaymentDueAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaymentDueAtUtc")),
-                PaidAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")),
+                CreatedAt = ResolveRequestCreatedAtUtc(message, fields),
+                PaymentDueAtUtc = ParseDate(GetFieldValue(fields, PaymentDueAtUtcFieldKind)),
+                PaidAtUtc = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind)),
                 TransferUsed = ParseInt(GetFieldValue(fields, "Summer_TransferCount"), 0) > 0
             };
         }
@@ -2316,30 +2366,55 @@ SELECT @result;
 
         private static DateTime ResolvePaymentDueAtUtc(Message message, IEnumerable<TkmendField> fields)
         {
-            var fromField = ParseDate(GetFieldValue(fields, "Summer_PaymentDueAtUtc"));
-            if (fromField.HasValue)
+            var rawDueAtValue = GetFieldValue(fields, PaymentDueAtUtcFieldKind);
+            var fromField = ParseDate(rawDueAtValue);
+            if (fromField.HasValue && HasExplicitTimeComponent(rawDueAtValue))
             {
                 return fromField.Value;
             }
 
-            var createdAtUtc = ResolveMessageCreatedAtUtc(message);
+            var createdAtUtc = ResolveRequestCreatedAtUtc(message, fields);
             return SummerCalendarRules.CalculatePaymentDueUtc(createdAtUtc);
         }
 
-        private static DateTime ResolveMessageCreatedAtUtc(Message message)
+        private static DateTime ResolveRequestCreatedAtUtc(Message message, IEnumerable<TkmendField> fields)
         {
-            var createdDate = message.CreatedDate;
-            if (createdDate.Kind == DateTimeKind.Utc)
+            var anchoredFieldValue = GetFieldValue(fields, RequestCreatedAtUtcFieldKind);
+            var anchoredCreatedAtUtc = ParseDate(anchoredFieldValue);
+            if (anchoredCreatedAtUtc.HasValue)
             {
-                return createdDate;
+                return anchoredCreatedAtUtc.Value;
             }
 
-            if (createdDate.Kind == DateTimeKind.Local)
+            return ResolveLegacyMessageCreatedAtUtc(message);
+        }
+
+        private static DateTime ResolveLegacyMessageCreatedAtUtc(Message message)
+        {
+            return NormalizeToUtc(message.CreatedDate);
+        }
+
+        private static DateTime NormalizeToUtc(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Utc)
             {
-                return createdDate.ToUniversalTime();
+                return value;
             }
 
-            return DateTime.SpecifyKind(createdDate, DateTimeKind.Utc);
+            if (value.Kind == DateTimeKind.Local)
+            {
+                return value.ToUniversalTime();
+            }
+
+            var unspecified = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+            return TimeZoneInfo.ConvertTimeToUtc(unspecified, SummerBusinessTimeZone);
+        }
+
+        private static DateTime TruncateToWholeSecondUtc(DateTime valueUtc)
+        {
+            var utc = NormalizeToUtc(valueUtc);
+            var ticks = utc.Ticks - (utc.Ticks % TimeSpan.TicksPerSecond);
+            return new DateTime(ticks, DateTimeKind.Utc);
         }
 
         private static DateTime? ParseDate(string? value)
@@ -2349,14 +2424,57 @@ SELECT @result;
                 return null;
             }
 
-            if (!DateTime.TryParse(value, out var parsed))
+            var normalized = value.Trim();
+            if (DateTimeOffset.TryParse(
+                normalized,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.RoundtripKind,
+                out var dto))
+            {
+                return dto.UtcDateTime;
+            }
+
+            if (!DateTime.TryParse(
+                normalized,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.RoundtripKind,
+                out var parsed))
             {
                 return null;
             }
 
-            return parsed.Kind == DateTimeKind.Utc
-                ? parsed
-                : DateTime.SpecifyKind(parsed, DateTimeKind.Utc).ToUniversalTime();
+            return NormalizeToUtc(parsed);
+        }
+
+        private static bool HasExplicitTimeComponent(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return false;
+            }
+
+            return normalized.Contains('T', StringComparison.Ordinal)
+                || normalized.Contains(':', StringComparison.Ordinal);
+        }
+
+        private static TimeZoneInfo ResolveSummerBusinessTimeZone()
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo");
+            }
+            catch
+            {
+                try
+                {
+                    return TimeZoneInfo.FindSystemTimeZoneById("Egypt Standard Time");
+                }
+                catch
+                {
+                    return TimeZoneInfo.Utc;
+                }
+            }
         }
 
         private sealed class SummerDestinationCatalogPayload
@@ -2388,6 +2506,3 @@ SELECT @result;
         }
     }
 }
-
-
-

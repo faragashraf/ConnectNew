@@ -8,6 +8,11 @@ namespace Persistence.Services.Summer
 
         public const string TransferReviewRequiredCode = "TRANSFER_REVIEW_REQUIRED";
         public const string TransferReviewResolvedCode = "TRANSFER_REVIEW_RESOLVED";
+        public const string RequestCreatedAtUtcFieldKind = "Summer_RequestCreatedAtUtc";
+        public const string PaymentDueAtUtcFieldKind = "Summer_PaymentDueAtUtc";
+        public const string PaidAtUtcFieldKind = "Summer_PaidAtUtc";
+        public const string PaymentStatusFieldKind = "Summer_PaymentStatus";
+        public const string ActionTypeFieldKind = "Summer_ActionType";
 
         public static readonly string[] WaveCodeFieldKinds = { "SummerCamp", "SUM2026_WaveCode", "WaveCode" };
         public static readonly string[] WaveLabelFieldKinds = { "SummerCampLabel", "SUM2026_WaveLabel", "WaveLabel" };

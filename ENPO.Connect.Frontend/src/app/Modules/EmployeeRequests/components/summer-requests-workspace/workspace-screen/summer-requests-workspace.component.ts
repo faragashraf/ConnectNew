@@ -120,12 +120,12 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return null;
     }
 
-    const paidAt = this.tryParseDate(paidAtLocal);
+    const paidAt = this.parseDateTimeLocalInput(paidAtLocal);
     if (!paidAt) {
       return null;
     }
 
-    return paidAt.getTime() < requestCreatedAt.getTime()
+    return this.toComparableUnixSecond(paidAt) < this.toComparableUnixSecond(requestCreatedAt)
       ? { [this.paymentBeforeRequestCreationErrorKey]: true }
       : null;
   };
@@ -598,7 +598,8 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }
 
     const paidAtLocal = String(this.paymentForm.get('paidAtLocal')?.value ?? '').trim();
-    const paidAtUtcIso = paidAtLocal ? new Date(paidAtLocal).toISOString() : '';
+    const paidAtParsed = this.parseDateTimeLocalInput(paidAtLocal);
+    const paidAtUtcIso = paidAtParsed ? paidAtParsed.toISOString() : '';
 
     this.submittingPayment = true;
     this.summerWorkflowController.pay({
@@ -1478,7 +1479,23 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const day = String(value.getDate()).padStart(2, '0');
     const hours = String(value.getHours()).padStart(2, '0');
     const minutes = String(value.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+    const seconds = String(value.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+  }
+
+  private parseDateTimeLocalInput(value: string): Date | null {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const withSeconds = normalized.length === 16 ? `${normalized}:00` : normalized;
+    const parsed = new Date(withSeconds);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private toComparableUnixSecond(value: Date): number {
+    return Math.floor(value.getTime() / 1000);
   }
 
   private normalizeLoadedRequestDetails(raw: unknown, fallbackMessageId?: number): MessageDto | null {
