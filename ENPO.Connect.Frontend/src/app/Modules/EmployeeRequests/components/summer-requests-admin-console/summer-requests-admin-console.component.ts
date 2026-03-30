@@ -27,7 +27,9 @@ import {
   SUMMER_ADMIN_ACTION,
   SummerAdminActionCode
 } from '../summer-shared/core/summer-action-codes';
-import { isAdminActionAllowedForCurrentStatus } from '../summer-shared/core/summer-admin-action-state-guard';
+import {
+  resolveAdminActionDecisionForCurrentStatus
+} from '../summer-shared/core/summer-admin-action-state-guard';
 import { SUMMER_UI_TEXTS_AR } from '../summer-shared/core/summer-ui-texts.ar';
 import { SummerRequestsRealtimeService } from '../summer-shared/core/summer-requests-realtime.service';
 import {
@@ -415,14 +417,20 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.isActionBlockedByCurrentState(normalized);
   }
 
-  isActionBlockedByCurrentState(actionCode: SummerAdminActionCode): boolean {
-    const currentRequest = this.selectedRequest;
-    if (!currentRequest) {
-      return false;
+  get selectedActionBlockedMessage(): string {
+    const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
+    if (!normalized) {
+      return '';
     }
 
-    const currentState = String(currentRequest.statusLabel ?? currentRequest.status ?? '').trim();
-    return !isAdminActionAllowedForCurrentStatus(actionCode, currentState);
+    const decision = this.resolveActionDecision(normalized);
+    return decision.isAllowed
+      ? ''
+      : (decision.errorMessage || SUMMER_UI_TEXTS_AR.errors.invalidAdminActionForCurrentState);
+  }
+
+  isActionBlockedByCurrentState(actionCode: SummerAdminActionCode): boolean {
+    return !this.resolveActionDecision(actionCode).isAllowed;
   }
 
   get selectedRequestReplies(): Array<{ id: number; author: string; isAdminAction: boolean; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
@@ -818,8 +826,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.isActionBlockedByCurrentState(actionCode)) {
-      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.duplicateAdminActionState}</h5>`, true);
+    const actionDecision = this.resolveActionDecision(actionCode);
+    if (!actionDecision.isAllowed) {
+      const blockedMessage = actionDecision.errorMessage || SUMMER_UI_TEXTS_AR.errors.invalidAdminActionForCurrentState;
+      this.msg.msgError('خطأ', `<h5>${blockedMessage}</h5>`, true);
       return;
     }
 
@@ -1147,6 +1157,20 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     return '';
+  }
+
+  private resolveActionDecision(actionCode: SummerAdminActionCode) {
+    const currentRequest = this.selectedRequest;
+    if (!currentRequest) {
+      return {
+        isAllowed: true,
+        errorMessage: ''
+      };
+    }
+
+    const currentState = String(currentRequest.statusLabel ?? currentRequest.status ?? '').trim();
+    const decision = resolveAdminActionDecisionForCurrentStatus(actionCode, currentState);
+    return decision;
   }
 
   private normalizeSearchToken(value: unknown): string {

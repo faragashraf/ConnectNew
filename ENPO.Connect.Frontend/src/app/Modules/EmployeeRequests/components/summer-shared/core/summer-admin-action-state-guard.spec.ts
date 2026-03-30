@@ -19,6 +19,11 @@ describe('summer-admin-action-state-guard', () => {
     expect(isAdminActionAllowedForCurrentStatus('note', 'Replied')).toBeTrue();
   });
 
+  it('blocks transfer approval when current state is rejected/cancelled', () => {
+    expect(isAdminActionAllowedForCurrentStatus('APPROVE_TRANSFER', 'Rejected')).toBeFalse();
+    expect(isAdminActionAllowedForCurrentStatus('APPROVE_TRANSFER', 'مرفوض')).toBeFalse();
+  });
+
   it('matches the state-flow rule: pending -> approved -> rejected -> approved, then approving again is blocked', () => {
     expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'New')).toBeTrue();
     expect(isAdminActionAllowedForCurrentStatus('MANUAL_CANCEL', 'Replied')).toBeTrue();

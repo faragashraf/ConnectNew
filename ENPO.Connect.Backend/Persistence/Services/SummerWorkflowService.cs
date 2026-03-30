@@ -60,6 +60,7 @@ namespace Persistence.Services
         };
         private static readonly TimeZoneInfo SummerBusinessTimeZone = ResolveSummerBusinessTimeZone();
         private static readonly SummerAdminActionExecutionGate AdminActionExecutionGate = new();
+        private static readonly SummerRequestWorkflowEngine AdminActionWorkflowEngine = new();
         private const string DefaultRequestUpdateSource = "SUMMER_WORKFLOW";
 
         public SummerWorkflowService(
@@ -669,19 +670,22 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (SummerAdminActionStateGuard.ShouldBlockDuplicateStateTransition(actionCode, messageToProcess.Status))
+                var workflowResolution = AdminActionWorkflowEngine.Resolve(messageToProcess.Status, actionCode);
+                if (!workflowResolution.IsAllowed)
                 {
                     _logger.LogWarning(
-                        "Summer admin action blocked due to duplicate state transition. MessageId={MessageId}, UserId={UserId}, AttemptedAction={AttemptedAction}, CurrentStatus={CurrentStatus}, AttemptedAtUtc={AttemptedAtUtc}",
+                        "Summer admin action blocked by workflow engine. MessageId={MessageId}, UserId={UserId}, AttemptedAction={AttemptedAction}, CurrentStatus={CurrentStatus}, TargetState={TargetState}, AttemptedAtUtc={AttemptedAtUtc}, Reason={Reason}",
                         request.MessageId,
                         userId,
                         actionCode,
                         messageToProcess.Status,
-                        attemptedAtUtc);
+                        workflowResolution.TargetState,
+                        attemptedAtUtc,
+                        workflowResolution.ErrorMessage);
                     response.Errors.Add(new Error
                     {
                         Code = "409",
-                        Message = SummerAdminActionStateGuard.DuplicateStateTransitionMessage
+                        Message = workflowResolution.ErrorMessage
                     });
                     return response;
                 }
@@ -704,7 +708,16 @@ namespace Persistence.Services
                         NewExtraCount = request.NewExtraCount,
                         Notes = request.Comment,
                         files = request.files
-                    }, userId, ip, notifyResponsibleAdmins: false, notifyOwner: true);
+                    },
+                    userId,
+                    ip,
+                    notifyResponsibleAdmins: false,
+                    notifyOwner: true,
+                    initiatedAdminActionCode: actionCode,
+                    initiatedByUserId: userId,
+                    previousStatusForAdminAction: messageToProcess.Status,
+                    adminActionComment: comment,
+                    adminActionAtUtc: attemptedAtUtc);
 
                     if (!transferResponse.IsSuccess)
                     {
@@ -735,24 +748,11 @@ namespace Persistence.Services
                 await using var attachTx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
                 try
                 {
+                    var previousState = message.Status;
                     var replyMessage = string.Empty;
                     if (actionCode == SummerAdminActionCatalog.Codes.FinalApprove)
                     {
-                        if (message.Status == MessageStatus.Rejected && !request.Force)
-                        {
-                            response.Errors.Add(new Error { Code = "400", Message = "الطلب مرفوض بالفعل. استخدم خيار القوة إذا لزم." });
-                            await attachTx.RollbackAsync();
-                            await connectTx.RollbackAsync();
-                            return response;
-                        }
-
-                        message.Status = MessageStatus.Replied;
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.FinalApprove);
-                        UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
-                        if (!string.IsNullOrWhiteSpace(comment))
-                        {
-                            UpsertField(fields, message.MessageId, "Summer_AdminComment", comment);
-                        }
+                        message.Status = workflowResolution.TargetState ?? MessageStatus.Replied;
 
                         var paymentStatusToken = NormalizeSearchToken(GetFieldValue(fields, PaymentStatusFieldKind));
                         var needsRePaymentToken = NormalizeSearchToken(GetFieldValue(fields, "Summer_TransferRequiresRePayment"));
@@ -783,9 +783,7 @@ namespace Persistence.Services
                     }
                     else if (actionCode == SummerAdminActionCatalog.Codes.ManualCancel)
                     {
-                        message.Status = MessageStatus.Rejected;
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.ManualCancel);
-                        UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
+                        message.Status = workflowResolution.TargetState ?? MessageStatus.Rejected;
                         UpsertField(fields, message.MessageId, "Summer_CancelReason", string.IsNullOrWhiteSpace(comment) ? "إلغاء يدوي من إدارة المصايف." : comment);
                         UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
                         UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED_ADMIN");
@@ -802,8 +800,6 @@ namespace Persistence.Services
                     }
                     else if (actionCode == SummerAdminActionCatalog.Codes.Comment)
                     {
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.Comment);
-                        UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? "تم تسجيل تعليق إداري على الطلب."
                             : comment;
@@ -815,6 +811,16 @@ namespace Persistence.Services
                         await connectTx.RollbackAsync();
                         return response;
                     }
+
+                    ApplyAdminActionAuditFields(
+                        fields,
+                        message.MessageId,
+                        actionCode,
+                        previousState,
+                        message.Status,
+                        userId,
+                        DateTime.UtcNow,
+                        comment);
 
                     await AddReplyWithAttachmentsAsync(message.MessageId, replyMessage, userId, ip, request.files);
 
@@ -1201,7 +1207,12 @@ namespace Persistence.Services
             string userId,
             string ip,
             bool notifyResponsibleAdmins = true,
-            bool notifyOwner = true)
+            bool notifyOwner = true,
+            string? initiatedAdminActionCode = null,
+            string? initiatedByUserId = null,
+            MessageStatus? previousStatusForAdminAction = null,
+            string? adminActionComment = null,
+            DateTime? adminActionAtUtc = null)
         {
             var response = new CommonResponse<SummerRequestSummaryDto>();
             request ??= new SummerTransferRequest();
@@ -1237,6 +1248,9 @@ namespace Persistence.Services
                 }
 
                 var normalizedTargetWave = request.ToWaveCode.Trim();
+                var normalizedAdminActionCode = NormalizeActionCode(initiatedAdminActionCode);
+                var shouldRecordAdminAction = !string.IsNullOrWhiteSpace(normalizedAdminActionCode)
+                    && !string.IsNullOrWhiteSpace(initiatedByUserId);
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
                 var paymentStatus = (GetFieldValue(fields, PaymentStatusFieldKind) ?? string.Empty).Trim();
@@ -1379,6 +1393,21 @@ namespace Persistence.Services
                         UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, reopenedDueAt.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "true");
                         UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", "تم تغيير عدد الأفراد بعد السداد، ويلزم إعادة السداد.");
+                    }
+
+                    if (shouldRecordAdminAction)
+                    {
+                        var previousState = previousStatusForAdminAction ?? message.Status;
+                        var actorUserId = string.IsNullOrWhiteSpace(initiatedByUserId) ? userId : initiatedByUserId.Trim();
+                        ApplyAdminActionAuditFields(
+                            fields,
+                            message.MessageId,
+                            normalizedAdminActionCode,
+                            previousState,
+                            message.Status,
+                            actorUserId,
+                            adminActionAtUtc ?? DateTime.UtcNow,
+                            adminActionComment);
                     }
 
                     var rePaymentNote = requiresRePayment
@@ -2464,6 +2493,35 @@ SELECT @result;
             }
 
             return int.MaxValue;
+        }
+
+        private void ApplyAdminActionAuditFields(
+            List<TkmendField> fields,
+            int messageId,
+            string actionCode,
+            MessageStatus previousState,
+            MessageStatus newState,
+            string performedByUserId,
+            DateTime actionAtUtc,
+            string? comment)
+        {
+            var normalizedAction = NormalizeActionCode(actionCode);
+            if (string.IsNullOrWhiteSpace(normalizedAction))
+            {
+                return;
+            }
+
+            UpsertField(fields, messageId, ActionTypeFieldKind, normalizedAction);
+            UpsertField(fields, messageId, "Summer_AdminLastAction", normalizedAction);
+            UpsertField(fields, messageId, "Summer_AdminActionAtUtc", actionAtUtc.ToString("o"));
+            UpsertField(fields, messageId, "Summer_AdminPreviousState", previousState.ToString());
+            UpsertField(fields, messageId, "Summer_AdminNewState", newState.ToString());
+            UpsertField(fields, messageId, "Summer_AdminActionBy", (performedByUserId ?? string.Empty).Trim());
+
+            if (!string.IsNullOrWhiteSpace(comment))
+            {
+                UpsertField(fields, messageId, "Summer_AdminComment", comment.Trim());
+            }
         }
 
         private void UpsertField(List<TkmendField> fields, int messageId, string kind, string value)

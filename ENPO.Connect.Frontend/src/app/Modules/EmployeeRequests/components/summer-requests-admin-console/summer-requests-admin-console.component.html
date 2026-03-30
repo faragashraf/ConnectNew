@@ -386,7 +386,7 @@
           </label>
 
           <small class="help-text" *ngIf="isSelectedActionBlockedByCurrentState">
-            لا يمكن تنفيذ نفس الإجراء مرة أخرى لأن الطلب بالفعل في هذه الحالة.
+            {{ selectedActionBlockedMessage }}
           </small>
 
           <label>

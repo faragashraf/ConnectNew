@@ -4,40 +4,27 @@ namespace Persistence.Services.Summer
 {
     internal static class SummerAdminActionStateGuard
     {
-        internal const string DuplicateStateTransitionMessage = "لا يمكن تنفيذ نفس الإجراء مرة أخرى لأن الطلب بالفعل في هذه الحالة.";
+        private static readonly SummerRequestWorkflowEngine WorkflowEngine = new();
+        internal const string DuplicateStateTransitionMessage = SummerRequestWorkflowEngine.DuplicateStateTransitionMessage;
 
         internal static bool IsBypassAction(string? normalizedActionCode)
         {
-            return string.Equals(
-                SummerAdminActionCatalog.Normalize(normalizedActionCode),
-                SummerAdminActionCatalog.Codes.Comment,
-                StringComparison.OrdinalIgnoreCase);
+            return SummerRequestWorkflowEngine.IsCommentLikeAction(normalizedActionCode);
         }
 
         internal static MessageStatus? ResolveTargetStatus(string? normalizedActionCode)
         {
-            return SummerAdminActionCatalog.Normalize(normalizedActionCode) switch
-            {
-                SummerAdminActionCatalog.Codes.FinalApprove => MessageStatus.Replied,
-                SummerAdminActionCatalog.Codes.ManualCancel => MessageStatus.Rejected,
-                _ => null
-            };
+            return SummerRequestWorkflowEngine.ResolveDeterministicTargetState(normalizedActionCode);
         }
 
         internal static bool ShouldBlockDuplicateStateTransition(string? normalizedActionCode, MessageStatus currentStatus)
         {
-            if (IsBypassAction(normalizedActionCode))
-            {
-                return false;
-            }
-
-            var targetStatus = ResolveTargetStatus(normalizedActionCode);
-            if (!targetStatus.HasValue)
-            {
-                return false;
-            }
-
-            return targetStatus.Value == currentStatus;
+            var resolution = WorkflowEngine.Resolve(currentStatus, normalizedActionCode);
+            return !resolution.IsAllowed
+                && string.Equals(
+                    resolution.ErrorMessage,
+                    DuplicateStateTransitionMessage,
+                    StringComparison.Ordinal);
         }
     }
 }
