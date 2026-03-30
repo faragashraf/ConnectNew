@@ -12,6 +12,7 @@ import { TourService } from '../../services/tour.service';
 import { filter, timeInterval, timeout } from 'rxjs/operators';
 import { SoundService } from '../../services/helper/sound.service';
 import { ThemeService } from '../../services/theme.service';
+import { WindowsNotificationService } from '../../services/helper/windowsNotification.service';
 
 @Component({
   selector: 'app-nav-bar',
@@ -68,7 +69,8 @@ export class NavBarComponent implements OnInit, AfterViewInit {
     private sanitizer: DomSanitizer,
     private fb: FormBuilder,
     private cd: ChangeDetectorRef,
-    public themeService: ThemeService
+    public themeService: ThemeService,
+    private windowsNotificationService: WindowsNotificationService
   ) {
     this.twoFactorForm = this.fb.group({
       pairingId: [null],
@@ -458,6 +460,16 @@ export class NavBarComponent implements OnInit, AfterViewInit {
         this.msgsService.msgInfo('تم الإلغاء');
       }
     });
+  }
+
+  async testSystemNotification() {
+    const isSent = await this.windowsNotificationService.runManualNotificationTest();
+    if (isSent) {
+      this.msgsService.msgSuccess('تم إرسال إشعار نظام تجريبي. تحقق من Notification Center.', 4000, true);
+      return;
+    }
+
+    this.msgsService.msgInfo('تعذر إرسال الإشعار. تحقق من صلاحية الإشعارات في المتصفح والنظام.', 'اختبار إشعار النظام');
   }
 
   clearCache() {

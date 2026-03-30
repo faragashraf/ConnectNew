@@ -162,16 +162,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       this.authService.SignOut();
     }
 
-    if ('Notification' in window) {
-      Notification.requestPermission().then((permission) => {
-        if (permission !== 'granted') {
-          if ('Notification' in window && Notification.permission !== 'granted') {
-            this.instructionVisible = true;
-          }
-        }
-      });
-    }
-    this.NotificationService.requestNotificationPermission();
+    this.NotificationService.initializeNotificationInfra();
 
     this.notificationSubscription = assignSubscription(this.notificationSubscription, this.signalRService.Notification$, (notification: any) => {
       const displayNotification = this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto;
@@ -179,6 +170,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       const notificationTitle = String(displayNotification?.title ?? '').trim();
       const notificationSender = String(displayNotification?.sender ?? 'Connect').trim() || 'Connect';
       const notificationTime = displayNotification?.time ?? notification?.time;
+      const osNotificationTitle = notificationTitle || notificationSender || 'Connect';
+      const osNotificationBody = notificationBody || notificationTitle || 'لديك إشعار جديد';
 
       this.signalRService.Notification.push(displayNotification);
 
@@ -190,7 +183,19 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         life: 5000
       });
       this.signalRService.primMsgCount++;
-      this.NotificationService.showNotification(notificationBody, 'assets/imges/Online.jpg', notificationTitle);
+      console.log('[Notifications] SignalR event received:', {
+        sender: notificationSender,
+        title: notificationTitle,
+        body: notificationBody,
+        time: notificationTime
+      });
+      void this.NotificationService.showNotification(
+        osNotificationBody,
+        'assets/imges/Online.jpg',
+        osNotificationTitle,
+        { tag: `signalr-${Date.now()}` },
+        'signalr'
+      );
       this.cdr.detectChanges();
     });
 

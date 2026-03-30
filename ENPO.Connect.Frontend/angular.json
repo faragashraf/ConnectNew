@@ -50,7 +50,12 @@
             "assets": [
               "src/favicon.ico",
               "src/icon.ico",
-              "src/assets"
+              "src/assets",
+              {
+                "glob": "service-worker.js",
+                "input": "src",
+                "output": "/"
+              }
             ],
             "styles": [
               "src/styles.scss",
@@ -175,7 +180,12 @@
             "assets": [
               "src/favicon.ico",
               "src/icon.ico",
-              "src/assets"
+              "src/assets",
+              {
+                "glob": "service-worker.js",
+                "input": "src",
+                "output": "/"
+              }
             ],
             "styles": [
               "src/styles.scss"
