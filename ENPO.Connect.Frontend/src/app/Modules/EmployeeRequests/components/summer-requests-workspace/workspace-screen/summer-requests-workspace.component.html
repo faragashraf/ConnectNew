@@ -206,9 +206,9 @@
                 <h4>تسجيل السداد</h4>
                 <label>
                   <span class="required-label">تاريخ ووقت السداد</span>
-                  <input type="datetime-local" step="1" formControlName="paidAtLocal" [attr.min]="getPaymentMinDateTimeLocal(request)" />
+                  <input type="datetime-local" step="1" formControlName="paidAtLocal" [attr.max]="getPaymentMaxDateTimeLocal()" />
                 </label>
-                <p class="warn" *ngIf="hasPaymentBeforeRequestCreationError()">{{ paymentBeforeRequestCreationMessage }}</p>
+                <p class="warn" *ngIf="hasPaymentInFutureError()">{{ paymentInFutureMessage }}</p>
                 <label>
                   <span class="optional-label">ملاحظات السداد</span>
                   <textarea rows="3" formControlName="notes" placeholder="ملاحظات السداد"></textarea>

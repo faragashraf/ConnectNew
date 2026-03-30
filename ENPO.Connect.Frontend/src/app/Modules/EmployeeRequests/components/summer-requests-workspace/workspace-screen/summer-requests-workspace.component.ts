@@ -1,5 +1,5 @@
 ﻿import { Component, OnDestroy, OnInit } from '@angular/core';
-import { AbstractControl, FormBuilder, FormGroup, ValidationErrors, Validators } from '@angular/forms';
+import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
@@ -71,7 +71,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   readonly pdfReferenceTitle = SUMMER_PDF_REFERENCE_TITLE;
   readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   readonly dynamicSummerConfigRouteKey = 'admins/summer-requests/dynamic-booking';
-  readonly paymentBeforeRequestCreationMessage = SUMMER_UI_TEXTS_AR.errors.paymentBeforeRequestCreation;
+  readonly paymentInFutureMessage = SUMMER_UI_TEXTS_AR.errors.paymentInFuture;
   destinations: SummerDestinationConfig[] = [];
   loadingDestinations = false;
   destinationsError = '';
@@ -106,17 +106,11 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   activeTabIndex = 0;
   editRequestId: number | null = null;
 
-  private readonly paymentBeforeRequestCreationErrorKey = 'paymentBeforeRequestCreation';
+  private readonly paymentInFutureErrorKey = 'paymentInFuture';
   private readonly subscriptions = new Subscription();
-  private readonly paymentDateNotBeforeCreationValidator = (control: AbstractControl): ValidationErrors | null => {
+  private readonly paymentDateNotInFutureValidator = (control: AbstractControl) => {
     const paidAtLocal = String(control?.value ?? '').trim();
     if (!paidAtLocal) {
-      return null;
-    }
-
-    const selectedRequest = this.selectedRequest;
-    const requestCreatedAt = this.tryParseDate(selectedRequest?.createdAt);
-    if (!requestCreatedAt) {
       return null;
     }
 
@@ -125,8 +119,8 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return null;
     }
 
-    return this.toComparableUnixSecond(paidAt) < this.toComparableUnixSecond(requestCreatedAt)
-      ? { [this.paymentBeforeRequestCreationErrorKey]: true }
+    return this.toComparableUnixSecond(paidAt) > this.toComparableUnixSecond(new Date())
+      ? { [this.paymentInFutureErrorKey]: true }
       : null;
   };
 
@@ -154,7 +148,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       paidAtLocal: ['', Validators.required],
       notes: ['', Validators.maxLength(1000)]
     });
-    this.paymentForm.get('paidAtLocal')?.addValidators(this.paymentDateNotBeforeCreationValidator);
+    this.paymentForm.get('paidAtLocal')?.addValidators(this.paymentDateNotInFutureValidator);
 
     this.transferForm = this.fb.group({
       toCategoryId: [null, Validators.required],
@@ -579,8 +573,8 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   submitPayment(): void {
     this.paymentForm.markAllAsTouched();
     if (this.paymentForm.invalid) {
-      if (this.paymentForm.get('paidAtLocal')?.hasError(this.paymentBeforeRequestCreationErrorKey)) {
-        this.msg.msgError('خطأ', `<h5>${this.paymentBeforeRequestCreationMessage}</h5>`, true);
+      if (this.paymentForm.get('paidAtLocal')?.hasError(this.paymentInFutureErrorKey)) {
+        this.msg.msgError('خطأ', `<h5>${this.paymentInFutureMessage}</h5>`, true);
         return;
       }
       this.msg.msgError('خطأ', '<h5>يرجى استكمال بيانات السداد.</h5>', true);
@@ -715,7 +709,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   selectRequest(messageId: number): void {
     this.selectedRequestId = messageId;
     this.selectedRequestDetailsError = '';
-    this.refreshPaymentDateValidation();
     const current = this.selectedRequest;
     if (!current) {
       this.selectedRequestDetails = null;
@@ -803,7 +796,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           } else if (this.selectedRequestId) {
             this.loadSelectedRequestDetails(this.selectedRequestId);
           }
-          this.refreshPaymentDateValidation();
           return;
         }
 
@@ -812,7 +804,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         this.selectedRequestId = null;
         this.selectedRequestDetails = null;
         this.seasonTransferAlreadyUsed = false;
-        this.refreshPaymentDateValidation();
       },
       error: () => {
         this.myRequests = [];
@@ -820,7 +811,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         this.selectedRequestId = null;
         this.selectedRequestDetails = null;
         this.seasonTransferAlreadyUsed = false;
-        this.refreshPaymentDateValidation();
       },
       complete: () => {
         this.loadingRequests = false;
@@ -845,19 +835,14 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     return Date.now() > due.getTime();
   }
 
-  getPaymentMinDateTimeLocal(request: SummerRequestSummaryDto | undefined | null): string {
-    const createdAt = this.tryParseDate(request?.createdAt);
-    if (!createdAt) {
-      return '';
-    }
-
-    return this.toDateTimeLocalInputValue(createdAt);
+  getPaymentMaxDateTimeLocal(): string {
+    return this.toDateTimeLocalInputValue(new Date());
   }
 
-  hasPaymentBeforeRequestCreationError(): boolean {
+  hasPaymentInFutureError(): boolean {
     const control = this.paymentForm.get('paidAtLocal');
     return Boolean(
-      control?.hasError(this.paymentBeforeRequestCreationErrorKey)
+      control?.hasError(this.paymentInFutureErrorKey)
       && (control.touched || control.dirty)
     );
   }
@@ -1294,7 +1279,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const patched = this.listPatchService.upsertOwnerRequests(this.myRequests, summary);
     this.myRequests = patched.items;
     this.seasonTransferAlreadyUsed = this.myRequests.some(item => item.transferUsed);
-    this.refreshPaymentDateValidation();
   }
 
   private removeMyRequestSummary(messageId: number): void {
@@ -1314,8 +1298,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       this.selectedRequestDetails = null;
       this.selectedRequestDetailsError = '';
     }
-
-    this.refreshPaymentDateValidation();
   }
 
   private refreshCapacityFromSignal(update: SummerCapacityRealtimeEvent): void {
@@ -1459,10 +1441,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     return normalized === 'true' || normalized === '1';
   }
 
-  private refreshPaymentDateValidation(): void {
-    this.paymentForm.get('paidAtLocal')?.updateValueAndValidity({ emitEvent: false });
-  }
-
   private tryParseDate(value: unknown): Date | null {
     const normalized = String(value ?? '').trim();
     if (!normalized) {
@@ -1471,16 +1449,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
     const parsed = new Date(normalized);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  private toDateTimeLocalInputValue(value: Date): string {
-    const year = String(value.getFullYear());
-    const month = String(value.getMonth() + 1).padStart(2, '0');
-    const day = String(value.getDate()).padStart(2, '0');
-    const hours = String(value.getHours()).padStart(2, '0');
-    const minutes = String(value.getMinutes()).padStart(2, '0');
-    const seconds = String(value.getSeconds()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
   }
 
   private parseDateTimeLocalInput(value: string): Date | null {
@@ -1492,6 +1460,16 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const withSeconds = normalized.length === 16 ? `${normalized}:00` : normalized;
     const parsed = new Date(withSeconds);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private toDateTimeLocalInputValue(value: Date): string {
+    const year = String(value.getFullYear());
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    const hours = String(value.getHours()).padStart(2, '0');
+    const minutes = String(value.getMinutes()).padStart(2, '0');
+    const seconds = String(value.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
   }
 
   private toComparableUnixSecond(value: Date): number {

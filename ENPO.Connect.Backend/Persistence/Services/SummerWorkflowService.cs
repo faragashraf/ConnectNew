@@ -1100,6 +1100,7 @@ namespace Persistence.Services
                 var dueAtUtc = TruncateToWholeSecondUtc(dueAtRawUtc);
                 var paidAtRawUtc = request.PaidAtUtc?.UtcDateTime ?? DateTime.UtcNow;
                 var paidAtUtc = TruncateToWholeSecondUtc(paidAtRawUtc);
+                var nowUtc = TruncateToWholeSecondUtc(DateTime.UtcNow);
                 var hasCreatedAtAnchor = ParseDate(rawCreatedAtField).HasValue;
 
                 _logger.LogInformation(
@@ -1117,18 +1118,17 @@ namespace Persistence.Services
                     request.PaidAtUtc?.Offset.ToString(),
                     request.PaidAtUtc.HasValue);
 
-                if (paidAtUtc < requestCreatedAtUtc)
+                if (paidAtUtc > nowUtc)
                 {
                     _logger.LogWarning(
-                        "Summer payment rejected: paid date before request creation. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, CreatedAtUtc={CreatedAtUtc:o}, CreatedAtAnchorRaw={CreatedAtAnchorRaw}",
+                        "Summer payment rejected: paid date in future. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, NowUtc={NowUtc:o}",
                         message.MessageId,
                         paidAtUtc,
-                        requestCreatedAtUtc,
-                        rawCreatedAtField);
+                        nowUtc);
                     response.Errors.Add(new Error
                     {
                         Code = "400",
-                        Message = "لا يمكن إدخال تاريخ السداد قبل تاريخ إنشاء الطلب."
+                        Message = "لا يمكن إدخال تاريخ سداد في المستقبل."
                     });
                     return response;
                 }

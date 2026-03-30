@@ -30,4 +30,12 @@ describe('summer-admin-action-state-guard', () => {
     expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'Rejected')).toBeTrue();
     expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'Replied')).toBeFalse();
   });
+
+  it('treats completed/printed states as terminal for state-changing admin actions', () => {
+    expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'Printed')).toBeFalse();
+    expect(isAdminActionAllowedForCurrentStatus('MANUAL_CANCEL', 'Completed')).toBeFalse();
+    expect(isAdminActionAllowedForCurrentStatus('APPROVE_TRANSFER', 'تم')).toBeFalse();
+    expect(isAdminActionAllowedForCurrentStatus('COMMENT', 'Printed')).toBeTrue();
+    expect(resolveBlockedActionForCurrentStatus('تم')).toBe('FINAL_APPROVE');
+  });
 });

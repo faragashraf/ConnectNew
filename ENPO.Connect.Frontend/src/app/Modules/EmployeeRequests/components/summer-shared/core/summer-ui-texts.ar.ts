@@ -4,7 +4,7 @@ export const SUMMER_UI_TEXTS_AR = {
     requestSelectionRequired: 'يرجى اختيار طلب أولاً.',
     requestSelectionRequiredShort: 'يرجى اختيار طلب.',
     companionNameMinimumThreeParts: 'يجب إدخال اسم المرافق ثلاثي على الأقل.',
-    paymentBeforeRequestCreation: 'لا يمكن إدخال تاريخ السداد قبل تاريخ إنشاء الطلب.',
+    paymentInFuture: 'لا يمكن إدخال تاريخ سداد في المستقبل.',
     requestDetailsUnavailable: 'تعذر تحميل بيانات الطلب المختار حالياً.',
     destinationCatalogLoadFailed: 'تعذر تحميل إعدادات المصايف من الخدمة العامة.',
     destinationCatalogInvalid: 'تعذر تحميل إعدادات المصايف من CDMendTbl.',

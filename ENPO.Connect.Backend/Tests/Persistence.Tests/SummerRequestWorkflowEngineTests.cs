@@ -8,6 +8,31 @@ public class SummerRequestWorkflowEngineTests
 {
     private readonly SummerRequestWorkflowEngine _engine = new();
 
+    [Theory]
+    [InlineData(MessageStatus.New)]
+    [InlineData(MessageStatus.InProgress)]
+    [InlineData(MessageStatus.Replied)]
+    [InlineData(MessageStatus.Rejected)]
+    [InlineData(MessageStatus.Printed)]
+    [InlineData(MessageStatus.All)]
+    public void Resolve_Always_Allows_CommentLike_Actions_In_All_States(MessageStatus currentState)
+    {
+        var commentResult = _engine.Resolve(currentState, "COMMENT");
+        var replyResult = _engine.Resolve(currentState, "reply");
+        var noteResult = _engine.Resolve(currentState, "note");
+
+        Assert.True(commentResult.IsAllowed);
+        Assert.True(replyResult.IsAllowed);
+        Assert.True(noteResult.IsAllowed);
+
+        Assert.False(commentResult.ChangesState);
+        Assert.False(replyResult.ChangesState);
+        Assert.False(noteResult.ChangesState);
+        Assert.True(commentResult.IsBypassAction);
+        Assert.True(replyResult.IsBypassAction);
+        Assert.True(noteResult.IsBypassAction);
+    }
+
     [Fact]
     public void Resolve_Blocks_Duplicate_FinalApprove_When_CurrentStatus_IsReplied()
     {
@@ -29,26 +54,53 @@ public class SummerRequestWorkflowEngineTests
     }
 
     [Fact]
-    public void Resolve_Always_Allows_CommentLike_Actions()
-    {
-        var commentResult = _engine.Resolve(MessageStatus.Rejected, "COMMENT");
-        var replyResult = _engine.Resolve(MessageStatus.Replied, "reply");
-        var noteResult = _engine.Resolve(MessageStatus.Printed, "note");
-
-        Assert.True(commentResult.IsAllowed);
-        Assert.True(replyResult.IsAllowed);
-        Assert.True(noteResult.IsAllowed);
-        Assert.False(commentResult.ChangesState);
-        Assert.True(commentResult.IsBypassAction);
-    }
-
-    [Fact]
     public void Resolve_Blocks_ApproveTransfer_For_Rejected_State()
     {
         var result = _engine.Resolve(MessageStatus.Rejected, SummerAdminActionCatalog.Codes.ApproveTransfer);
 
         Assert.False(result.IsAllowed);
         Assert.Equal(SummerRequestWorkflowEngine.InvalidTransitionMessage, result.ErrorMessage);
+    }
+
+    [Theory]
+    [InlineData(MessageStatus.Printed, SummerAdminActionCatalog.Codes.FinalApprove)]
+    [InlineData(MessageStatus.Printed, SummerAdminActionCatalog.Codes.ManualCancel)]
+    [InlineData(MessageStatus.Printed, SummerAdminActionCatalog.Codes.ApproveTransfer)]
+    [InlineData(MessageStatus.All, SummerAdminActionCatalog.Codes.FinalApprove)]
+    [InlineData(MessageStatus.All, SummerAdminActionCatalog.Codes.ManualCancel)]
+    [InlineData(MessageStatus.All, SummerAdminActionCatalog.Codes.ApproveTransfer)]
+    public void Resolve_Blocks_StateChanging_AdminActions_For_CompletedLike_States(
+        MessageStatus currentState,
+        string actionCode)
+    {
+        var result = _engine.Resolve(currentState, actionCode);
+
+        Assert.False(result.IsAllowed);
+        Assert.Equal(SummerRequestWorkflowEngine.InvalidTransitionMessage, result.ErrorMessage);
+        Assert.False(result.ChangesState);
+    }
+
+    [Theory]
+    [InlineData(MessageStatus.New)]
+    [InlineData(MessageStatus.InProgress)]
+    [InlineData(MessageStatus.Replied)]
+    public void Resolve_Allows_ApproveTransfer_For_Open_States(MessageStatus currentState)
+    {
+        var result = _engine.Resolve(currentState, SummerAdminActionCatalog.Codes.ApproveTransfer);
+
+        Assert.True(result.IsAllowed);
+        Assert.True(result.ChangesState);
+        Assert.Null(result.TargetState);
+    }
+
+    [Fact]
+    public void Resolve_Blocks_Unknown_Action_Code()
+    {
+        var result = _engine.Resolve(MessageStatus.New, "COMPLETE");
+
+        Assert.False(result.IsAllowed);
+        Assert.Equal(SummerRequestWorkflowEngine.InvalidTransitionMessage, result.ErrorMessage);
+        Assert.False(result.ChangesState);
     }
 
     [Fact]

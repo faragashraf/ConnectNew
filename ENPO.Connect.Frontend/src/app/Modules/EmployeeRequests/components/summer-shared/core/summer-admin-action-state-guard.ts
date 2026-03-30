@@ -5,7 +5,7 @@ export const SUMMER_ADMIN_ACTION_STATE_MESSAGES = {
   invalidCurrentState: 'لا يمكن تنفيذ هذا الإجراء لأن حالة الطلب الحالية لا تسمح بذلك.'
 } as const;
 
-type CanonicalRequestState = 'NEW' | 'IN_PROGRESS' | 'REPLIED' | 'REJECTED' | 'UNKNOWN';
+type CanonicalRequestState = 'NEW' | 'IN_PROGRESS' | 'REPLIED' | 'REJECTED' | 'COMPLETED' | 'UNKNOWN';
 
 export interface SummerAdminActionStateDecision {
   actionCode: SummerAdminActionCode | '';
@@ -66,6 +66,14 @@ function resolveCanonicalRequestState(status: unknown): CanonicalRequestState {
     return 'REJECTED';
   }
 
+  if (
+    token === 'printed'
+    || token === 'completed'
+    || token === 'تم'
+  ) {
+    return 'COMPLETED';
+  }
+
   return 'UNKNOWN';
 }
 
@@ -76,6 +84,10 @@ function isActionAllowedByState(actionCode: SummerAdminActionCode, currentState:
 
   if (currentState === 'REJECTED') {
     return actionCode !== SUMMER_ADMIN_ACTION.APPROVE_TRANSFER;
+  }
+
+  if (currentState === 'COMPLETED') {
+    return actionCode === SUMMER_ADMIN_ACTION.COMMENT;
   }
 
   return true;
@@ -159,6 +171,9 @@ export function resolveBlockedActionForCurrentStatus(status: unknown): SummerAdm
   }
   if (currentState === 'REJECTED') {
     return SUMMER_ADMIN_ACTION.MANUAL_CANCEL;
+  }
+  if (currentState === 'COMPLETED') {
+    return SUMMER_ADMIN_ACTION.FINAL_APPROVE;
   }
   return '';
 }
