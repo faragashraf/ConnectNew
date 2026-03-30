@@ -351,8 +351,7 @@ namespace Persistence.Services
                         var isPaid = item.PaidAtUtc.HasValue;
                         var isOverdueUnpaid = !isPaid
                             && item.PaymentDueAtUtc.HasValue
-                            && item.PaymentDueAtUtc.Value < nowUtc
-                            && ResolveMessageStatus(item.Status) != MessageStatus.Rejected;
+                            && item.PaymentDueAtUtc.Value < nowUtc;
 
                         var isPaidFilter = normalizedPaymentState is "paid" or "مسدد";
                         var isUnpaidFilter = normalizedPaymentState is "unpaid" or "غيرمسدد";
@@ -495,8 +494,7 @@ namespace Persistence.Services
                     OverdueUnpaidCount = requests.Count(r =>
                         !r.PaidAtUtc.HasValue
                         && r.PaymentDueAtUtc.HasValue
-                        && r.PaymentDueAtUtc.Value < nowUtc
-                        && ResolveMessageStatus(r.Status) != MessageStatus.Rejected),
+                        && r.PaymentDueAtUtc.Value < nowUtc),
                     ByDestination = requests
                         .GroupBy(r => new
                         {
@@ -527,6 +525,16 @@ namespace Persistence.Services
                         .OrderByDescending(g => g.Count)
                         .ToList()
                 };
+
+                _logger.LogInformation(
+                    "Summer admin dashboard computed. UserId={UserId}, SeasonYear={SeasonYear}, ScopeCategoryId={ScopeCategoryId}, ScopeWaveCode={ScopeWaveCode}, Total={Total}, Unpaid={Unpaid}, OverdueUnpaid={OverdueUnpaid}",
+                    userId,
+                    seasonYear,
+                    categoryId,
+                    normalizedWaveCode,
+                    dashboard.TotalRequests,
+                    dashboard.UnpaidCount,
+                    dashboard.OverdueUnpaidCount);
 
                 response.Data = dashboard;
             }
