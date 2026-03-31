@@ -7,6 +7,8 @@ import { CdCategoryMandDto, ListRequestModel, MessageDto, RequestedData, SearchK
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import {
+  SummerPricingQuoteDto,
+  SummerPricingQuoteRequest,
   SummerRequestSummaryDto,
   SummerWaveCapacityDto
 } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.dto';
@@ -28,6 +30,7 @@ import {
   isValidSummerCompanionName,
   normalizeSummerCompanionName
 } from '../../summer-shared/core/summer-companion-name.policy';
+import { deriveStayModeControlPolicy } from '../../summer-shared/core/summer-pricing-ui-rules';
 import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
 import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
 
@@ -76,6 +79,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
   bookingCapacityLoading = false;
   bookingWaveCapacities: SummerWaveCapacityDto[] = [];
+  pricingQuoteLoading = false;
+  pricingQuoteError = '';
+  pricingQuote: SummerPricingQuoteDto | null = null;
   myRequests: SummerRequestSummaryDto[] = [];
 
   private readonly subscriptions = new Subscription();
@@ -84,6 +90,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private loadedEditRequestId: number | null = null;
   private initialEditSignature = '';
   private lastProxyEnabled = false;
+  private lastPricingQuoteKey = '';
 
   constructor(
     private readonly fb: FormBuilder,
@@ -155,6 +162,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.selectedDestinationId = Number.isFinite(categoryId) && categoryId > 0 ? categoryId : null;
     this.bookingValidationAlerts = [];
     this.bookingWaveCapacities = [];
+    this.pricingQuote = null;
+    this.pricingQuoteError = '';
+    this.pricingQuoteLoading = false;
+    this.lastPricingQuoteKey = '';
     if (options?.resetFiles !== false) {
       this.fileParameters = [];
     }
@@ -261,9 +272,15 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return;
     }
 
+    if (this.matchesAlias(baseName, this.engine.aliases.stayMode)) {
+      this.loadPricingQuote();
+      return;
+    }
+
     if (this.matchesAlias(baseName, this.engine.aliases.waveCode)) {
       this.syncWaveLabel();
       this.loadBookingCapacity();
+      this.loadPricingQuote();
     }
   }
 
@@ -398,9 +415,15 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       next: response => {
         if (response?.isSuccess) {
           const savedMessageId = Number(response?.data?.messageId ?? currentMessageId);
-          this.msg.msgSuccess(this.isEditMode
-            ? 'تم حفظ تعديلات الطلب بنجاح'
-            : 'تم تسجيل الطلب بنجاح');
+          const pricingDisplayText = this.extractPricingDisplayText(response?.data?.fields);
+          const successMessage = this.isEditMode
+            ? (pricingDisplayText.length > 0
+              ? `تم حفظ تعديلات الطلب بنجاح.\n${pricingDisplayText}`
+              : 'تم حفظ تعديلات الطلب بنجاح')
+            : (pricingDisplayText.length > 0
+              ? `تم تسجيل الطلب بنجاح.\n${pricingDisplayText}`
+              : 'تم تسجيل الطلب بنجاح');
+          this.msg.msgSuccess(successMessage, 6500);
           this.bookingValidationAlerts = [];
           this.fileParameters = [];
           this.hasEditChanges = false;
@@ -509,10 +532,19 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.setControlValue(this.engine.aliases.seasonYear, String(this.seasonYear));
 
     const stayModeCtrl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.stayMode);
-    if (stayModeCtrl && destination.stayModes.length === 1) {
+    if (!stayModeCtrl) {
+      return;
+    }
+
+    if (destination.stayModes.length === 1) {
       stayModeCtrl.setValue(destination.stayModes[0].code, { emitEvent: false });
       stayModeCtrl.disable({ emitEvent: false });
+      stayModeCtrl.updateValueAndValidity({ emitEvent: false });
+      return;
     }
+
+    stayModeCtrl.enable({ emitEvent: false });
+    stayModeCtrl.updateValueAndValidity({ emitEvent: false });
   }
 
   private applyOwnerDefaultMode(preserveExistingValues = false): void {
@@ -588,6 +620,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.applyCompanionAgeRules();
     this.syncWaveLabel();
     this.loadBookingCapacity();
+    this.loadPricingQuote();
   }
 
   private syncExtraCountValidationMessage(destination: SummerDestinationConfig): void {
@@ -723,6 +756,138 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         this.bookingCapacityLoading = false;
       }
     });
+  }
+
+  private loadPricingQuote(): void {
+    const destination = this.selectedDestination;
+    if (!destination || !this.ticketForm) {
+      this.clearPricingQuote(true);
+      return;
+    }
+
+    const waveCode = this.getStringValue(this.engine.aliases.waveCode);
+    const familyCount = Number(this.getStringValue(this.engine.aliases.familyCount) || 0) || 0;
+    const extraCount = Math.max(0, Number(this.getStringValue(this.engine.aliases.extraCount) || 0) || 0);
+    const personsCount = familyCount + extraCount;
+
+    if (!waveCode || familyCount <= 0 || personsCount <= 0) {
+      this.clearPricingQuote(true);
+      return;
+    }
+
+    const selectedWave = destination.waves.find(wave => wave.code === waveCode);
+    const stayModeControl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.stayMode);
+    const stayModeValue = this.getStringValue(this.engine.aliases.stayMode);
+    const fallbackStayMode = destination.stayModes.length > 0 ? destination.stayModes[0].code : '';
+    const requestedStayMode = stayModeValue || fallbackStayMode;
+
+    const quoteRequest: SummerPricingQuoteRequest = {
+      categoryId: destination.categoryId,
+      seasonYear: Number(this.seasonYear) || 0,
+      waveCode,
+      waveLabel: selectedWave?.startsAtLabel ?? '',
+      waveStartsAtIso: selectedWave?.startsAtIso ?? '',
+      personsCount,
+      familyCount,
+      extraCount,
+      stayMode: requestedStayMode,
+      destinationName: destination.name
+    };
+
+    const quoteKey = [
+      quoteRequest.categoryId,
+      quoteRequest.seasonYear,
+      quoteRequest.waveCode,
+      quoteRequest.waveLabel,
+      quoteRequest.personsCount,
+      quoteRequest.stayMode
+    ].join('|');
+
+    if (quoteKey === this.lastPricingQuoteKey && (this.pricingQuoteLoading || !!this.pricingQuote)) {
+      return;
+    }
+
+    this.lastPricingQuoteKey = quoteKey;
+    this.pricingQuoteLoading = true;
+    this.pricingQuoteError = '';
+
+    this.summerWorkflowController.getPricingQuote(quoteRequest).subscribe({
+      next: response => {
+        if (response?.isSuccess && response.data) {
+          this.pricingQuote = response.data;
+          this.pricingQuoteError = '';
+          this.applyPricingQuoteToStayModeControl(response.data, stayModeControl);
+          return;
+        }
+
+        const errors = (response?.errors ?? [])
+          .map(item => String(item?.message ?? '').trim())
+          .filter(item => item.length > 0)
+          .join(' ');
+        this.pricingQuote = null;
+        this.pricingQuoteError = errors || 'تعذر حساب التسعير لهذا الاختيار.';
+      },
+      error: () => {
+        this.pricingQuote = null;
+        this.pricingQuoteError = 'تعذر حساب التسعير حاليًا. حاول مرة أخرى.';
+      },
+      complete: () => {
+        this.pricingQuoteLoading = false;
+      }
+    });
+  }
+
+  private applyPricingQuoteToStayModeControl(
+    quote: SummerPricingQuoteDto,
+    stayModeControl: AbstractControl | null
+  ): void {
+    if (!stayModeControl || !quote) {
+      return;
+    }
+
+    const stayModesCount = this.selectedDestination?.stayModes?.length ?? 0;
+    const policy = deriveStayModeControlPolicy({
+      pricingMode: quote.pricingMode,
+      transportationMandatory: quote.transportationMandatory,
+      normalizedStayMode: quote.normalizedStayMode
+    }, stayModesCount);
+
+    if (policy.normalizedStayMode.length > 0 && String(stayModeControl.value ?? '').trim() !== policy.normalizedStayMode) {
+      stayModeControl.setValue(policy.normalizedStayMode, { emitEvent: false });
+    }
+
+    if (policy.disableControl) {
+      stayModeControl.disable({ emitEvent: false });
+    } else {
+      stayModeControl.enable({ emitEvent: false });
+    }
+
+    stayModeControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private clearPricingQuote(resetStayModeControl: boolean): void {
+    this.pricingQuote = null;
+    this.pricingQuoteError = '';
+    this.pricingQuoteLoading = false;
+    this.lastPricingQuoteKey = '';
+
+    if (!resetStayModeControl || !this.ticketForm) {
+      return;
+    }
+
+    const destination = this.selectedDestination;
+    const stayModeControl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.stayMode);
+    if (!stayModeControl || !destination) {
+      return;
+    }
+
+    if (destination.stayModes.length === 1) {
+      stayModeControl.setValue(destination.stayModes[0].code, { emitEvent: false });
+      stayModeControl.disable({ emitEvent: false });
+    } else {
+      stayModeControl.enable({ emitEvent: false });
+    }
+    stayModeControl.updateValueAndValidity({ emitEvent: false });
   }
 
   private bindSignalRefresh(): void {
@@ -944,6 +1109,35 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return String(control?.value ?? '').trim();
   }
 
+  formatPriceValue(value: number | string | null | undefined): string {
+    const parsed = Number(value ?? 0);
+    if (!Number.isFinite(parsed)) {
+      return '0';
+    }
+    const fixed = Number.isInteger(parsed) ? parsed.toString() : parsed.toFixed(2);
+    return `${fixed} جنيه`;
+  }
+
+  resolveStayModeLabel(mode: string | null | undefined): string {
+    const normalized = String(mode ?? '').trim().toUpperCase();
+    if (normalized === 'RESIDENCE_WITH_TRANSPORT') {
+      return 'إقامة وانتقالات';
+    }
+    if (normalized === 'RESIDENCE_ONLY') {
+      return 'إقامة فقط';
+    }
+    return normalized.length > 0 ? normalized : '-';
+  }
+
+  get isTransportIncludedMode(): boolean {
+    const quote = this.pricingQuote;
+    if (!quote) {
+      return false;
+    }
+
+    return String(quote.pricingMode ?? '').trim() === 'TransportationMandatoryIncluded';
+  }
+
   private matchesAlias(name: string, aliases: readonly string[]): boolean {
     const lowered = String(name ?? '').trim().toLowerCase();
     return aliases.some(alias => alias.toLowerCase() === lowered);
@@ -955,6 +1149,21 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
     const normalized = String(value ?? '').trim().toLowerCase();
     return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  }
+
+  private extractPricingDisplayText(fields: TkmendField[] | undefined): string {
+    const pricingFieldKeys = ['Summer_PricingDisplayText', 'SUM2026_PricingDisplayText'];
+    const messageFields = Array.isArray(fields) ? fields : [];
+
+    for (const key of pricingFieldKeys) {
+      const value = messageFields.find(field => String(field?.fildKind ?? '').trim().toLowerCase() === key.toLowerCase());
+      const text = String(value?.fildTxt ?? '').trim();
+      if (text.length > 0) {
+        return text;
+      }
+    }
+
+    return '';
   }
 
   private initializeFromComponentConfig(): void {

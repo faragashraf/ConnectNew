@@ -12,6 +12,7 @@ using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.Correspondance;
 using Models.DTO.Correspondance.Enums;
+using Models.DTO.Correspondance.Summer;
 using NPOI.SS.Formula.Functions;
 using Persistence.Data;
 using Persistence.HelperServices;
@@ -20,6 +21,7 @@ using Persistence.Services.Summer;
 using SignalR.Notification;
 using System;
 using System.Data;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -37,6 +39,7 @@ namespace Persistence.Services
         private readonly ENPOCreateLogFile _logger;
         private readonly MessageRequestService _messageRequestService;
         private readonly IConnectNotificationService _notificationService;
+        private readonly SummerPricingService _summerPricingService;
         private const int CapacityLockTimeoutMs = 15000;
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -68,10 +71,35 @@ namespace Persistence.Services
             "Summer_CancelledAtUtc",
             "Summer_AdminLastAction",
             "Summer_AdminActionAtUtc",
-            "Summer_AdminComment"
+            "Summer_AdminComment",
+            SummerWorkflowDomainConstants.PricingFieldKinds.ConfigId,
+            SummerWorkflowDomainConstants.PricingFieldKinds.PolicyId,
+            SummerWorkflowDomainConstants.PricingFieldKinds.PricingMode,
+            SummerWorkflowDomainConstants.PricingFieldKinds.TransportationMandatory,
+            SummerWorkflowDomainConstants.PricingFieldKinds.SelectedStayMode,
+            SummerWorkflowDomainConstants.PricingFieldKinds.PersonsCount,
+            SummerWorkflowDomainConstants.PricingFieldKinds.PeriodKey,
+            SummerWorkflowDomainConstants.PricingFieldKinds.WaveDate,
+            SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationPricePerPerson,
+            SummerWorkflowDomainConstants.PricingFieldKinds.TransportationPricePerPerson,
+            SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationTotal,
+            SummerWorkflowDomainConstants.PricingFieldKinds.TransportationTotal,
+            SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal,
+            SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText,
+            SummerWorkflowDomainConstants.PricingFieldKinds.SmsText,
+            SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText
         };
 
-        public HandleEmployeeCategories(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, helperService helperService, IMapper mapper, ENPOCreateLogFile logger, MessageRequestService messageRequestService, IConnectNotificationService notificationService)
+        public HandleEmployeeCategories(
+            ConnectContext connectContext,
+            Attach_HeldContext attach_HeldContext,
+            GPAContext gPAContext,
+            helperService helperService,
+            IMapper mapper,
+            ENPOCreateLogFile logger,
+            MessageRequestService messageRequestService,
+            IConnectNotificationService notificationService,
+            SummerPricingService summerPricingService)
         {
             _connectContext = connectContext;
             _attach_HeldContext = attach_HeldContext;
@@ -81,6 +109,7 @@ namespace Persistence.Services
             _logger = logger ?? new ENPOCreateLogFile("C:\\Connect_Log", "HandleEmployeeCategories_Log" + DateTime.Today.ToString("dd-MMM-yyyy"), FileExtension.txt);
             _messageRequestService = messageRequestService ?? throw new ArgumentNullException(nameof(messageRequestService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _summerPricingService = summerPricingService ?? throw new ArgumentNullException(nameof(summerPricingService));
         }
 
         private helperService helper_service_check(helperService svc)
@@ -112,26 +141,38 @@ namespace Persistence.Services
                 return;
             }
 
-            var employeeId = GetFieldValue(messageRequest.Fields, "Emp_Id");
+            var employeeId = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.EmployeeIdFieldKinds);
             if (string.IsNullOrWhiteSpace(employeeId))
             {
                 response.Errors.Add(new Error { Code = "400", Message = "رقم ملف الموظف مطلوب." });
                 return;
             }
 
-            var summerCamp = GetFieldValue(messageRequest.Fields, "SummerCamp");
+            var summerCamp = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.WaveCodeFieldKinds);
             if (string.IsNullOrWhiteSpace(summerCamp))
             {
                 response.Errors.Add(new Error { Code = "400", Message = "الفوج مطلوب." });
                 return;
             }
 
-            var familyCount = ParseInt(GetFieldValue(messageRequest.Fields, "FamilyCount"), 0);
+            var familyCount = ParseInt(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.FamilyCountFieldKinds), 0);
             if (familyCount <= 0)
             {
                 response.Errors.Add(new Error { Code = "400", Message = "عدد الأفراد مطلوب." });
                 return;
             }
+
+            var extraCount = Math.Max(0, ParseInt(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.ExtraCountFieldKinds), 0));
+            var personsCount = familyCount + extraCount;
+            if (personsCount <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "عدد الأفراد مطلوب لحساب التسعير." });
+                return;
+            }
+
+            var seasonYear = ParseInt(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.SeasonYearFieldKinds), DateTime.UtcNow.Year);
+            var waveLabel = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.WaveLabelFieldKinds);
+            var stayMode = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.StayModeFieldKinds);
 
             if (categoryInfo == null)
             {
@@ -146,6 +187,59 @@ namespace Persistence.Services
                 response.Errors.Add(new Error { Code = "404", Message = "بيانات التصنيف الرئيسي غير متاحة." });
                 return;
             }
+
+            var destinationName = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.DestinationNameFieldKinds);
+            if (string.IsNullOrWhiteSpace(destinationName))
+            {
+                destinationName = (categoryInfo.Category?.CatName ?? string.Empty).Trim();
+            }
+
+            var pricingQuoteResponse = await _summerPricingService.GetQuoteAsync(new SummerPricingQuoteRequest
+            {
+                CategoryId = categoryInfo.Category.CatId,
+                SeasonYear = seasonYear,
+                WaveCode = summerCamp,
+                WaveLabel = waveLabel,
+                FamilyCount = familyCount,
+                ExtraCount = extraCount,
+                PersonsCount = personsCount,
+                StayMode = stayMode,
+                DestinationName = destinationName
+            });
+
+            if (!pricingQuoteResponse.IsSuccess || pricingQuoteResponse.Data == null)
+            {
+                if (pricingQuoteResponse.Errors.Any())
+                {
+                    foreach (var error in pricingQuoteResponse.Errors)
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = string.IsNullOrWhiteSpace(error?.Code) ? "400" : error.Code,
+                            Message = string.IsNullOrWhiteSpace(error?.Message)
+                                ? "تعذر حساب التسعير. يرجى مراجعة إعدادات التسعير."
+                                : error.Message
+                        });
+                    }
+                }
+                else
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = "تعذر حساب التسعير. يرجى مراجعة إعدادات التسعير."
+                    });
+                }
+
+                return;
+            }
+
+            var pricingQuote = pricingQuoteResponse.Data;
+            ApplyPricingSnapshotFields(messageRequest.Fields, pricingQuote);
+            UpsertRequestFieldRange(
+                messageRequest.Fields,
+                SummerWorkflowDomainConstants.StayModeFieldKinds,
+                pricingQuote.NormalizedStayMode);
 
             messageRequest.Type = (byte)parentCategory.CatId;
             var editMessageId = messageRequest.MessageId.GetValueOrDefault();
@@ -277,16 +371,18 @@ namespace Persistence.Services
                         var requestRef = (existingMessage.RequestRef ?? string.Empty).Trim();
                         if (string.IsNullOrWhiteSpace(requestRef))
                         {
-                            var seasonYear = ParseInt(GetFieldValue(messageRequest.Fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
+                            var requestSeasonYear = ParseInt(GetFieldValue(messageRequest.Fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
                             var sequenceName = GetSummerSequenceName(categoryInfo.Category.CatId);
                             var requestRefSeq = _helperService.GetSequenceNextValue(sequenceName);
-                            requestRef = BuildSummerRequestReference(categoryInfo.Category.CatId, seasonYear, requestRefSeq);
+                            requestRef = BuildSummerRequestReference(categoryInfo.Category.CatId, requestSeasonYear, requestRefSeq);
                         }
 
                         messageRequest.MessageId = messageId;
                         messageRequest.RequestRef = requestRef;
                         messageRequest.AssignedSectorId = parentCategory.Stockholder.ToString();
                         UpsertRequestField(messageRequest.Fields, "RequestRef", requestRef);
+                        ApplyPricingMessageIdentity(pricingQuote, messageId, requestRef);
+                        ApplyPricingSnapshotFields(messageRequest.Fields, pricingQuote);
 
                         existingMessage.Subject = messageRequest.Subject;
                         existingMessage.Description = messageRequest.Description;
@@ -309,10 +405,10 @@ namespace Persistence.Services
                     {
                         // Generate ids using DB-backed sequences (helperService expected to use atomic DB operations)
                         messageId = _helperService.GetSequenceNextValue("Seq_Tickets");
-                        var seasonYear = ParseInt(GetFieldValue(messageRequest.Fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
+                        var requestSeasonYear = ParseInt(GetFieldValue(messageRequest.Fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
                         var sequenceName = GetSummerSequenceName(categoryInfo.Category.CatId);
                         var requestRefSeq = _helperService.GetSequenceNextValue(sequenceName);
-                        var requestReference = BuildSummerRequestReference(categoryInfo.Category.CatId, seasonYear, requestRefSeq);
+                        var requestReference = BuildSummerRequestReference(categoryInfo.Category.CatId, requestSeasonYear, requestRefSeq);
 
                         messageRequest.MessageId = messageId;
                         messageRequest.RequestRef = requestReference;
@@ -322,6 +418,8 @@ namespace Persistence.Services
                         {
                             requestRefField.FildTxt = messageRequest.RequestRef;
                         }
+                        ApplyPricingMessageIdentity(pricingQuote, messageId, messageRequest.RequestRef);
+                        ApplyPricingSnapshotFields(messageRequest.Fields, pricingQuote);
 
                         var requestCreatedAtUtc = TruncateToWholeSecondUtc(DateTime.UtcNow);
                         var paymentDueAtUtc = SummerCalendarRules.CalculatePaymentDueUtc(requestCreatedAtUtc);
@@ -375,6 +473,17 @@ namespace Persistence.Services
                     }
 
                     await _helperService.GetMessageRequestById(messageId, response);
+                    if (!isEditOperation && response.IsSuccess && response.Data != null)
+                    {
+                        try
+                        {
+                            await DispatchOwnerPricingConfirmationAsync(response.Data);
+                        }
+                        catch (Exception notificationEx)
+                        {
+                            _logger.AppendLine($"Owner pricing confirmation notification failed: {notificationEx.Message}");
+                        }
+                    }
 
                     return;
                 }
@@ -757,12 +866,194 @@ SELECT @result;
             return digitsOnly.Length > 0 ? digitsOnly : normalized;
         }
 
+        private async Task DispatchOwnerPricingConfirmationAsync(MessageDto message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            var fields = message.Fields ?? new List<TkmendField>();
+            if (fields.Count == 0)
+            {
+                return;
+            }
+
+            var smsText = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.SmsText });
+            var whatsappText = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText });
+            if (string.IsNullOrWhiteSpace(whatsappText))
+            {
+                whatsappText = smsText;
+            }
+
+            if (string.IsNullOrWhiteSpace(smsText) && string.IsNullOrWhiteSpace(whatsappText))
+            {
+                return;
+            }
+
+            var mobile = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.EmployeePhoneFieldKinds);
+            if (string.IsNullOrWhiteSpace(mobile))
+            {
+                mobile = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.EmployeeExtraPhoneFieldKinds);
+            }
+
+            if (string.IsNullOrWhiteSpace(mobile))
+            {
+                _logger.AppendLine($"Owner pricing confirmation skipped for MessageId={message.MessageId}: mobile is missing.");
+                return;
+            }
+
+            var ownerId = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.EmployeeIdFieldKinds);
+            if (string.IsNullOrWhiteSpace(ownerId))
+            {
+                ownerId = (message.CreatedBy ?? string.Empty).Trim();
+            }
+
+            var referenceNo = string.IsNullOrWhiteSpace(message.RequestRef)
+                ? $"SUMMER-{message.MessageId}"
+                : message.RequestRef.Trim();
+
+            if (!string.IsNullOrWhiteSpace(smsText))
+            {
+                var smsResponse = await _notificationService.SendSmsAsync(new SmsDispatchRequest
+                {
+                    MobileNumber = mobile,
+                    Message = smsText.Trim(),
+                    UserId = string.IsNullOrWhiteSpace(ownerId) ? "SYSTEM" : ownerId,
+                    ReferenceNo = referenceNo
+                });
+
+                if (!smsResponse.IsSuccess)
+                {
+                    var smsErrors = string.Join(" | ", smsResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.AppendLine($"Owner pricing SMS notification failed for MessageId={message.MessageId}. Errors={smsErrors}");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(whatsappText))
+            {
+                var whatsappResponse = await _notificationService.SendWhatsAppAsync(new WhatsAppDispatchRequest
+                {
+                    MobileNumber = mobile,
+                    Message = whatsappText.Trim()
+                });
+
+                if (!whatsappResponse.IsSuccess)
+                {
+                    var whatsappErrors = string.Join(" | ", whatsappResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.AppendLine($"Owner pricing WhatsApp notification failed for MessageId={message.MessageId}. Errors={whatsappErrors}");
+                }
+            }
+        }
+
+        private static void ApplyPricingSnapshotFields(List<TkmendField>? fields, SummerPricingQuoteDto quote)
+        {
+            if (fields == null || quote == null)
+            {
+                return;
+            }
+
+            var waveDateValue = string.Empty;
+            if (SummerCalendarRules.TryParseWaveLabelDateUtc(quote.WaveLabel, out var waveStartUtc))
+            {
+                waveDateValue = waveStartUtc.ToString("o");
+            }
+
+            var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [SummerWorkflowDomainConstants.PricingFieldKinds.ConfigId] = quote.PricingConfigId,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.PolicyId] = quote.PricingConfigId,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.PricingMode] = quote.PricingMode,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.TransportationMandatory] = quote.TransportationMandatory ? "true" : "false",
+                [SummerWorkflowDomainConstants.PricingFieldKinds.SelectedStayMode] = quote.NormalizedStayMode,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.PersonsCount] = quote.PersonsCount.ToString(CultureInfo.InvariantCulture),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.PeriodKey] = quote.PeriodKey,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.WaveDate] = waveDateValue,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationPricePerPerson] = FormatDecimalValue(quote.AccommodationPricePerPerson),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.TransportationPricePerPerson] = FormatDecimalValue(quote.TransportationPricePerPerson),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationTotal] = FormatDecimalValue(quote.AccommodationTotal),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.TransportationTotal] = FormatDecimalValue(quote.TransportationTotal),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal] = FormatDecimalValue(quote.GrandTotal),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText] = quote.DisplayText,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.SmsText] = quote.SmsText,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText] = quote.WhatsAppText
+            };
+
+            foreach (var item in snapshot)
+            {
+                UpsertRequestField(fields, item.Key, item.Value);
+            }
+        }
+
+        private static void ApplyPricingMessageIdentity(SummerPricingQuoteDto quote, int messageId, string? requestRef)
+        {
+            if (quote == null)
+            {
+                return;
+            }
+
+            var bookingNumber = string.IsNullOrWhiteSpace(requestRef)
+                ? $"SUMMER-{messageId}"
+                : requestRef.Trim();
+            var referenceNumber = messageId > 0
+                ? messageId.ToString(CultureInfo.InvariantCulture)
+                : bookingNumber;
+
+            quote.DisplayText = ReplacePricingMessageTokens(quote.DisplayText, bookingNumber, referenceNumber);
+            quote.SmsText = ReplacePricingMessageTokens(quote.SmsText, bookingNumber, referenceNumber);
+            quote.WhatsAppText = ReplacePricingMessageTokens(quote.WhatsAppText, bookingNumber, referenceNumber);
+        }
+
+        private static string ReplacePricingMessageTokens(string? template, string bookingNumber, string referenceNumber)
+        {
+            var text = (template ?? string.Empty).Trim();
+            if (text.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            return text
+                .Replace("{bookingNumber}", bookingNumber, StringComparison.Ordinal)
+                .Replace("{referenceNumber}", referenceNumber, StringComparison.Ordinal);
+        }
+
+        private static string FormatDecimalValue(decimal value)
+        {
+            return value % 1m == 0m
+                ? decimal.Truncate(value).ToString("0", CultureInfo.InvariantCulture)
+                : value.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
         private static string? GetFieldValue(IEnumerable<TkmendField>? fields, string fieldKind)
         {
             return fields?
-                .FirstOrDefault(x => x.FildKind == fieldKind)?
+                .FirstOrDefault(x => string.Equals(x.FildKind, fieldKind, StringComparison.OrdinalIgnoreCase))?
                 .FildTxt?
                 .Trim();
+        }
+
+        private static string GetFirstFieldValue(IEnumerable<TkmendField>? fields, IEnumerable<string> fieldKinds)
+        {
+            if (fields == null || fieldKinds == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (var fieldKind in fieldKinds)
+            {
+                if (string.IsNullOrWhiteSpace(fieldKind))
+                {
+                    continue;
+                }
+
+                var value = GetFieldValue(fields, fieldKind.Trim());
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return string.Empty;
         }
 
         private static int ParseInt(string? value, int fallback = 0)
@@ -852,6 +1143,24 @@ SELECT @result;
             else
             {
                 existing.FildTxt = value;
+            }
+        }
+
+        private static void UpsertRequestFieldRange(List<TkmendField>? fields, IEnumerable<string> kinds, string value)
+        {
+            if (fields == null || kinds == null)
+            {
+                return;
+            }
+
+            foreach (var kind in kinds)
+            {
+                if (string.IsNullOrWhiteSpace(kind))
+                {
+                    continue;
+                }
+
+                UpsertRequestField(fields, kind.Trim(), value);
             }
         }
 

@@ -29,6 +29,7 @@ namespace Persistence.Services
         private readonly IConnectNotificationService _notificationService;
         private readonly ApplicationConfig _applicationConfig;
         private readonly ILogger<SummerWorkflowService> _logger;
+        private readonly SummerPricingService _summerPricingService;
 
         private const int CapacityLockTimeoutMs = 15000;
         private const int AdminActionGateTimeoutMs = 10000;
@@ -79,6 +80,7 @@ namespace Persistence.Services
             _notificationService = notificationService;
             _applicationConfig = options?.Value ?? new ApplicationConfig();
             _logger = logger;
+            _summerPricingService = new SummerPricingService(_connectContext);
         }
 
         public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear, int? messageId = null)
@@ -888,6 +890,74 @@ namespace Persistence.Services
                 || userUnitIds.Contains(currentResponsibleSectorId, StringComparer.OrdinalIgnoreCase);
         }
 
+        private async Task<bool> CanUserManageSummerPricingAsync(string userId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return false;
+            }
+
+            var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+            if (!userUnitIds.Any())
+            {
+                return false;
+            }
+
+            var summerRules = await GetSummerRulesAsync();
+            var summerCategoryIds = summerRules.Keys.ToList();
+            if (!summerCategoryIds.Any())
+            {
+                return false;
+            }
+
+            var categories = await _connectContext.Cdcategories
+                .AsNoTracking()
+                .Where(category => summerCategoryIds.Contains(category.CatId))
+                .Select(category => new
+                {
+                    category.CatId,
+                    category.CatParent,
+                    category.Stockholder
+                })
+                .ToListAsync();
+
+            if (!categories.Any())
+            {
+                return false;
+            }
+
+            var parentIds = categories
+                .Select(category => category.CatParent)
+                .Where(parentId => parentId > 0)
+                .Distinct()
+                .ToList();
+
+            var parentStockholders = parentIds.Any()
+                ? await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .Where(parent => parentIds.Contains(parent.CatId))
+                    .Select(parent => parent.Stockholder)
+                    .ToListAsync()
+                : new List<int?>();
+
+            var allowedUnitIds = categories
+                .Select(category => category.Stockholder)
+                .Concat(parentStockholders)
+                .Where(stockholder => stockholder.HasValue)
+                .Select(stockholder => stockholder!.Value.ToString())
+                .Where(stockholder => !string.IsNullOrWhiteSpace(stockholder))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (!allowedUnitIds.Any())
+            {
+                return false;
+            }
+
+            return userUnitIds.Any(unitId => allowedUnitIds.Contains(unitId, StringComparer.OrdinalIgnoreCase));
+        }
+
         public async Task<CommonResponse<IEnumerable<SummerWaveCapacityDto>>> GetWaveCapacityAsync(int categoryId, string waveCode)
         {
             var response = new CommonResponse<IEnumerable<SummerWaveCapacityDto>>();
@@ -938,6 +1008,81 @@ namespace Persistence.Services
                         };
                     })
                     .ToList();
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuoteAsync(SummerPricingQuoteRequest request)
+        {
+            return _summerPricingService.GetQuoteAsync(request);
+        }
+
+        public async Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalogAsync(int seasonYear, string userId)
+        {
+            var response = new CommonResponse<SummerPricingCatalogDto>();
+            try
+            {
+                if (!await CanUserManageSummerPricingAsync(userId))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض إعدادات تسعير المصايف."
+                    });
+                    return response;
+                }
+
+                var catalogResponse = await _summerPricingService.GetCatalogAsync(seasonYear);
+                if (!catalogResponse.IsSuccess)
+                {
+                    foreach (var error in catalogResponse.Errors)
+                    {
+                        response.Errors.Add(error);
+                    }
+                    return response;
+                }
+
+                response.Data = catalogResponse.Data;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerPricingCatalogDto>> SavePricingCatalogAsync(SummerPricingCatalogUpsertRequest request, string userId)
+        {
+            var response = new CommonResponse<SummerPricingCatalogDto>();
+            try
+            {
+                if (!await CanUserManageSummerPricingAsync(userId))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بتعديل إعدادات تسعير المصايف."
+                    });
+                    return response;
+                }
+
+                var saveResponse = await _summerPricingService.SaveCatalogAsync(request);
+                if (!saveResponse.IsSuccess)
+                {
+                    foreach (var error in saveResponse.Errors)
+                    {
+                        response.Errors.Add(error);
+                    }
+                    return response;
+                }
+
+                response.Data = saveResponse.Data;
             }
             catch (Exception ex)
             {

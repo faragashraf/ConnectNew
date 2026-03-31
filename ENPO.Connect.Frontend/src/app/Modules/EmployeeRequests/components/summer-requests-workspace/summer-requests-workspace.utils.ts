@@ -52,7 +52,23 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   Summer_WorkflowStateReason: 'سبب المتابعة',
   Summer_WorkflowStateAtUtc: 'تاريخ حالة المتابعة',
   Summer_TransferRequiresRePayment: 'إعادة السداد مطلوبة',
-  Summer_TransferRePaymentReason: 'سبب إعادة السداد'
+  Summer_TransferRePaymentReason: 'سبب إعادة السداد',
+  Summer_PricingConfigId: 'مرجع سياسة التسعير',
+  Summer_PricingPolicyId: 'مرجع سياسة التسعير',
+  Summer_PricingMode: 'نمط التسعير',
+  Summer_PricingTransportationMandatory: 'الانتقالات إلزامية',
+  Summer_PricingSelectedStayMode: 'نوع الحجز المعتمد',
+  Summer_PricingPersonsCount: 'عدد الأفراد المحسوب',
+  Summer_PricingPeriodKey: 'فترة التسعير',
+  Summer_PricingWaveDate: 'تاريخ الفوج للتسعير',
+  Summer_PricingAccommodationPricePerPerson: 'سعر الإقامة للفرد',
+  Summer_PricingTransportationPricePerPerson: 'سعر الانتقالات للفرد',
+  Summer_PricingAccommodationTotal: 'إجمالي الإقامة',
+  Summer_PricingTransportationTotal: 'إجمالي الانتقالات',
+  Summer_PricingGrandTotal: 'الإجمالي النهائي',
+  Summer_PricingDisplayText: 'بيان التسعير',
+  Summer_PricingSmsText: 'نص رسالة SMS',
+  Summer_PricingWhatsAppText: 'نص رسالة WhatsApp'
 };
 
 const ACTION_TYPE_LABELS: Record<string, string> = {
@@ -83,6 +99,12 @@ const WORKFLOW_STATE_LABELS: Record<string, string> = {
 const STAY_MODE_LABELS: Record<string, string> = {
   RESIDENCE_ONLY: 'إقامة فقط',
   RESIDENCE_WITH_TRANSPORT: 'إقامة وانتقالات'
+};
+
+const PRICING_MODE_LABELS: Record<string, string> = {
+  AccommodationOnlyAllowed: 'إقامة فقط',
+  AccommodationAndTransportationOptional: 'إقامة وانتقالات (اختياري)',
+  TransportationMandatoryIncluded: 'انتقالات إلزامية ومضمنة'
 };
 
 const DESTINATION_VALUE_LABELS: Record<string, string> = {
@@ -263,6 +285,10 @@ export function formatRequestFieldValue(fieldKey: string, rawValue: string): str
     return translateValue(value, STAY_MODE_LABELS);
   }
 
+  if (normalizedKey.includes('pricingmode')) {
+    return translateValue(value, PRICING_MODE_LABELS);
+  }
+
   if (normalizedKey.includes('destination')) {
     return translateValue(value, DESTINATION_VALUE_LABELS);
   }
@@ -280,6 +306,14 @@ export function formatRequestFieldValue(fieldKey: string, rawValue: string): str
   }
 
   if (normalizedKey.includes('transferrequiresrepayment')) {
+    const flag = parseBooleanLike(value);
+    if (flag === null) {
+      return value;
+    }
+    return flag ? 'نعم' : 'لا';
+  }
+
+  if (normalizedKey.includes('pricingtransportationmandatory')) {
     const flag = parseBooleanLike(value);
     if (flag === null) {
       return value;
@@ -525,6 +559,42 @@ function resolveCanonicalFieldMeta(
   }
   if (normalized.includes('staymode')) {
     return { id: 'stay_mode', label: 'نوع الحجز', group: 'booking', order: 50 };
+  }
+  if (normalized.includes('pricingselectedstaymode')) {
+    return { id: 'pricing_selected_stay_mode', label: 'نوع الحجز المعتمد', group: 'booking', order: 51 };
+  }
+  if (normalized.includes('pricingmode')) {
+    return { id: 'pricing_mode', label: 'نمط التسعير', group: 'booking', order: 52 };
+  }
+  if (normalized.includes('pricingtransportationmandatory')) {
+    return { id: 'pricing_transport_mandatory', label: 'الانتقالات إلزامية', group: 'booking', order: 53 };
+  }
+  if (normalized.includes('pricingpersonscount')) {
+    return { id: 'pricing_persons_count', label: 'عدد الأفراد المحسوب', group: 'booking', order: 54 };
+  }
+  if (normalized.includes('pricingperiodkey')) {
+    return { id: 'pricing_period_key', label: 'فترة التسعير', group: 'booking', order: 55 };
+  }
+  if (normalized.includes('pricingaccommodationpriceperperson')) {
+    return { id: 'pricing_accommodation_unit', label: 'سعر الإقامة للفرد', group: 'booking', order: 56 };
+  }
+  if (normalized.includes('pricingtransportationpriceperperson')) {
+    return { id: 'pricing_transportation_unit', label: 'سعر الانتقالات للفرد', group: 'booking', order: 57 };
+  }
+  if (normalized.includes('pricingaccommodationtotal')) {
+    return { id: 'pricing_accommodation_total', label: 'إجمالي الإقامة', group: 'booking', order: 58 };
+  }
+  if (normalized.includes('pricingtransportationtotal')) {
+    return { id: 'pricing_transportation_total', label: 'إجمالي الانتقالات', group: 'booking', order: 59 };
+  }
+  if (normalized.includes('pricinggrandtotal')) {
+    return { id: 'pricing_grand_total', label: 'الإجمالي النهائي', group: 'booking', order: 60 };
+  }
+  if (normalized.includes('pricingdisplaytext')) {
+    return { id: 'pricing_display_text', label: 'بيان التسعير', group: 'workflow', order: 65 };
+  }
+  if (normalized.includes('pricingconfigid') || normalized.includes('pricingpolicyid')) {
+    return { id: 'pricing_config_id', label: 'مرجع سياسة التسعير', group: 'workflow', order: 66 };
   }
   if (normalized.includes('familycount')) {
     return { id: 'family_count', label: 'عدد الأفراد', group: 'booking', order: 60 };

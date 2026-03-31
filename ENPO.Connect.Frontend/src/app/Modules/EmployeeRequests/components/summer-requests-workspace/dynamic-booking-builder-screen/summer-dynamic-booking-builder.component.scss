@@ -108,6 +108,55 @@
   color: #5d7388;
 }
 
+.pricing-summary {
+  border: 1px solid #c8e6d5;
+  border-radius: 12px;
+  background: #f3fbf7;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.pricing-summary h4 {
+  margin: 0;
+  color: #0f5b3a;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.55rem;
+}
+
+.pricing-item {
+  border: 1px solid #cfe8da;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.pricing-item span {
+  font-size: 0.85rem;
+  color: #3f6f57;
+}
+
+.pricing-item strong {
+  color: #145d3c;
+}
+
+.pricing-item.total {
+  border-color: #9fd1b3;
+  background: #ecf9f1;
+}
+
+.pricing-note {
+  margin: 0;
+  color: #155b3d;
+  font-weight: 600;
+}
+
 .meta-error {
   color: #b33131;
 }

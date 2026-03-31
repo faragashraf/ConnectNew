@@ -6,8 +6,12 @@ import { FileParameter } from '../dto-shared';
 import {
   SummerAdminActionRequest,
   SummerAdminDashboardDto,
+  SummerPricingCatalogDto,
+  SummerPricingCatalogUpsertRequest,
   SummerAdminRequestsQuery,
   SummerCancelFormRequest,
+  SummerPricingQuoteDto,
+  SummerPricingQuoteRequest,
   SummerPayFormRequest,
   SummerRequestSummaryDto,
   SummerTransferFormRequest,
@@ -34,6 +38,19 @@ export class SummerWorkflowController {
       .set('categoryId', String(categoryId))
       .set('waveCode', waveCode);
     return this.http.get<SummerWorkflowCommonResponse<SummerWaveCapacityDto[]>>(`${this.baseUrl}/GetWaveCapacity`, { params });
+  }
+
+  getPricingQuote(body: SummerPricingQuoteRequest): Observable<SummerWorkflowCommonResponse<SummerPricingQuoteDto>> {
+    return this.http.post<SummerWorkflowCommonResponse<SummerPricingQuoteDto>>(`${this.baseUrl}/GetPricingQuote`, body);
+  }
+
+  getPricingCatalog(seasonYear: number): Observable<SummerWorkflowCommonResponse<SummerPricingCatalogDto>> {
+    const params = new HttpParams().set('seasonYear', String(seasonYear));
+    return this.http.get<SummerWorkflowCommonResponse<SummerPricingCatalogDto>>(`${this.baseUrl}/GetPricingCatalog`, { params });
+  }
+
+  savePricingCatalog(body: SummerPricingCatalogUpsertRequest): Observable<SummerWorkflowCommonResponse<SummerPricingCatalogDto>> {
+    return this.http.post<SummerWorkflowCommonResponse<SummerPricingCatalogDto>>(`${this.baseUrl}/SavePricingCatalog`, body);
   }
 
   getAdminRequests(query: SummerAdminRequestsQuery): Observable<SummerWorkflowCommonResponse<SummerRequestSummaryDto[]>> {

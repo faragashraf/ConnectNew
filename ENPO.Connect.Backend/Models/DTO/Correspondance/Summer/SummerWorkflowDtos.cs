@@ -66,6 +66,75 @@ public class SummerWaveDefinitionDto
     public string? StartsAtIso { get; set; }
 }
 
+public class SummerPricingQuoteRequest
+{
+    public int CategoryId { get; set; }
+    public int SeasonYear { get; set; } = 2026;
+    public string WaveCode { get; set; } = string.Empty;
+    public string? WaveLabel { get; set; }
+    public string? WaveStartsAtIso { get; set; }
+    public string? PeriodKey { get; set; }
+    public int PersonsCount { get; set; }
+    public int? FamilyCount { get; set; }
+    public int? ExtraCount { get; set; }
+    public string? StayMode { get; set; }
+    public string? DestinationName { get; set; }
+}
+
+public class SummerPricingQuoteDto
+{
+    public string PricingConfigId { get; set; } = string.Empty;
+    public int CategoryId { get; set; }
+    public int SeasonYear { get; set; }
+    public string WaveCode { get; set; } = string.Empty;
+    public string WaveLabel { get; set; } = string.Empty;
+    public string PeriodKey { get; set; } = string.Empty;
+    public string PricingMode { get; set; } = string.Empty;
+    public bool TransportationMandatory { get; set; }
+    public int PersonsCount { get; set; }
+    public decimal AccommodationPricePerPerson { get; set; }
+    public decimal TransportationPricePerPerson { get; set; }
+    public string SelectedStayMode { get; set; } = string.Empty;
+    public string NormalizedStayMode { get; set; } = string.Empty;
+    public bool StayModeWasNormalized { get; set; }
+    public decimal AccommodationTotal { get; set; }
+    public decimal TransportationTotal { get; set; }
+    public decimal GrandTotal { get; set; }
+    public string DisplayText { get; set; } = string.Empty;
+    public string SmsText { get; set; } = string.Empty;
+    public string WhatsAppText { get; set; } = string.Empty;
+}
+
+public class SummerPricingCatalogDto
+{
+    public int SeasonYear { get; set; } = 2026;
+    public List<SummerPricingCatalogRecordDto> Records { get; set; } = new();
+}
+
+public class SummerPricingCatalogRecordDto
+{
+    public string PricingConfigId { get; set; } = string.Empty;
+    public int CategoryId { get; set; }
+    public int SeasonYear { get; set; } = 2026;
+    public string WaveCode { get; set; } = string.Empty;
+    public string PeriodKey { get; set; } = string.Empty;
+    public string? DateFrom { get; set; }
+    public string? DateTo { get; set; }
+    public decimal AccommodationPricePerPerson { get; set; }
+    public decimal TransportationPricePerPerson { get; set; }
+    public string PricingMode { get; set; } = string.Empty;
+    public bool TransportationMandatory { get; set; }
+    public bool IsActive { get; set; } = true;
+    public string DisplayLabel { get; set; } = string.Empty;
+    public string Notes { get; set; } = string.Empty;
+}
+
+public class SummerPricingCatalogUpsertRequest
+{
+    public int SeasonYear { get; set; } = 2026;
+    public List<SummerPricingCatalogRecordDto> Records { get; set; } = new();
+}
+
 public class SummerCancelRequest
 {
     public int MessageId { get; set; }

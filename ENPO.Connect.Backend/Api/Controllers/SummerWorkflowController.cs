@@ -30,6 +30,26 @@ namespace Api.Controllers
             return _summerWorkflowService.GetWaveCapacityAsync(categoryId, waveCode);
         }
 
+        [HttpPost(nameof(GetPricingQuote))]
+        public Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuote([FromBody] SummerPricingQuoteRequest request)
+        {
+            return _summerWorkflowService.GetPricingQuoteAsync(request);
+        }
+
+        [HttpGet(nameof(GetPricingCatalog))]
+        public Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalog(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear)
+        {
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            return _summerWorkflowService.GetPricingCatalogAsync(seasonYear, userId);
+        }
+
+        [HttpPost(nameof(SavePricingCatalog))]
+        public Task<CommonResponse<SummerPricingCatalogDto>> SavePricingCatalog([FromBody] SummerPricingCatalogUpsertRequest request)
+        {
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            return _summerWorkflowService.SavePricingCatalogAsync(request, userId);
+        }
+
         [HttpGet(nameof(GetAdminRequests))]
         public Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetAdminRequests([FromQuery] SummerAdminRequestsQuery query)
         {

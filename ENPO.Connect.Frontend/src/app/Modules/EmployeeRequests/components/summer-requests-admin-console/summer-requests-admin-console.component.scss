@@ -83,6 +83,107 @@
   box-shadow: 0 2px 12px rgba(12, 50, 80, 0.04);
 }
 
+.pricing-panel {
+  margin-top: 14px;
+  border: 1px solid #d0e2f0;
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.96), rgba(248,252,255,0.92));
+  padding: 14px;
+  box-shadow: 0 2px 12px rgba(12, 50, 80, 0.04);
+  display: grid;
+  gap: 10px;
+}
+
+.pricing-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pricing-header h3 {
+  margin: 0;
+  color: #1a4260;
+}
+
+.pricing-note {
+  margin: 6px 0 0;
+  color: #8b5d00;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.pricing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pricing-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #ffe8e8;
+  color: #9b1c1c;
+  font-weight: 700;
+}
+
+.pricing-table-wrap {
+  overflow: auto;
+}
+
+.pricing-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1480px;
+}
+
+.pricing-table th,
+.pricing-table td {
+  border-bottom: 1px solid #e9f1f9;
+  padding: 8px;
+  vertical-align: middle;
+}
+
+.pricing-table th {
+  white-space: nowrap;
+  background: linear-gradient(180deg, #f5faff, #eaf2fb);
+  color: #1a4260;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pricing-table td input,
+.pricing-table td select {
+  min-width: 120px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.pricing-table td.center-cell {
+  text-align: center;
+}
+
+.pricing-table td.center-cell input[type='checkbox'] {
+  width: auto;
+}
+
+.danger-link {
+  border: 0;
+  background: transparent;
+  color: #b42318;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ghost-link {
+  border: 0;
+  background: transparent;
+  color: #1c5ea7;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .scope-row {
   display: flex;
   flex-wrap: wrap;
@@ -1015,6 +1116,11 @@ button.ghost:hover:not(:disabled) {
   .workspace {
     grid-template-columns: 1fr;
   }
+
+  .pricing-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 @media (max-width: 700px) {
@@ -1047,5 +1153,13 @@ button.ghost:hover:not(:disabled) {
   .page-buttons {
     width: 100%;
     justify-content: center;
+  }
+
+  .pricing-actions {
+    width: 100%;
+  }
+
+  .pricing-actions button {
+    flex: 1 1 auto;
   }
 }

@@ -19,6 +19,19 @@ export type SummerFieldAliasMap = {
   seasonYear: string[];
   destinationId: string[];
   destinationName: string[];
+  pricingConfigId: string[];
+  pricingMode: string[];
+  pricingTransportationMandatory: string[];
+  pricingSelectedStayMode: string[];
+  pricingPersonsCount: string[];
+  pricingAccommodationUnitPrice: string[];
+  pricingTransportationUnitPrice: string[];
+  pricingAccommodationTotal: string[];
+  pricingTransportationTotal: string[];
+  pricingGrandTotal: string[];
+  pricingDisplayText: string[];
+  pricingSmsText: string[];
+  pricingWhatsAppText: string[];
 };
 
 export const SUMMER_CANONICAL_FIELD_KEYS = {
@@ -56,7 +69,20 @@ const SUMMER_DEFAULT_FIELD_ALIASES: SummerFieldAliasMap = {
   companionAge: [...SUMMER_CANONICAL_FIELD_KEYS.companionAge],
   seasonYear: ['SummerSeasonYear'],
   destinationId: ['SummerDestinationId'],
-  destinationName: ['SummerDestinationName']
+  destinationName: ['SummerDestinationName'],
+  pricingConfigId: ['Summer_PricingConfigId', 'Summer_PricingPolicyId'],
+  pricingMode: ['Summer_PricingMode'],
+  pricingTransportationMandatory: ['Summer_PricingTransportationMandatory'],
+  pricingSelectedStayMode: ['Summer_PricingSelectedStayMode'],
+  pricingPersonsCount: ['Summer_PricingPersonsCount'],
+  pricingAccommodationUnitPrice: ['Summer_PricingAccommodationPricePerPerson'],
+  pricingTransportationUnitPrice: ['Summer_PricingTransportationPricePerPerson'],
+  pricingAccommodationTotal: ['Summer_PricingAccommodationTotal'],
+  pricingTransportationTotal: ['Summer_PricingTransportationTotal'],
+  pricingGrandTotal: ['Summer_PricingGrandTotal'],
+  pricingDisplayText: ['Summer_PricingDisplayText'],
+  pricingSmsText: ['Summer_PricingSmsText'],
+  pricingWhatsAppText: ['Summer_PricingWhatsAppText']
 };
 
 export function createDefaultSummerFieldAliases(): SummerFieldAliasMap {
@@ -80,6 +106,19 @@ export function createDefaultSummerFieldAliases(): SummerFieldAliasMap {
     companionAge: [...SUMMER_DEFAULT_FIELD_ALIASES.companionAge],
     seasonYear: [...SUMMER_DEFAULT_FIELD_ALIASES.seasonYear],
     destinationId: [...SUMMER_DEFAULT_FIELD_ALIASES.destinationId],
-    destinationName: [...SUMMER_DEFAULT_FIELD_ALIASES.destinationName]
+    destinationName: [...SUMMER_DEFAULT_FIELD_ALIASES.destinationName],
+    pricingConfigId: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingConfigId],
+    pricingMode: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingMode],
+    pricingTransportationMandatory: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingTransportationMandatory],
+    pricingSelectedStayMode: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingSelectedStayMode],
+    pricingPersonsCount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingPersonsCount],
+    pricingAccommodationUnitPrice: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingAccommodationUnitPrice],
+    pricingTransportationUnitPrice: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingTransportationUnitPrice],
+    pricingAccommodationTotal: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingAccommodationTotal],
+    pricingTransportationTotal: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingTransportationTotal],
+    pricingGrandTotal: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingGrandTotal],
+    pricingDisplayText: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingDisplayText],
+    pricingSmsText: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingSmsText],
+    pricingWhatsAppText: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingWhatsAppText]
   };
 }

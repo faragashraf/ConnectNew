@@ -8,6 +8,9 @@ import { FileParameter } from 'src/app/shared/services/BackendServices/dto-share
 import {
   SummerAdminDashboardDto,
   SummerDashboardBucketDto,
+  SummerPricingCatalogDto,
+  SummerPricingCatalogRecordDto,
+  SummerPricingCatalogUpsertRequest,
   SummerRequestsPageChange,
   SummerRequestsPageData,
   SummerRequestSummaryDto,
@@ -124,6 +127,17 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   capacityScopeCategoryId: number | null = null;
   capacityScopeWaveCode = '';
 
+  readonly pricingModeOptions: Array<{ value: string; label: string }> = [
+    { value: 'AccommodationOnlyAllowed', label: 'إقامة فقط' },
+    { value: 'AccommodationAndTransportationOptional', label: 'إقامة وانتقالات (اختياري)' },
+    { value: 'TransportationMandatoryIncluded', label: 'انتقالات إلزامية ومضمنة' }
+  ];
+  pricingCatalogLoading = false;
+  pricingCatalogSaving = false;
+  pricingCatalogError = '';
+  pricingSeasonYear = this.seasonYear;
+  pricingRecords: SummerPricingCatalogRecordDto[] = [];
+
   actionAttachments: File[] = [];
   private readonly allowedAttachmentExtensions = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
   private readonly subscriptions = new Subscription();
@@ -189,6 +203,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           if (this.destinations.length > 0) {
             this.loadDashboard();
             this.loadRequests();
+            this.loadPricingCatalog();
             return;
           }
         }
@@ -200,12 +215,14 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           : SUMMER_UI_TEXTS_AR.errors.destinationCatalogInvalid;
         this.loadDashboard();
         this.loadRequests();
+        this.loadPricingCatalog();
       },
       error: () => {
         this.destinations = [];
         this.destinationsError = SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed;
         this.loadDashboard();
         this.loadRequests();
+        this.loadPricingCatalog();
       },
       complete: () => {
         this.loadingDestinations = false;
@@ -710,6 +727,130 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadPricingCatalog(silent = true): void {
+    this.pricingCatalogLoading = true;
+    if (!silent) {
+      this.pricingCatalogError = '';
+    }
+
+    this.summerWorkflowController.getPricingCatalog(this.seasonYear).subscribe({
+      next: response => {
+        if (response?.isSuccess && response.data) {
+          const catalog = response.data as SummerPricingCatalogDto;
+          this.pricingSeasonYear = Number(catalog.seasonYear ?? this.seasonYear) || this.seasonYear;
+          this.pricingRecords = Array.isArray(catalog.records)
+            ? catalog.records.map(record => this.normalizePricingRecord(record))
+            : [];
+
+          if (this.pricingRecords.length === 0) {
+            this.pricingRecords = [this.createEmptyPricingRecord()];
+          }
+          this.pricingCatalogError = '';
+          return;
+        }
+
+        const errorText = this.collectErrors(response) || 'تعذر تحميل إعدادات التسعير.';
+        this.pricingCatalogError = errorText;
+        if (!silent) {
+          this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
+        }
+      },
+      error: () => {
+        this.pricingCatalogError = 'تعذر تحميل إعدادات التسعير حالياً.';
+        if (!silent) {
+          this.msg.msgError('خطأ', `<h5>${this.pricingCatalogError}</h5>`, true);
+        }
+      },
+      complete: () => {
+        this.pricingCatalogLoading = false;
+      }
+    });
+  }
+
+  addPricingRecord(): void {
+    this.pricingRecords = [...this.pricingRecords, this.createEmptyPricingRecord()];
+  }
+
+  duplicatePricingRecord(index: number): void {
+    if (index < 0 || index >= this.pricingRecords.length) {
+      return;
+    }
+
+    const sourceRecord = this.normalizePricingRecord(this.pricingRecords[index]);
+    const duplicatedRecord = this.normalizePricingRecord({
+      ...sourceRecord,
+      pricingConfigId: this.buildDuplicatedPricingConfigId(sourceRecord)
+    });
+
+    this.pricingRecords = [
+      ...this.pricingRecords.slice(0, index + 1),
+      duplicatedRecord,
+      ...this.pricingRecords.slice(index + 1)
+    ];
+
+    this.msg.msgSuccess('تم نسخ السجل بنجاح، يرجى مراجعة البيانات ثم الحفظ.');
+  }
+
+  removePricingRecord(index: number): void {
+    if (index < 0 || index >= this.pricingRecords.length) {
+      return;
+    }
+
+    this.pricingRecords = this.pricingRecords.filter((_, i) => i !== index);
+    if (this.pricingRecords.length === 0) {
+      this.pricingRecords = [this.createEmptyPricingRecord()];
+    }
+  }
+
+  onPricingModeChanged(record: SummerPricingCatalogRecordDto): void {
+    const normalizedMode = String(record?.pricingMode ?? '').trim();
+    if (normalizedMode === 'TransportationMandatoryIncluded') {
+      record.transportationMandatory = true;
+      return;
+    }
+
+    if (normalizedMode === 'AccommodationOnlyAllowed') {
+      record.transportationMandatory = false;
+      record.transportationPricePerPerson = 0;
+    }
+  }
+
+  savePricingCatalog(): void {
+    const payload: SummerPricingCatalogUpsertRequest = {
+      seasonYear: Number(this.pricingSeasonYear) || this.seasonYear,
+      records: this.pricingRecords.map((record, index) => this.normalizePricingRecordForSave(record, index))
+    };
+
+    this.pricingCatalogSaving = true;
+    this.spinner.show('جاري حفظ إعدادات التسعير...');
+    this.summerWorkflowController.savePricingCatalog(payload).subscribe({
+      next: response => {
+        if (response?.isSuccess && response.data) {
+          const catalog = response.data as SummerPricingCatalogDto;
+          this.pricingSeasonYear = Number(catalog.seasonYear ?? payload.seasonYear) || payload.seasonYear;
+          this.pricingRecords = Array.isArray(catalog.records)
+            ? catalog.records.map(record => this.normalizePricingRecord(record))
+            : [];
+          if (this.pricingRecords.length === 0) {
+            this.pricingRecords = [this.createEmptyPricingRecord()];
+          }
+          this.pricingCatalogError = '';
+          this.msg.msgSuccess('تم حفظ إعدادات التسعير بنجاح.');
+          return;
+        }
+
+        this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
+      },
+      error: () => {
+        this.msg.msgError('خطأ', '<h5>تعذر حفظ إعدادات التسعير حالياً.</h5>', true);
+      },
+      complete: () => {
+        this.pricingCatalogSaving = false;
+        this.spinner.hide();
+      }
+    });
+  }
+
   loadDashboard(): void {
     this.loadingDashboard = true;
     const raw = this.filtersForm.getRawValue();
@@ -1071,6 +1212,107 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     return `key:${String(item?.key ?? '')}`;
+  }
+
+  trackByPricingRecord(index: number, record: SummerPricingCatalogRecordDto): string {
+    const configId = String(record?.pricingConfigId ?? '').trim();
+    if (configId.length > 0) {
+      return configId;
+    }
+    return `row:${index}`;
+  }
+
+  getDestinationLabelByCategoryId(categoryId: number): string {
+    const destination = this.destinations.find(item => item.categoryId === Number(categoryId));
+    if (destination) {
+      return destination.name;
+    }
+    return Number(categoryId) > 0 ? `مصيف ${categoryId}` : 'اختر المصيف';
+  }
+
+  isPricingModeMandatory(record: SummerPricingCatalogRecordDto): boolean {
+    const mode = String(record?.pricingMode ?? '').trim();
+    return mode === 'TransportationMandatoryIncluded';
+  }
+
+  isAccommodationOnlyMode(record: SummerPricingCatalogRecordDto): boolean {
+    const mode = String(record?.pricingMode ?? '').trim();
+    return mode === 'AccommodationOnlyAllowed';
+  }
+
+  private createEmptyPricingRecord(): SummerPricingCatalogRecordDto {
+    return {
+      pricingConfigId: '',
+      categoryId: this.destinations.length > 0 ? this.destinations[0].categoryId : 0,
+      seasonYear: this.pricingSeasonYear || this.seasonYear,
+      waveCode: '',
+      periodKey: '',
+      dateFrom: '',
+      dateTo: '',
+      accommodationPricePerPerson: 0,
+      transportationPricePerPerson: 0,
+      pricingMode: 'AccommodationAndTransportationOptional',
+      transportationMandatory: false,
+      isActive: true,
+      displayLabel: '',
+      notes: 'سعر استرشادي قابل للتعديل بعد اعتماد اللجنة'
+    };
+  }
+
+  private normalizePricingRecord(record: SummerPricingCatalogRecordDto): SummerPricingCatalogRecordDto {
+    const normalized: SummerPricingCatalogRecordDto = {
+      pricingConfigId: String(record?.pricingConfigId ?? '').trim(),
+      categoryId: Number(record?.categoryId ?? 0) || 0,
+      seasonYear: Number(record?.seasonYear ?? this.pricingSeasonYear ?? this.seasonYear) || this.seasonYear,
+      waveCode: String(record?.waveCode ?? '').trim(),
+      periodKey: String(record?.periodKey ?? '').trim(),
+      dateFrom: String(record?.dateFrom ?? '').trim(),
+      dateTo: String(record?.dateTo ?? '').trim(),
+      accommodationPricePerPerson: Number(record?.accommodationPricePerPerson ?? 0) || 0,
+      transportationPricePerPerson: Number(record?.transportationPricePerPerson ?? 0) || 0,
+      pricingMode: String(record?.pricingMode ?? 'AccommodationAndTransportationOptional').trim() || 'AccommodationAndTransportationOptional',
+      transportationMandatory: Boolean(record?.transportationMandatory),
+      isActive: record?.isActive !== false,
+      displayLabel: String(record?.displayLabel ?? '').trim(),
+      notes: String(record?.notes ?? '').trim()
+    };
+
+    this.onPricingModeChanged(normalized);
+    return normalized;
+  }
+
+  private normalizePricingRecordForSave(record: SummerPricingCatalogRecordDto, index: number): SummerPricingCatalogRecordDto {
+    const normalized = this.normalizePricingRecord(record);
+    if (!normalized.pricingConfigId) {
+      const periodOrWave = normalized.periodKey || normalized.waveCode || `ROW${index + 1}`;
+      normalized.pricingConfigId = `SUM${normalized.seasonYear}-CAT${normalized.categoryId}-${periodOrWave}`;
+    }
+    return normalized;
+  }
+
+  private buildDuplicatedPricingConfigId(sourceRecord: SummerPricingCatalogRecordDto): string {
+    const periodOrWave = sourceRecord.periodKey || sourceRecord.waveCode || `ROW${this.pricingRecords.length + 1}`;
+    const fallbackBase = `SUM${sourceRecord.seasonYear}-CAT${sourceRecord.categoryId}-${periodOrWave}`;
+    const rawBase = String(sourceRecord.pricingConfigId ?? '').trim() || fallbackBase;
+    const base = rawBase
+      .replace(/[^A-Za-z0-9_-]/g, '')
+      .toUpperCase() || fallbackBase;
+
+    const existing = new Set(
+      this.pricingRecords
+        .map(item => String(item?.pricingConfigId ?? '').trim().toUpperCase())
+        .filter(item => item.length > 0)
+    );
+
+    const stamp = Date.now().toString(36).toUpperCase();
+    let candidate = `${base}-COPY-${stamp}`;
+    let counter = 1;
+    while (existing.has(candidate.toUpperCase())) {
+      counter += 1;
+      candidate = `${base}-COPY-${stamp}-${counter}`;
+    }
+
+    return candidate;
   }
 
   private bindActionRules(): void {

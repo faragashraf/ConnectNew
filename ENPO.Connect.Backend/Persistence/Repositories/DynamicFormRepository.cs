@@ -18,6 +18,7 @@ using SignalR.Notification;
 using System;
 using System.Globalization;
 using Persistence.Services;
+using Persistence.Services.Summer;
 
 namespace Persistence.Repositories
 {
@@ -35,6 +36,7 @@ namespace Persistence.Repositories
         private readonly SignalRConnectionManager _signalRConnectionManager;
         private readonly MessageRequestService _messageRequestService;
         private readonly IConnectNotificationService _notificationService;
+        private readonly SummerPricingService _summerPricingService;
         public DynamicFormRepository(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, IMapper mapper, IOptions<ApplicationConfig> options, helperService helperService, RedisConnectionManager redisManager, SignalRConnectionManager signalRConnectionManager, IConnectNotificationService notificationService)
         {
             _signalRConnectionManager = signalRConnectionManager;
@@ -49,6 +51,7 @@ namespace Persistence.Repositories
             _helperService = new helperService(_gPAContext, _connectContext, _attach_HeldContext, _option, _logger, _mapper, _redisManager);
             // instantiate the message request service for shared prepare/persist logic
             _messageRequestService = new MessageRequestService(_connectContext, _attach_HeldContext, _gPAContext, _helperService, _mapper, _logger);
+            _summerPricingService = new SummerPricingService(_connectContext);
         }
         public CommonResponse<IEnumerable<CdmendDto>> GetMandatoryMetaDate(string? appId)
         {
@@ -149,7 +152,16 @@ namespace Persistence.Repositories
                     && x.MendStat == false);
 
             // instantiate handler and dispatch accordingly
-            var categoryHandler = new HandleEmployeeCategories(_connectContext, _attach_HeldContext, _gPAContext, _helperService, _mapper, _logger, _messageRequestService, _notificationService);
+            var categoryHandler = new HandleEmployeeCategories(
+                _connectContext,
+                _attach_HeldContext,
+                _gPAContext,
+                _helperService,
+                _mapper,
+                _logger,
+                _messageRequestService,
+                _notificationService,
+                _summerPricingService);
             if (isSummerCategory)
             {
                 await categoryHandler.SummerRequests(messageRequest, categoryInfo, response);

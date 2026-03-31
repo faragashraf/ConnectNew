@@ -49,6 +49,50 @@
     </p>
   </section>
 
+  <section class="pricing-summary" *ngIf="selectedDestination">
+    <h4>ملخص التسعير</h4>
+    <small class="loading-note" *ngIf="pricingQuoteLoading">جاري تحديث التسعير...</small>
+    <p class="warn" *ngIf="!pricingQuoteLoading && pricingQuoteError.length > 0">{{ pricingQuoteError }}</p>
+
+    <div class="pricing-grid" *ngIf="!pricingQuoteLoading && pricingQuote as quote">
+      <article class="pricing-item">
+        <span>سعر الإقامة للفرد</span>
+        <strong>{{ formatPriceValue(quote.accommodationPricePerPerson) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>سعر الانتقالات للفرد</span>
+        <strong>{{ formatPriceValue(quote.transportationPricePerPerson) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>عدد الأفراد</span>
+        <strong>{{ quote.personsCount }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>نوع الحجز المعتمد</span>
+        <strong>{{ resolveStayModeLabel(quote.normalizedStayMode) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>إجمالي الإقامة</span>
+        <strong>{{ formatPriceValue(quote.accommodationTotal) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>إجمالي الانتقالات</span>
+        <strong>{{ formatPriceValue(quote.transportationTotal) }}</strong>
+      </article>
+      <article class="pricing-item total">
+        <span>الإجمالي النهائي</span>
+        <strong>{{ formatPriceValue(quote.grandTotal) }}</strong>
+      </article>
+    </div>
+
+    <p class="pricing-note" *ngIf="!pricingQuoteLoading && pricingQuote as quote">
+      <ng-container *ngIf="quote.transportationMandatory || isTransportIncludedMode">
+        الانتقالات إلزامية لهذا المصيف
+        <ng-container *ngIf="isTransportIncludedMode"> ومضمنة في السعر</ng-container>.
+      </ng-container>
+    </p>
+  </section>
+
   <ng-container *ngIf="loadingMetadata || loadingEditRequest">
     <div class="loading loading-note">
       {{ loadingMetadata ? 'جاري تحميل بيانات التعريف...' : 'جاري تحميل بيانات الطلب للتعديل...' }}

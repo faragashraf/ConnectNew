@@ -87,6 +87,70 @@ export interface SummerDestinationConfigDto {
   waves: SummerWaveDefinitionDto[];
 }
 
+export interface SummerPricingQuoteRequest {
+  categoryId: number;
+  seasonYear: number;
+  waveCode: string;
+  waveLabel?: string;
+  waveStartsAtIso?: string;
+  periodKey?: string;
+  personsCount: number;
+  familyCount?: number | null;
+  extraCount?: number | null;
+  stayMode?: string;
+  destinationName?: string;
+}
+
+export interface SummerPricingQuoteDto {
+  pricingConfigId: string;
+  categoryId: number;
+  seasonYear: number;
+  waveCode: string;
+  waveLabel: string;
+  periodKey: string;
+  pricingMode: string;
+  transportationMandatory: boolean;
+  personsCount: number;
+  accommodationPricePerPerson: number;
+  transportationPricePerPerson: number;
+  selectedStayMode: string;
+  normalizedStayMode: string;
+  stayModeWasNormalized: boolean;
+  accommodationTotal: number;
+  transportationTotal: number;
+  grandTotal: number;
+  displayText: string;
+  smsText: string;
+  whatsAppText: string;
+}
+
+export interface SummerPricingCatalogRecordDto {
+  pricingConfigId: string;
+  categoryId: number;
+  seasonYear: number;
+  waveCode: string;
+  periodKey: string;
+  dateFrom?: string;
+  dateTo?: string;
+  accommodationPricePerPerson: number;
+  transportationPricePerPerson: number;
+  pricingMode: string;
+  transportationMandatory: boolean;
+  isActive: boolean;
+  displayLabel: string;
+  notes: string;
+}
+
+export interface SummerPricingCatalogDto {
+  seasonYear: number;
+  records: SummerPricingCatalogRecordDto[];
+}
+
+export interface SummerPricingCatalogUpsertRequest {
+  seasonYear: number;
+  records: SummerPricingCatalogRecordDto[];
+}
+
 export interface SummerCancelFormRequest {
   messageId: number;
   reason?: string;
