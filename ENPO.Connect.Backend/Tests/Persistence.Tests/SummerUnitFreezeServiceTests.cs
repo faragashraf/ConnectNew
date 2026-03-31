@@ -251,6 +251,130 @@ public class SummerUnitFreezeServiceTests
         Assert.Equal(9300, bookedDetail.AssignedMessageId);
     }
 
+    [Fact]
+    public async Task CreateFreezeBatch_AllowsRefreezeAfterRelease_WhenCapacityStillEligible()
+    {
+        await using var context = CreateContext();
+        var service = new SummerUnitFreezeService(context);
+
+        var firstFreeze = await service.CreateFreezeBatchAsync(
+            categoryId: 147,
+            waveCode: "W7",
+            familyCount: 5,
+            requestedUnitsCount: 1,
+            totalUnits: 2,
+            freezeType: "GENERAL",
+            reason: "first freeze",
+            notes: null,
+            createdBy: "admin");
+        Assert.True(firstFreeze.Success);
+        Assert.NotNull(firstFreeze.Batch);
+
+        var release = await service.ReleaseFreezeBatchAsync(firstFreeze.Batch!.FreezeId, "admin");
+        Assert.True(release.Success);
+
+        var secondFreeze = await service.CreateFreezeBatchAsync(
+            categoryId: 147,
+            waveCode: "W7",
+            familyCount: 5,
+            requestedUnitsCount: 1,
+            totalUnits: 2,
+            freezeType: "GENERAL",
+            reason: "re-freeze",
+            notes: null,
+            createdBy: "admin");
+
+        Assert.True(secondFreeze.Success);
+        Assert.NotNull(secondFreeze.Batch);
+        Assert.NotEqual(firstFreeze.Batch!.FreezeId, secondFreeze.Batch!.FreezeId);
+
+        var activeBatches = await context.SummerUnitFreezeBatches.CountAsync(batch => batch.IsActive);
+        Assert.Equal(1, activeBatches);
+    }
+
+    [Fact]
+    public async Task CreateFreezeBatch_RejectsRefreezeWhenCapacityConsumedByBookedRequest()
+    {
+        await using var context = CreateContext();
+        var service = new SummerUnitFreezeService(context);
+
+        var firstFreeze = await service.CreateFreezeBatchAsync(
+            categoryId: 147,
+            waveCode: "W8",
+            familyCount: 6,
+            requestedUnitsCount: 1,
+            totalUnits: 1,
+            freezeType: "GENERAL",
+            reason: "initial",
+            notes: null,
+            createdBy: "admin");
+        Assert.True(firstFreeze.Success);
+        Assert.NotNull(firstFreeze.Batch);
+
+        var release = await service.ReleaseFreezeBatchAsync(firstFreeze.Batch!.FreezeId, "admin");
+        Assert.True(release.Success);
+
+        context.Messages.Add(new Message
+        {
+            MessageId = 9901,
+            CategoryCd = 147,
+            Status = MessageStatus.New,
+            Priority = Priority.Medium,
+            CreatedDate = DateTime.UtcNow
+        });
+        context.TkmendFields.AddRange(
+            new TkmendField { FildSql = 1201, FildRelted = 9901, FildKind = "SummerCamp", FildTxt = "W8" },
+            new TkmendField { FildSql = 1202, FildRelted = 9901, FildKind = "FamilyCount", FildTxt = "6" });
+        await context.SaveChangesAsync();
+
+        var secondFreeze = await service.CreateFreezeBatchAsync(
+            categoryId: 147,
+            waveCode: "W8",
+            familyCount: 6,
+            requestedUnitsCount: 1,
+            totalUnits: 1,
+            freezeType: "GENERAL",
+            reason: "re-freeze blocked by booking",
+            notes: null,
+            createdBy: "admin");
+
+        Assert.False(secondFreeze.Success);
+        Assert.Equal("409", secondFreeze.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateFreezeBatch_PreventsDoubleFreezeForActiveStock()
+    {
+        await using var context = CreateContext();
+        var service = new SummerUnitFreezeService(context);
+
+        var firstFreeze = await service.CreateFreezeBatchAsync(
+            categoryId: 147,
+            waveCode: "W9",
+            familyCount: 4,
+            requestedUnitsCount: 1,
+            totalUnits: 1,
+            freezeType: "GENERAL",
+            reason: "first",
+            notes: null,
+            createdBy: "admin");
+        Assert.True(firstFreeze.Success);
+
+        var secondFreeze = await service.CreateFreezeBatchAsync(
+            categoryId: 147,
+            waveCode: "W9",
+            familyCount: 4,
+            requestedUnitsCount: 1,
+            totalUnits: 1,
+            freezeType: "GENERAL",
+            reason: "double",
+            notes: null,
+            createdBy: "admin");
+
+        Assert.False(secondFreeze.Success);
+        Assert.Equal("409", secondFreeze.ErrorCode);
+    }
+
     private static ConnectContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<ConnectContext>()

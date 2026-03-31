@@ -54,6 +54,20 @@ import {
   SummerRequestFieldGridRow
 } from '../summer-requests-workspace/summer-requests-workspace.utils';
 
+type SummerPricingGroupEntry = {
+  index: number;
+  record: SummerPricingCatalogRecordDto;
+};
+
+type SummerPricingRecordGroup = {
+  key: string;
+  categoryId: number;
+  destinationName: string;
+  rows: SummerPricingGroupEntry[];
+  activeCount: number;
+  inactiveCount: number;
+};
+
 @Component({
   selector: 'app-summer-requests-admin-console',
   templateUrl: './summer-requests-admin-console.component.html',
@@ -137,6 +151,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   pricingCatalogError = '';
   pricingSeasonYear = this.seasonYear;
   pricingRecords: SummerPricingCatalogRecordDto[] = [];
+  defaultPricingGroupsExpanded = true;
+  private pricingGroupExpandedState: Record<string, boolean> = {};
 
   actionAttachments: File[] = [];
   private readonly allowedAttachmentExtensions = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
@@ -179,6 +195,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.defaultPricingGroupsExpanded = this.resolveDefaultPricingGroupExpandState();
     this.bindActionRules();
     this.bindFilterDependencies();
     this.bindSignalRefresh();
@@ -753,6 +770,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           if (this.pricingRecords.length === 0) {
             this.pricingRecords = [this.createEmptyPricingRecord()];
           }
+          this.syncPricingGroupExpansionState();
           this.pricingCatalogError = '';
           return;
         }
@@ -775,8 +793,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     });
   }
 
-  addPricingRecord(): void {
-    this.pricingRecords = [...this.pricingRecords, this.createEmptyPricingRecord()];
+  addPricingRecord(categoryId?: number): void {
+    this.pricingRecords = [...this.pricingRecords, this.createEmptyPricingRecord(categoryId)];
+    this.syncPricingGroupExpansionState();
   }
 
   duplicatePricingRecord(index: number): void {
@@ -795,6 +814,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       duplicatedRecord,
       ...this.pricingRecords.slice(index + 1)
     ];
+    this.syncPricingGroupExpansionState();
 
     this.msg.msgSuccess('تم نسخ السجل بنجاح، يرجى مراجعة البيانات ثم الحفظ.');
   }
@@ -808,6 +828,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     if (this.pricingRecords.length === 0) {
       this.pricingRecords = [this.createEmptyPricingRecord()];
     }
+    this.syncPricingGroupExpansionState();
   }
 
   onPricingModeChanged(record: SummerPricingCatalogRecordDto): void {
@@ -842,6 +863,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           if (this.pricingRecords.length === 0) {
             this.pricingRecords = [this.createEmptyPricingRecord()];
           }
+          this.syncPricingGroupExpansionState();
           this.pricingCatalogError = '';
           this.msg.msgSuccess('تم حفظ إعدادات التسعير بنجاح.');
           return;
@@ -1238,6 +1260,75 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return Number(categoryId) > 0 ? `مصيف ${categoryId}` : 'اختر المصيف';
   }
 
+  get pricingRecordGroups(): SummerPricingRecordGroup[] {
+    const grouped = new Map<string, SummerPricingRecordGroup>();
+    this.pricingRecords.forEach((record, index) => {
+      const categoryId = Number(record?.categoryId ?? 0) || 0;
+      const key = this.buildPricingGroupKey(categoryId);
+      const destinationName = this.getDestinationLabelByCategoryId(categoryId);
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key,
+          categoryId,
+          destinationName,
+          rows: [],
+          activeCount: 0,
+          inactiveCount: 0
+        });
+      }
+
+      const group = grouped.get(key)!;
+      group.rows.push({ index, record });
+      if (record?.isActive !== false) {
+        group.activeCount += 1;
+      } else {
+        group.inactiveCount += 1;
+      }
+    });
+
+    return Array.from(grouped.values()).sort((a, b) => this.comparePricingGroups(a, b));
+  }
+
+  trackByPricingGroup(_index: number, group: SummerPricingRecordGroup): string {
+    return group.key;
+  }
+
+  trackByPricingGroupEntry(_index: number, entry: SummerPricingGroupEntry): string {
+    const configId = String(entry?.record?.pricingConfigId ?? '').trim();
+    if (configId.length > 0) {
+      return configId;
+    }
+    return `row:${entry?.index ?? _index}`;
+  }
+
+  isPricingGroupExpanded(groupKey: string): boolean {
+    if (Object.prototype.hasOwnProperty.call(this.pricingGroupExpandedState, groupKey)) {
+      return this.pricingGroupExpandedState[groupKey] === true;
+    }
+
+    return this.defaultPricingGroupsExpanded;
+  }
+
+  togglePricingGroup(groupKey: string): void {
+    this.pricingGroupExpandedState[groupKey] = !this.isPricingGroupExpanded(groupKey);
+  }
+
+  expandAllPricingGroups(): void {
+    this.pricingRecordGroups.forEach(group => {
+      this.pricingGroupExpandedState[group.key] = true;
+    });
+  }
+
+  collapseAllPricingGroups(): void {
+    this.pricingRecordGroups.forEach(group => {
+      this.pricingGroupExpandedState[group.key] = false;
+    });
+  }
+
+  onPricingCategoryChanged(): void {
+    this.syncPricingGroupExpansionState();
+  }
+
   isPricingModeMandatory(record: SummerPricingCatalogRecordDto): boolean {
     const mode = String(record?.pricingMode ?? '').trim();
     return mode === 'TransportationMandatoryIncluded';
@@ -1248,10 +1339,46 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return mode === 'AccommodationOnlyAllowed';
   }
 
-  private createEmptyPricingRecord(): SummerPricingCatalogRecordDto {
+  private resolveDefaultPricingGroupExpandState(): boolean {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+
+    return window.innerWidth > 992;
+  }
+
+  private buildPricingGroupKey(categoryId: number): string {
+    return `cat:${Number(categoryId || 0)}`;
+  }
+
+  private comparePricingGroups(a: SummerPricingRecordGroup, b: SummerPricingRecordGroup): number {
+    const aDestinationIndex = this.destinations.findIndex(item => item.categoryId === a.categoryId);
+    const bDestinationIndex = this.destinations.findIndex(item => item.categoryId === b.categoryId);
+    const normalizedAIndex = aDestinationIndex >= 0 ? aDestinationIndex : Number.MAX_SAFE_INTEGER;
+    const normalizedBIndex = bDestinationIndex >= 0 ? bDestinationIndex : Number.MAX_SAFE_INTEGER;
+    if (normalizedAIndex !== normalizedBIndex) {
+      return normalizedAIndex - normalizedBIndex;
+    }
+
+    return String(a.destinationName ?? '').localeCompare(String(b.destinationName ?? ''), 'ar');
+  }
+
+  private syncPricingGroupExpansionState(): void {
+    const validKeys = new Set(this.pricingRecordGroups.map(group => group.key));
+    Object.keys(this.pricingGroupExpandedState).forEach(key => {
+      if (!validKeys.has(key)) {
+        delete this.pricingGroupExpandedState[key];
+      }
+    });
+  }
+
+  private createEmptyPricingRecord(preferredCategoryId?: number): SummerPricingCatalogRecordDto {
+    const normalizedPreferredCategoryId = Number(preferredCategoryId ?? 0) || 0;
     return {
       pricingConfigId: '',
-      categoryId: this.destinations.length > 0 ? this.destinations[0].categoryId : 0,
+      categoryId: normalizedPreferredCategoryId > 0
+        ? normalizedPreferredCategoryId
+        : (this.destinations.length > 0 ? this.destinations[0].categoryId : 0),
       seasonYear: this.pricingSeasonYear || this.seasonYear,
       waveCode: '',
       periodKey: '',
@@ -1259,12 +1386,23 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       dateTo: '',
       accommodationPricePerPerson: 0,
       transportationPricePerPerson: 0,
+      insuranceAmount: 0,
+      proxyInsuranceAmount: null,
       pricingMode: 'AccommodationAndTransportationOptional',
       transportationMandatory: false,
       isActive: true,
       displayLabel: '',
       notes: 'سعر استرشادي قابل للتعديل بعد اعتماد اللجنة'
     };
+  }
+
+  private toNullableNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
   }
 
   private normalizePricingRecord(record: SummerPricingCatalogRecordDto): SummerPricingCatalogRecordDto {
@@ -1278,6 +1416,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       dateTo: String(record?.dateTo ?? '').trim(),
       accommodationPricePerPerson: Number(record?.accommodationPricePerPerson ?? 0) || 0,
       transportationPricePerPerson: Number(record?.transportationPricePerPerson ?? 0) || 0,
+      insuranceAmount: Number(record?.insuranceAmount ?? 0) || 0,
+      proxyInsuranceAmount: this.toNullableNumber(record?.proxyInsuranceAmount),
       pricingMode: String(record?.pricingMode ?? 'AccommodationAndTransportationOptional').trim() || 'AccommodationAndTransportationOptional',
       transportationMandatory: Boolean(record?.transportationMandatory),
       isActive: record?.isActive !== false,

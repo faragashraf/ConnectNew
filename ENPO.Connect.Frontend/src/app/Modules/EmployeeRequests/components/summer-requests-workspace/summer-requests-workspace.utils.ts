@@ -63,6 +63,9 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   Summer_PricingWaveDate: 'تاريخ الفوج للتسعير',
   Summer_PricingAccommodationPricePerPerson: 'سعر الإقامة للفرد',
   Summer_PricingTransportationPricePerPerson: 'سعر الانتقالات للفرد',
+  Summer_PricingInsuranceAmount: 'قيمة التأمين',
+  Summer_PricingProxyInsuranceAmount: 'قيمة تأمين الحجز بالنيابة',
+  Summer_PricingAppliedInsuranceAmount: 'قيمة التأمين المطبقة',
   Summer_PricingAccommodationTotal: 'إجمالي الإقامة',
   Summer_PricingTransportationTotal: 'إجمالي الانتقالات',
   Summer_PricingGrandTotal: 'الإجمالي النهائي',
@@ -581,14 +584,23 @@ function resolveCanonicalFieldMeta(
   if (normalized.includes('pricingtransportationpriceperperson')) {
     return { id: 'pricing_transportation_unit', label: 'سعر الانتقالات للفرد', group: 'booking', order: 57 };
   }
+  if (normalized.includes('pricingproxyinsuranceamount')) {
+    return { id: 'pricing_proxy_insurance', label: 'قيمة تأمين الحجز بالنيابة', group: 'booking', order: 57 };
+  }
+  if (normalized.includes('pricingappliedinsuranceamount')) {
+    return { id: 'pricing_applied_insurance', label: 'قيمة التأمين المطبقة', group: 'booking', order: 58 };
+  }
+  if (normalized.includes('pricinginsuranceamount')) {
+    return { id: 'pricing_insurance', label: 'قيمة التأمين', group: 'booking', order: 58 };
+  }
   if (normalized.includes('pricingaccommodationtotal')) {
-    return { id: 'pricing_accommodation_total', label: 'إجمالي الإقامة', group: 'booking', order: 58 };
+    return { id: 'pricing_accommodation_total', label: 'إجمالي الإقامة', group: 'booking', order: 59 };
   }
   if (normalized.includes('pricingtransportationtotal')) {
-    return { id: 'pricing_transportation_total', label: 'إجمالي الانتقالات', group: 'booking', order: 59 };
+    return { id: 'pricing_transportation_total', label: 'إجمالي الانتقالات', group: 'booking', order: 60 };
   }
   if (normalized.includes('pricinggrandtotal')) {
-    return { id: 'pricing_grand_total', label: 'الإجمالي النهائي', group: 'booking', order: 60 };
+    return { id: 'pricing_grand_total', label: 'الإجمالي النهائي', group: 'booking', order: 61 };
   }
   if (normalized.includes('pricingdisplaytext')) {
     return { id: 'pricing_display_text', label: 'بيان التسعير', group: 'workflow', order: 65 };

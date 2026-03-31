@@ -195,6 +195,102 @@ public class SummerPricingServiceTests
         Assert.Equal(2620m, quoteResponse.Data.GrandTotal);
     }
 
+    [Fact]
+    public async Task Quote_AppliesBaseInsurance_ForNormalBooking()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+        var service = new SummerPricingService(context);
+
+        var saveResponse = await service.SaveCatalogAsync(new SummerPricingCatalogUpsertRequest
+        {
+            SeasonYear = 2026,
+            Records = new List<SummerPricingCatalogRecordDto>
+            {
+                new()
+                {
+                    PricingConfigId = "SUM2026-INSURANCE-NORMAL",
+                    CategoryId = 147,
+                    SeasonYear = 2026,
+                    PeriodKey = "JUN_SEP",
+                    AccommodationPricePerPerson = 700m,
+                    TransportationPricePerPerson = 610m,
+                    InsuranceAmount = 120m,
+                    ProxyInsuranceAmount = 180m,
+                    PricingMode = SummerWorkflowDomainConstants.PricingModes.AccommodationAndTransportationOptional,
+                    TransportationMandatory = false,
+                    IsActive = true
+                }
+            }
+        });
+
+        Assert.True(saveResponse.IsSuccess);
+
+        var quoteResponse = await service.GetQuoteAsync(new SummerPricingQuoteRequest
+        {
+            CategoryId = 147,
+            SeasonYear = 2026,
+            PeriodKey = "JUN_SEP",
+            PersonsCount = 2,
+            StayMode = "RESIDENCE_WITH_TRANSPORT",
+            IsProxyBooking = false
+        });
+
+        Assert.True(quoteResponse.IsSuccess);
+        Assert.NotNull(quoteResponse.Data);
+        Assert.Equal(120m, quoteResponse.Data.InsuranceAmount);
+        Assert.Equal(180m, quoteResponse.Data.ProxyInsuranceAmount);
+        Assert.Equal(120m, quoteResponse.Data.AppliedInsuranceAmount);
+        Assert.Equal(2740m, quoteResponse.Data.GrandTotal);
+    }
+
+    [Fact]
+    public async Task Quote_AppliesProxyInsurance_WhenProxyBooking()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+        var service = new SummerPricingService(context);
+
+        var saveResponse = await service.SaveCatalogAsync(new SummerPricingCatalogUpsertRequest
+        {
+            SeasonYear = 2026,
+            Records = new List<SummerPricingCatalogRecordDto>
+            {
+                new()
+                {
+                    PricingConfigId = "SUM2026-INSURANCE-PROXY",
+                    CategoryId = 147,
+                    SeasonYear = 2026,
+                    PeriodKey = "JUN_SEP",
+                    AccommodationPricePerPerson = 700m,
+                    TransportationPricePerPerson = 610m,
+                    InsuranceAmount = 120m,
+                    ProxyInsuranceAmount = 180m,
+                    PricingMode = SummerWorkflowDomainConstants.PricingModes.AccommodationAndTransportationOptional,
+                    TransportationMandatory = false,
+                    IsActive = true
+                }
+            }
+        });
+
+        Assert.True(saveResponse.IsSuccess);
+
+        var quoteResponse = await service.GetQuoteAsync(new SummerPricingQuoteRequest
+        {
+            CategoryId = 147,
+            SeasonYear = 2026,
+            PeriodKey = "JUN_SEP",
+            PersonsCount = 2,
+            StayMode = "RESIDENCE_WITH_TRANSPORT",
+            IsProxyBooking = true
+        });
+
+        Assert.True(quoteResponse.IsSuccess);
+        Assert.NotNull(quoteResponse.Data);
+        Assert.Equal(180m, quoteResponse.Data.AppliedInsuranceAmount);
+        Assert.Equal(2800m, quoteResponse.Data.GrandTotal);
+    }
+
     private static ConnectContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<ConnectContext>()

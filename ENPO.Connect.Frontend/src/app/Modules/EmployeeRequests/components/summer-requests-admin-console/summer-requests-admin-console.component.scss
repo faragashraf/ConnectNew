@@ -129,13 +129,97 @@
 }
 
 .pricing-table-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.pricing-group-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.pricing-group {
+  border: 1px solid #d6e6f3;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 252, 255, 0.94));
+}
+
+.pricing-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #f6fbff, #edf5fd);
+  border-bottom: 1px solid #dceaf6;
+  cursor: pointer;
+}
+
+.pricing-group-summary h4 {
+  margin: 0;
+  color: #1a4260;
+  font-size: 15px;
+}
+
+.pricing-group-summary small {
+  color: #537086;
+  font-weight: 700;
+}
+
+.pricing-group-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pricing-inline-action {
+  font-size: 12px;
+}
+
+.pricing-group-toggle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #1d608d;
+  background: #e7f2fc;
+  border: 1px solid #c5dff1;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.pricing-group-toggle.expanded {
+  transform: rotate(180deg);
+}
+
+.pricing-group-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.pricing-group-body.collapsed {
+  grid-template-rows: 0fr;
+}
+
+.pricing-group-body-inner {
+  overflow: hidden;
+}
+
+.pricing-group-table-wrap {
   overflow: auto;
 }
 
 .pricing-table {
+  table-layout: fixed;
   width: 100%;
   border-collapse: collapse;
-  min-width: 1480px;
+  min-width: 1260px;
 }
 
 .pricing-table th,
@@ -155,7 +239,8 @@
 
 .pricing-table td input,
 .pricing-table td select {
-  min-width: 120px;
+  min-width: 0;
+  width: 100%;
   padding: 8px 10px;
   font-size: 12px;
 }
@@ -166,6 +251,42 @@
 
 .pricing-table td.center-cell input[type='checkbox'] {
   width: auto;
+}
+
+.pricing-table .cell-destination {
+  min-width: 170px;
+}
+
+.pricing-table .cell-season {
+  min-width: 86px;
+}
+
+.pricing-table .cell-date {
+  min-width: 132px;
+}
+
+.pricing-table .cell-number {
+  min-width: 130px;
+}
+
+.pricing-table .cell-mode {
+  min-width: 190px;
+}
+
+.pricing-table .cell-toggle {
+  min-width: 72px;
+}
+
+.pricing-table .cell-label {
+  min-width: 170px;
+}
+
+.pricing-table .cell-notes {
+  min-width: 210px;
+}
+
+.pricing-table .cell-action {
+  min-width: 68px;
 }
 
 .danger-link {
@@ -1121,6 +1242,15 @@ button.ghost:hover:not(:disabled) {
     flex-direction: column;
     align-items: stretch;
   }
+
+  .pricing-group-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pricing-group-header-actions {
+    justify-content: space-between;
+  }
 }
 
 @media (max-width: 700px) {
@@ -1161,5 +1291,14 @@ button.ghost:hover:not(:disabled) {
 
   .pricing-actions button {
     flex: 1 1 auto;
+  }
+
+  .pricing-group-controls {
+    justify-content: stretch;
+  }
+
+  .pricing-group-controls .ghost-link {
+    flex: 1 1 0;
+    text-align: center;
   }
 }

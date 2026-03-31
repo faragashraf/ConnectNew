@@ -26,6 +26,9 @@ export type SummerFieldAliasMap = {
   pricingPersonsCount: string[];
   pricingAccommodationUnitPrice: string[];
   pricingTransportationUnitPrice: string[];
+  pricingInsuranceAmount: string[];
+  pricingProxyInsuranceAmount: string[];
+  pricingAppliedInsuranceAmount: string[];
   pricingAccommodationTotal: string[];
   pricingTransportationTotal: string[];
   pricingGrandTotal: string[];
@@ -77,6 +80,9 @@ const SUMMER_DEFAULT_FIELD_ALIASES: SummerFieldAliasMap = {
   pricingPersonsCount: ['Summer_PricingPersonsCount'],
   pricingAccommodationUnitPrice: ['Summer_PricingAccommodationPricePerPerson'],
   pricingTransportationUnitPrice: ['Summer_PricingTransportationPricePerPerson'],
+  pricingInsuranceAmount: ['Summer_PricingInsuranceAmount'],
+  pricingProxyInsuranceAmount: ['Summer_PricingProxyInsuranceAmount'],
+  pricingAppliedInsuranceAmount: ['Summer_PricingAppliedInsuranceAmount'],
   pricingAccommodationTotal: ['Summer_PricingAccommodationTotal'],
   pricingTransportationTotal: ['Summer_PricingTransportationTotal'],
   pricingGrandTotal: ['Summer_PricingGrandTotal'],
@@ -114,6 +120,9 @@ export function createDefaultSummerFieldAliases(): SummerFieldAliasMap {
     pricingPersonsCount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingPersonsCount],
     pricingAccommodationUnitPrice: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingAccommodationUnitPrice],
     pricingTransportationUnitPrice: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingTransportationUnitPrice],
+    pricingInsuranceAmount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingInsuranceAmount],
+    pricingProxyInsuranceAmount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingProxyInsuranceAmount],
+    pricingAppliedInsuranceAmount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingAppliedInsuranceAmount],
     pricingAccommodationTotal: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingAccommodationTotal],
     pricingTransportationTotal: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingTransportationTotal],
     pricingGrandTotal: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingGrandTotal],

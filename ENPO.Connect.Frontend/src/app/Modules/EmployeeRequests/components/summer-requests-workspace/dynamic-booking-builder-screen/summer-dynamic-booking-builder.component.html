@@ -52,6 +52,11 @@
       <article class="capacity-card" *ngFor="let row of bookingCapacitySummary" [class.frozen-highlight]="hasFrozenUnits(row)">
         <span>سعة {{ row.familyCount }}</span>
         <strong>{{ getCapacityDisplayedAvailableUnits(row) }}</strong>
+        <div class="capacity-breakdown" *ngIf="canUseFrozenUnitsToggle && includeFrozenUnitsForApi">
+          <span>متاح عام: {{ getCapacityPublicAvailableUnits(row) }}</span>
+          <span>متاح مجمد: {{ getCapacityFrozenAvailableUnits(row) }}</span>
+          <span>مجمد مستخدم: {{ getCapacityFrozenAssignedUnits(row) }}</span>
+        </div>
         <small>{{ getCapacityNote(row) }}</small>
         <small class="frozen-tag" *ngIf="hasFrozenUnits(row)">
           يتضمن وحدات مجمدة
@@ -92,6 +97,10 @@
       <article class="pricing-item">
         <span>إجمالي الانتقالات</span>
         <strong>{{ formatPriceValue(quote.transportationTotal) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>قيمة التأمين</span>
+        <strong>{{ formatPriceValue(quote.appliedInsuranceAmount) }}</strong>
       </article>
       <article class="pricing-item total">
         <span>الإجمالي النهائي</span>

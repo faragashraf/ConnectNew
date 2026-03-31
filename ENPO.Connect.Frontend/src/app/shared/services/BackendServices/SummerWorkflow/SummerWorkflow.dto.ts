@@ -100,6 +100,7 @@ export interface SummerPricingQuoteRequest {
   familyCount?: number | null;
   extraCount?: number | null;
   stayMode?: string;
+  isProxyBooking?: boolean;
   destinationName?: string;
 }
 
@@ -120,6 +121,9 @@ export interface SummerPricingQuoteDto {
   stayModeWasNormalized: boolean;
   accommodationTotal: number;
   transportationTotal: number;
+  insuranceAmount: number;
+  proxyInsuranceAmount?: number | null;
+  appliedInsuranceAmount: number;
   grandTotal: number;
   displayText: string;
   smsText: string;
@@ -136,6 +140,8 @@ export interface SummerPricingCatalogRecordDto {
   dateTo?: string;
   accommodationPricePerPerson: number;
   transportationPricePerPerson: number;
+  insuranceAmount: number;
+  proxyInsuranceAmount?: number | null;
   pricingMode: string;
   transportationMandatory: boolean;
   isActive: boolean;

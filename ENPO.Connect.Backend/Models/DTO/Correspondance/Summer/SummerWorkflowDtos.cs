@@ -80,6 +80,7 @@ public class SummerPricingQuoteRequest
     public int? FamilyCount { get; set; }
     public int? ExtraCount { get; set; }
     public string? StayMode { get; set; }
+    public bool IsProxyBooking { get; set; }
     public string? DestinationName { get; set; }
 }
 
@@ -101,6 +102,9 @@ public class SummerPricingQuoteDto
     public bool StayModeWasNormalized { get; set; }
     public decimal AccommodationTotal { get; set; }
     public decimal TransportationTotal { get; set; }
+    public decimal InsuranceAmount { get; set; }
+    public decimal? ProxyInsuranceAmount { get; set; }
+    public decimal AppliedInsuranceAmount { get; set; }
     public decimal GrandTotal { get; set; }
     public string DisplayText { get; set; } = string.Empty;
     public string SmsText { get; set; } = string.Empty;
@@ -124,6 +128,8 @@ public class SummerPricingCatalogRecordDto
     public string? DateTo { get; set; }
     public decimal AccommodationPricePerPerson { get; set; }
     public decimal TransportationPricePerPerson { get; set; }
+    public decimal InsuranceAmount { get; set; }
+    public decimal? ProxyInsuranceAmount { get; set; }
     public string PricingMode { get; set; } = string.Empty;
     public bool TransportationMandatory { get; set; }
     public bool IsActive { get; set; } = true;

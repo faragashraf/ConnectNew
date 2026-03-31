@@ -54,97 +54,125 @@
     <p class="pricing-error" *ngIf="pricingCatalogError.length > 0">{{ pricingCatalogError }}</p>
 
     <div class="pricing-table-wrap" *ngIf="!pricingCatalogLoading; else pricingLoadingBlock">
-      <table class="pricing-table">
-        <thead>
-          <tr>
-            <th>المصيف</th>
-            <th>الموسم</th>
-            <th>الفترة</th>
-            <th>الفوج (اختياري)</th>
-            <th>من</th>
-            <th>إلى</th>
-            <th>سعر الإقامة/فرد</th>
-            <th>سعر الانتقالات/فرد</th>
-            <th>وضع التسعير</th>
-            <th>الانتقالات إلزامية</th>
-            <th>مفعّل</th>
-            <th>وصف العرض</th>
-            <th>ملاحظات</th>
-            <th>نسخ</th>
-            <th>حذف</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let record of pricingRecords; let i = index; trackBy: trackByPricingRecord">
-            <td>
-              <select [(ngModel)]="record.categoryId" [ngModelOptions]="{standalone: true}">
-                <option [ngValue]="0">اختر المصيف</option>
-                <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">
-                  {{ destination.name }}
-                </option>
-              </select>
-            </td>
-            <td>
-              <input type="number" min="2020" [(ngModel)]="record.seasonYear" [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td>
-              <input
-                type="text"
-                placeholder="JUN_SEP / JUL_AUG"
-                [(ngModel)]="record.periodKey"
-                [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td>
-              <input type="text" placeholder="W1/W2..." [(ngModel)]="record.waveCode" [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td>
-              <input type="date" [(ngModel)]="record.dateFrom" [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td>
-              <input type="date" [(ngModel)]="record.dateTo" [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td>
-              <input type="number" min="0" step="0.01" [(ngModel)]="record.accommodationPricePerPerson" [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                [(ngModel)]="record.transportationPricePerPerson"
-                [disabled]="isAccommodationOnlyMode(record)"
-                [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td>
-              <select [(ngModel)]="record.pricingMode" [ngModelOptions]="{standalone: true}" (ngModelChange)="onPricingModeChanged(record)">
-                <option *ngFor="let mode of pricingModeOptions" [ngValue]="mode.value">{{ mode.label }}</option>
-              </select>
-            </td>
-            <td class="center-cell">
-              <input
-                type="checkbox"
-                [(ngModel)]="record.transportationMandatory"
-                [disabled]="isPricingModeMandatory(record)"
-                [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td class="center-cell">
-              <input type="checkbox" [(ngModel)]="record.isActive" [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td>
-              <input type="text" [(ngModel)]="record.displayLabel" [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td>
-              <input type="text" [(ngModel)]="record.notes" [ngModelOptions]="{standalone: true}" />
-            </td>
-            <td class="center-cell">
-              <button type="button" class="ghost-link" (click)="duplicatePricingRecord(i)">نسخ</button>
-            </td>
-            <td class="center-cell">
-              <button type="button" class="danger-link" (click)="removePricingRecord(i)">حذف</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="pricing-group-controls" *ngIf="pricingRecordGroups.length > 1">
+        <button type="button" class="ghost-link" (click)="expandAllPricingGroups()">توسيع الكل</button>
+        <button type="button" class="ghost-link" (click)="collapseAllPricingGroups()">طي الكل</button>
+      </div>
+
+      <section class="pricing-group" *ngFor="let group of pricingRecordGroups; trackBy: trackByPricingGroup">
+        <header class="pricing-group-header" (click)="togglePricingGroup(group.key)">
+          <div class="pricing-group-summary">
+            <h4>{{ group.destinationName }}</h4>
+            <small>
+              {{ group.rows.length }} سجل
+              <ng-container *ngIf="group.activeCount !== group.rows.length">
+                | مفعّل {{ group.activeCount }} | غير مفعّل {{ group.inactiveCount }}
+              </ng-container>
+            </small>
+          </div>
+          <div class="pricing-group-header-actions">
+            <button
+              type="button"
+              class="ghost-link pricing-inline-action"
+              (click)="addPricingRecord(group.categoryId); $event.stopPropagation()">
+              إضافة سطر
+            </button>
+            <span class="pricing-group-toggle" [class.expanded]="isPricingGroupExpanded(group.key)">⌄</span>
+          </div>
+        </header>
+
+        <div class="pricing-group-body" [class.collapsed]="!isPricingGroupExpanded(group.key)">
+          <div class="pricing-group-body-inner">
+            <div class="pricing-group-table-wrap">
+              <table class="pricing-table">
+                <thead>
+                  <tr>
+                    <th>المصيف</th>
+                    <th>الموسم</th>
+                    <th>من</th>
+                    <th>إلى</th>
+                    <th>سعر الإقامة/فرد</th>
+                    <th>سعر الانتقالات/فرد</th>
+                    <th>التأمين</th>
+                    <th>تأمين بالنيابة</th>
+                    <th>وضع التسعير</th>
+                    <th>مفعّل</th>
+                    <th>وصف العرض</th>
+                    <th>ملاحظات</th>
+                    <th>نسخ</th>
+                    <th>حذف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let entry of group.rows; trackBy: trackByPricingGroupEntry">
+                    <td class="cell-destination">
+                      <select
+                        [(ngModel)]="entry.record.categoryId"
+                        [ngModelOptions]="{standalone: true}"
+                        (ngModelChange)="onPricingCategoryChanged()">
+                        <option [ngValue]="0">اختر المصيف</option>
+                        <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">
+                          {{ destination.name }}
+                        </option>
+                      </select>
+                    </td>
+                    <td class="cell-season">
+                      <input type="number" min="2020" [(ngModel)]="entry.record.seasonYear" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-date">
+                      <input type="date" [(ngModel)]="entry.record.dateFrom" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-date">
+                      <input type="date" [(ngModel)]="entry.record.dateTo" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-number">
+                      <input type="number" min="0" step="0.01" [(ngModel)]="entry.record.accommodationPricePerPerson" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-number">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        [(ngModel)]="entry.record.transportationPricePerPerson"
+                        [disabled]="isAccommodationOnlyMode(entry.record)"
+                        [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-number">
+                      <input type="number" min="0" step="0.01" [(ngModel)]="entry.record.insuranceAmount" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-number">
+                      <input type="number" min="0" step="0.01" [(ngModel)]="entry.record.proxyInsuranceAmount" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-mode">
+                      <select
+                        [(ngModel)]="entry.record.pricingMode"
+                        [ngModelOptions]="{standalone: true}"
+                        (ngModelChange)="onPricingModeChanged(entry.record)">
+                        <option *ngFor="let mode of pricingModeOptions" [ngValue]="mode.value">{{ mode.label }}</option>
+                      </select>
+                    </td>
+                    <td class="center-cell cell-toggle">
+                      <input type="checkbox" [(ngModel)]="entry.record.isActive" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-label">
+                      <input type="text" [(ngModel)]="entry.record.displayLabel" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-notes">
+                      <input type="text" [(ngModel)]="entry.record.notes" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="center-cell cell-action">
+                      <button type="button" class="ghost-link" (click)="duplicatePricingRecord(entry.index)">نسخ</button>
+                    </td>
+                    <td class="center-cell cell-action">
+                      <button type="button" class="danger-link" (click)="removePricingRecord(entry.index)">حذف</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
 
     <ng-template #pricingLoadingBlock>

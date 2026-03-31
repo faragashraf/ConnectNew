@@ -21,6 +21,7 @@ namespace Persistence.Services.Summer
         public static readonly string[] ExtraCountFieldKinds = { "Over_Count", "SUM2026_ExtraCount", "ExtraCount" };
         public static readonly string[] SeasonYearFieldKinds = { "SummerSeasonYear", "SUM2026_SeasonYear", "SeasonYear" };
         public static readonly string[] StayModeFieldKinds = { "SummerStayMode", "SUM2026_StayMode", "StayMode" };
+        public static readonly string[] ProxyModeFieldKinds = { "SummerProxyMode", "SUM2026_ProxyMode", "ProxyMode" };
         public static readonly string[] UseFrozenUnitFieldKinds = { "Summer_UseFrozenUnit", "SUM2026_UseFrozenUnit", "UseFrozenUnit" };
         public static readonly string[] DestinationIdFieldKinds = { "SummerDestinationId", "SUM2026_DestinationId" };
         public static readonly string[] DestinationNameFieldKinds = { "SummerDestinationName", "SUM2026_DestinationName" };
@@ -58,6 +59,9 @@ namespace Persistence.Services.Summer
             public const string TransportationPricePerPerson = "Summer_PricingTransportationPricePerPerson";
             public const string AccommodationTotal = "Summer_PricingAccommodationTotal";
             public const string TransportationTotal = "Summer_PricingTransportationTotal";
+            public const string InsuranceAmount = "Summer_PricingInsuranceAmount";
+            public const string ProxyInsuranceAmount = "Summer_PricingProxyInsuranceAmount";
+            public const string AppliedInsuranceAmount = "Summer_PricingAppliedInsuranceAmount";
             public const string GrandTotal = "Summer_PricingGrandTotal";
             public const string DisplayText = "Summer_PricingDisplayText";
             public const string SmsText = "Summer_PricingSmsText";

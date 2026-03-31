@@ -86,6 +86,9 @@ namespace Persistence.Services
             SummerWorkflowDomainConstants.PricingFieldKinds.TransportationPricePerPerson,
             SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationTotal,
             SummerWorkflowDomainConstants.PricingFieldKinds.TransportationTotal,
+            SummerWorkflowDomainConstants.PricingFieldKinds.InsuranceAmount,
+            SummerWorkflowDomainConstants.PricingFieldKinds.ProxyInsuranceAmount,
+            SummerWorkflowDomainConstants.PricingFieldKinds.AppliedInsuranceAmount,
             SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal,
             SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText,
             SummerWorkflowDomainConstants.PricingFieldKinds.SmsText,
@@ -189,6 +192,7 @@ namespace Persistence.Services
             var seasonYear = ParseInt(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.SeasonYearFieldKinds), DateTime.UtcNow.Year);
             var waveLabel = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.WaveLabelFieldKinds);
             var stayMode = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.StayModeFieldKinds);
+            var isProxyBooking = ParseBoolean(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.ProxyModeFieldKinds));
 
             if (categoryInfo == null)
             {
@@ -239,6 +243,7 @@ namespace Persistence.Services
                 ExtraCount = extraCount,
                 PersonsCount = personsCount,
                 StayMode = stayMode,
+                IsProxyBooking = isProxyBooking,
                 DestinationName = destinationName
             });
 
@@ -1029,6 +1034,11 @@ SELECT @result;
                 [SummerWorkflowDomainConstants.PricingFieldKinds.TransportationPricePerPerson] = FormatDecimalValue(quote.TransportationPricePerPerson),
                 [SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationTotal] = FormatDecimalValue(quote.AccommodationTotal),
                 [SummerWorkflowDomainConstants.PricingFieldKinds.TransportationTotal] = FormatDecimalValue(quote.TransportationTotal),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.InsuranceAmount] = FormatDecimalValue(quote.InsuranceAmount),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.ProxyInsuranceAmount] = quote.ProxyInsuranceAmount.HasValue
+                    ? FormatDecimalValue(quote.ProxyInsuranceAmount.Value)
+                    : string.Empty,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.AppliedInsuranceAmount] = FormatDecimalValue(quote.AppliedInsuranceAmount),
                 [SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal] = FormatDecimalValue(quote.GrandTotal),
                 [SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText] = quote.DisplayText,
                 [SummerWorkflowDomainConstants.PricingFieldKinds.SmsText] = quote.SmsText,

@@ -162,9 +162,15 @@ namespace Persistence.Services.Summer
                     stayModeWasNormalized = true;
                 }
 
+                var insuranceAmount = Math.Max(0m, selectedRule.InsuranceAmount);
+                var proxyInsuranceAmount = selectedRule.ProxyInsuranceAmount.HasValue
+                    ? Math.Max(0m, selectedRule.ProxyInsuranceAmount.Value)
+                    : (decimal?)null;
+                var appliedInsuranceAmount = request.IsProxyBooking && proxyInsuranceAmount.HasValue
+                    ? proxyInsuranceAmount.Value
+                    : insuranceAmount;
                 var accommodationTotal = personsCount * selectedRule.AccommodationPricePerPerson;
                 var transportationTotal = 0m;
-                var grandTotal = accommodationTotal;
 
                 if (!string.Equals(
                     normalizedPricingMode,
@@ -176,8 +182,9 @@ namespace Persistence.Services.Summer
                         StringComparison.OrdinalIgnoreCase))
                 {
                     transportationTotal = personsCount * selectedRule.TransportationPricePerPerson;
-                    grandTotal = accommodationTotal + transportationTotal;
                 }
+
+                var grandTotal = accommodationTotal + transportationTotal + appliedInsuranceAmount;
 
                 var destinationName = (request.DestinationName ?? string.Empty).Trim();
                 if (destinationName.Length == 0)
@@ -200,6 +207,7 @@ namespace Persistence.Services.Summer
                     selectedRule.TransportationPricePerPerson,
                     accommodationTotal,
                     transportationTotal,
+                    appliedInsuranceAmount,
                     grandTotal,
                     normalizedStayMode,
                     normalizedPricingMode,
@@ -214,6 +222,7 @@ namespace Persistence.Services.Summer
                     selectedRule.TransportationPricePerPerson,
                     accommodationTotal,
                     transportationTotal,
+                    appliedInsuranceAmount,
                     grandTotal,
                     normalizedStayMode,
                     normalizedPricingMode,
@@ -245,6 +254,9 @@ namespace Persistence.Services.Summer
                     StayModeWasNormalized = stayModeWasNormalized,
                     AccommodationTotal = accommodationTotal,
                     TransportationTotal = transportationTotal,
+                    InsuranceAmount = insuranceAmount,
+                    ProxyInsuranceAmount = proxyInsuranceAmount,
+                    AppliedInsuranceAmount = appliedInsuranceAmount,
                     GrandTotal = grandTotal,
                     DisplayText = displayText,
                     SmsText = smsText,
@@ -565,6 +577,10 @@ namespace Persistence.Services.Summer
                     DateTo = parsedDateTo,
                     AccommodationPricePerPerson = item.AccommodationPricePerPerson,
                     TransportationPricePerPerson = item.TransportationPricePerPerson,
+                    InsuranceAmount = Math.Max(0m, item.InsuranceAmount),
+                    ProxyInsuranceAmount = item.ProxyInsuranceAmount.HasValue
+                        ? Math.Max(0m, item.ProxyInsuranceAmount.Value)
+                        : null,
                     PricingMode = (item.PricingMode ?? string.Empty).Trim(),
                     TransportationMandatory = item.TransportationMandatory ?? false,
                     DisplayLabel = (item.DisplayLabel ?? string.Empty).Trim(),
@@ -590,6 +606,8 @@ namespace Persistence.Services.Summer
                 DateTo = record.DateTo?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 AccommodationPricePerPerson = record.AccommodationPricePerPerson,
                 TransportationPricePerPerson = record.TransportationPricePerPerson,
+                InsuranceAmount = record.InsuranceAmount,
+                ProxyInsuranceAmount = record.ProxyInsuranceAmount,
                 PricingMode = normalizedMode.Length > 0 ? normalizedMode : record.PricingMode,
                 TransportationMandatory = record.TransportationMandatory,
                 IsActive = record.IsActive,
@@ -612,6 +630,10 @@ namespace Persistence.Services.Summer
                 DateTo = ParseDateOnly(record.DateTo)?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 AccommodationPricePerPerson = record.AccommodationPricePerPerson,
                 TransportationPricePerPerson = record.TransportationPricePerPerson,
+                InsuranceAmount = Math.Max(0m, record.InsuranceAmount),
+                ProxyInsuranceAmount = record.ProxyInsuranceAmount.HasValue
+                    ? Math.Max(0m, record.ProxyInsuranceAmount.Value)
+                    : null,
                 PricingMode = normalizedMode.Length > 0 ? normalizedMode : (record.PricingMode ?? string.Empty).Trim(),
                 TransportationMandatory = record.TransportationMandatory ?? false,
                 IsActive = record.IsActive ?? true,
@@ -664,6 +686,8 @@ namespace Persistence.Services.Summer
 
                 var accommodationPrice = record.AccommodationPricePerPerson;
                 var transportPrice = record.TransportationPricePerPerson;
+                var insuranceAmount = record.InsuranceAmount;
+                var proxyInsuranceAmount = record.ProxyInsuranceAmount;
                 if (accommodationPrice <= 0m)
                 {
                     errors.Add(new Error { Code = "400", Message = $"سعر الإقامة للفرد يجب أن يكون أكبر من صفر في السطر رقم {rowNo}." });
@@ -673,6 +697,18 @@ namespace Persistence.Services.Summer
                 if (transportPrice < 0m)
                 {
                     errors.Add(new Error { Code = "400", Message = $"سعر الانتقالات للفرد لا يمكن أن يكون سالباً في السطر رقم {rowNo}." });
+                    continue;
+                }
+
+                if (insuranceAmount < 0m)
+                {
+                    errors.Add(new Error { Code = "400", Message = $"قيمة التأمين لا يمكن أن تكون سالبة في السطر رقم {rowNo}." });
+                    continue;
+                }
+
+                if (proxyInsuranceAmount.HasValue && proxyInsuranceAmount.Value < 0m)
+                {
+                    errors.Add(new Error { Code = "400", Message = $"قيمة تأمين الحجز بالنيابة لا يمكن أن تكون سالبة في السطر رقم {rowNo}." });
                     continue;
                 }
 
@@ -718,6 +754,8 @@ namespace Persistence.Services.Summer
                     DateTo = dateTo?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     AccommodationPricePerPerson = accommodationPrice,
                     TransportationPricePerPerson = transportPrice,
+                    InsuranceAmount = insuranceAmount,
+                    ProxyInsuranceAmount = proxyInsuranceAmount,
                     PricingMode = mode,
                     TransportationMandatory = transportationMandatory,
                     IsActive = record.IsActive,
@@ -1056,6 +1094,7 @@ namespace Persistence.Services.Summer
             decimal transportationPricePerPerson,
             decimal accommodationTotal,
             decimal transportationTotal,
+            decimal appliedInsuranceAmount,
             decimal grandTotal,
             string normalizedStayMode,
             string pricingMode,
@@ -1070,6 +1109,7 @@ namespace Persistence.Services.Summer
                 transportationPricePerPerson,
                 accommodationTotal,
                 transportationTotal,
+                appliedInsuranceAmount,
                 grandTotal,
                 normalizedStayMode,
                 pricingMode,
@@ -1085,6 +1125,7 @@ namespace Persistence.Services.Summer
             decimal transportationPricePerPerson,
             decimal accommodationTotal,
             decimal transportationTotal,
+            decimal appliedInsuranceAmount,
             decimal grandTotal,
             string normalizedStayMode,
             string pricingMode,
@@ -1099,6 +1140,7 @@ namespace Persistence.Services.Summer
                 transportationPricePerPerson,
                 accommodationTotal,
                 transportationTotal,
+                appliedInsuranceAmount,
                 grandTotal,
                 normalizedStayMode,
                 pricingMode,
@@ -1114,6 +1156,7 @@ namespace Persistence.Services.Summer
             decimal transportationPricePerPerson,
             decimal accommodationTotal,
             decimal transportationTotal,
+            decimal appliedInsuranceAmount,
             decimal grandTotal,
             string normalizedStayMode,
             string pricingMode,
@@ -1140,8 +1183,11 @@ namespace Persistence.Services.Summer
             }
 
             var waveDateText = ExtractWaveDateText(waveDisplay);
+            var insuranceSegment = appliedInsuranceAmount > 0m
+                ? $"، التأمين: {FormatMoney(appliedInsuranceAmount)} جنيه"
+                : string.Empty;
 
-            return $"رقم الحجز: #{{bookingNumber}} | المرجعي: {{referenceNumber}}. الوجهة: {destinationName}، - تاريخ {waveDisplay}، الموعد: {waveDateText}، نوع الحجز: {stayModeLabel}، عدد الأفراد: {personsCount}، الإجمالي: {FormatMoney(grandTotal)} جنيه. يرجى السداد قبل موعد أقصاه {nextDayDueDateText}.";
+            return $"رقم الحجز: #{{bookingNumber}} | المرجعي: {{referenceNumber}}. الوجهة: {destinationName}، - تاريخ {waveDisplay}، الموعد: {waveDateText}، نوع الحجز: {stayModeLabel}، عدد الأفراد: {personsCount}{insuranceSegment}، الإجمالي: {FormatMoney(grandTotal)} جنيه. يرجى السداد قبل موعد أقصاه {nextDayDueDateText}.";
         }
 
         private static string ExtractWaveDateText(string waveDisplay)
@@ -1224,6 +1270,8 @@ namespace Persistence.Services.Summer
             public string? DateTo { get; set; }
             public decimal AccommodationPricePerPerson { get; set; }
             public decimal TransportationPricePerPerson { get; set; }
+            public decimal InsuranceAmount { get; set; }
+            public decimal? ProxyInsuranceAmount { get; set; }
             public string? PricingMode { get; set; }
             public bool? TransportationMandatory { get; set; }
             public bool? IsActive { get; set; }
@@ -1243,6 +1291,8 @@ namespace Persistence.Services.Summer
             public DateOnly? DateTo { get; set; }
             public decimal AccommodationPricePerPerson { get; set; }
             public decimal TransportationPricePerPerson { get; set; }
+            public decimal InsuranceAmount { get; set; }
+            public decimal? ProxyInsuranceAmount { get; set; }
             public string PricingMode { get; set; } = string.Empty;
             public bool TransportationMandatory { get; set; }
             public string DisplayLabel { get; set; } = string.Empty;

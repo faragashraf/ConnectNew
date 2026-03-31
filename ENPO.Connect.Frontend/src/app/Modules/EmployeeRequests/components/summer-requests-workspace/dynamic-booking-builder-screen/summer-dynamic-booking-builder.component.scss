@@ -123,6 +123,22 @@
   color: #5d7388;
 }
 
+.capacity-card .capacity-breakdown {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.1rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 8px;
+  background: #f2f8ff;
+  border: 1px solid #d8e8f8;
+}
+
+.capacity-card .capacity-breakdown span {
+  color: #184c72;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .capacity-card.frozen-highlight {
   border-color: #9dc3de;
   box-shadow: inset 0 0 0 1px rgba(37, 102, 142, 0.12);
