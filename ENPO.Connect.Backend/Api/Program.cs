@@ -20,6 +20,7 @@ using Persistence.Services;
 using Persistence.Services.Notifications;
 using Persistence.UnitOfWorks;
 using SignalR.Notification;
+using System.Data;
 using System.Reflection;
 using System.Text;
 
@@ -54,6 +55,7 @@ builder.Services.AddTransient<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 builder.Services.AddOptions<ApplicationConfig>().BindConfiguration(nameof(ApplicationConfig));
+builder.Services.AddOptions<ResortBookingBlacklistOptions>().BindConfiguration(ResortBookingBlacklistOptions.SectionName);
 //builder.Services.Configure<ApplicationConfig>(builder.Configuration.GetSection("ApplicationConfig"));
 
 builder.Services.AddSingleton<ApplicationConfig>(sp =>
@@ -229,56 +231,54 @@ builder.Services.AddSingleton<RedisConnectionManager>(serviceProvider =>
 
 var app = builder.Build();
 
-// Ensure pending EF Core migrations are applied for ConnectContext on startup (idempotent)
+// Ensure pending EF Core migrations are applied for ConnectContext on startup (idempotent + safe for multi-instance startup).
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var loggerFactory = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
+    var logger = loggerFactory?.CreateLogger("StartupMigrations");
     try
     {
         var connectContext = services.GetRequiredService<ConnectContext>();
-        // Apply migrations if any pending. If already applied, this is a no-op.
-        var configuration = services.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
-        var conn = configuration?.GetConnectionString("ConnectConnectingString");
-        Console.WriteLine($"[StartupMigrations] Target connection: {conn}");
+        var configuration = services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+        var startupMigrationsEnabled = configuration.GetValue("StartupMigrations:Enabled", true);
+        var failStartupOnError = configuration.GetValue("StartupMigrations:FailStartupOnError", true);
+        var commandTimeoutSeconds = Math.Max(30, configuration.GetValue("StartupMigrations:CommandTimeoutSeconds", 300));
+        var lockTimeoutSeconds = Math.Max(5, configuration.GetValue("StartupMigrations:SqlAppLockTimeoutSeconds", 120));
+        var lockResource = (configuration.GetValue<string>("StartupMigrations:SqlAppLockResource") ?? "CONNECT_STARTUP_MIGRATIONS").Trim();
+        if (string.IsNullOrWhiteSpace(lockResource))
+        {
+            lockResource = "CONNECT_STARTUP_MIGRATIONS";
+        }
 
-        var pending = connectContext.Database.GetPendingMigrations();
-        var pendingList = pending?.ToList() ?? new System.Collections.Generic.List<string>();
-        Console.WriteLine($"[StartupMigrations] Pending migrations: {(pendingList.Count > 0 ? string.Join(",", pendingList) : "<none>")}");
-
-        //// Ensure CDMend.ApplicationID allows NULL to avoid migration-insert failures when seed data
-        //try
-        //{
-        //    var dbConnection = connectContext.Database.GetDbConnection();
-        //    try
-        //    {
-        //        dbConnection.Open();
-        //        using (var cmd = dbConnection.CreateCommand())
-        //        {
-        //            // If the ApplicationID column exists, alter it to allow NULLs. This prevents migrations that re-insert seed data
-        //            // from failing due to NOT NULL constraint. If the column doesn't exist this statement is skipped.
-        //            cmd.CommandText = @"IF COL_LENGTH('dbo.CDMend','ApplicationID') IS NOT NULL BEGIN ALTER TABLE dbo.CDMend ALTER COLUMN ApplicationID NVARCHAR(10) NULL END";
-        //            cmd.ExecuteNonQuery();
-        //        }
-        //    }
-        //    finally
-        //    {
-        //        try { dbConnection.Close(); } catch { }
-        //    }
-        //}
-        //catch (Exception exAlter)
-        //{
-        //    var loggerFactoryLocal = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
-        //    var loggerLocal = loggerFactoryLocal?.CreateLogger("StartupMigrations:SchemaAdjust");
-        //    loggerLocal?.LogWarning(exAlter, "Could not ensure CDMend.ApplicationID is nullable before migrations. Continuing to migrations.");
-        //}
-
-        //connectContext.Database.Migrate();
-        //Console.WriteLine("[StartupMigrations] Database.Migrate() completed successfully.");
+        if (!startupMigrationsEnabled)
+        {
+            logger?.LogInformation("Startup migrations are disabled by configuration.");
+        }
+        else
+        {
+            try
+            {
+                connectContext.Database.SetCommandTimeout(commandTimeoutSeconds);
+                await EnsureConnectMigrationsAsync(
+                    connectContext,
+                    logger,
+                    lockResource,
+                    TimeSpan.FromSeconds(lockTimeoutSeconds),
+                    CancellationToken.None);
+            }
+            catch (Exception migrationEx)
+            {
+                logger?.LogError(migrationEx, "Error applying database migrations for ConnectContext.");
+                if (failStartupOnError)
+                {
+                    throw;
+                }
+            }
+        }
     }
     catch (Exception ex)
     {
-        var loggerFactory = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
-        var logger = loggerFactory?.CreateLogger("StartupMigrations");
         logger?.LogError(ex, "Error applying database migrations for ConnectContext.");
         throw;
     }
@@ -373,4 +373,139 @@ static string BuildAbsoluteUrl(string? publicBaseUrl, string? routePath, string 
     };
 
     return builder.Uri.ToString();
+}
+
+static async Task EnsureConnectMigrationsAsync(
+    ConnectContext connectContext,
+    Microsoft.Extensions.Logging.ILogger? logger,
+    string lockResource,
+    TimeSpan lockTimeout,
+    CancellationToken cancellationToken)
+{
+    var database = connectContext.Database;
+    var initialPending = database.GetPendingMigrations().ToList();
+    logger?.LogInformation(
+        "Startup migrations check: {PendingCount} pending migration(s).",
+        initialPending.Count);
+
+    if (initialPending.Count == 0)
+    {
+        return;
+    }
+
+    var useSqlServerLock = database.IsSqlServer();
+    var lockAcquired = false;
+    if (useSqlServerLock)
+    {
+        await database.OpenConnectionAsync(cancellationToken);
+        lockAcquired = await TryAcquireStartupMigrationSqlLockAsync(
+            connectContext,
+            lockResource,
+            Math.Max(5000, (int)lockTimeout.TotalMilliseconds),
+            cancellationToken);
+
+        if (!lockAcquired)
+        {
+            throw new InvalidOperationException(
+                $"Could not acquire startup migration SQL lock '{lockResource}' within {lockTimeout.TotalSeconds} seconds.");
+        }
+    }
+
+    try
+    {
+        var pendingAfterLock = database.GetPendingMigrations().ToList();
+        if (pendingAfterLock.Count == 0)
+        {
+            logger?.LogInformation("Startup migrations: no pending migrations after lock acquisition.");
+            return;
+        }
+
+        logger?.LogInformation(
+            "Applying pending migrations: {Migrations}",
+            string.Join(", ", pendingAfterLock));
+
+        await database.MigrateAsync(cancellationToken);
+
+        var remainingPending = database.GetPendingMigrations().ToList();
+        if (remainingPending.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Startup migrations finished with remaining pending migrations: {string.Join(", ", remainingPending)}");
+        }
+
+        logger?.LogInformation("Startup migrations completed successfully.");
+    }
+    finally
+    {
+        if (useSqlServerLock && lockAcquired)
+        {
+            try
+            {
+                await ReleaseStartupMigrationSqlLockAsync(connectContext, lockResource, cancellationToken);
+            }
+            catch (Exception exRelease)
+            {
+                logger?.LogWarning(exRelease, "Failed to release startup migration SQL lock '{LockResource}'.", lockResource);
+            }
+        }
+
+        if (useSqlServerLock)
+        {
+            await database.CloseConnectionAsync();
+        }
+    }
+}
+
+static async Task<bool> TryAcquireStartupMigrationSqlLockAsync(
+    ConnectContext connectContext,
+    string lockResource,
+    int timeoutMs,
+    CancellationToken cancellationToken)
+{
+    var connection = connectContext.Database.GetDbConnection();
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
+DECLARE @result int;
+EXEC @result = sp_getapplock
+    @Resource = @resource,
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Session',
+    @LockTimeout = @timeout;
+SELECT @result;";
+
+    var resourceParam = command.CreateParameter();
+    resourceParam.ParameterName = "@resource";
+    resourceParam.Value = lockResource;
+    command.Parameters.Add(resourceParam);
+
+    var timeoutParam = command.CreateParameter();
+    timeoutParam.ParameterName = "@timeout";
+    timeoutParam.Value = timeoutMs;
+    command.Parameters.Add(timeoutParam);
+
+    var resultObject = await command.ExecuteScalarAsync(cancellationToken);
+    var resultCode = Convert.ToInt32(resultObject ?? -999);
+    return resultCode >= 0;
+}
+
+static async Task ReleaseStartupMigrationSqlLockAsync(
+    ConnectContext connectContext,
+    string lockResource,
+    CancellationToken cancellationToken)
+{
+    var connection = connectContext.Database.GetDbConnection();
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
+DECLARE @result int;
+EXEC @result = sp_releaseapplock
+    @Resource = @resource,
+    @LockOwner = 'Session';
+SELECT @result;";
+
+    var resourceParam = command.CreateParameter();
+    resourceParam.ParameterName = "@resource";
+    resourceParam.Value = lockResource;
+    command.Parameters.Add(resourceParam);
+
+    await command.ExecuteScalarAsync(cancellationToken);
 }

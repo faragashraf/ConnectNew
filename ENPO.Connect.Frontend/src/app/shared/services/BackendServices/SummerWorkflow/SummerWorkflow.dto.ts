@@ -58,6 +58,8 @@ export interface SummerWaveCapacityDto {
   totalUnits: number;
   usedUnits: number;
   availableUnits: number;
+  frozenAvailableUnits: number;
+  frozenAssignedUnits: number;
 }
 
 export interface SummerStayModeDefinitionDto {
@@ -227,4 +229,96 @@ export interface SummerAdminActionRequest {
   newFamilyCount?: number | null;
   newExtraCount?: number | null;
   files?: FileParameter[];
+}
+
+export interface SummerUnitFreezeCreateRequest {
+  categoryId: number;
+  waveCode: string;
+  familyCount: number;
+  requestedUnitsCount: number;
+  freezeType?: string;
+  reason?: string;
+  notes?: string;
+}
+
+export interface SummerUnitFreezeReleaseRequest {
+  freezeId: number;
+}
+
+export interface SummerUnitFreezeQuery {
+  categoryId?: number | null;
+  waveCode?: string;
+  familyCount?: number | null;
+  isActive?: boolean | null;
+}
+
+export interface SummerUnitFreezeDto {
+  freezeId: number;
+  categoryId: number;
+  waveCode: string;
+  familyCount: number;
+  requestedUnitsCount: number;
+  frozenAvailableUnits: number;
+  frozenAssignedUnits: number;
+  freezeType: string;
+  reason?: string;
+  notes?: string;
+  createdBy: string;
+  createdAtUtc: string;
+  isActive: boolean;
+  releasedAtUtc?: string;
+  releasedBy?: string;
+}
+
+export interface SummerUnitFreezeDetailDto {
+  freezeDetailId: number;
+  slotNumber: number;
+  status: string;
+  assignedMessageId?: number | null;
+  assignedAtUtc?: string;
+  releasedAtUtc?: string;
+  releasedBy?: string;
+  lastStatusChangedAtUtc: string;
+}
+
+export interface SummerUnitFreezeDetailsDto {
+  freeze: SummerUnitFreezeDto;
+  units: SummerUnitFreezeDetailDto[];
+}
+
+export interface SummerUnitsAvailableCountQuery {
+  resortId: number;
+  waveId: string;
+  capacity: number;
+  includeFrozenUnits?: boolean;
+}
+
+export interface SummerUnitsAvailableCountDto {
+  categoryId: number;
+  waveCode: string;
+  familyCount: number;
+  totalUnits: number;
+  usedUnits: number;
+  frozenAvailableUnits: number;
+  frozenAssignedUnits: number;
+  publicAvailableUnits: number;
+  availableUnits: number;
+  includeFrozenUnits: boolean;
+}
+
+export interface AdminUnitFreezeCreatePayload {
+  resortId: number;
+  waveId: string;
+  capacity: number;
+  unitsCount: number;
+  freezeType?: string;
+  reason?: string;
+  notes?: string;
+}
+
+export interface AdminUnitFreezeListQuery {
+  resortId?: number | null;
+  waveId?: string;
+  capacity?: number | null;
+  isActive?: boolean | null;
 }

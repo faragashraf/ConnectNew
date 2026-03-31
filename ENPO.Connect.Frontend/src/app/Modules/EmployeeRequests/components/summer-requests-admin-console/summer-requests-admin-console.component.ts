@@ -336,6 +336,14 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.capacityRows.reduce((sum, row) => sum + (Number(row.availableUnits ?? 0) || 0), 0);
   }
 
+  get capacityFrozenAvailableUnits(): number {
+    return this.capacityRows.reduce((sum, row) => sum + (Number(row.frozenAvailableUnits ?? 0) || 0), 0);
+  }
+
+  get capacityFrozenAssignedUnits(): number {
+    return this.capacityRows.reduce((sum, row) => sum + (Number(row.frozenAssignedUnits ?? 0) || 0), 0);
+  }
+
   get selectedDashboardDestination(): SummerDestinationConfig | undefined {
     if (!this.dashboardScopeCategoryId) {
       return undefined;
@@ -699,7 +707,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     this.loadingWaveCapacity = true;
     this.capacityErrorText = '';
-    this.summerWorkflowController.getWaveCapacity(this.capacityScopeCategoryId, this.capacityScopeWaveCode).subscribe({
+    this.summerWorkflowController.getWaveCapacity(this.capacityScopeCategoryId, this.capacityScopeWaveCode, true).subscribe({
       next: response => {
         if (response?.isSuccess && Array.isArray(response.data)) {
           this.capacityRows = [...response.data]

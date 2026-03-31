@@ -1,6 +1,7 @@
 import { NgModule, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 import { PrimengModule } from 'src/app/shared/Modules/primeng.module';
 import { GenericModuleModule } from '../../GenericComponents/generic-module.module';
 
@@ -15,6 +16,12 @@ import { SummerUpdatesTimelineComponent } from '../components/summer-shared/summ
 import { SummerRequestsListComponent } from '../components/summer-shared/summer-requests-list/summer-requests-list.component';
 import { SummerRequestCompanionsTableComponent } from '../components/summer-shared/summer-request-companions-table/summer-request-companions-table.component';
 import { SummerSkeletonComponent } from '../components/summer-shared/summer-skeleton/summer-skeleton.component';
+import { FreezeFormComponent } from '../components/summer-shared/freeze-form/freeze-form.component';
+import { FreezeTableComponent } from '../components/summer-shared/freeze-table/freeze-table.component';
+import { FreezeDetailsComponent } from '../components/summer-shared/freeze-details/freeze-details.component';
+import { SummerUnitFreezeCreatePageComponent } from '../components/summer-unit-freeze-create-page/summer-unit-freeze-create-page.component';
+import { SummerUnitFreezeListPageComponent } from '../components/summer-unit-freeze-list-page/summer-unit-freeze-list-page.component';
+import { SummerUnitFreezeDetailsPageComponent } from '../components/summer-unit-freeze-details-page/summer-unit-freeze-details-page.component';
 
 @NgModule({
   declarations: [
@@ -28,13 +35,20 @@ import { SummerSkeletonComponent } from '../components/summer-shared/summer-skel
     SummerUpdatesTimelineComponent,
     SummerRequestsListComponent,
     SummerRequestCompanionsTableComponent,
-    SummerSkeletonComponent
+    SummerSkeletonComponent,
+    FreezeFormComponent,
+    FreezeTableComponent,
+    FreezeDetailsComponent,
+    SummerUnitFreezeCreatePageComponent,
+    SummerUnitFreezeListPageComponent,
+    SummerUnitFreezeDetailsPageComponent
   ],
   imports: [
     CommonModule,
     PrimengModule,
     FormsModule,
     ReactiveFormsModule,
+    RouterModule,
     GenericModuleModule
   ],
   exports: [
@@ -44,4 +58,3 @@ import { SummerSkeletonComponent } from '../components/summer-shared/summer-skel
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
 export class SummerRequestsFeatureModule {}
-

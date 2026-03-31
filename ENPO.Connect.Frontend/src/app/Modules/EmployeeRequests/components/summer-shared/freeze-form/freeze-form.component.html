@@ -1,0 +1,83 @@
+<section class="freeze-form-shell" [formGroup]="form">
+  <div class="grid">
+    <label>
+      <span class="required-label">المصيف</span>
+      <select formControlName="resortId">
+        <option [ngValue]="null">اختر المصيف</option>
+        <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">{{ destination.name }}</option>
+      </select>
+    </label>
+
+    <label>
+      <span class="required-label">الفوج</span>
+      <select formControlName="waveId" [disabled]="!selectedDestination">
+        <option [ngValue]="''">اختر الفوج</option>
+        <option *ngFor="let wave of availableWaves" [ngValue]="wave.code">
+          {{ wave.code }} - {{ wave.startsAtLabel }}
+        </option>
+      </select>
+    </label>
+
+    <label>
+      <span class="required-label">السعة</span>
+      <select formControlName="capacity" [disabled]="!selectedDestination">
+        <option [ngValue]="null">اختر السعة</option>
+        <option *ngFor="let option of availableCapacities" [ngValue]="option">{{ option }}</option>
+      </select>
+    </label>
+
+    <label>
+      <span class="required-label">عدد الوحدات</span>
+      <input type="number" min="1" formControlName="unitsCount" />
+      <small class="error" *ngIf="form.get('unitsCount')?.hasError('exceedsAvailable')">
+        العدد المطلوب أكبر من المتاح حالياً.
+      </small>
+    </label>
+
+    <label class="wide">
+      <span>سبب التجميد</span>
+      <input type="text" formControlName="reason" maxlength="200" />
+    </label>
+
+    <label class="wide">
+      <span>ملاحظات</span>
+      <textarea rows="3" formControlName="notes" maxlength="1000"></textarea>
+    </label>
+  </div>
+
+  <div class="available-box" *ngIf="loadingAvailableCount || availableCount || availableCountError.length > 0">
+    <ng-container *ngIf="loadingAvailableCount">
+      <small>جاري تحميل الوحدات المتاحة...</small>
+    </ng-container>
+
+    <ng-container *ngIf="!loadingAvailableCount && availableCount">
+      <div class="kpis">
+        <article>
+          <span>الإجمالي</span>
+          <strong>{{ availableCount.totalUnits }}</strong>
+        </article>
+        <article>
+          <span>المستخدم</span>
+          <strong>{{ availableCount.usedUnits }}</strong>
+        </article>
+        <article>
+          <span>المجمد</span>
+          <strong>{{ availableCount.frozenAvailableUnits }}</strong>
+        </article>
+        <article>
+          <span>المتاح للتجميد</span>
+          <strong>{{ availableCount.availableUnits }}</strong>
+        </article>
+      </div>
+    </ng-container>
+
+    <small class="error" *ngIf="!loadingAvailableCount && availableCountError.length > 0">{{ availableCountError }}</small>
+  </div>
+
+  <div class="actions">
+    <button type="button" class="ghost" (click)="cancel()" [disabled]="submitLoading">إلغاء</button>
+    <button type="button" class="primary" (click)="submit()" [disabled]="submitLoading || form.invalid">
+      {{ submitLoading ? 'جاري التنفيذ...' : submitLabel }}
+    </button>
+  </div>
+</section>

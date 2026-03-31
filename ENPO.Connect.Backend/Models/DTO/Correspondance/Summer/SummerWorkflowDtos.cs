@@ -33,6 +33,8 @@ public class SummerWaveCapacityDto
     public int TotalUnits { get; set; }
     public int UsedUnits { get; set; }
     public int AvailableUnits { get; set; }
+    public int FrozenAvailableUnits { get; set; }
+    public int FrozenAssignedUnits { get; set; }
 }
 
 public class SummerDestinationConfigDto
@@ -219,4 +221,114 @@ public class SummerAdminActionRequest
     public int? NewFamilyCount { get; set; }
     public int? NewExtraCount { get; set; }
     public List<IFormFile>? files { get; set; } = new();
+}
+
+public class SummerUnitFreezeCreateRequest
+{
+    public int CategoryId { get; set; }
+    public string WaveCode { get; set; } = string.Empty;
+    public int FamilyCount { get; set; }
+    public int RequestedUnitsCount { get; set; }
+    public string? FreezeType { get; set; }
+    public string? Reason { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class SummerUnitFreezeReleaseRequest
+{
+    public int FreezeId { get; set; }
+}
+
+public class SummerUnitFreezeQuery
+{
+    public int? CategoryId { get; set; }
+    public string? WaveCode { get; set; }
+    public int? FamilyCount { get; set; }
+    public bool? IsActive { get; set; }
+}
+
+public class SummerUnitFreezeDto
+{
+    public int FreezeId { get; set; }
+    public int CategoryId { get; set; }
+    public string WaveCode { get; set; } = string.Empty;
+    public int FamilyCount { get; set; }
+    public int RequestedUnitsCount { get; set; }
+    public int FrozenAvailableUnits { get; set; }
+    public int FrozenAssignedUnits { get; set; }
+    public string FreezeType { get; set; } = string.Empty;
+    public string? Reason { get; set; }
+    public string? Notes { get; set; }
+    public string CreatedBy { get; set; } = string.Empty;
+    public DateTime CreatedAtUtc { get; set; }
+    public bool IsActive { get; set; }
+    public DateTime? ReleasedAtUtc { get; set; }
+    public string? ReleasedBy { get; set; }
+}
+
+public class SummerUnitFreezeDetailDto
+{
+    public int FreezeDetailId { get; set; }
+    public int SlotNumber { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public int? AssignedMessageId { get; set; }
+    public DateTime? AssignedAtUtc { get; set; }
+    public DateTime? ReleasedAtUtc { get; set; }
+    public string? ReleasedBy { get; set; }
+    public DateTime LastStatusChangedAtUtc { get; set; }
+}
+
+public class SummerUnitFreezeDetailsDto
+{
+    public SummerUnitFreezeDto Freeze { get; set; } = new();
+    public List<SummerUnitFreezeDetailDto> Units { get; set; } = new();
+}
+
+public class SummerUnitsAvailableCountQuery
+{
+    public int CategoryId { get; set; }
+    public string WaveCode { get; set; } = string.Empty;
+    public int FamilyCount { get; set; }
+    public bool IncludeFrozenUnits { get; set; }
+}
+
+public class SummerUnitsAvailableCountDto
+{
+    public int CategoryId { get; set; }
+    public string WaveCode { get; set; } = string.Empty;
+    public int FamilyCount { get; set; }
+    public int TotalUnits { get; set; }
+    public int UsedUnits { get; set; }
+    public int FrozenAvailableUnits { get; set; }
+    public int FrozenAssignedUnits { get; set; }
+    public int PublicAvailableUnits { get; set; }
+    public int AvailableUnits { get; set; }
+    public bool IncludeFrozenUnits { get; set; }
+}
+
+public class AdminUnitsAvailableCountQuery
+{
+    public int ResortId { get; set; }
+    public string WaveId { get; set; } = string.Empty;
+    public int Capacity { get; set; }
+    public bool IncludeFrozenUnits { get; set; }
+}
+
+public class AdminUnitFreezeCreateRequest
+{
+    public int ResortId { get; set; }
+    public string WaveId { get; set; } = string.Empty;
+    public int Capacity { get; set; }
+    public int UnitsCount { get; set; }
+    public string? FreezeType { get; set; }
+    public string? Reason { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class AdminUnitFreezeListQuery
+{
+    public int? ResortId { get; set; }
+    public string? WaveId { get; set; }
+    public int? Capacity { get; set; }
+    public bool? IsActive { get; set; }
 }

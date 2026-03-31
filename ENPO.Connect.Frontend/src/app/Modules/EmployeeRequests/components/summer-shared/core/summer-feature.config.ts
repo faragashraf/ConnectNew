@@ -31,6 +31,8 @@ export const SUMMER_FEATURE_ROUTES = {
   workspace: 'SummerRequests',
   workspaceEdit: 'SummerRequests/edit/:id',
   adminConsole: 'SummerRequestsManagement',
+  unitFreezeList: 'resorts/unit-freeze',
+  unitFreezeCreate: 'resorts/unit-freeze/create',
+  unitFreezeDetails: 'resorts/unit-freeze/:id',
   dashboard: 'Chart'
 } as const;
-

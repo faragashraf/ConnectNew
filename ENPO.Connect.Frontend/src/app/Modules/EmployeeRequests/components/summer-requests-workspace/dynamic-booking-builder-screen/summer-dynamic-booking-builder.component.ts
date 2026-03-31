@@ -5,7 +5,7 @@ import { GenericFormsIsolationProvider, GenericFormsService, GroupInfo } from 's
 import { GenericDynamicFormDetailsComponent } from '../../generic-dynamic-form-details/generic-dynamic-form-details.component';
 import { CdCategoryMandDto, ListRequestModel, MessageDto, RequestedData, SearchKind, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
-import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
+import { ApiException, FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import {
   SummerPricingQuoteDto,
   SummerPricingQuoteRequest,
@@ -20,6 +20,7 @@ import { SummerDestinationConfig } from '../summer-requests-workspace.config';
 import { SummerDynamicFormEngineService } from '../summer-dynamic-form-engine.service';
 import { ComponentConfig, getConfigByRoute } from 'src/app/shared/models/Component.Config.model';
 import { ComponentConfigService } from 'src/app/Modules/admins/services/component-config.service';
+import { ActivatedRoute } from '@angular/router';
 import {
   SUMMER_DEFAULT_SEASON_YEAR,
   SUMMER_DYNAMIC_APPLICATION_ID
@@ -33,6 +34,7 @@ import {
 import { deriveStayModeControlPolicy } from '../../summer-shared/core/summer-pricing-ui-rules';
 import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
 import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
+import Swal from 'sweetalert2';
 
 type OwnerDefaults = {
   name: string;
@@ -76,9 +78,11 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   editRequestError = '';
   hasEditChanges = false;
   canUseProxyRegistration = false;
+  canUseFrozenUnitsInCurrentFlow = false;
 
   bookingCapacityLoading = false;
   bookingWaveCapacities: SummerWaveCapacityDto[] = [];
+  includeFrozenUnitsInBooking = false;
   pricingQuoteLoading = false;
   pricingQuoteError = '';
   pricingQuote: SummerPricingQuoteDto | null = null;
@@ -98,6 +102,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     private readonly dynamicFormController: DynamicFormController,
     private readonly summerWorkflowController: SummerWorkflowController,
     private readonly componentConfigService: ComponentConfigService,
+    private readonly route: ActivatedRoute,
     private readonly authObjectsService: AuthObjectsService,
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
@@ -148,6 +153,14 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
   get bookingCapacitySummary(): SummerWaveCapacityDto[] {
     return [...this.bookingWaveCapacities].sort((a, b) => a.familyCount - b.familyCount);
+  }
+
+  get canUseFrozenUnitsToggle(): boolean {
+    return this.canUseFrozenUnitsInCurrentFlow;
+  }
+
+  get includeFrozenUnitsForApi(): boolean {
+    return this.canUseFrozenUnitsToggle && this.includeFrozenUnitsInBooking;
   }
 
   get submitDisabled(): boolean {
@@ -289,6 +302,43 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.updateEditChangeState();
   }
 
+  onIncludeFrozenUnitsChanged(value: boolean): void {
+    this.includeFrozenUnitsInBooking = this.canUseFrozenUnitsToggle ? Boolean(value) : false;
+    this.loadBookingCapacity();
+  }
+
+  getCapacityDisplayedAvailableUnits(row: SummerWaveCapacityDto): number {
+    const publicAvailableUnits = Number(row?.availableUnits ?? 0) || 0;
+    const frozenAvailableUnits = Number(row?.frozenAvailableUnits ?? 0) || 0;
+    return this.includeFrozenUnitsForApi
+      ? Math.max(0, publicAvailableUnits + frozenAvailableUnits)
+      : Math.max(0, publicAvailableUnits);
+  }
+
+  getCapacityNote(row: SummerWaveCapacityDto): string {
+    const totalUnits = Number(row?.totalUnits ?? 0) || 0;
+    const usedUnits = Number(row?.usedUnits ?? 0) || 0;
+    const frozenAvailableUnits = Number(row?.frozenAvailableUnits ?? 0) || 0;
+    const frozenAssignedUnits = Number(row?.frozenAssignedUnits ?? 0) || 0;
+    const publicAvailableUnits = Number(row?.availableUnits ?? 0) || 0;
+
+    if (this.canUseFrozenUnitsToggle && this.includeFrozenUnitsForApi) {
+      return `الإجمالي ${totalUnits} | المستخدم ${usedUnits} | المتاح العام ${publicAvailableUnits} | المجمد ${frozenAvailableUnits} | المجمد المستخدم ${frozenAssignedUnits}`;
+    }
+
+    return `المتاح ${publicAvailableUnits} من ${totalUnits} (غير المتاح ${Math.max(0, totalUnits - publicAvailableUnits)})`;
+  }
+
+  hasFrozenUnits(row: SummerWaveCapacityDto): boolean {
+    if (!this.canUseFrozenUnitsToggle) {
+      return false;
+    }
+
+    const frozenAvailableUnits = Number(row?.frozenAvailableUnits ?? 0) || 0;
+    const frozenAssignedUnits = Number(row?.frozenAssignedUnits ?? 0) || 0;
+    return frozenAvailableUnits > 0 || frozenAssignedUnits > 0;
+  }
+
   submitDynamicBooking(form: FormGroup): void {
     this.ticketForm = form;
     this.bookingValidationAlerts = [];
@@ -390,6 +440,8 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.ensureKeyField(fields, 'Over_Count', extraCount, destination.categoryId);
     this.ensureKeyField(fields, 'SummerStayMode', stayMode, destination.categoryId);
     this.ensureKeyField(fields, 'SummerProxyMode', proxyMode, destination.categoryId);
+    this.ensureKeyField(fields, 'Summer_UseFrozenUnit', this.includeFrozenUnitsForApi ? 'true' : 'false', destination.categoryId);
+    this.ensureKeyField(fields, 'SUM2026_UseFrozenUnit', this.includeFrozenUnitsForApi ? 'true' : 'false', destination.categoryId);
     this.ensureKeyField(fields, 'Description', notes, destination.categoryId);
 
     const unitIds = this.resolveUnitIds();
@@ -438,6 +490,11 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
             this.onDestinationChanged(selected);
           }
         } else {
+          if (this.hasBlacklistErrorCode(response?.errors as Array<{ code?: string; message?: string }> | undefined)) {
+            this.showBlacklistBlockedModal();
+            return;
+          }
+
           const errors = (response?.errors ?? [])
             .map(item => String(item?.message ?? '').trim())
             .filter(item => item.length > 0)
@@ -445,7 +502,17 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
           this.msg.msgError('خطأ', `<h5>${errors || (this.isEditMode ? 'تعذر حفظ التعديلات.' : 'تعذر تسجيل الطلب.')}</h5>`, true);
         }
       },
-      error: () => {
+      error: (error: unknown) => {
+        if (this.resolveHttpStatus(error) === 403) {
+          this.showBlacklistBlockedModal();
+          return;
+        }
+
+        if (this.hasBlacklistErrorCode(this.extractErrorsFromException(error))) {
+          this.showBlacklistBlockedModal();
+          return;
+        }
+
         this.msg.msgError('خطأ', `<h5>${this.isEditMode ? 'تعذر حفظ تعديلات الطلب حاليًا.' : 'تعذر تسجيل طلب المصيف حاليًا.'}</h5>`, true);
       },
       complete: () => {
@@ -745,7 +812,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     this.bookingCapacityLoading = true;
-    this.summerWorkflowController.getWaveCapacity(destination.categoryId, waveCode).subscribe({
+    this.summerWorkflowController.getWaveCapacity(destination.categoryId, waveCode, this.includeFrozenUnitsForApi).subscribe({
       next: response => {
         this.bookingWaveCapacities = response?.isSuccess && Array.isArray(response.data) ? response.data : [];
       },
@@ -1216,9 +1283,21 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private refreshProxyModeAccess(): void {
     try {
       this.canUseProxyRegistration = this.authObjectsService.checkAuthFun('SummerAdminFunc');
+      this.canUseFrozenUnitsInCurrentFlow = this.canUseProxyRegistration && this.isSummerAdminFlowContext();
+      if (!this.canUseFrozenUnitsInCurrentFlow) {
+        this.includeFrozenUnitsInBooking = false;
+      }
     } catch {
       this.canUseProxyRegistration = false;
+      this.canUseFrozenUnitsInCurrentFlow = false;
+      this.includeFrozenUnitsInBooking = false;
     }
+  }
+
+  private isSummerAdminFlowContext(): boolean {
+    const routeSnapshots = this.route?.snapshot?.pathFromRoot ?? [];
+    return routeSnapshots.some(snapshot =>
+      String(snapshot?.data?.['func'] ?? '').trim().toLowerCase() === 'summeradminfunc');
   }
 
   private filterRestrictedFields(fields: CdCategoryMandDto[]): CdCategoryMandDto[] {
@@ -2006,6 +2085,39 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     return combined || fallback;
+  }
+
+  private hasBlacklistErrorCode(errors: Array<{ code?: string; message?: string }> | undefined): boolean {
+    const values = errors ?? [];
+    return values.some(error => String(error?.code ?? '').trim().toUpperCase() === 'SUMMER_BLACKLIST_BLOCKED');
+  }
+
+  private resolveHttpStatus(error: unknown): number {
+    const status = Number((error as { status?: unknown } | null)?.status ?? 0);
+    return Number.isFinite(status) ? status : 0;
+  }
+
+  private extractErrorsFromException(error: unknown): Array<{ code?: string; message?: string }> {
+    const apiException = error as ApiException | null;
+    const responseText = String(apiException?.response ?? '').trim();
+    if (!responseText) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(responseText) as { errors?: Array<{ code?: string; message?: string }> };
+      return Array.isArray(parsed?.errors) ? parsed.errors : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private showBlacklistBlockedModal(): void {
+    Swal.fire({
+      icon: 'error',
+      title: 'غير مصرح بالحجز',
+      html: '<div style="direction:rtl">هذا المستخدم غير مصرح له بالحجز على المصايف</div>'
+    });
   }
 
   private coalesceText(...values: unknown[]): string {

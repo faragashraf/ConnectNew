@@ -46,6 +46,7 @@ namespace Models.DTO.Common
         public string EventSMSAccepted { get; set; }
         public string EventSMSARejected { get; set; }
         public List<string> LtraExcelColumns { get; set; }
+        public int SummerCapacitySignalRTimeoutMs { get; set; } = 4000;
     }
 
     public class NotificationChannelsOptions

@@ -25,6 +25,17 @@
     <small class="mode-note" *ngIf="isEditMode && editRequestError.length === 0 && !loadingEditRequest">
       يتم تعديل الطلب رقم #{{ editRequestId }}.
     </small>
+    <label class="toggle-row" *ngIf="canUseFrozenUnitsToggle">
+      <input
+        type="checkbox"
+        [checked]="includeFrozenUnitsInBooking"
+        (change)="onIncludeFrozenUnitsChanged($any($event.target).checked)"
+        [disabled]="loadingMetadata || loadingEditRequest || submitting" />
+      <span>تضمين الوحدات المجمدة (للحجز الإداري)</span>
+    </label>
+    <small class="mode-note" *ngIf="canUseFrozenUnitsToggle && includeFrozenUnitsForApi">
+      الوضع الإداري مفعل: الإتاحة تشمل الوحدات المجمدة وسيتم تمييزها بوضوح.
+    </small>
   </div>
 
   <div class="danger-alert" *ngIf="bookingValidationAlerts.length > 0">
@@ -38,10 +49,13 @@
     <h4>الإتاحة اللحظية للفوج المختار</h4>
     <small class="loading-note" *ngIf="bookingCapacityLoading">جاري تحديث الإتاحة...</small>
     <div class="capacity-grid" *ngIf="bookingCapacitySummary.length > 0">
-      <article class="capacity-card" *ngFor="let row of bookingCapacitySummary">
+      <article class="capacity-card" *ngFor="let row of bookingCapacitySummary" [class.frozen-highlight]="hasFrozenUnits(row)">
         <span>سعة {{ row.familyCount }}</span>
-        <strong>{{ row.availableUnits }}</strong>
-        <small>متاح من {{ row.totalUnits }} (المستخدم {{ row.usedUnits }})</small>
+        <strong>{{ getCapacityDisplayedAvailableUnits(row) }}</strong>
+        <small>{{ getCapacityNote(row) }}</small>
+        <small class="frozen-tag" *ngIf="hasFrozenUnits(row)">
+          يتضمن وحدات مجمدة
+        </small>
       </article>
     </div>
     <p class="muted" *ngIf="!bookingCapacityLoading && bookingCapacitySummary.length === 0">

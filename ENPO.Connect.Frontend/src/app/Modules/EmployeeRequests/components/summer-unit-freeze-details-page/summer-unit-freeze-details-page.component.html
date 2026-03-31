@@ -1,0 +1,32 @@
+<section class="freeze-page-shell">
+  <header class="head">
+    <div>
+      <h2>تفاصيل التجميد #{{ freezeId }}</h2>
+      <p>عرض الوحدات المجمدة وحالتها داخل عملية التجميد.</p>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="ghost" (click)="backToList()">العودة للقائمة</button>
+      <button
+        type="button"
+        class="danger"
+        (click)="releaseAll()"
+        [disabled]="releasing || loading || !(details?.freeze?.isActive)">
+        {{ releasing ? 'جاري الفك...' : 'فك التجميد بالكامل' }}
+      </button>
+    </div>
+  </header>
+
+  <div class="loading-note" *ngIf="loading">جاري تحميل التفاصيل...</div>
+  <p class="error" *ngIf="!loading && detailsError.length > 0">{{ detailsError }}</p>
+
+  <app-freeze-details
+    *ngIf="!loading && details"
+    [details]="details"
+    [destinations]="destinations">
+  </app-freeze-details>
+
+  <p class="empty" *ngIf="!loading && !details && detailsError.length === 0">
+    لا توجد بيانات متاحة لهذا التجميد.
+  </p>
+</section>

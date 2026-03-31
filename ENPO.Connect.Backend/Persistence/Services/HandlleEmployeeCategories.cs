@@ -40,6 +40,8 @@ namespace Persistence.Services
         private readonly MessageRequestService _messageRequestService;
         private readonly IConnectNotificationService _notificationService;
         private readonly SummerPricingService _summerPricingService;
+        private readonly SummerBookingBlacklistService _summerBookingBlacklistService;
+        private readonly SummerUnitFreezeService _summerUnitFreezeService;
         private const int CapacityLockTimeoutMs = 15000;
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -99,7 +101,9 @@ namespace Persistence.Services
             ENPOCreateLogFile logger,
             MessageRequestService messageRequestService,
             IConnectNotificationService notificationService,
-            SummerPricingService summerPricingService)
+            SummerPricingService summerPricingService,
+            SummerBookingBlacklistService summerBookingBlacklistService,
+            SummerUnitFreezeService summerUnitFreezeService)
         {
             _connectContext = connectContext;
             _attach_HeldContext = attach_HeldContext;
@@ -110,6 +114,8 @@ namespace Persistence.Services
             _messageRequestService = messageRequestService ?? throw new ArgumentNullException(nameof(messageRequestService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _summerPricingService = summerPricingService ?? throw new ArgumentNullException(nameof(summerPricingService));
+            _summerBookingBlacklistService = summerBookingBlacklistService ?? throw new ArgumentNullException(nameof(summerBookingBlacklistService));
+            _summerUnitFreezeService = summerUnitFreezeService ?? throw new ArgumentNullException(nameof(summerUnitFreezeService));
         }
 
         private helperService helper_service_check(helperService svc)
@@ -119,7 +125,7 @@ namespace Persistence.Services
         }
 
         // SummerRequests: creates message + reply and persists with retry and basic unique-requestRef handling to reduce overwrite collisions
-        public async Task SummerRequests(MessageRequest messageRequest, CategoryWithParent categoryInfo, CommonResponse<MessageDto> response)
+        public async Task SummerRequests(MessageRequest messageRequest, CategoryWithParent categoryInfo, CommonResponse<MessageDto> response, string? actingUserId = null)
         {
             if (messageRequest == null) throw new ArgumentNullException(nameof(messageRequest));
             if (response == null) throw new ArgumentNullException(nameof(response));
@@ -145,6 +151,16 @@ namespace Persistence.Services
             if (string.IsNullOrWhiteSpace(employeeId))
             {
                 response.Errors.Add(new Error { Code = "400", Message = "رقم ملف الموظف مطلوب." });
+                return;
+            }
+
+            if (_summerBookingBlacklistService.IsBlocked(employeeId))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "SUMMER_BLACKLIST_BLOCKED",
+                    Message = "تعذر إتمام الحجز: رقم الملف مدرج ضمن قائمة الممنوعين من الحجز."
+                });
                 return;
             }
 
@@ -186,6 +202,25 @@ namespace Persistence.Services
             {
                 response.Errors.Add(new Error { Code = "404", Message = "بيانات التصنيف الرئيسي غير متاحة." });
                 return;
+            }
+
+            var normalizedActorUserId = string.IsNullOrWhiteSpace(actingUserId)
+                ? (messageRequest.CreatedBy ?? string.Empty).Trim()
+                : actingUserId.Trim();
+            var useFrozenInventory = ParseBoolean(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.UseFrozenUnitFieldKinds));
+            var allowAdminFrozenBooking = false;
+            if (useFrozenInventory)
+            {
+                allowAdminFrozenBooking = await CanUserManageSummerCategoryAsync(normalizedActorUserId, categoryInfo.Category.CatId);
+                if (!allowAdminFrozenBooking)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك باستخدام الوحدات المجمدة في هذا المصيف."
+                    });
+                    return;
+                }
             }
 
             var destinationName = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.DestinationNameFieldKinds);
@@ -240,6 +275,10 @@ namespace Persistence.Services
                 messageRequest.Fields,
                 SummerWorkflowDomainConstants.StayModeFieldKinds,
                 pricingQuote.NormalizedStayMode);
+            UpsertRequestFieldRange(
+                messageRequest.Fields,
+                SummerWorkflowDomainConstants.UseFrozenUnitFieldKinds,
+                allowAdminFrozenBooking ? "true" : "false");
 
             messageRequest.Type = (byte)parentCategory.CatId;
             var editMessageId = messageRequest.MessageId.GetValueOrDefault();
@@ -263,6 +302,7 @@ namespace Persistence.Services
                 response,
                 summerCamp,
                 familyCount,
+                allowFrozenReservation: allowAdminFrozenBooking,
                 isEditOperation ? editMessageId : null);
             if (!hasCapacity)
             {
@@ -338,6 +378,7 @@ namespace Persistence.Services
                         response,
                         summerCamp,
                         familyCount,
+                        allowFrozenReservation: allowAdminFrozenBooking,
                         isEditOperation ? editMessageId : null);
                     if (!hasCapacity)
                     {
@@ -432,6 +473,29 @@ namespace Persistence.Services
 
                         replyText = "تم إنشاء طلب المصيف.";
                         capacityAction = "CREATE";
+                    }
+
+                    if (!allowAdminFrozenBooking)
+                    {
+                        await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(messageId, normalizedActorUserId);
+                    }
+                    else
+                    {
+                        var frozenAssigned = await _summerUnitFreezeService.TryAssignFrozenUnitAsync(
+                            categoryInfo.Category.CatId,
+                            summerCamp,
+                            familyCount,
+                            messageId,
+                            normalizedActorUserId);
+                        if (!frozenAssigned)
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "429",
+                                Message = "لا توجد وحدات مجمدة متاحة حالياً للحجز الإداري."
+                            });
+                            return;
+                        }
                     }
 
                     var assignedSector = messageRequest.AssignedSectorId ?? messageRequest.CreatedBy;
@@ -679,6 +743,7 @@ namespace Persistence.Services
             CommonResponse<MessageDto> response,
             string summerCamp,
             int familyCount,
+            bool allowFrozenReservation = false,
             int? excludedMessageId = null)
         {
             if (!SummerCapacityRules.TryGetValue(category.CatId, out var capacityByFamily))
@@ -696,58 +761,49 @@ namespace Persistence.Services
                 return false;
             }
 
-            var sameCampReservationMessageIds = await _connectContext.TkmendFields
-                .AsNoTracking()
-                .Where(x => x.FildKind == "SummerCamp" && x.FildTxt == summerCamp)
-                .Select(x => x.FildRelted)
-                .Distinct()
-                .ToListAsync();
-
-            if (!sameCampReservationMessageIds.Any())
+            var hasPublicCapacity = await _summerUnitFreezeService.HasPublicCapacityAsync(
+                category.CatId,
+                summerCamp,
+                familyCount,
+                totalUnits,
+                excludedMessageId);
+            if (hasPublicCapacity)
             {
                 return true;
             }
 
-            var sameCategoryQuery = _connectContext.Messages
-                .AsNoTracking()
-                .Where(m => sameCampReservationMessageIds.Contains(m.MessageId)
-                            && m.CategoryCd == category.CatId
-                            && m.Status != MessageStatus.Rejected);
-            if (excludedMessageId.HasValue)
+            if (allowFrozenReservation)
             {
-                sameCategoryQuery = sameCategoryQuery.Where(m => m.MessageId != excludedMessageId.Value);
-            }
-            var sameCategoryMessageIds = await sameCategoryQuery
-                .Select(m => m.MessageId)
-                .ToListAsync();
-
-            if (!sameCategoryMessageIds.Any())
-            {
-                return true;
+                var hasFrozenAvailability = await _summerUnitFreezeService.HasAssignableFrozenUnitAsync(
+                    category.CatId,
+                    summerCamp,
+                    familyCount);
+                if (hasFrozenAvailability)
+                {
+                    return true;
+                }
             }
 
-            var familyCountFields = await _connectContext.TkmendFields
-                .AsNoTracking()
-                .Where(x => sameCategoryMessageIds.Contains(x.FildRelted) && x.FildKind == "FamilyCount")
-                .ToListAsync();
-
-            var usedUnits = familyCountFields
-                .Where(x => ParseInt(x.FildTxt, 0) == familyCount)
-                .Select(x => x.FildRelted)
-                .Distinct()
-                .Count();
-
-            if (usedUnits >= totalUnits)
+            var frozenAvailableUnits = await _summerUnitFreezeService.CountActiveFrozenAvailableUnitsAsync(
+                category.CatId,
+                summerCamp,
+                familyCount);
+            if (frozenAvailableUnits > 0)
             {
                 response.Errors.Add(new Error
                 {
                     Code = "429",
-                    Message = $"لا توجد وحدات متاحة لعدد الأفراد '{familyCount}' في الفوج '{summerCamp}' بمصيف '{category.CatName}'."
+                    Message = $"لا توجد وحدات متاحة لعدد الأفراد '{familyCount}' في الفوج '{summerCamp}' بمصيف '{category.CatName}' لأن الوحدات المتبقية مجمدة للإدارة."
                 });
                 return false;
             }
 
-            return true;
+            response.Errors.Add(new Error
+            {
+                Code = "429",
+                Message = $"لا توجد وحدات متاحة لعدد الأفراد '{familyCount}' في الفوج '{summerCamp}' بمصيف '{category.CatName}'."
+            });
+            return false;
         }
 
         private async Task<bool> AcquireCapacityLockAsync(int categoryId, string waveCode)
@@ -1056,9 +1112,103 @@ SELECT @result;
             return string.Empty;
         }
 
+        private static bool ParseBoolean(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return false;
+            }
+
+            return normalized.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("1", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("yes", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("y", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("نعم", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static int ParseInt(string? value, int fallback = 0)
         {
             return int.TryParse((value ?? string.Empty).Trim(), out var parsed) ? parsed : fallback;
+        }
+
+        private async Task<bool> CanUserManageSummerCategoryAsync(string userId, int categoryId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId) || categoryId <= 0)
+            {
+                return false;
+            }
+
+            var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+            if (userUnitIds.Count == 0)
+            {
+                return false;
+            }
+
+            var categoryProjection = await _connectContext.Cdcategories
+                .AsNoTracking()
+                .Where(category => category.CatId == categoryId)
+                .Select(category => new { category.CatId, category.CatParent, category.Stockholder })
+                .FirstOrDefaultAsync();
+            if (categoryProjection == null)
+            {
+                return false;
+            }
+
+            var allowedUnitIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (categoryProjection.Stockholder.HasValue)
+            {
+                allowedUnitIds.Add(categoryProjection.Stockholder.Value.ToString());
+            }
+
+            if (categoryProjection.CatParent > 0)
+            {
+                var parentStockholder = await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .Where(parent => parent.CatId == categoryProjection.CatParent)
+                    .Select(parent => parent.Stockholder)
+                    .FirstOrDefaultAsync();
+                if (parentStockholder.HasValue)
+                {
+                    allowedUnitIds.Add(parentStockholder.Value.ToString());
+                }
+            }
+
+            if (allowedUnitIds.Count == 0)
+            {
+                return false;
+            }
+
+            return userUnitIds.Any(unitId => allowedUnitIds.Contains(unitId));
+        }
+
+        private async Task<List<string>> GetActiveUserUnitIdsAsync(string userId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return new List<string>();
+            }
+
+            var now = DateTime.Now.Date;
+            var unitIds = await _gPAContext.UserPositions
+                .AsNoTracking()
+                .Where(position =>
+                    position.UserId == normalizedUserId
+                    && position.IsActive != false
+                    && (!position.StartDate.HasValue || position.StartDate.Value <= now)
+                    && (!position.EndDate.HasValue || position.EndDate.Value >= now))
+                .Select(position => position.UnitId)
+                .Distinct()
+                .ToListAsync();
+
+            return unitIds
+                .Select(unitId => unitId.ToString())
+                .Select(unitId => (unitId ?? string.Empty).Trim())
+                .Where(unitId => unitId.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         private static bool ValidateAndNormalizeCompanionNames(List<TkmendField>? fields, CommonResponse<MessageDto> response)

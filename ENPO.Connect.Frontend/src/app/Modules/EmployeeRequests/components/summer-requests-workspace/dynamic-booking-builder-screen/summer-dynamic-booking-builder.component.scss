@@ -36,11 +36,26 @@
   max-width: 320px;
 }
 
+.top-controls .toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: none;
+  width: fit-content;
+  font-weight: 600;
+  color: #124d73;
+}
+
 .top-controls select {
   border: 1px solid #c5d4e3;
   border-radius: 8px;
   padding: 0.45rem 0.6rem;
   background: #fff;
+}
+
+.top-controls .toggle-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
 }
 
 .required-label {
@@ -106,6 +121,23 @@
 
 .capacity-card small {
   color: #5d7388;
+}
+
+.capacity-card.frozen-highlight {
+  border-color: #9dc3de;
+  box-shadow: inset 0 0 0 1px rgba(37, 102, 142, 0.12);
+}
+
+.capacity-card .frozen-tag {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 0.2rem;
+  padding: 0.08rem 0.5rem;
+  border-radius: 999px;
+  background: #e9f4ff;
+  color: #1f5f8a;
+  font-weight: 700;
+  font-size: 0.75rem;
 }
 
 .pricing-summary {

@@ -30,10 +30,13 @@ namespace Persistence.Services
         private readonly ApplicationConfig _applicationConfig;
         private readonly ILogger<SummerWorkflowService> _logger;
         private readonly SummerPricingService _summerPricingService;
+        private readonly SummerBookingBlacklistService _summerBookingBlacklistService;
+        private readonly SummerUnitFreezeService _summerUnitFreezeService;
 
         private const int CapacityLockTimeoutMs = 15000;
         private const int AdminActionGateTimeoutMs = 10000;
         private const int AdminActionLockTimeoutMs = 15000;
+        private const int CapacityUpdateDispatchTimeoutMs = 4000;
         private const string SummerDynamicApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId;
         private const string SummerDestinationCatalogMend = SummerWorkflowDomainConstants.DestinationCatalogMend;
         private const string TransferReviewRequiredCode = SummerWorkflowDomainConstants.TransferReviewRequiredCode;
@@ -71,6 +74,7 @@ namespace Persistence.Services
             helperService helperService,
             IConnectNotificationService notificationService,
             IOptions<ApplicationConfig> options,
+            IOptionsMonitor<ResortBookingBlacklistOptions> resortBookingBlacklistOptions,
             ILogger<SummerWorkflowService> logger)
         {
             _connectContext = connectContext;
@@ -81,6 +85,8 @@ namespace Persistence.Services
             _applicationConfig = options?.Value ?? new ApplicationConfig();
             _logger = logger;
             _summerPricingService = new SummerPricingService(_connectContext);
+            _summerBookingBlacklistService = new SummerBookingBlacklistService(resortBookingBlacklistOptions);
+            _summerUnitFreezeService = new SummerUnitFreezeService(_connectContext, _logger);
         }
 
         public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear, int? messageId = null)
@@ -569,6 +575,426 @@ namespace Persistence.Services
             return response;
         }
 
+        public async Task<CommonResponse<IEnumerable<SummerUnitFreezeDto>>> GetUnitFreezesAsync(SummerUnitFreezeQuery query, string userId)
+        {
+            var response = new CommonResponse<IEnumerable<SummerUnitFreezeDto>>();
+            query ??= new SummerUnitFreezeQuery();
+            try
+            {
+                var manageableCategoryIds = await GetManageableSummerCategoryIdsAsync(userId);
+                if (manageableCategoryIds.Count == 0)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض عمليات تجميد الوحدات."
+                    });
+                    return response;
+                }
+
+                var normalizedWaveCode = (query.WaveCode ?? string.Empty).Trim();
+                var freezeQuery = _summerUnitFreezeService.BuildFreezeBatchesQuery()
+                    .AsNoTracking()
+                    .Where(batch => manageableCategoryIds.Contains(batch.CategoryId));
+
+                if (query.CategoryId.HasValue && query.CategoryId.Value > 0)
+                {
+                    freezeQuery = freezeQuery.Where(batch => batch.CategoryId == query.CategoryId.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(normalizedWaveCode))
+                {
+                    freezeQuery = freezeQuery.Where(batch => batch.WaveCode == normalizedWaveCode);
+                }
+
+                if (query.FamilyCount.HasValue && query.FamilyCount.Value > 0)
+                {
+                    freezeQuery = freezeQuery.Where(batch => batch.FamilyCount == query.FamilyCount.Value);
+                }
+
+                if (query.IsActive.HasValue)
+                {
+                    freezeQuery = freezeQuery.Where(batch => batch.IsActive == query.IsActive.Value);
+                }
+
+                var batches = await freezeQuery
+                    .OrderByDescending(batch => batch.CreatedAtUtc)
+                    .ToListAsync();
+                if (batches.Count == 0)
+                {
+                    response.Data = Array.Empty<SummerUnitFreezeDto>();
+                    return response;
+                }
+
+                var freezeIds = batches.Select(batch => batch.FreezeId).ToList();
+                var detailCounters = await _connectContext.SummerUnitFreezeDetails
+                    .AsNoTracking()
+                    .Where(detail => freezeIds.Contains(detail.FreezeId))
+                    .GroupBy(detail => new { detail.FreezeId, detail.Status })
+                    .Select(group => new
+                    {
+                        group.Key.FreezeId,
+                        group.Key.Status,
+                        Count = group.Count()
+                    })
+                    .ToListAsync();
+
+                var availableByFreeze = detailCounters
+                    .Where(item => item.Status == SummerUnitFreezeStatuses.FrozenAvailable)
+                    .ToDictionary(item => item.FreezeId, item => item.Count);
+                var assignedByFreeze = detailCounters
+                    .Where(item => item.Status == SummerUnitFreezeStatuses.Booked)
+                    .ToDictionary(item => item.FreezeId, item => item.Count);
+
+                response.Data = batches
+                    .Select(batch => MapFreezeBatchToDto(
+                        batch,
+                        availableByFreeze.TryGetValue(batch.FreezeId, out var frozenAvailableUnits) ? frozenAvailableUnits : 0,
+                        assignedByFreeze.TryGetValue(batch.FreezeId, out var frozenAssignedUnits) ? frozenAssignedUnits : 0))
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerUnitFreezeDto>> CreateUnitFreezeAsync(SummerUnitFreezeCreateRequest request, string userId)
+        {
+            var response = new CommonResponse<SummerUnitFreezeDto>();
+            var traceId = Guid.NewGuid().ToString("N");
+            request ??= new SummerUnitFreezeCreateRequest();
+            try
+            {
+                _logger.LogInformation(
+                    "Unit-freeze create request started. TraceId={TraceId}, UserId={UserId}, CategoryId={CategoryId}, WaveCode={WaveCode}, FamilyCount={FamilyCount}, RequestedUnitsCount={RequestedUnitsCount}",
+                    traceId,
+                    userId,
+                    request.CategoryId,
+                    request.WaveCode,
+                    request.FamilyCount,
+                    request.RequestedUnitsCount);
+
+                if (request.CategoryId <= 0 || string.IsNullOrWhiteSpace(request.WaveCode) || request.FamilyCount <= 0 || request.RequestedUnitsCount <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "بيانات التجميد غير مكتملة." });
+                    _logger.LogWarning(
+                        "Unit-freeze create request validation failed. TraceId={TraceId}",
+                        traceId);
+                    return response;
+                }
+
+                if (!await CanUserManageSummerCategoryAsync(userId, request.CategoryId))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بإنشاء تجميد وحدات لهذا المصيف."
+                    });
+                    _logger.LogWarning(
+                        "Unit-freeze create request denied by permissions. TraceId={TraceId}, UserId={UserId}, CategoryId={CategoryId}",
+                        traceId,
+                        userId,
+                        request.CategoryId);
+                    return response;
+                }
+
+                var seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear;
+                var summerRules = await GetSummerRulesAsync(seasonYear);
+                if (!summerRules.TryGetValue(request.CategoryId, out var rule))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف غير مُعد في النظام." });
+                    _logger.LogWarning(
+                        "Unit-freeze create failed because category is not configured in summer rules. TraceId={TraceId}, CategoryId={CategoryId}",
+                        traceId,
+                        request.CategoryId);
+                    return response;
+                }
+
+                if (!rule.CapacityByFamily.TryGetValue(request.FamilyCount, out var totalUnits) || totalUnits <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "السعة المطلوبة غير متاحة في إعدادات المصيف." });
+                    _logger.LogWarning(
+                        "Unit-freeze create failed because requested family capacity is not configured. TraceId={TraceId}, CategoryId={CategoryId}, FamilyCount={FamilyCount}",
+                        traceId,
+                        request.CategoryId,
+                        request.FamilyCount);
+                    return response;
+                }
+
+                _logger.LogInformation(
+                    "Before creating freeze batch. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, FamilyCount={FamilyCount}, RequestedUnitsCount={RequestedUnitsCount}, TotalUnits={TotalUnits}",
+                    traceId,
+                    request.CategoryId,
+                    request.WaveCode,
+                    request.FamilyCount,
+                    request.RequestedUnitsCount,
+                    totalUnits);
+
+                var createResult = await _summerUnitFreezeService.CreateFreezeBatchAsync(
+                    request.CategoryId,
+                    request.WaveCode,
+                    request.FamilyCount,
+                    request.RequestedUnitsCount,
+                    totalUnits,
+                    request.FreezeType ?? "GENERAL",
+                    request.Reason,
+                    request.Notes,
+                    userId,
+                    requestTraceId: traceId);
+
+                if (!createResult.Success || createResult.Batch == null)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = string.IsNullOrWhiteSpace(createResult.ErrorCode) ? "400" : createResult.ErrorCode!,
+                        Message = string.IsNullOrWhiteSpace(createResult.ErrorMessage) ? "تعذر إنشاء التجميد." : createResult.ErrorMessage!
+                    });
+                    _logger.LogWarning(
+                        "Unit-freeze create failed in freeze service result. TraceId={TraceId}, ErrorCode={ErrorCode}, ErrorMessage={ErrorMessage}",
+                        traceId,
+                        createResult.ErrorCode,
+                        createResult.ErrorMessage);
+                    return response;
+                }
+
+                _logger.LogInformation(
+                    "Before mapping freeze response DTO. TraceId={TraceId}, FreezeId={FreezeId}",
+                    traceId,
+                    createResult.Batch.FreezeId);
+                response.Data = MapFreezeBatchToDto(
+                    createResult.Batch,
+                    request.RequestedUnitsCount,
+                    0);
+
+                _logger.LogInformation(
+                    "Before secondary capacity update publish (SignalR). TraceId={TraceId}, FreezeId={FreezeId}, CategoryId={CategoryId}, WaveCode={WaveCode}",
+                    traceId,
+                    createResult.Batch.FreezeId,
+                    request.CategoryId,
+                    request.WaveCode?.Trim());
+                await PublishCapacityUpdateAsync(request.CategoryId, request.WaveCode.Trim(), "FREEZE_CREATE", traceId);
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+                _logger.LogError(
+                    ex,
+                    "Unit-freeze create request failed with unhandled exception. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, FamilyCount={FamilyCount}, RequestedUnitsCount={RequestedUnitsCount}",
+                    traceId,
+                    request.CategoryId,
+                    request.WaveCode,
+                    request.FamilyCount,
+                    request.RequestedUnitsCount);
+            }
+            finally
+            {
+                _logger.LogInformation(
+                    "Immediately before returning unit-freeze create response. TraceId={TraceId}, IsSuccess={IsSuccess}, ErrorCount={ErrorCount}, FreezeId={FreezeId}",
+                    traceId,
+                    response.IsSuccess,
+                    response.Errors.Count,
+                    response.Data?.FreezeId);
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerUnitFreezeDto>> ReleaseUnitFreezeAsync(SummerUnitFreezeReleaseRequest request, string userId)
+        {
+            var response = new CommonResponse<SummerUnitFreezeDto>();
+            request ??= new SummerUnitFreezeReleaseRequest();
+            try
+            {
+                if (request.FreezeId <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم التجميد مطلوب." });
+                    return response;
+                }
+
+                var batchSnapshot = await _summerUnitFreezeService.BuildFreezeBatchesQuery()
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(batch => batch.FreezeId == request.FreezeId);
+                if (batchSnapshot == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "عملية التجميد غير موجودة." });
+                    return response;
+                }
+
+                if (!await CanUserManageSummerCategoryAsync(userId, batchSnapshot.CategoryId))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بفك التجميد لهذا المصيف."
+                    });
+                    return response;
+                }
+
+                var releaseResult = await _summerUnitFreezeService.ReleaseFreezeBatchAsync(request.FreezeId, userId);
+                if (!releaseResult.Success || releaseResult.Batch == null)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = string.IsNullOrWhiteSpace(releaseResult.ErrorCode) ? "400" : releaseResult.ErrorCode!,
+                        Message = string.IsNullOrWhiteSpace(releaseResult.ErrorMessage) ? "تعذر فك التجميد." : releaseResult.ErrorMessage!
+                    });
+                    return response;
+                }
+
+                var frozenAvailableUnits = releaseResult.Batch.Details.Count(detail => detail.Status == SummerUnitFreezeStatuses.FrozenAvailable);
+                var frozenAssignedUnits = releaseResult.Batch.Details.Count(detail => detail.Status == SummerUnitFreezeStatuses.Booked);
+                response.Data = MapFreezeBatchToDto(releaseResult.Batch, frozenAvailableUnits, frozenAssignedUnits);
+
+                await PublishCapacityUpdateAsync(releaseResult.Batch.CategoryId, releaseResult.Batch.WaveCode, "FREEZE_RELEASE");
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerUnitFreezeDetailsDto>> GetUnitFreezeDetailsAsync(int freezeId, string userId)
+        {
+            var response = new CommonResponse<SummerUnitFreezeDetailsDto>();
+            try
+            {
+                if (freezeId <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم التجميد مطلوب." });
+                    return response;
+                }
+
+                var batch = await _summerUnitFreezeService.BuildFreezeBatchesQuery()
+                    .AsNoTracking()
+                    .Include(item => item.Details)
+                    .FirstOrDefaultAsync(item => item.FreezeId == freezeId);
+                if (batch == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "عملية التجميد غير موجودة." });
+                    return response;
+                }
+
+                if (!await CanUserManageSummerCategoryAsync(userId, batch.CategoryId))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض تفاصيل التجميد لهذا المصيف."
+                    });
+                    return response;
+                }
+
+                var frozenAvailableUnits = batch.Details.Count(detail => detail.Status == SummerUnitFreezeStatuses.FrozenAvailable);
+                var frozenAssignedUnits = batch.Details.Count(detail => detail.Status == SummerUnitFreezeStatuses.Booked);
+
+                response.Data = new SummerUnitFreezeDetailsDto
+                {
+                    Freeze = MapFreezeBatchToDto(batch, frozenAvailableUnits, frozenAssignedUnits),
+                    Units = batch.Details
+                        .OrderBy(detail => detail.SlotNumber)
+                        .Select(detail => new SummerUnitFreezeDetailDto
+                        {
+                            FreezeDetailId = detail.FreezeDetailId,
+                            SlotNumber = detail.SlotNumber,
+                            Status = detail.Status,
+                            AssignedMessageId = detail.AssignedMessageId,
+                            AssignedAtUtc = detail.AssignedAtUtc,
+                            ReleasedAtUtc = detail.ReleasedAtUtc,
+                            ReleasedBy = detail.ReleasedBy,
+                            LastStatusChangedAtUtc = detail.LastStatusChangedAtUtc
+                        })
+                        .ToList()
+                };
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerUnitsAvailableCountDto>> GetUnitsAvailableCountAsync(SummerUnitsAvailableCountQuery query, string userId)
+        {
+            var response = new CommonResponse<SummerUnitsAvailableCountDto>();
+            query ??= new SummerUnitsAvailableCountQuery();
+            try
+            {
+                if (query.CategoryId <= 0 || query.FamilyCount <= 0 || string.IsNullOrWhiteSpace(query.WaveCode))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "بيانات الإتاحة غير مكتملة." });
+                    return response;
+                }
+
+                if (!await CanUserManageSummerCategoryAsync(userId, query.CategoryId))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض إتاحة الوحدات لهذا المصيف."
+                    });
+                    return response;
+                }
+
+                var summerRules = await GetSummerRulesAsync();
+                if (!summerRules.TryGetValue(query.CategoryId, out var rule))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف غير مُعد في النظام." });
+                    return response;
+                }
+
+                if (!rule.CapacityByFamily.TryGetValue(query.FamilyCount, out var totalUnits) || totalUnits <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "السعة المطلوبة غير متاحة في إعدادات المصيف." });
+                    return response;
+                }
+
+                var normalizedWaveCode = query.WaveCode.Trim();
+                var usedUnits = await _summerUnitFreezeService.CountUsedUnitsAsync(
+                    query.CategoryId,
+                    normalizedWaveCode,
+                    query.FamilyCount);
+                var frozenAvailableUnits = await _summerUnitFreezeService.CountActiveFrozenAvailableUnitsAsync(
+                    query.CategoryId,
+                    normalizedWaveCode,
+                    query.FamilyCount);
+                var frozenAssignedUnits = await _summerUnitFreezeService.CountActiveFrozenAssignedUnitsAsync(
+                    query.CategoryId,
+                    normalizedWaveCode,
+                    query.FamilyCount);
+
+                var publicAvailableUnits = Math.Max(0, totalUnits - usedUnits - frozenAvailableUnits);
+                var availableUnits = query.IncludeFrozenUnits
+                    ? Math.Max(0, publicAvailableUnits + frozenAvailableUnits)
+                    : publicAvailableUnits;
+
+                response.Data = new SummerUnitsAvailableCountDto
+                {
+                    CategoryId = query.CategoryId,
+                    WaveCode = normalizedWaveCode,
+                    FamilyCount = query.FamilyCount,
+                    TotalUnits = totalUnits,
+                    UsedUnits = usedUnits,
+                    FrozenAvailableUnits = frozenAvailableUnits,
+                    FrozenAssignedUnits = frozenAssignedUnits,
+                    PublicAvailableUnits = publicAvailableUnits,
+                    AvailableUnits = availableUnits,
+                    IncludeFrozenUnits = query.IncludeFrozenUnits
+                };
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
         public async Task<CommonResponse<SummerRequestSummaryDto>> ExecuteAdminActionAsync(SummerAdminActionRequest request, string userId, string ip)
         {
             var response = new CommonResponse<SummerRequestSummaryDto>();
@@ -789,6 +1215,7 @@ namespace Persistence.Services
                         UpsertField(fields, message.MessageId, "Summer_CancelReason", string.IsNullOrWhiteSpace(comment) ? "إلغاء يدوي من إدارة المصايف." : comment);
                         UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
                         UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED_ADMIN");
+                        await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, userId);
                         if (IsTransferReviewRequired(fields))
                         {
                             UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
@@ -892,23 +1319,40 @@ namespace Persistence.Services
 
         private async Task<bool> CanUserManageSummerPricingAsync(string userId)
         {
-            var normalizedUserId = (userId ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            var manageableCategoryIds = await GetManageableSummerCategoryIdsAsync(userId);
+            return manageableCategoryIds.Count > 0;
+        }
+
+        private async Task<bool> CanUserManageSummerCategoryAsync(string userId, int categoryId)
+        {
+            if (categoryId <= 0)
             {
                 return false;
             }
 
-            var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
-            if (!userUnitIds.Any())
+            var manageableCategoryIds = await GetManageableSummerCategoryIdsAsync(userId);
+            return manageableCategoryIds.Contains(categoryId);
+        }
+
+        private async Task<HashSet<int>> GetManageableSummerCategoryIdsAsync(string userId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
             {
-                return false;
+                return new HashSet<int>();
+            }
+
+            var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+            if (userUnitIds.Count == 0)
+            {
+                return new HashSet<int>();
             }
 
             var summerRules = await GetSummerRulesAsync();
             var summerCategoryIds = summerRules.Keys.ToList();
-            if (!summerCategoryIds.Any())
+            if (summerCategoryIds.Count == 0)
             {
-                return false;
+                return new HashSet<int>();
             }
 
             var categories = await _connectContext.Cdcategories
@@ -921,10 +1365,9 @@ namespace Persistence.Services
                     category.Stockholder
                 })
                 .ToListAsync();
-
-            if (!categories.Any())
+            if (categories.Count == 0)
             {
-                return false;
+                return new HashSet<int>();
             }
 
             var parentIds = categories
@@ -932,33 +1375,40 @@ namespace Persistence.Services
                 .Where(parentId => parentId > 0)
                 .Distinct()
                 .ToList();
-
-            var parentStockholders = parentIds.Any()
-                ? await _connectContext.Cdcategories
+            var parentStockholders = parentIds.Count == 0
+                ? new Dictionary<int, int?>()
+                : await _connectContext.Cdcategories
                     .AsNoTracking()
                     .Where(parent => parentIds.Contains(parent.CatId))
-                    .Select(parent => parent.Stockholder)
-                    .ToListAsync()
-                : new List<int?>();
+                    .Select(parent => new { parent.CatId, parent.Stockholder })
+                    .ToDictionaryAsync(parent => parent.CatId, parent => parent.Stockholder);
 
-            var allowedUnitIds = categories
-                .Select(category => category.Stockholder)
-                .Concat(parentStockholders)
-                .Where(stockholder => stockholder.HasValue)
-                .Select(stockholder => stockholder!.Value.ToString())
-                .Where(stockholder => !string.IsNullOrWhiteSpace(stockholder))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            if (!allowedUnitIds.Any())
+            var manageableCategoryIds = new HashSet<int>();
+            foreach (var category in categories)
             {
-                return false;
+                var categoryStockholder = category.Stockholder?.ToString();
+                var parentStockholder = parentStockholders.TryGetValue(category.CatParent, out var parentStockholderValue) && parentStockholderValue.HasValue
+                    ? parentStockholderValue.Value.ToString()
+                    : string.Empty;
+
+                var allowed = (!string.IsNullOrWhiteSpace(categoryStockholder)
+                               && userUnitIds.Contains(categoryStockholder, StringComparer.OrdinalIgnoreCase))
+                              || (!string.IsNullOrWhiteSpace(parentStockholder)
+                                  && userUnitIds.Contains(parentStockholder, StringComparer.OrdinalIgnoreCase));
+                if (allowed)
+                {
+                    manageableCategoryIds.Add(category.CatId);
+                }
             }
 
-            return userUnitIds.Any(unitId => allowedUnitIds.Contains(unitId, StringComparer.OrdinalIgnoreCase));
+            return manageableCategoryIds;
         }
 
-        public async Task<CommonResponse<IEnumerable<SummerWaveCapacityDto>>> GetWaveCapacityAsync(int categoryId, string waveCode)
+        public async Task<CommonResponse<IEnumerable<SummerWaveCapacityDto>>> GetWaveCapacityAsync(
+            int categoryId,
+            string waveCode,
+            string userId,
+            bool includeFrozenUnits = false)
         {
             var response = new CommonResponse<IEnumerable<SummerWaveCapacityDto>>();
             try
@@ -976,38 +1426,79 @@ namespace Persistence.Services
                     return response;
                 }
 
+                var includeFrozenStock = false;
+                if (includeFrozenUnits)
+                {
+                    includeFrozenStock = await CanUserManageSummerCategoryAsync(userId, categoryId);
+                    if (!includeFrozenStock)
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "403",
+                            Message = "غير مصرح لك بعرض الوحدات المجمدة في هذا المصيف."
+                        });
+                        _logger.LogWarning(
+                            "Rejected include-frozen wave capacity request for unauthorized user. UserId={UserId}, CategoryId={CategoryId}, WaveCode={WaveCode}",
+                            userId,
+                            categoryId,
+                            waveCode);
+                        return response;
+                    }
+                }
+
                 var normalizedWave = waveCode.Trim();
                 var activeMessageIds = await GetActiveMessageIdsForWaveAsync(categoryId, normalizedWave);
                 var familyFields = activeMessageIds.Count == 0
                     ? new List<TkmendField>()
                     : await _connectContext.TkmendFields
                         .AsNoTracking()
-                        .Where(f => activeMessageIds.Contains(f.FildRelted) && f.FildKind == "FamilyCount")
+                        .Where(f => activeMessageIds.Contains(f.FildRelted)
+                            && (f.FildKind == "FamilyCount" || f.FildKind == "SUM2026_FamilyCount"))
                         .ToListAsync();
+                var frozenAvailableByFamily = await _summerUnitFreezeService.CountActiveFrozenAvailableByFamilyAsync(categoryId, normalizedWave);
+                var capacityRows = new List<SummerWaveCapacityDto>();
+                foreach (var item in rule.CapacityByFamily.OrderBy(item => item.Key))
+                {
+                    var familyCount = item.Key;
+                    var totalUnits = item.Value;
+                    var usedUnits = familyFields
+                        .Where(f => ParseInt(f.FildTxt, 0) == familyCount)
+                        .Select(f => f.FildRelted)
+                        .Distinct()
+                        .Count();
+                    var frozenAvailableUnits = frozenAvailableByFamily.TryGetValue(familyCount, out var frozenCount)
+                        ? frozenCount
+                        : 0;
+                    var frozenAssignedUnits = await _summerUnitFreezeService.CountActiveFrozenAssignedUnitsAsync(
+                        categoryId,
+                        normalizedWave,
+                        familyCount);
 
-                response.Data = rule.CapacityByFamily
-                    .OrderBy(item => item.Key)
-                    .Select(item =>
+                    var publicAvailableUnits = Math.Max(0, totalUnits - usedUnits - frozenAvailableUnits);
+                    var exposedFrozenAvailableUnits = includeFrozenStock ? frozenAvailableUnits : 0;
+                    var exposedFrozenAssignedUnits = includeFrozenStock ? frozenAssignedUnits : 0;
+                    var exposedUsedUnits = includeFrozenStock
+                        ? usedUnits
+                        : Math.Max(0, totalUnits - publicAvailableUnits);
+
+                    var computedAvailableUnits = includeFrozenStock
+                        ? Math.Max(0, publicAvailableUnits + frozenAvailableUnits)
+                        : publicAvailableUnits;
+
+                    capacityRows.Add(new SummerWaveCapacityDto
                     {
-                        var familyCount = item.Key;
-                        var totalUnits = item.Value;
-                        var usedUnits = familyFields
-                            .Where(f => ParseInt(f.FildTxt, 0) == familyCount)
-                            .Select(f => f.FildRelted)
-                            .Distinct()
-                            .Count();
+                        CategoryId = categoryId,
+                        WaveCode = normalizedWave,
+                        FamilyCount = familyCount,
+                        TotalUnits = totalUnits,
+                        UsedUnits = exposedUsedUnits,
+                        AvailableUnits = computedAvailableUnits,
+                        FrozenAvailableUnits = exposedFrozenAvailableUnits,
+                        FrozenAssignedUnits = exposedFrozenAssignedUnits
+                    });
+                }
 
-                        return new SummerWaveCapacityDto
-                        {
-                            CategoryId = categoryId,
-                            WaveCode = normalizedWave,
-                            FamilyCount = familyCount,
-                            TotalUnits = totalUnits,
-                            UsedUnits = usedUnits,
-                            AvailableUnits = Math.Max(0, totalUnits - usedUnits)
-                        };
-                    })
-                    .ToList();
+                response.Data = capacityRows;
             }
             catch (Exception ex)
             {
@@ -1154,6 +1645,7 @@ namespace Persistence.Services
                     UpsertField(fields, message.MessageId, "Summer_CancelReason", (request.Reason ?? string.Empty).Trim());
                     UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
                     UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED");
+                    await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, userId);
 
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
@@ -1419,6 +1911,16 @@ namespace Persistence.Services
                     return response;
                 }
 
+                if (_summerBookingBlacklistService.IsBlocked(employeeId))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "SUMMER_BLACKLIST_BLOCKED",
+                        Message = "تعذر إتمام الحجز: رقم الملف مدرج ضمن قائمة الممنوعين من الحجز."
+                    });
+                    return response;
+                }
+
                 var seasonYear = ParseInt(GetFieldValue(fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
                 var summerRules = await GetSummerRulesAsync(seasonYear);
                 if (await HasEmployeeUsedTransferInSeasonAsync(employeeId, seasonYear, message.MessageId, summerRules.Keys))
@@ -1503,6 +2005,8 @@ namespace Persistence.Services
                         await connectTx.RollbackAsync();
                         return response;
                     }
+
+                    await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, userId);
 
                     var fromCategory = message.CategoryCd;
                     var fromWave = GetFirstFieldValue(fields, "SummerCamp", "SUM2026_WaveCode", "WaveCode");
@@ -1666,6 +2170,7 @@ namespace Persistence.Services
                     UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", nowUtc.ToString("o"));
                     UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED_AUTO");
                     UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, dueAt.ToString("o"));
+                    await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, "SYSTEM", cancellationToken);
 
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
@@ -2018,7 +2523,8 @@ namespace Persistence.Services
             string waveCode,
             int familyCount,
             SummerRule? rule,
-            int? excludedMessageId = null)
+            int? excludedMessageId = null,
+            bool allowFrozenReservation = false)
         {
             if (rule == null)
             {
@@ -2030,25 +2536,23 @@ namespace Persistence.Services
                 return false;
             }
 
-            var activeMessageIds = await GetActiveMessageIdsForWaveAsync(categoryId, waveCode.Trim(), excludedMessageId);
-            if (!activeMessageIds.Any())
+            var hasPublicCapacity = await _summerUnitFreezeService.HasPublicCapacityAsync(
+                categoryId,
+                waveCode.Trim(),
+                familyCount,
+                totalUnits,
+                excludedMessageId);
+            if (hasPublicCapacity)
             {
                 return true;
             }
 
-            var familyFields = await _connectContext.TkmendFields
-                .AsNoTracking()
-                .Where(f => activeMessageIds.Contains(f.FildRelted)
-                            && (f.FildKind == "FamilyCount" || f.FildKind == "SUM2026_FamilyCount"))
-                .ToListAsync();
+            if (allowFrozenReservation)
+            {
+                return await _summerUnitFreezeService.HasAssignableFrozenUnitAsync(categoryId, waveCode.Trim(), familyCount);
+            }
 
-            var usedUnits = familyFields
-                .Where(f => ParseInt(f.FildTxt, 0) == familyCount)
-                .Select(f => f.FildRelted)
-                .Distinct()
-                .Count();
-
-            return usedUnits < totalUnits;
+            return false;
         }
 
         private async Task<bool> AcquireCapacityLockAsync(int categoryId, string waveCode)
@@ -2131,81 +2635,152 @@ SELECT @result;
             return resultCode >= 0;
         }
 
-        private async Task PublishCapacityUpdateAsync(int categoryId, string waveCode, string action)
+        private async Task PublishCapacityUpdateAsync(
+            int categoryId,
+            string waveCode,
+            string action,
+            string? requestTraceId = null,
+            CancellationToken cancellationToken = default)
         {
             if (categoryId <= 0 || string.IsNullOrWhiteSpace(waveCode))
             {
                 return;
             }
 
-            var normalizedWaveCode = waveCode.Trim();
-            var normalizedAction = string.IsNullOrWhiteSpace(action)
-                ? "UPDATE"
-                : action.Trim().ToUpperInvariant();
-            var emittedAtUtc = DateTime.UtcNow;
-            var destinationName = await ResolveSummerDestinationNameAsync(categoryId);
-            var batchNumber = ResolveSummerBatchNumber(normalizedWaveCode);
+            var traceId = string.IsNullOrWhiteSpace(requestTraceId) ? Guid.NewGuid().ToString("N") : requestTraceId.Trim();
+            try
+            {
+                var normalizedWaveCode = waveCode.Trim();
+                var normalizedAction = string.IsNullOrWhiteSpace(action)
+                    ? "UPDATE"
+                    : action.Trim().ToUpperInvariant();
+                var dispatchTimeoutMs = ResolveCapacityUpdateDispatchTimeoutMs();
+                var emittedAtUtc = DateTime.UtcNow;
+                var destinationName = await ResolveSummerDestinationNameAsync(categoryId, cancellationToken);
+                var batchNumber = ResolveSummerBatchNumber(normalizedWaveCode);
 
-            var messageText = JsonSerializer.Serialize(new Dictionary<string, object?>
-            {
-                ["event"] = "SUMMER_CAPACITY_UPDATED",
-                ["destinationId"] = categoryId,
-                ["destinationName"] = destinationName,
-                ["waveCode"] = normalizedWaveCode,
-                ["batchNumber"] = batchNumber,
-                ["action"] = normalizedAction,
-                ["emittedAt"] = emittedAtUtc,
-                ["sender"] = "Connect",
-                ["title"] = "إدارة طلبات المصايف"
-            });
-            var notification = new NotificationDto
-            {
-                Notification = messageText,
-                type = NotificationType.info,
-                Title = "إدارة طلبات المصايف",
-                time = emittedAtUtc,
-                sender = "Connect",
-                Category = NotificationCategory.Business
-            };
+                var messageText = JsonSerializer.Serialize(new Dictionary<string, object?>
+                {
+                    ["event"] = "SUMMER_CAPACITY_UPDATED",
+                    ["destinationId"] = categoryId,
+                    ["destinationName"] = destinationName,
+                    ["waveCode"] = normalizedWaveCode,
+                    ["batchNumber"] = batchNumber,
+                    ["action"] = normalizedAction,
+                    ["emittedAt"] = emittedAtUtc,
+                    ["sender"] = "Connect",
+                    ["title"] = "إدارة طلبات المصايف"
+                });
+                var notification = new NotificationDto
+                {
+                    Notification = messageText,
+                    type = NotificationType.info,
+                    Title = "إدارة طلبات المصايف",
+                    time = emittedAtUtc,
+                    sender = "Connect",
+                    Category = NotificationCategory.Business
+                };
 
-            var dispatchResponse = await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
-            {
-                GroupNames = SummerNotificationGroups,
-                Notification = notification.Notification,
-                Type = notification.type,
-                Title = notification.Title,
-                Time = notification.time,
-                Sender = notification.sender,
-                Category = notification.Category ?? NotificationCategory.Business
-            });
+                _logger.LogInformation(
+                    "Before capacity update SignalR dispatch. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, TimeoutMs={TimeoutMs}",
+                    traceId,
+                    categoryId,
+                    normalizedWaveCode,
+                    normalizedAction,
+                    dispatchTimeoutMs);
 
-            if (!dispatchResponse.IsSuccess)
-            {
-                var errors = string.Join(" | ", dispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
-                _logger.LogWarning(
-                    "Summer capacity update publish encountered errors. CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, Errors={Errors}",
+                var dispatchTask = _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+                {
+                    GroupNames = SummerNotificationGroups,
+                    Notification = notification.Notification,
+                    Type = notification.type,
+                    Title = notification.Title,
+                    Time = notification.time,
+                    Sender = notification.sender,
+                    Category = notification.Category ?? NotificationCategory.Business
+                }, cancellationToken);
+
+                var timeoutTask = Task.Delay(dispatchTimeoutMs, cancellationToken);
+                var completedTask = await Task.WhenAny(dispatchTask, timeoutTask);
+                if (completedTask != dispatchTask)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException(cancellationToken);
+                    }
+
+                    _logger.LogWarning(
+                        "Capacity update publish timed out and will not block response. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, TimeoutMs={TimeoutMs}",
+                        traceId,
+                        categoryId,
+                        normalizedWaveCode,
+                        normalizedAction,
+                        dispatchTimeoutMs);
+                    return;
+                }
+
+                var dispatchResponse = await dispatchTask;
+
+                if (!dispatchResponse.IsSuccess)
+                {
+                    var errors = string.Join(" | ", dispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.LogWarning(
+                        "Summer capacity update publish encountered errors. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, Errors={Errors}",
+                        traceId,
+                        categoryId,
+                        waveCode,
+                        action,
+                        errors);
+                    return;
+                }
+
+                _logger.LogInformation(
+                    "Summer capacity update published. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, Groups={Groups}",
+                    traceId,
                     categoryId,
                     waveCode,
                     action,
-                    errors);
-                return;
+                    string.Join(",", SummerNotificationGroups));
             }
-
-            _logger.LogInformation(
-                "Summer capacity update published. CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, Groups={Groups}",
-                categoryId,
-                waveCode,
-                action,
-                string.Join(",", SummerNotificationGroups));
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "Capacity update publish cancelled by token. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}",
+                    traceId,
+                    categoryId,
+                    waveCode,
+                    action);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Capacity update publish failed but will not block API response. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}",
+                    traceId,
+                    categoryId,
+                    waveCode,
+                    action);
+            }
         }
 
-        private async Task<string> ResolveSummerDestinationNameAsync(int categoryId)
+        private int ResolveCapacityUpdateDispatchTimeoutMs()
+        {
+            var configured = _applicationConfig?.ApiOptions?.SummerCapacitySignalRTimeoutMs ?? 0;
+            if (configured <= 0)
+            {
+                return CapacityUpdateDispatchTimeoutMs;
+            }
+
+            return Math.Clamp(configured, 1000, 30000);
+        }
+
+        private async Task<string> ResolveSummerDestinationNameAsync(int categoryId, CancellationToken cancellationToken = default)
         {
             var destinationName = await _connectContext.Cdcategories
                 .AsNoTracking()
                 .Where(category => category.CatId == categoryId)
                 .Select(category => category.CatName)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(cancellationToken);
 
             destinationName = Convert.ToString(destinationName ?? string.Empty).Trim();
             return destinationName.Length > 0
@@ -2454,6 +3029,28 @@ SELECT @result;
                 PaymentDueAtUtc = ParseDate(GetFieldValue(fields, PaymentDueAtUtcFieldKind)),
                 PaidAtUtc = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind)),
                 TransferUsed = ParseInt(GetFieldValue(fields, "Summer_TransferCount"), 0) > 0
+            };
+        }
+
+        private static SummerUnitFreezeDto MapFreezeBatchToDto(SummerUnitFreezeBatch batch, int frozenAvailableUnits, int frozenAssignedUnits)
+        {
+            return new SummerUnitFreezeDto
+            {
+                FreezeId = batch.FreezeId,
+                CategoryId = batch.CategoryId,
+                WaveCode = batch.WaveCode,
+                FamilyCount = batch.FamilyCount,
+                RequestedUnitsCount = batch.RequestedUnitsCount,
+                FrozenAvailableUnits = frozenAvailableUnits,
+                FrozenAssignedUnits = frozenAssignedUnits,
+                FreezeType = batch.FreezeType,
+                Reason = batch.Reason,
+                Notes = batch.Notes,
+                CreatedBy = batch.CreatedBy,
+                CreatedAtUtc = batch.CreatedAtUtc,
+                IsActive = batch.IsActive,
+                ReleasedAtUtc = batch.ReleasedAtUtc,
+                ReleasedBy = batch.ReleasedBy
             };
         }
 

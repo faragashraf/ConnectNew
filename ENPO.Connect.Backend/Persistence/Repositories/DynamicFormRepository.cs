@@ -37,7 +37,20 @@ namespace Persistence.Repositories
         private readonly MessageRequestService _messageRequestService;
         private readonly IConnectNotificationService _notificationService;
         private readonly SummerPricingService _summerPricingService;
-        public DynamicFormRepository(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, IMapper mapper, IOptions<ApplicationConfig> options, helperService helperService, RedisConnectionManager redisManager, SignalRConnectionManager signalRConnectionManager, IConnectNotificationService notificationService)
+        private readonly SummerBookingBlacklistService _summerBookingBlacklistService;
+        private readonly SummerUnitFreezeService _summerUnitFreezeService;
+
+        public DynamicFormRepository(
+            ConnectContext connectContext,
+            Attach_HeldContext attach_HeldContext,
+            GPAContext gPAContext,
+            IMapper mapper,
+            IOptions<ApplicationConfig> options,
+            IOptionsMonitor<ResortBookingBlacklistOptions> resortBookingBlacklistOptions,
+            helperService helperService,
+            RedisConnectionManager redisManager,
+            SignalRConnectionManager signalRConnectionManager,
+            IConnectNotificationService notificationService)
         {
             _signalRConnectionManager = signalRConnectionManager;
             _notificationService = notificationService;
@@ -52,6 +65,8 @@ namespace Persistence.Repositories
             // instantiate the message request service for shared prepare/persist logic
             _messageRequestService = new MessageRequestService(_connectContext, _attach_HeldContext, _gPAContext, _helperService, _mapper, _logger);
             _summerPricingService = new SummerPricingService(_connectContext);
+            _summerBookingBlacklistService = new SummerBookingBlacklistService(resortBookingBlacklistOptions);
+            _summerUnitFreezeService = new SummerUnitFreezeService(_connectContext);
         }
         public CommonResponse<IEnumerable<CdmendDto>> GetMandatoryMetaDate(string? appId)
         {
@@ -161,10 +176,12 @@ namespace Persistence.Repositories
                 _logger,
                 _messageRequestService,
                 _notificationService,
-                _summerPricingService);
+                _summerPricingService,
+                _summerBookingBlacklistService,
+                _summerUnitFreezeService);
             if (isSummerCategory)
             {
-                await categoryHandler.SummerRequests(messageRequest, categoryInfo, response);
+                await categoryHandler.SummerRequests(messageRequest, categoryInfo, response, userId);
                 _logger.AppendLine("CreateRequest: Handled by SummerRequests path.");
                 return response;
             }

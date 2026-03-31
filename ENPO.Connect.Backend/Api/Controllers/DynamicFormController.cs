@@ -1,8 +1,10 @@
 ﻿using Core;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Models.DTO.Common;
 using Models.DTO.Correspondance;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace Api.Controllers
@@ -45,12 +47,20 @@ namespace Api.Controllers
         [HttpPost]
         [Route(nameof(CreateRequest))]
         [Consumes("multipart/form-data")]
-        public Task<CommonResponse<MessageDto>> CreateRequest([FromForm] MessageRequest messageRequest)
+        public async Task<ActionResult<CommonResponse<MessageDto>>> CreateRequest([FromForm] MessageRequest messageRequest)
         {
             string userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
             string UserEmail = HttpContext.User.Claims.First(f => f.Type == "UserEmail").Value;
             var ipv4 = HttpContext.Connection.RemoteIpAddress!.MapToIPv4().ToString();
-            return _unitOfWork.dynamicFormRepository.CreateRequest(messageRequest, userId, UserEmail, ipv4);
+            var result = await _unitOfWork.dynamicFormRepository.CreateRequest(messageRequest, userId, UserEmail, ipv4);
+            var hasBlacklistBlock = result?.Errors?.Any(error =>
+                string.Equals(error?.Code, "SUMMER_BLACKLIST_BLOCKED", StringComparison.OrdinalIgnoreCase)) == true;
+            if (hasBlacklistBlock)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+
+            return result;
         }
 
         [HttpGet]

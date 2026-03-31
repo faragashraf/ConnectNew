@@ -32,6 +32,21 @@ const routes: Routes =
       pathMatch: 'full'
     },
     {
+      path: 'resorts/unit-freeze',
+      redirectTo: '/EmployeeRequests/resorts/unit-freeze',
+      pathMatch: 'full'
+    },
+    {
+      path: 'resorts/unit-freeze/create',
+      redirectTo: '/EmployeeRequests/resorts/unit-freeze/create',
+      pathMatch: 'full'
+    },
+    {
+      path: 'resorts/unit-freeze/:id',
+      redirectTo: '/EmployeeRequests/resorts/unit-freeze/:id',
+      pathMatch: 'full'
+    },
+    {
       path: 'ApplicationGenericManager',
       component: ApplicationGenericManagerComponent,
       canActivate: [AuthNewGuardService],

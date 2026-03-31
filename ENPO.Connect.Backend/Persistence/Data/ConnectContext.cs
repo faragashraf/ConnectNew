@@ -41,6 +41,10 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<MessagesRelation> MessagesRelations { get; set; }
 
+    public virtual DbSet<SummerUnitFreezeBatch> SummerUnitFreezeBatches { get; set; }
+
+    public virtual DbSet<SummerUnitFreezeDetail> SummerUnitFreezeDetails { get; set; }
+
     public override int SaveChanges()
     {
         var UserId = _httpContextAccessor.HttpContext?.User?.Claims.FirstOrDefault((Claim u) => u.Type == "UserId").Value;
@@ -430,6 +434,69 @@ public partial class ConnectContext : DbContext
             entity.Property(e => e.RelationType)
                 .HasMaxLength(50)
                 .HasColumnName("RELATION_TYPE");
+        });
+
+        modelBuilder.Entity<SummerUnitFreezeBatch>(entity =>
+        {
+            entity.HasKey(e => e.FreezeId).HasName("PK_SummerUnitFreezeBatches");
+
+            entity.ToTable("SummerUnitFreezeBatches");
+
+            entity.HasIndex(e => new { e.CategoryId, e.WaveCode, e.FamilyCount, e.IsActive }, "IX_SummerUnitFreezeBatches_Search");
+
+            entity.Property(e => e.FreezeId).HasColumnName("FreezeID");
+            entity.Property(e => e.CategoryId).HasColumnName("CategoryID");
+            entity.Property(e => e.WaveCode)
+                .HasMaxLength(50)
+                .IsRequired();
+            entity.Property(e => e.FamilyCount).HasColumnName("FamilyCount");
+            entity.Property(e => e.RequestedUnitsCount).HasColumnName("RequestedUnitsCount");
+            entity.Property(e => e.FreezeType)
+                .HasMaxLength(50)
+                .HasDefaultValue("GENERAL");
+            entity.Property(e => e.Reason).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(50)
+                .IsRequired();
+            entity.Property(e => e.CreatedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.ReleasedAtUtc).HasColumnType("datetime2");
+            entity.Property(e => e.ReleasedBy).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<SummerUnitFreezeDetail>(entity =>
+        {
+            entity.HasKey(e => e.FreezeDetailId).HasName("PK_SummerUnitFreezeDetails");
+
+            entity.ToTable("SummerUnitFreezeDetails");
+
+            entity.HasIndex(e => new { e.FreezeId, e.SlotNumber }, "IX_SummerUnitFreezeDetails_Freeze_Slot").IsUnique();
+            entity.HasIndex(e => e.AssignedMessageId, "IX_SummerUnitFreezeDetails_AssignedMessage");
+
+            entity.Property(e => e.FreezeDetailId).HasColumnName("FreezeDetailID");
+            entity.Property(e => e.FreezeId).HasColumnName("FreezeID");
+            entity.Property(e => e.SlotNumber).HasColumnName("SlotNumber");
+            entity.Property(e => e.Status)
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(e => e.AssignedMessageId).HasColumnName("AssignedMessageID");
+            entity.Property(e => e.AssignedAtUtc).HasColumnType("datetime2");
+            entity.Property(e => e.ReleasedAtUtc).HasColumnType("datetime2");
+            entity.Property(e => e.ReleasedBy).HasMaxLength(50);
+            entity.Property(e => e.LastStatusChangedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasOne(detail => detail.Freeze)
+                .WithMany(batch => batch.Details)
+                .HasForeignKey(detail => detail.FreezeId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_SummerUnitFreezeDetails_Batches");
         });
 
         modelBuilder.HasSequence<int>("Seq_Categories").StartsAt(101L);
