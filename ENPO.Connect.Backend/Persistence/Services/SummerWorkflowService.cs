@@ -58,6 +58,37 @@ namespace Persistence.Services
         private static readonly string[] EmployeeNationalIdFieldKinds = SummerWorkflowDomainConstants.EmployeeNationalIdFieldKinds;
         private static readonly string[] EmployeePhoneFieldKinds = SummerWorkflowDomainConstants.EmployeePhoneFieldKinds;
         private static readonly string[] EmployeeExtraPhoneFieldKinds = SummerWorkflowDomainConstants.EmployeeExtraPhoneFieldKinds;
+        private static readonly string[] WorkEntityFieldKinds =
+        {
+            "Department",
+            "SUM2026_Department",
+            "CurrPlace",
+            "CurrentPlace",
+            "OrgUnitName",
+            "OrganizationName",
+            "UnitName",
+            "EntityName",
+            "Job",
+            "SUM2026_Job"
+        };
+        private static readonly string[] UnitNumberFieldKinds =
+        {
+            "Summer_UnitNumber",
+            "SUM2026_UnitNumber",
+            "UnitNumber",
+            "RoomNumber",
+            "ApartmentNumber",
+            "ChaletNumber"
+        };
+        private static readonly string[] NotesFieldKinds =
+        {
+            "Description",
+            "Notes",
+            "Remark",
+            "Remarks",
+            "Summer_AdminComment",
+            "Summer_PaymentNotes"
+        };
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -1847,6 +1878,278 @@ namespace Persistence.Services
             }
 
             return response;
+        }
+
+        public async Task<CommonResponse<SummerWaveBookingsPrintReportDto>> GetWaveBookingsPrintReportAsync(
+            int categoryId,
+            string waveCode,
+            int seasonYear,
+            string userId)
+        {
+            var response = new CommonResponse<SummerWaveBookingsPrintReportDto>();
+            try
+            {
+                if (categoryId <= 0 || string.IsNullOrWhiteSpace(waveCode))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف والفوج مطلوبان." });
+                    return response;
+                }
+
+                var normalizedUserId = (userId ?? string.Empty).Trim();
+                if (normalizedUserId.Length == 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "معرف المستخدم مطلوب." });
+                    return response;
+                }
+
+                var normalizedWaveCode = waveCode.Trim();
+                var normalizedSeasonYear = seasonYear > 0 ? seasonYear : DateTime.UtcNow.Year;
+                var summerRules = await GetSummerRulesAsync(normalizedSeasonYear);
+                if (!summerRules.TryGetValue(categoryId, out var categoryRule))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف غير مُعد في النظام." });
+                    return response;
+                }
+
+                var categoryName = await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .Where(category => category.CatId == categoryId)
+                    .Select(category => category.CatName)
+                    .FirstOrDefaultAsync();
+
+                var (waveStartAtUtc, waveEndAtUtc) = ResolveWaveDateRangeUtc(
+                    categoryRule,
+                    categoryId,
+                    normalizedSeasonYear,
+                    normalizedWaveCode);
+
+                var report = new SummerWaveBookingsPrintReportDto
+                {
+                    CategoryId = categoryId,
+                    CategoryName = ResolveDisplayText(categoryName, $"مصيف {categoryId}"),
+                    WaveCode = normalizedWaveCode,
+                    WaveStartAtUtc = waveStartAtUtc,
+                    WaveEndAtUtc = waveEndAtUtc,
+                    GeneratedAtUtc = DateTime.UtcNow,
+                    GeneratedByUserId = normalizedUserId,
+                    TotalBookings = 0
+                };
+
+                var activeMessageIds = await GetActiveMessageIdsForWaveAsync(categoryId, normalizedWaveCode);
+                if (activeMessageIds.Count == 0)
+                {
+                    response.Data = report;
+                    return response;
+                }
+
+                var messages = await _connectContext.Messages
+                    .AsNoTracking()
+                    .Where(message => activeMessageIds.Contains(message.MessageId))
+                    .OrderBy(message => message.CreatedDate)
+                    .ThenBy(message => message.MessageId)
+                    .ToListAsync();
+                if (messages.Count == 0)
+                {
+                    response.Data = report;
+                    return response;
+                }
+
+                var messageIds = messages.Select(message => message.MessageId).ToList();
+                var allFields = await _connectContext.TkmendFields
+                    .AsNoTracking()
+                    .Where(field => messageIds.Contains(field.FildRelted))
+                    .ToListAsync();
+                var fieldsByMessageId = allFields
+                    .GroupBy(field => field.FildRelted)
+                    .ToDictionary(group => group.Key, group => group.ToList());
+
+                var rows = new List<(int? FamilyCount, SummerWaveBookingPrintRowDto Row)>();
+                foreach (var message in messages)
+                {
+                    var messageFields = fieldsByMessageId.TryGetValue(message.MessageId, out var resolvedFields)
+                        ? resolvedFields
+                        : new List<TkmendField>();
+
+                    var familyCountValue = ParseInt(GetFirstFieldValue(messageFields, FamilyCountFieldKinds), 0);
+                    var familyCount = familyCountValue > 0 ? familyCountValue : (int?)null;
+                    var extraCount = Math.Max(0, ParseInt(GetFirstFieldValue(messageFields, ExtraCountFieldKinds), 0));
+                    var personsCount = ResolvePersonsCount(messageFields, familyCountValue, extraCount);
+
+                    var workflowStateCode = GetFieldValue(messageFields, "Summer_WorkflowState") ?? string.Empty;
+                    var workflowStateLabel = ResolveWorkflowStateLabel(workflowStateCode);
+                    var needsTransferReview = string.Equals(
+                        workflowStateCode,
+                        TransferReviewRequiredCode,
+                        StringComparison.OrdinalIgnoreCase);
+                    var statusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel);
+
+                    var bookingTypeLabel = ResolveBookingTypeLabel(
+                        GetFirstFieldValue(messageFields, SummerWorkflowDomainConstants.StayModeFieldKinds),
+                        GetFieldValue(messageFields, SummerWorkflowDomainConstants.PricingFieldKinds.SelectedStayMode) ?? string.Empty,
+                        GetFieldValue(messageFields, SummerWorkflowDomainConstants.PricingFieldKinds.PricingMode) ?? string.Empty,
+                        GetFirstFieldValue(messageFields, SummerWorkflowDomainConstants.ProxyModeFieldKinds));
+
+                    var row = new SummerWaveBookingPrintRowDto
+                    {
+                        MessageId = message.MessageId,
+                        RequestRef = ResolveDisplayText(message.RequestRef),
+                        BookerName = ResolveDisplayText(
+                            GetFirstFieldValue(messageFields, EmployeeNameFieldKinds),
+                            $"طلب رقم {message.MessageId}"),
+                        WorkEntity = ResolveDisplayText(GetFirstFieldValue(messageFields, WorkEntityFieldKinds)),
+                        BookingTypeLabel = ResolveDisplayText(bookingTypeLabel),
+                        UnitNumber = ResolveDisplayText(GetFirstFieldValue(messageFields, UnitNumberFieldKinds)),
+                        PersonsCount = Math.Max(0, personsCount),
+                        StatusLabel = ResolveDisplayText(statusLabel),
+                        Notes = ResolveDisplayText(GetFirstFieldValue(messageFields, NotesFieldKinds))
+                    };
+
+                    rows.Add((familyCount, row));
+                }
+
+                report.Sections = rows
+                    .GroupBy(item => item.FamilyCount)
+                    .OrderBy(group => group.Key ?? int.MaxValue)
+                    .Select(group =>
+                    {
+                        var orderedRows = group
+                            .Select(item => item.Row)
+                            .OrderBy(item => item.BookerName, StringComparer.OrdinalIgnoreCase)
+                            .ThenBy(item => item.RequestRef, StringComparer.OrdinalIgnoreCase)
+                            .ThenBy(item => item.MessageId)
+                            .ToList();
+
+                        return new SummerWaveBookingsPrintSectionDto
+                        {
+                            FamilyCount = group.Key,
+                            SectionLabel = ResolveSectionLabel(group.Key),
+                            TotalBookings = orderedRows.Count,
+                            Rows = orderedRows
+                        };
+                    })
+                    .ToList();
+
+                report.TotalBookings = report.Sections.Sum(section => section.TotalBookings);
+                response.Data = report;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        private static (DateTime? WaveStartAtUtc, DateTime? WaveEndAtUtc) ResolveWaveDateRangeUtc(
+            SummerRule? categoryRule,
+            int categoryId,
+            int seasonYear,
+            string waveCode)
+        {
+            if (!TryResolveWaveStartUtc(categoryRule, categoryId, seasonYear, waveCode, null, out var waveStartAtUtc))
+            {
+                return (null, null);
+            }
+
+            DateTime? waveEndAtUtc = null;
+            if (categoryRule?.WaveStartByCode?.Count > 0)
+            {
+                var nearestNextWaveStartUtc = categoryRule.WaveStartByCode
+                    .Values
+                    .Where(value => value > waveStartAtUtc)
+                    .OrderBy(value => value)
+                    .FirstOrDefault();
+
+                if (nearestNextWaveStartUtc != default)
+                {
+                    waveEndAtUtc = nearestNextWaveStartUtc.AddDays(-1);
+                }
+            }
+
+            waveEndAtUtc ??= waveStartAtUtc.AddDays(6);
+            return (waveStartAtUtc, waveEndAtUtc);
+        }
+
+        private static int ResolvePersonsCount(IEnumerable<TkmendField> fields, int familyCount, int extraCount)
+        {
+            var pricingPersonsCount = ParseInt(GetFieldValue(fields, SummerWorkflowDomainConstants.PricingFieldKinds.PersonsCount), 0);
+            if (pricingPersonsCount > 0)
+            {
+                return pricingPersonsCount;
+            }
+
+            if (familyCount > 0)
+            {
+                return familyCount + Math.Max(0, extraCount);
+            }
+
+            return 0;
+        }
+
+        private static string ResolveBookingTypeLabel(
+            string stayMode,
+            string pricingSelectedStayMode,
+            string pricingMode,
+            string proxyMode)
+        {
+            var candidateStayMode = !string.IsNullOrWhiteSpace(pricingSelectedStayMode)
+                ? pricingSelectedStayMode
+                : stayMode;
+            var normalizedStayMode = NormalizeSearchToken(candidateStayMode);
+            var normalizedPricingMode = NormalizeSearchToken(pricingMode);
+            var isProxy = ParseBooleanLike(proxyMode);
+
+            var label = normalizedStayMode switch
+            {
+                "residenceonly" or "residence_only" => "إقامة فقط",
+                "residencewithtransport" or "residence_with_transport" => "إقامة وانتقالات",
+                _ => normalizedPricingMode switch
+                {
+                    "accommodationonlyallowed" => "إقامة فقط",
+                    "accommodationandtransportationoptional" => "إقامة وانتقالات (اختياري)",
+                    "transportationmandatoryincluded" => "إقامة وانتقالات (إلزامي)",
+                    _ => ResolveDisplayText(candidateStayMode, ResolveDisplayText(pricingMode))
+                }
+            };
+
+            if (isProxy == true)
+            {
+                label = $"{label} - بالنيابة";
+            }
+
+            return label;
+        }
+
+        private static bool? ParseBooleanLike(string? value)
+        {
+            var token = NormalizeSearchToken(value);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return null;
+            }
+
+            return token switch
+            {
+                "true" or "1" or "yes" or "y" or "نعم" => true,
+                "false" or "0" or "no" or "n" or "لا" => false,
+                _ => null
+            };
+        }
+
+        private static string ResolveSectionLabel(int? familyCount)
+        {
+            if (familyCount.HasValue && familyCount.Value > 0)
+            {
+                return $"الشقة ({familyCount.Value} أفراد)";
+            }
+
+            return "وحدات غير محددة السعة";
+        }
+
+        private static string ResolveDisplayText(string? value, string fallback = "-")
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            return normalized.Length > 0 ? normalized : fallback;
         }
 
         public Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuoteAsync(SummerPricingQuoteRequest request)

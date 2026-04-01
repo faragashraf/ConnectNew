@@ -52,6 +52,16 @@ namespace Api.Controllers
             return _summerWorkflowService.GetWaveCapacityAsync(categoryId, waveCode, userId, includeFrozenUnits);
         }
 
+        [HttpGet(nameof(GetWaveBookingsPrintReport))]
+        public Task<CommonResponse<SummerWaveBookingsPrintReportDto>> GetWaveBookingsPrintReport(
+            int categoryId,
+            string waveCode,
+            int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear)
+        {
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            return _summerWorkflowService.GetWaveBookingsPrintReportAsync(categoryId, waveCode, seasonYear, userId);
+        }
+
         [HttpPost(nameof(GetPricingQuote))]
         public Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuote([FromBody] SummerPricingQuoteRequest request)
         {

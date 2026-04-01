@@ -22,6 +22,11 @@ const routes: Routes =
       pathMatch: 'full'
     },
     {
+      path: 'SummerRequestsManagement/print-bookings',
+      redirectTo: '/EmployeeRequests/SummerRequestsManagement/print-bookings',
+      pathMatch: 'full'
+    },
+    {
       path: 'SummerRequests',
       redirectTo: '/EmployeeRequests/SummerRequests',
       pathMatch: 'full'

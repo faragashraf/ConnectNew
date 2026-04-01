@@ -52,6 +52,40 @@ public class SummerWaveCapacityDto
     public int FrozenAssignedUnits { get; set; }
 }
 
+public class SummerWaveBookingsPrintReportDto
+{
+    public int CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
+    public string WaveCode { get; set; } = string.Empty;
+    public DateTime? WaveStartAtUtc { get; set; }
+    public DateTime? WaveEndAtUtc { get; set; }
+    public DateTime GeneratedAtUtc { get; set; }
+    public string GeneratedByUserId { get; set; } = string.Empty;
+    public int TotalBookings { get; set; }
+    public List<SummerWaveBookingsPrintSectionDto> Sections { get; set; } = new();
+}
+
+public class SummerWaveBookingsPrintSectionDto
+{
+    public int? FamilyCount { get; set; }
+    public string SectionLabel { get; set; } = string.Empty;
+    public int TotalBookings { get; set; }
+    public List<SummerWaveBookingPrintRowDto> Rows { get; set; } = new();
+}
+
+public class SummerWaveBookingPrintRowDto
+{
+    public int MessageId { get; set; }
+    public string RequestRef { get; set; } = string.Empty;
+    public string BookerName { get; set; } = string.Empty;
+    public string WorkEntity { get; set; } = string.Empty;
+    public string BookingTypeLabel { get; set; } = string.Empty;
+    public string UnitNumber { get; set; } = string.Empty;
+    public int PersonsCount { get; set; }
+    public string StatusLabel { get; set; } = string.Empty;
+    public string Notes { get; set; } = string.Empty;
+}
+
 public class SummerDestinationConfigDto
 {
     public int CategoryId { get; set; }

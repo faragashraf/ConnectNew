@@ -14,6 +14,9 @@ import {
   SummerRequestsPageChange,
   SummerRequestsPageData,
   SummerRequestSummaryDto,
+  SummerWaveBookingsPrintReportDto,
+  SummerWaveBookingsPrintRowDto,
+  SummerWaveBookingsPrintSectionDto,
   SummerWaveCapacityDto
 } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.dto';
 import { SummerWorkflowController } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.service';
@@ -140,6 +143,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   capacityRows: SummerWaveCapacityDto[] = [];
   capacityScopeCategoryId: number | null = null;
   capacityScopeWaveCode = '';
+  bookingsPrintDialogVisible = false;
+  loadingWaveBookingsPrint = false;
+  waveBookingsPrintErrorText = '';
+  waveBookingsPrintData: SummerWaveBookingsPrintReportDto | null = null;
 
   readonly pricingModeOptions: Array<{ value: string; label: string }> = [
     { value: 'AccommodationOnlyAllowed', label: 'إقامة فقط' },
@@ -361,6 +368,51 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.capacityRows.reduce((sum, row) => sum + (Number(row.frozenAssignedUnits ?? 0) || 0), 0);
   }
 
+  get waveBookingsPrintSections(): SummerWaveBookingsPrintSectionDto[] {
+    return this.waveBookingsPrintData?.sections ?? [];
+  }
+
+  get hasWaveBookingsPrintRows(): boolean {
+    return (this.waveBookingsPrintData?.totalBookings ?? 0) > 0;
+  }
+
+  get waveBookingsPrintUserName(): string {
+    const candidates = [
+      localStorage.getItem('firstName'),
+      localStorage.getItem('UserId'),
+      this.waveBookingsPrintData?.generatedByUserId
+    ];
+
+    for (const candidate of candidates) {
+      const text = String(candidate ?? '').trim();
+      if (text.length > 0) {
+        return text;
+      }
+    }
+
+    return '-';
+  }
+
+  get showWaveBookingsPrintRequestRefColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintText(row => row.requestRef);
+  }
+
+  get showWaveBookingsPrintUnitNumberColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintText(row => row.unitNumber);
+  }
+
+  get showWaveBookingsPrintPersonsCountColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintNumeric(row => row.personsCount);
+  }
+
+  get showWaveBookingsPrintStatusColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintText(row => row.statusLabel);
+  }
+
+  get showWaveBookingsPrintNotesColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintText(row => row.notes);
+  }
+
   get selectedDashboardDestination(): SummerDestinationConfig | undefined {
     if (!this.dashboardScopeCategoryId) {
       return undefined;
@@ -542,6 +594,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.activeDashboardStatus = '';
     this.activeDashboardPaymentState = '';
     this.capacityDialogVisible = false;
+    this.bookingsPrintDialogVisible = false;
     this.loadRequests();
     this.loadDashboard();
   }
@@ -713,8 +766,65 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.refreshWaveCapacity();
   }
 
+  openWaveBookingsPrintPreview(): void {
+    if (!this.canOpenWaveCapacityDialog) {
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidWaveCapacityScope}</h5>`, true);
+      return;
+    }
+
+    this.bookingsPrintDialogVisible = true;
+    this.refreshWaveBookingsPrintReport();
+  }
+
   onCapacityDialogHide(): void {
     this.capacityDialogVisible = false;
+  }
+
+  onWaveBookingsPrintDialogHide(): void {
+    this.bookingsPrintDialogVisible = false;
+  }
+
+  refreshWaveBookingsPrintReport(silent = false): void {
+    if (!this.selectedFilterCategoryId || !this.selectedFilterWaveCode) {
+      return;
+    }
+
+    this.loadingWaveBookingsPrint = true;
+    this.waveBookingsPrintErrorText = '';
+    if (!silent) {
+      this.waveBookingsPrintData = null;
+    }
+
+    this.summerWorkflowController
+      .getWaveBookingsPrintReport(this.selectedFilterCategoryId, this.selectedFilterWaveCode, this.seasonYear)
+      .subscribe({
+        next: response => {
+          if (response?.isSuccess && response.data) {
+            this.waveBookingsPrintData = response.data;
+            return;
+          }
+
+          this.waveBookingsPrintData = null;
+          this.waveBookingsPrintErrorText = this.collectErrors(response);
+          if (!silent) {
+            this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
+          }
+        },
+        error: () => {
+          this.waveBookingsPrintData = null;
+          this.waveBookingsPrintErrorText = 'تعذر تحميل كشف الحاجزين حالياً.';
+          if (!silent) {
+            this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
+          }
+        },
+        complete: () => {
+          this.loadingWaveBookingsPrint = false;
+        }
+      });
+  }
+
+  printWaveBookingsReport(): void {
+    window.print();
   }
 
   refreshWaveCapacity(silent = false): void {
@@ -1117,6 +1227,27 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     const hour = String(date.getHours()).padStart(2, '0');
     const minute = String(date.getMinutes()).padStart(2, '0');
     return `${day}/${month}/${year} ${hour}:${minute}`;
+  }
+
+  formatDateOnly(value?: string): string {
+    if (!value) {
+      return '-';
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  resolveWaveBookingsPrintText(value: string | null | undefined): string {
+    const text = String(value ?? '').trim();
+    return text.length > 0 ? text : '-';
   }
 
   isPaymentOverdue(request: SummerRequestSummaryDto): boolean {
@@ -1596,6 +1727,14 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.capacityDialogVisible = false;
         }
       }
+
+      if (this.bookingsPrintDialogVisible) {
+        if (selectedCategoryId > 0 && currentWaveCode.length > 0 && allowedCodes.has(currentWaveCode)) {
+          this.refreshWaveBookingsPrintReport(true);
+        } else {
+          this.bookingsPrintDialogVisible = false;
+        }
+      }
     });
 
     if (categorySub) {
@@ -1604,16 +1743,22 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     const waveSub = this.filtersForm.get('waveCode')?.valueChanges.subscribe(value => {
       const selectedWaveCode = String(value ?? '').trim();
-      if (!this.capacityDialogVisible) {
-        return;
+      if (this.capacityDialogVisible) {
+        if (this.selectedFilterCategoryId > 0 && selectedWaveCode.length > 0) {
+          this.capacityScopeCategoryId = this.selectedFilterCategoryId;
+          this.capacityScopeWaveCode = selectedWaveCode;
+          this.refreshWaveCapacity(true);
+        } else {
+          this.capacityDialogVisible = false;
+        }
       }
 
-      if (this.selectedFilterCategoryId > 0 && selectedWaveCode.length > 0) {
-        this.capacityScopeCategoryId = this.selectedFilterCategoryId;
-        this.capacityScopeWaveCode = selectedWaveCode;
-        this.refreshWaveCapacity(true);
-      } else {
-        this.capacityDialogVisible = false;
+      if (this.bookingsPrintDialogVisible) {
+        if (this.selectedFilterCategoryId > 0 && selectedWaveCode.length > 0) {
+          this.refreshWaveBookingsPrintReport(true);
+        } else {
+          this.bookingsPrintDialogVisible = false;
+        }
       }
     });
 
@@ -1748,6 +1893,28 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         this.loadingDetails = false;
       }
     });
+  }
+
+  private hasAnyWaveBookingsPrintText(
+    selector: (row: SummerWaveBookingsPrintRowDto) => string | null | undefined
+  ): boolean {
+    return this.waveBookingsPrintSections.some(section =>
+      section.rows.some(row => {
+        const text = String(selector(row) ?? '').trim();
+        return text.length > 0 && text !== '-';
+      })
+    );
+  }
+
+  private hasAnyWaveBookingsPrintNumeric(
+    selector: (row: SummerWaveBookingsPrintRowDto) => number | null | undefined
+  ): boolean {
+    return this.waveBookingsPrintSections.some(section =>
+      section.rows.some(row => {
+        const value = Number(selector(row) ?? 0);
+        return Number.isFinite(value) && value > 0;
+      })
+    );
   }
 
   private collectErrors(response: { errors?: Array<{ message?: string }> } | null | undefined): string {

@@ -1,0 +1,91 @@
+<section class="bookings-print-shell">
+  <header class="preview-toolbar no-print">
+    <div class="toolbar-title">
+      <h2>معاينة طباعة كشف الحاجزين</h2>
+      <small>المصيف: {{ report?.categoryName || ('مصيف ' + selectedCategoryId) }} | الفوج: {{ report?.waveCode || selectedWaveCode || '-' }}</small>
+    </div>
+    <div class="toolbar-actions">
+      <button type="button" class="ghost" (click)="closePreview()">إغلاق</button>
+      <button type="button" class="primary" (click)="printNow()" [disabled]="loading || loadError.length > 0">طباعة</button>
+    </div>
+  </header>
+
+  <p class="error-text" *ngIf="loadError.length > 0">{{ loadError }}</p>
+
+  <section class="print-document" *ngIf="loadError.length === 0">
+    <header class="doc-header">
+      <h1>كشف أسماء الحاجزين للفوج</h1>
+      <div class="doc-meta-grid">
+        <article>
+          <span>المصيف</span>
+          <strong>{{ report?.categoryName || ('مصيف ' + selectedCategoryId) }}</strong>
+        </article>
+        <article>
+          <span>الفوج</span>
+          <strong>{{ report?.waveCode || selectedWaveCode || '-' }}</strong>
+        </article>
+        <article>
+          <span>بداية الفوج</span>
+          <strong>{{ formatDate(report?.waveStartAtUtc) }}</strong>
+        </article>
+        <article>
+          <span>نهاية الفوج</span>
+          <strong>{{ formatDate(report?.waveEndAtUtc) }}</strong>
+        </article>
+        <article>
+          <span>تاريخ ووقت الطباعة</span>
+          <strong>{{ formatDateTime(report?.generatedAtUtc) }}</strong>
+        </article>
+        <article>
+          <span>تمت الطباعة بواسطة</span>
+          <strong>{{ printUserName }}</strong>
+        </article>
+      </div>
+    </header>
+
+    <div class="loading-state" *ngIf="loading">جاري تحميل بيانات كشف الحاجزين...</div>
+    <p class="empty-state" *ngIf="!loading && !hasRows">لا توجد بيانات حجوزات للفوج المحدد.</p>
+
+    <section class="print-section" *ngFor="let section of sections; trackBy: trackBySection">
+      <header class="section-header">
+        <h3>{{ section.sectionLabel }}</h3>
+        <span>إجمالي القسم: {{ section.totalBookings }}</span>
+      </header>
+
+      <div class="table-wrap">
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th class="col-index">م</th>
+              <th>اسم الحاجز / صاحب الطلب</th>
+              <th>جهة العمل</th>
+              <th>نوع الحجز</th>
+              <th *ngIf="showRequestRefColumn">رقم الطلب</th>
+              <th *ngIf="showUnitNumberColumn">رقم الوحدة</th>
+              <th *ngIf="showPersonsCountColumn">عدد الأفراد</th>
+              <th *ngIf="showStatusColumn">الحالة</th>
+              <th *ngIf="showNotesColumn">ملاحظات</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of section.rows; let rowIndex = index; trackBy: trackByRow">
+              <td class="col-index">{{ rowIndex + 1 }}</td>
+              <td>{{ resolveDisplayText(row.bookerName) }}</td>
+              <td>{{ resolveDisplayText(row.workEntity) }}</td>
+              <td>{{ resolveDisplayText(row.bookingTypeLabel) }}</td>
+              <td *ngIf="showRequestRefColumn">{{ resolveDisplayText(row.requestRef) }}</td>
+              <td *ngIf="showUnitNumberColumn">{{ resolveDisplayText(row.unitNumber) }}</td>
+              <td *ngIf="showPersonsCountColumn">{{ row.personsCount > 0 ? row.personsCount : '-' }}</td>
+              <td *ngIf="showStatusColumn">{{ resolveDisplayText(row.statusLabel) }}</td>
+              <td *ngIf="showNotesColumn">{{ resolveDisplayText(row.notes) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="doc-summary" *ngIf="!loading && hasRows">
+      <strong>الإجمالي العام للحاجزين: {{ report?.totalBookings }}</strong>
+    </footer>
+  </section>
+</section>

@@ -25,6 +25,7 @@ import {
   SummerPricingQuoteRequest,
   SummerPayFormRequest,
   SummerRequestSummaryDto,
+  SummerWaveBookingsPrintReportDto,
   SummerTransferFormRequest,
   SummerWaveCapacityDto,
   SummerWorkflowCommonResponse
@@ -63,6 +64,21 @@ export class SummerWorkflowController {
       .set('waveCode', waveCode)
       .set('includeFrozenUnits', String(Boolean(includeFrozenUnits)));
     return this.http.get<SummerWorkflowCommonResponse<SummerWaveCapacityDto[]>>(`${this.baseUrl}/GetWaveCapacity`, { params });
+  }
+
+  getWaveBookingsPrintReport(
+    categoryId: number,
+    waveCode: string,
+    seasonYear: number
+  ): Observable<SummerWorkflowCommonResponse<SummerWaveBookingsPrintReportDto>> {
+    const params = new HttpParams()
+      .set('categoryId', String(categoryId))
+      .set('waveCode', waveCode)
+      .set('seasonYear', String(seasonYear));
+    return this.http.get<SummerWorkflowCommonResponse<SummerWaveBookingsPrintReportDto>>(
+      `${this.baseUrl}/GetWaveBookingsPrintReport`,
+      { params }
+    );
   }
 
   getPricingQuote(body: SummerPricingQuoteRequest): Observable<SummerWorkflowCommonResponse<SummerPricingQuoteDto>> {

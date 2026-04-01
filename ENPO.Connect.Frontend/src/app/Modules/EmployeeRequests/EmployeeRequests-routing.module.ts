@@ -8,6 +8,7 @@ import { SummerRequestsAdminConsoleComponent } from './components/summer-request
 import { SummerUnitFreezeListPageComponent } from './components/summer-unit-freeze-list-page/summer-unit-freeze-list-page.component';
 import { SummerUnitFreezeCreatePageComponent } from './components/summer-unit-freeze-create-page/summer-unit-freeze-create-page.component';
 import { SummerUnitFreezeDetailsPageComponent } from './components/summer-unit-freeze-details-page/summer-unit-freeze-details-page.component';
+import { SummerWaveBookingsPrintPageComponent } from './components/summer-wave-bookings-print-page/summer-wave-bookings-print-page.component';
 import { SUMMER_FEATURE_ROUTES } from './components/summer-shared/core/summer-feature.config';
 
 const routes: Routes = [
@@ -30,6 +31,14 @@ const routes: Routes = [
   {
     path: SUMMER_FEATURE_ROUTES.adminConsole,
     component: SummerRequestsAdminConsoleComponent,
+    canActivate: [AuthNewGuardService], data: {
+      func: 'SummerAdminFunc',
+      configRouteKey: 'Admin/SummerRequestsManagement'
+    }
+  },
+  {
+    path: SUMMER_FEATURE_ROUTES.waveBookingsPrint,
+    component: SummerWaveBookingsPrintPageComponent,
     canActivate: [AuthNewGuardService], data: {
       func: 'SummerAdminFunc',
       configRouteKey: 'Admin/SummerRequestsManagement'

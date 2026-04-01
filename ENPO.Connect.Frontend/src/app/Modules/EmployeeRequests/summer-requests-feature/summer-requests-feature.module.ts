@@ -22,6 +22,7 @@ import { FreezeDetailsComponent } from '../components/summer-shared/freeze-detai
 import { SummerUnitFreezeCreatePageComponent } from '../components/summer-unit-freeze-create-page/summer-unit-freeze-create-page.component';
 import { SummerUnitFreezeListPageComponent } from '../components/summer-unit-freeze-list-page/summer-unit-freeze-list-page.component';
 import { SummerUnitFreezeDetailsPageComponent } from '../components/summer-unit-freeze-details-page/summer-unit-freeze-details-page.component';
+import { SummerWaveBookingsPrintPageComponent } from '../components/summer-wave-bookings-print-page/summer-wave-bookings-print-page.component';
 
 @NgModule({
   declarations: [
@@ -41,7 +42,8 @@ import { SummerUnitFreezeDetailsPageComponent } from '../components/summer-unit-
     FreezeDetailsComponent,
     SummerUnitFreezeCreatePageComponent,
     SummerUnitFreezeListPageComponent,
-    SummerUnitFreezeDetailsPageComponent
+    SummerUnitFreezeDetailsPageComponent,
+    SummerWaveBookingsPrintPageComponent
   ],
   imports: [
     CommonModule,

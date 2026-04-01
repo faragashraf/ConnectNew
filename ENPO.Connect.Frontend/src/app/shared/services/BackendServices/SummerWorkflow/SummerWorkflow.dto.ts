@@ -74,6 +74,37 @@ export interface SummerWaveCapacityDto {
   frozenAssignedUnits: number;
 }
 
+export interface SummerWaveBookingsPrintRowDto {
+  messageId: number;
+  requestRef: string;
+  bookerName: string;
+  workEntity: string;
+  bookingTypeLabel: string;
+  unitNumber: string;
+  personsCount: number;
+  statusLabel: string;
+  notes: string;
+}
+
+export interface SummerWaveBookingsPrintSectionDto {
+  familyCount?: number | null;
+  sectionLabel: string;
+  totalBookings: number;
+  rows: SummerWaveBookingsPrintRowDto[];
+}
+
+export interface SummerWaveBookingsPrintReportDto {
+  categoryId: number;
+  categoryName: string;
+  waveCode: string;
+  waveStartAtUtc?: string | null;
+  waveEndAtUtc?: string | null;
+  generatedAtUtc?: string;
+  generatedByUserId: string;
+  totalBookings: number;
+  sections: SummerWaveBookingsPrintSectionDto[];
+}
+
 export interface SummerStayModeDefinitionDto {
   code: string;
   label: string;

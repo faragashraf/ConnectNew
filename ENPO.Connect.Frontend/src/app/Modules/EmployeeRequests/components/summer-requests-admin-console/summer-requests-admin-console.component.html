@@ -338,6 +338,13 @@
             [disabled]="!canOpenWaveCapacityDialog">
             بيان إتاحة هذا الفوج
           </button>
+          <button
+            type="button"
+            class="ghost bookings-print-trigger"
+            (click)="openWaveBookingsPrintPreview()"
+            [disabled]="!canOpenWaveCapacityDialog">
+            طباعة كشف الحاجزين
+          </button>
         </div>
       </label>
 
@@ -453,6 +460,122 @@
       <p class="empty" *ngIf="!loadingWaveCapacity && capacityRows.length === 0 && capacityErrorText.length === 0">
         لا توجد بيانات إتاحة حالياً للفوج المختار.
       </p>
+    </div>
+  </p-dialog>
+
+  <p-dialog
+    header="كشف أسماء الحاجزين للفوج"
+    [(visible)]="bookingsPrintDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [appendTo]="'body'"
+    styleClass="wave-bookings-print-dialog"
+    [style]="{ width: '1220px', maxWidth: '98vw' }"
+    [contentStyle]="{ overflow: 'auto', maxHeight: '86vh' }"
+    (onHide)="onWaveBookingsPrintDialogHide()">
+    <div class="wave-bookings-dialog-shell">
+      <div class="wave-bookings-dialog-actions no-print">
+        <div class="wave-bookings-dialog-title">
+          <h4>{{ waveBookingsPrintData?.categoryName || selectedFilterDestinationName }} - الفوج {{ waveBookingsPrintData?.waveCode || selectedFilterWaveCode }}</h4>
+          <small *ngIf="waveBookingsPrintData?.generatedAtUtc">تاريخ الطباعة: {{ formatDate(waveBookingsPrintData?.generatedAtUtc || '') }}</small>
+        </div>
+        <div class="wave-bookings-dialog-buttons">
+          <button type="button" class="ghost" (click)="refreshWaveBookingsPrintReport()" [disabled]="loadingWaveBookingsPrint">
+            {{ loadingWaveBookingsPrint ? 'جاري التحديث...' : 'تحديث' }}
+          </button>
+          <button type="button" class="primary" (click)="printWaveBookingsReport()" [disabled]="loadingWaveBookingsPrint || waveBookingsPrintErrorText.length > 0">
+            طباعة
+          </button>
+        </div>
+      </div>
+
+      <p class="capacity-error" *ngIf="waveBookingsPrintErrorText.length > 0" [innerHTML]="waveBookingsPrintErrorText"></p>
+
+      <div class="wave-bookings-loading loading-note" *ngIf="loadingWaveBookingsPrint">جاري تحميل كشف الحاجزين...</div>
+      <app-summer-skeleton
+        *ngIf="loadingWaveBookingsPrint"
+        [variant]="'capacity'"
+        [rows]="4"
+        [showTitle]="false"
+        [ariaLabel]="'جاري تحميل كشف الحاجزين'">
+      </app-summer-skeleton>
+
+      <section class="wave-bookings-print-doc" *ngIf="!loadingWaveBookingsPrint && waveBookingsPrintData as report">
+        <header class="wave-bookings-doc-header">
+          <h2>كشف أسماء الحاجزين للفوج</h2>
+          <div class="wave-bookings-meta-grid">
+            <article>
+              <span>المصيف</span>
+              <strong>{{ resolveWaveBookingsPrintText(report.categoryName) }}</strong>
+            </article>
+            <article>
+              <span>الفوج</span>
+              <strong>{{ resolveWaveBookingsPrintText(report.waveCode) }}</strong>
+            </article>
+            <article>
+              <span>بداية الفوج</span>
+              <strong>{{ formatDateOnly(report.waveStartAtUtc || '') }}</strong>
+            </article>
+            <article>
+              <span>نهاية الفوج</span>
+              <strong>{{ formatDateOnly(report.waveEndAtUtc || '') }}</strong>
+            </article>
+            <article>
+              <span>وقت الطباعة</span>
+              <strong>{{ formatDate(report.generatedAtUtc || '') }}</strong>
+            </article>
+            <article>
+              <span>المستخدم</span>
+              <strong>{{ waveBookingsPrintUserName }}</strong>
+            </article>
+          </div>
+        </header>
+
+        <p class="empty" *ngIf="!hasWaveBookingsPrintRows">لا توجد بيانات حجوزات للفوج المختار.</p>
+
+        <section class="wave-bookings-section" *ngFor="let section of waveBookingsPrintSections">
+          <header class="wave-bookings-section-header">
+            <h3>{{ section.sectionLabel }}</h3>
+            <span>إجمالي القسم: {{ section.totalBookings }}</span>
+          </header>
+
+          <div class="wave-bookings-table-wrap">
+            <table class="wave-bookings-table">
+              <thead>
+                <tr>
+                  <th class="col-index">م</th>
+                  <th>اسم الحاجز / صاحب الطلب</th>
+                  <th>جهة العمل</th>
+                  <th>نوع الحجز</th>
+                  <th *ngIf="showWaveBookingsPrintRequestRefColumn">رقم الطلب</th>
+                  <th *ngIf="showWaveBookingsPrintUnitNumberColumn">رقم الوحدة</th>
+                  <th *ngIf="showWaveBookingsPrintPersonsCountColumn">عدد الأفراد</th>
+                  <th *ngIf="showWaveBookingsPrintStatusColumn">الحالة</th>
+                  <th *ngIf="showWaveBookingsPrintNotesColumn">ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of section.rows; let rowIndex = index">
+                  <td class="col-index">{{ rowIndex + 1 }}</td>
+                  <td>{{ resolveWaveBookingsPrintText(row.bookerName) }}</td>
+                  <td>{{ resolveWaveBookingsPrintText(row.workEntity) }}</td>
+                  <td>{{ resolveWaveBookingsPrintText(row.bookingTypeLabel) }}</td>
+                  <td *ngIf="showWaveBookingsPrintRequestRefColumn">{{ resolveWaveBookingsPrintText(row.requestRef) }}</td>
+                  <td *ngIf="showWaveBookingsPrintUnitNumberColumn">{{ resolveWaveBookingsPrintText(row.unitNumber) }}</td>
+                  <td *ngIf="showWaveBookingsPrintPersonsCountColumn">{{ row.personsCount > 0 ? row.personsCount : '-' }}</td>
+                  <td *ngIf="showWaveBookingsPrintStatusColumn">{{ resolveWaveBookingsPrintText(row.statusLabel) }}</td>
+                  <td *ngIf="showWaveBookingsPrintNotesColumn">{{ resolveWaveBookingsPrintText(row.notes) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer class="wave-bookings-summary" *ngIf="hasWaveBookingsPrintRows">
+          <strong>الإجمالي العام للحاجزين: {{ report.totalBookings }}</strong>
+        </footer>
+      </section>
     </div>
   </p-dialog>
 

@@ -31,6 +31,7 @@ export const SUMMER_FEATURE_ROUTES = {
   workspace: 'SummerRequests',
   workspaceEdit: 'SummerRequests/edit/:token',
   adminConsole: 'SummerRequestsManagement',
+  waveBookingsPrint: 'SummerRequestsManagement/print-bookings',
   unitFreezeList: 'resorts/unit-freeze',
   unitFreezeCreate: 'resorts/unit-freeze/create',
   unitFreezeDetails: 'resorts/unit-freeze/:id',
