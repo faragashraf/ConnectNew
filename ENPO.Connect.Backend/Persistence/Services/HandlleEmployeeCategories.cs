@@ -406,6 +406,12 @@ namespace Persistence.Services
                             return;
                         }
 
+                        if (!await CanUserEditExistingSummerMessageAsync(normalizedActorUserId, existingMessage))
+                        {
+                            response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بتعديل هذا الطلب." });
+                            return;
+                        }
+
                         previousCategoryId = existingMessage.CategoryCd;
                         previousWaveCode = (await _connectContext.TkmendFields
                             .AsNoTracking()
@@ -510,6 +516,7 @@ namespace Persistence.Services
                     {
                         await _connectContext.Replies.AddAsync(reply);
                         await SaveRequestAttachmentsAsync(messageRequest.files, reply.ReplyId);
+                        await RevokeSummerEditTokensAsync(messageId, normalizedActorUserId);
                     }
                     else
                     {
@@ -1191,6 +1198,76 @@ SELECT @result;
             }
 
             return userUnitIds.Any(unitId => allowedUnitIds.Contains(unitId));
+        }
+
+        private async Task<bool> CanUserEditExistingSummerMessageAsync(string userId, Message existingMessage)
+        {
+            if (existingMessage == null)
+            {
+                return false;
+            }
+
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return false;
+            }
+
+            if (string.Equals(
+                    (existingMessage.CreatedBy ?? string.Empty).Trim(),
+                    normalizedUserId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (await CanUserManageSummerCategoryAsync(normalizedUserId, existingMessage.CategoryCd))
+            {
+                return true;
+            }
+
+            var ownerEmployeeId = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(field =>
+                    field.FildRelted == existingMessage.MessageId
+                    && SummerWorkflowDomainConstants.EmployeeIdFieldKinds.Contains(field.FildKind))
+                .Select(field => field.FildTxt)
+                .FirstOrDefaultAsync();
+
+            return string.Equals(
+                (ownerEmployeeId ?? string.Empty).Trim(),
+                normalizedUserId,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task RevokeSummerEditTokensAsync(int messageId, string revokedBy)
+        {
+            if (messageId <= 0)
+            {
+                return;
+            }
+
+            var normalizedRevokedBy = (revokedBy ?? string.Empty).Trim();
+            var now = DateTime.UtcNow;
+            var activeTokens = await _connectContext.RequestTokens
+                .Where(tokenRow =>
+                    tokenRow.MessageId == messageId
+                    && tokenRow.TokenPurpose == SummerWorkflowDomainConstants.RequestTokenPurposes.SummerEdit
+                    && tokenRow.RevokedAt == null
+                    && (!tokenRow.ExpiresAt.HasValue || tokenRow.ExpiresAt > now)
+                    && (!tokenRow.IsOneTimeUse || !tokenRow.IsUsed))
+                .ToListAsync();
+
+            if (activeTokens.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var tokenRow in activeTokens)
+            {
+                tokenRow.RevokedAt = now;
+                tokenRow.RevokedBy = normalizedRevokedBy.Length == 0 ? "SYSTEM" : normalizedRevokedBy;
+            }
         }
 
         private async Task<List<string>> GetActiveUserUnitIdsAsync(string userId)

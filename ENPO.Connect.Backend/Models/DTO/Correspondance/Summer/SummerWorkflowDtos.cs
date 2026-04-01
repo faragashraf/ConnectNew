@@ -26,6 +26,20 @@ public class SummerRequestSummaryDto
     public bool TransferUsed { get; set; }
 }
 
+public class SummerCreateEditTokenRequest
+{
+    public int MessageId { get; set; }
+    public int? ExpireMinutes { get; set; } = 30;
+    public bool OneTimeUse { get; set; }
+}
+
+public class SummerEditTokenResolutionDto
+{
+    public int MessageId { get; set; }
+    public DateTime? ExpiresAtUtc { get; set; }
+    public bool IsOneTimeUse { get; set; }
+}
+
 public class SummerWaveCapacityDto
 {
     public int CategoryId { get; set; }

@@ -51,6 +51,18 @@ export interface SummerRequestSummaryDto {
   transferUsed: boolean;
 }
 
+export interface SummerCreateEditTokenRequest {
+  messageId: number;
+  expireMinutes?: number | null;
+  oneTimeUse?: boolean;
+}
+
+export interface SummerEditTokenResolutionDto {
+  messageId: number;
+  expiresAtUtc?: string;
+  isOneTimeUse: boolean;
+}
+
 export interface SummerWaveCapacityDto {
   categoryId: number;
   waveCode: string;

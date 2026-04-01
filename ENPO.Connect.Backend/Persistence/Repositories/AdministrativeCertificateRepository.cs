@@ -18,10 +18,12 @@ using Models.DTO.Correspondance.Enums;
 using Models.GPA;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.Summer;
 using Repositories;
 using SignalR.Notification;
 using System.Data;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -558,41 +560,102 @@ namespace Persistence.Repositories
             return res;
         }
 
-        public async Task<CommonResponse<string>> CreateRequestTokenAsync(int messageId, int? expireHours = 24)
+        public async Task<CommonResponse<string>> CreateRequestTokenAsync(
+            int messageId,
+            string? createdBy = null,
+            string? tokenPurpose = null,
+            int? expireHours = 24,
+            bool isOneTimeUse = false,
+            string? subjectUserId = null)
         {
             var res = new CommonResponse<string>();
             try
             {
-                // Try to find an existing token for this message
-                var existing = await _connectContext.RequestTokens
-                    .Where(t => t.MessageId == messageId)
-                    .OrderByDescending(t => t.ExpiresAt ?? DateTime.MaxValue)
-                    .FirstOrDefaultAsync();
-
-                var now = DateTime.UtcNow;
-                if (existing != null)
+                if (messageId <= 0)
                 {
-                    // If token has no expiry (persistent) or expires later than 15 minutes from now, reuse it
-                    if (!existing.ExpiresAt.HasValue || existing.ExpiresAt.Value > now.AddMinutes(15))
-                    {
-                        res.Data = existing.Token;
-                        return res;
-                    }
-                    // otherwise existing token is expired or will expire within 15 minutes -> generate new one
+                    res.Errors.Add(new Error { Code = "400", Message = "MessageId is required." });
+                    return res;
                 }
 
-                var token = Guid.NewGuid().ToString("N");
+                var normalizedCreatedBy = (createdBy ?? string.Empty).Trim();
+                var normalizedSubjectUserId = (subjectUserId ?? string.Empty).Trim();
+                var normalizedPurpose = string.IsNullOrWhiteSpace(tokenPurpose)
+                    ? SummerWorkflowDomainConstants.RequestTokenPurposes.Generic
+                    : tokenPurpose.Trim();
+                var lookupUserId = normalizedSubjectUserId.Length > 0
+                    ? normalizedSubjectUserId
+                    : normalizedCreatedBy;
+                if (!string.IsNullOrWhiteSpace(lookupUserId))
+                {
+                    var hasAccess = await CanUserAccessMessageAsync(messageId, lookupUserId);
+                    if (!hasAccess)
+                    {
+                        res.Errors.Add(new Error { Code = "404", Message = "Message not found." });
+                        return res;
+                    }
+                }
+                else
+                {
+                    var messageExists = await _connectContext.Messages
+                        .AsNoTracking()
+                        .AnyAsync(message => message.MessageId == messageId);
+                    if (!messageExists)
+                    {
+                        res.Errors.Add(new Error { Code = "404", Message = "Message not found." });
+                        return res;
+                    }
+                }
+
+                var now = DateTime.UtcNow;
+
+                var activeTokensQuery = _connectContext.RequestTokens
+                    .Where(tokenRow =>
+                        tokenRow.MessageId == messageId
+                        && tokenRow.TokenPurpose == normalizedPurpose
+                        && tokenRow.RevokedAt == null
+                        && (!tokenRow.ExpiresAt.HasValue || tokenRow.ExpiresAt.Value > now)
+                        && (!tokenRow.IsOneTimeUse || !tokenRow.IsUsed));
+                if (!string.IsNullOrWhiteSpace(normalizedSubjectUserId))
+                {
+                    activeTokensQuery = activeTokensQuery
+                        .Where(tokenRow => tokenRow.UserId == normalizedSubjectUserId);
+                }
+
+                var activeTokens = await activeTokensQuery.ToListAsync();
+                if (activeTokens.Count > 0)
+                {
+                    foreach (var activeToken in activeTokens)
+                    {
+                        activeToken.RevokedAt = now;
+                        activeToken.RevokedBy = string.IsNullOrWhiteSpace(normalizedCreatedBy)
+                            ? "SYSTEM"
+                            : normalizedCreatedBy;
+                    }
+                }
+
+                var rawToken = GenerateSecureToken();
+                var tokenHash = ComputeTokenHash(rawToken);
                 var entity = new Models.Correspondance.RequestToken
                 {
-                    Token = token,
+                    // Keep Token as an internal non-secret row key for backward-compatible schema.
+                    Token = Guid.NewGuid().ToString("N"),
+                    TokenHash = tokenHash,
                     MessageId = messageId,
+                    TokenPurpose = normalizedPurpose,
+                    IsUsed = false,
+                    IsOneTimeUse = isOneTimeUse,
+                    UsedAt = null,
                     CreatedAt = now,
-                    ExpiresAt = expireHours.HasValue ? now.AddHours(expireHours.Value) : (DateTime?)null
+                    CreatedBy = normalizedCreatedBy.Length == 0 ? null : normalizedCreatedBy,
+                    UserId = normalizedSubjectUserId.Length == 0 ? null : normalizedSubjectUserId,
+                    ExpiresAt = expireHours.HasValue ? now.AddHours(expireHours.Value) : null,
+                    RevokedAt = null,
+                    RevokedBy = null
                 };
 
                 await _connectContext.RequestTokens.AddAsync(entity);
                 await _connectContext.SaveChangesAsync();
-                res.Data = token;
+                res.Data = rawToken;
             }
             catch (Exception ex)
             {
@@ -607,21 +670,76 @@ namespace Persistence.Repositories
             return res;
         }
 
-        public async Task<CommonResponse<MessageDto>> GetRequestByTokenAsync(string token)
+        public async Task<CommonResponse<MessageDto>> GetRequestByTokenAsync(string token, string? currentUserId = null, bool consumeOneTime = false)
         {
             var res = new CommonResponse<MessageDto>();
             try
             {
-                var tok = await _connectContext.RequestTokens.FirstOrDefaultAsync(t => t.Token == token);
-                if (tok == null)
+                var normalizedToken = (token ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(normalizedToken))
                 {
-                    res.Errors.Add(new Error { Code = "404", Message = "Token not found" });
+                    res.Errors.Add(new Error { Code = "400", Message = "Token is required." });
                     return res;
                 }
-                if (tok.ExpiresAt.HasValue && tok.ExpiresAt.Value < DateTime.UtcNow)
+
+                var tokenHash = ComputeTokenHash(normalizedToken);
+                var tok = await _connectContext.RequestTokens
+                    .OrderByDescending(tokenRow => tokenRow.CreatedAt)
+                    .FirstOrDefaultAsync(tokenRow =>
+                        (tokenRow.TokenHash != null && tokenRow.TokenHash == tokenHash)
+                        || (tokenRow.TokenHash == null && tokenRow.Token == normalizedToken));
+
+                if (tok == null)
                 {
-                    res.Errors.Add(new Error { Code = "410", Message = "Token expired" });
+                    res.Errors.Add(new Error { Code = "404", Message = "Token not found." });
                     return res;
+                }
+
+                var normalizedPurpose = string.IsNullOrWhiteSpace(tok.TokenPurpose)
+                    ? SummerWorkflowDomainConstants.RequestTokenPurposes.Generic
+                    : tok.TokenPurpose.Trim();
+                if (!string.Equals(
+                        normalizedPurpose,
+                        SummerWorkflowDomainConstants.RequestTokenPurposes.Generic,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    res.Errors.Add(new Error { Code = "404", Message = "Token not found." });
+                    return res;
+                }
+
+                var normalizedCurrentUserId = (currentUserId ?? string.Empty).Trim();
+                var tokenBoundUserId = (tok.UserId ?? string.Empty).Trim();
+                if (tokenBoundUserId.Length > 0
+                    && !string.Equals(tokenBoundUserId, normalizedCurrentUserId, StringComparison.OrdinalIgnoreCase))
+                {
+                    res.Errors.Add(new Error { Code = "404", Message = "Token not found." });
+                    return res;
+                }
+
+                var now = DateTime.UtcNow;
+                if (tok.RevokedAt.HasValue)
+                {
+                    res.Errors.Add(new Error { Code = "410", Message = "Token revoked." });
+                    return res;
+                }
+
+                if (tok.ExpiresAt.HasValue && tok.ExpiresAt.Value <= now)
+                {
+                    res.Errors.Add(new Error { Code = "410", Message = "Token expired." });
+                    return res;
+                }
+
+                if (tok.IsOneTimeUse && tok.IsUsed)
+                {
+                    res.Errors.Add(new Error { Code = "410", Message = "Token already used." });
+                    return res;
+                }
+
+                if (consumeOneTime && tok.IsOneTimeUse && !tok.IsUsed)
+                {
+                    tok.IsUsed = true;
+                    tok.UsedAt = now;
+                    await _connectContext.SaveChangesAsync();
                 }
 
                 var expressions = new List<Expression<Func<Message, bool>>>();
@@ -632,7 +750,7 @@ namespace Persistence.Repositories
 
                 var internalDto = new InternalCommunicationDto
                 {
-                    userId = "",
+                    userId = normalizedCurrentUserId,
                     expressionMessageFilters = (ExpressionBuilder.CombineAnd(expressions.ToArray()), filters)
                 };
 
@@ -660,6 +778,69 @@ namespace Persistence.Repositories
         }
 
         ///////////////////////////////       Private Methods        ///////////////////////////////////////////////
+
+        private async Task<bool> CanUserAccessMessageAsync(int messageId, string userId)
+        {
+            if (messageId <= 0)
+            {
+                return false;
+            }
+
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return false;
+            }
+
+            var expressions = new List<Expression<Func<Message, bool>>>();
+            Expression<Func<Message, bool>> messageIdExpr = message => message.MessageId == messageId;
+            expressions.Add(messageIdExpr);
+            var filters = new Dictionary<string, Expression<Func<Message, bool>>>
+            {
+                { "MessageId", messageIdExpr }
+            };
+
+            var internalDto = new InternalCommunicationDto
+            {
+                userId = normalizedUserId,
+                expressionMessageFilters = (ExpressionBuilder.CombineAnd(expressions.ToArray()), filters)
+            };
+
+            var requestModel = new ListRequestModel
+            {
+                pageNumber = 1,
+                pageSize = 1,
+                Search = new Search { SearchKind = SearchKind.NoSearch }
+            };
+
+            var singleResponse = await _helperService.ReturnSingleCommonResponseAsync(internalDto, requestModel);
+            return singleResponse.IsSuccess
+                && singleResponse.Data != null
+                && singleResponse.Data.MessageId == messageId;
+        }
+
+        private static string GenerateSecureToken(int bytesLength = 32)
+        {
+            var bytes = RandomNumberGenerator.GetBytes(bytesLength);
+            var token = Convert.ToBase64String(bytes)
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+            return token;
+        }
+
+        private static string ComputeTokenHash(string token)
+        {
+            var normalized = (token ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var buffer = Encoding.UTF8.GetBytes(normalized);
+            var hash = SHA256.HashData(buffer);
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
 
         private static string GetPropertyName(ListRequestModel RequestModel)
         {
@@ -769,5 +950,3 @@ namespace Persistence.Repositories
     }
 
 }
-
-

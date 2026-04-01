@@ -104,7 +104,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   seasonTransferAlreadyUsed = false;
   transferWaveCapacities: SummerWaveCapacityDto[] = [];
   activeTabIndex = 0;
+  editRouteToken: string | null = null;
   editRequestId: number | null = null;
+  creatingEditLink = false;
+  resolvingEditToken = false;
 
   private readonly paymentInFutureErrorKey = 'paymentInFuture';
   private readonly subscriptions = new Subscription();
@@ -179,7 +182,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   get isEditMode(): boolean {
-    return Number(this.editRequestId ?? 0) > 0;
+    return String(this.editRouteToken ?? '').trim().length > 0;
   }
 
   get transferDestination(): SummerDestinationConfig | undefined {
@@ -469,12 +472,42 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.creatingEditLink) {
+      return;
+    }
+
+    this.creatingEditLink = true;
     this.activeTabIndex = 0;
-    this.router.navigate(['/EmployeeRequests/SummerRequests/edit', request.messageId]);
+    this.summerWorkflowController.createEditToken({
+      messageId: request.messageId,
+      oneTimeUse: false
+    }).subscribe({
+      next: response => {
+        const token = String(response?.data ?? '').trim();
+        if (response?.isSuccess && token.length > 0) {
+          this.router.navigate(['/EmployeeRequests/SummerRequests/edit', token]);
+          return;
+        }
+
+        const errors = (response?.errors ?? [])
+          .map(item => String(item?.message ?? '').trim())
+          .filter(item => item.length > 0)
+          .join('<br/>');
+        this.msg.msgError('تعذر إنشاء رابط التعديل', `<h5>${errors || 'تعذر إنشاء رابط تعديل آمن للطلب.'}</h5>`, true);
+      },
+      error: () => {
+        this.msg.msgError('تعذر إنشاء رابط التعديل', '<h5>حدث خطأ أثناء إنشاء رابط تعديل آمن للطلب.</h5>', true);
+      },
+      complete: () => {
+        this.creatingEditLink = false;
+      }
+    });
   }
 
   exitEditMode(openMyRequestsTab = false): void {
+    this.editRouteToken = null;
     this.editRequestId = null;
+    this.resolvingEditToken = false;
     if (openMyRequestsTab) {
       this.activeTabIndex = 1;
     }
@@ -1046,21 +1079,64 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   private bindRouteMode(): void {
     const routeSub = this.route.paramMap.subscribe(params => {
-      const parsedId = this.parsePositiveInt(params.get('id'));
-      this.editRequestId = parsedId;
-
-      if (parsedId) {
-        this.activeTabIndex = 0;
-        const matched = this.myRequests.find(item => item.messageId === parsedId);
-        if (matched) {
-          this.selectedRequestId = matched.messageId;
-          this.loadSelectedRequestDetails(matched.messageId);
-        }
+      const routeToken = String(params.get('token') ?? params.get('id') ?? '').trim();
+      if (routeToken.length === 0) {
+        this.editRouteToken = null;
+        this.editRequestId = null;
+        this.resolvingEditToken = false;
         return;
       }
+
+      if (this.editRouteToken === routeToken && (this.resolvingEditToken || Number(this.editRequestId ?? 0) > 0)) {
+        return;
+      }
+
+      this.editRouteToken = routeToken;
+      this.editRequestId = null;
+      this.resolvingEditToken = true;
+      this.activeTabIndex = 0;
+
+      this.summerWorkflowController.resolveEditToken(routeToken).subscribe({
+        next: response => {
+          if (this.editRouteToken !== routeToken) {
+            return;
+          }
+
+          const resolvedMessageId = Number(response?.data?.messageId ?? 0);
+          if (response?.isSuccess && Number.isFinite(resolvedMessageId) && resolvedMessageId > 0) {
+            this.editRequestId = Math.floor(resolvedMessageId);
+            const matched = this.myRequests.find(item => item.messageId === this.editRequestId);
+            if (matched) {
+              this.selectedRequestId = matched.messageId;
+              this.loadSelectedRequestDetails(matched.messageId);
+            }
+            return;
+          }
+
+          this.handleEditTokenResolutionFailure(response?.errors);
+        },
+        error: () => {
+          this.handleEditTokenResolutionFailure();
+        },
+        complete: () => {
+          this.resolvingEditToken = false;
+        }
+      });
     });
 
     this.subscriptions.add(routeSub);
+  }
+
+  private handleEditTokenResolutionFailure(errors?: Array<{ message?: string }>): void {
+    const message = (errors ?? [])
+      .map(item => String(item?.message ?? '').trim())
+      .filter(item => item.length > 0)
+      .join('<br/>');
+    this.msg.msgError('رابط تعديل غير صالح', `<h5>${message || 'رابط التعديل غير صالح أو منتهي الصلاحية.'}</h5>`, true);
+    this.editRouteToken = null;
+    this.editRequestId = null;
+    this.resolvingEditToken = false;
+    this.router.navigate(['/EmployeeRequests/SummerRequests']);
   }
 
   private loadSelectedRequestDetails(messageId: number): void {

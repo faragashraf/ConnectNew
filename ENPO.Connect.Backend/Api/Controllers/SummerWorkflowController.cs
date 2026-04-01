@@ -29,6 +29,22 @@ namespace Api.Controllers
             return _summerWorkflowService.GetMyRequestsAsync(userId, seasonYear, messageId);
         }
 
+        [HttpPost(nameof(CreateEditToken))]
+        public Task<CommonResponse<string>> CreateEditToken([FromBody] SummerCreateEditTokenRequest request)
+        {
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            var ip = HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "0.0.0.0";
+            return _summerWorkflowService.CreateEditTokenAsync(request, userId, ip);
+        }
+
+        [HttpGet(nameof(ResolveEditToken))]
+        public Task<CommonResponse<SummerEditTokenResolutionDto>> ResolveEditToken(string token)
+        {
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            var ip = HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "0.0.0.0";
+            return _summerWorkflowService.ResolveEditTokenAsync(token, userId, ip);
+        }
+
         [HttpGet(nameof(GetWaveCapacity))]
         public Task<CommonResponse<IEnumerable<SummerWaveCapacityDto>>> GetWaveCapacity(int categoryId, string waveCode, bool includeFrozenUnits = false)
         {

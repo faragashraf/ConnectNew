@@ -8,6 +8,8 @@ import {
   AdminUnitFreezeListQuery,
   SummerAdminActionRequest,
   SummerAdminDashboardDto,
+  SummerCreateEditTokenRequest,
+  SummerEditTokenResolutionDto,
   SummerPricingCatalogDto,
   SummerPricingCatalogUpsertRequest,
   SummerAdminRequestsQuery,
@@ -40,6 +42,15 @@ export class SummerWorkflowController {
       params = params.set('messageId', String(messageId));
     }
     return this.http.get<SummerWorkflowCommonResponse<SummerRequestSummaryDto[]>>(`${this.baseUrl}/GetMyRequests`, { params });
+  }
+
+  createEditToken(body: SummerCreateEditTokenRequest): Observable<SummerWorkflowCommonResponse<string>> {
+    return this.http.post<SummerWorkflowCommonResponse<string>>(`${this.baseUrl}/CreateEditToken`, body);
+  }
+
+  resolveEditToken(token: string): Observable<SummerWorkflowCommonResponse<SummerEditTokenResolutionDto>> {
+    const params = new HttpParams().set('token', token);
+    return this.http.get<SummerWorkflowCommonResponse<SummerEditTokenResolutionDto>>(`${this.baseUrl}/ResolveEditToken`, { params });
   }
 
   getWaveCapacity(

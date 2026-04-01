@@ -418,10 +418,27 @@ public partial class ConnectContext : DbContext
         {
             entity.HasKey(e => e.Token);
             entity.ToTable("RequestTokens");
+            entity.Property(e => e.Id).HasColumnName("Id").ValueGeneratedOnAdd();
             entity.Property(e => e.Token).HasMaxLength(200).HasColumnName("Token");
+            entity.Property(e => e.TokenHash).HasMaxLength(128).HasColumnName("TokenHash");
             entity.Property(e => e.MessageId).HasColumnName("MessageID");
+            entity.Property(e => e.TokenPurpose).HasMaxLength(100).HasColumnName("TokenPurpose");
+            entity.Property(e => e.IsUsed).HasColumnName("IsUsed").HasDefaultValue(false);
+            entity.Property(e => e.IsOneTimeUse).HasColumnName("IsOneTimeUse").HasDefaultValue(false);
+            entity.Property(e => e.UsedAt).HasColumnType("datetime").HasColumnName("UsedAt");
             entity.Property(e => e.CreatedAt).HasColumnType("datetime").HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.CreatedBy).HasMaxLength(64).HasColumnName("CreatedBy");
+            entity.Property(e => e.UserId).HasMaxLength(64).HasColumnName("UserId");
             entity.Property(e => e.ExpiresAt).HasColumnType("datetime");
+            entity.Property(e => e.RevokedAt).HasColumnType("datetime").HasColumnName("RevokedAt");
+            entity.Property(e => e.RevokedBy).HasMaxLength(64).HasColumnName("RevokedBy");
+
+            entity.HasIndex(e => e.TokenHash, "UX_RequestTokens_TokenHash")
+                .IsUnique()
+                .HasFilter("[TokenHash] IS NOT NULL");
+            entity.HasIndex(e => e.Id, "IX_RequestTokens_Id")
+                .IsUnique();
+            entity.HasIndex(e => new { e.MessageId, e.TokenPurpose, e.UserId, e.RevokedAt }, "IX_RequestTokens_MessagePurposeUserActive");
         });
 
         modelBuilder.Entity<MessagesRelation>(entity =>

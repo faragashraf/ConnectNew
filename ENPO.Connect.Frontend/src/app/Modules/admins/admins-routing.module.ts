@@ -27,8 +27,8 @@ const routes: Routes =
       pathMatch: 'full'
     },
     {
-      path: 'SummerRequests/edit/:id',
-      redirectTo: '/EmployeeRequests/SummerRequests/edit/:id',
+      path: 'SummerRequests/edit/:token',
+      redirectTo: '/EmployeeRequests/SummerRequests/edit/:token',
       pathMatch: 'full'
     },
     {

@@ -6,6 +6,9 @@ namespace Persistence.Services.Summer
         public const string DynamicApplicationId = "SUM2026DYN";
         public const string DestinationCatalogMend = "SUM2026_DestinationCatalog";
         public const string PricingCatalogMend = "SUM2026_PricingCatalog";
+        public const int DefaultEditTokenLifetimeMinutes = 30;
+        public const int MinEditTokenLifetimeMinutes = 5;
+        public const int MaxEditTokenLifetimeMinutes = 120;
 
         public const string TransferReviewRequiredCode = "TRANSFER_REVIEW_REQUIRED";
         public const string TransferReviewResolvedCode = "TRANSFER_REVIEW_RESOLVED";
@@ -66,6 +69,12 @@ namespace Persistence.Services.Summer
             public const string DisplayText = "Summer_PricingDisplayText";
             public const string SmsText = "Summer_PricingSmsText";
             public const string WhatsAppText = "Summer_PricingWhatsAppText";
+        }
+
+        public static class RequestTokenPurposes
+        {
+            public const string Generic = "GENERIC_REQUEST_LINK";
+            public const string SummerEdit = "SUMMER_REQUEST_EDIT";
         }
     }
 }

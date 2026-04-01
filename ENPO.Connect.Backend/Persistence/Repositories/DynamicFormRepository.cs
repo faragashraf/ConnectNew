@@ -196,10 +196,127 @@ namespace Persistence.Repositories
             _logger.AppendLine("CreateRequest method completed. ---------------------------------------");
             return response;
         }
-        public async Task<CommonResponse<MessageDto>> GetRequestById(int messageId)
+        public async Task<CommonResponse<MessageDto>> GetRequestById(int messageId, string userId)
         {
             var response = new CommonResponse<MessageDto>();
+
+            if (messageId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "رقم الطلب مطلوب." });
+                return response;
+            }
+
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح." });
+                return response;
+            }
+
+            var message = await _connectContext.Messages
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.MessageId == messageId);
+            if (message == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
+                return response;
+            }
+
+            if (await IsSummerCategoryAsync(message.CategoryCd)
+                && !await CanUserAccessSummerMessageAsync(normalizedUserId, message))
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
+                return response;
+            }
+
             await _helperService.GetMessageRequestById(messageId, response);
             return response;
-        }    }
+        }
+
+        private async Task<bool> IsSummerCategoryAsync(int categoryId)
+        {
+            if (categoryId <= 0)
+            {
+                return false;
+            }
+
+            return await _connectContext.CdCategoryMands
+                .AsNoTracking()
+                .AnyAsync(item =>
+                    item.MendCategory == categoryId
+                    && item.MendStat == false
+                    && item.MendField.Contains("SUM2026"));
+        }
+
+        private async Task<bool> CanUserAccessSummerMessageAsync(string userId, Message message)
+        {
+            if (message == null)
+            {
+                return false;
+            }
+
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return false;
+            }
+
+            if (string.Equals((message.CreatedBy ?? string.Empty).Trim(), normalizedUserId, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+            if (userUnitIds.Count > 0)
+            {
+                var assignedSectorId = (message.AssignedSectorId ?? string.Empty).Trim();
+                var currentResponsibleSectorId = (message.CurrentResponsibleSectorId ?? string.Empty).Trim();
+                if (userUnitIds.Contains(assignedSectorId, StringComparer.OrdinalIgnoreCase)
+                    || userUnitIds.Contains(currentResponsibleSectorId, StringComparer.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            var ownerEmployeeId = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(field => field.FildRelted == message.MessageId
+                    && SummerWorkflowDomainConstants.EmployeeIdFieldKinds.Contains(field.FildKind))
+                .Select(field => field.FildTxt)
+                .FirstOrDefaultAsync();
+
+            return string.Equals(
+                (ownerEmployeeId ?? string.Empty).Trim(),
+                normalizedUserId,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task<List<string>> GetActiveUserUnitIdsAsync(string userId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return new List<string>();
+            }
+
+            var now = DateTime.Now.Date;
+            var unitIds = await _gPAContext.UserPositions
+                .AsNoTracking()
+                .Where(position =>
+                    position.UserId == normalizedUserId
+                    && position.IsActive != false
+                    && (!position.StartDate.HasValue || position.StartDate.Value <= now)
+                    && (!position.EndDate.HasValue || position.EndDate.Value >= now))
+                .Select(position => position.UnitId)
+                .Distinct()
+                .ToListAsync();
+
+            return unitIds
+                .Select(unitId => unitId.ToString())
+                .Select(unitId => (unitId ?? string.Empty).Trim())
+                .Where(unitId => unitId.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
 }

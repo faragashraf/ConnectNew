@@ -10,7 +10,7 @@ namespace Repositories
         public CommonResponse<IEnumerable<CdcategoryDto>> GetAllCategories(string? appId);
         public CommonResponse<IEnumerable<CdmendDto>> GetMandatoryMetaDate(string? appId);
         public Task<CommonResponse<MessageDto>> CreateRequest(MessageRequest messageRequest, string userId, string UserEmail, string ip);
-        public Task<CommonResponse<MessageDto>> GetRequestById(int messageId);
+        public Task<CommonResponse<MessageDto>> GetRequestById(int messageId, string userId);
 
     }
 }

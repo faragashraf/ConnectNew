@@ -67,7 +67,8 @@ namespace Api.Controllers
         [Route(nameof(GetRequestById))]
         public Task<CommonResponse<MessageDto>> GetRequestById(int messageId)
         {
-            return _unitOfWork.dynamicFormRepository.GetRequestById(messageId);
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            return _unitOfWork.dynamicFormRepository.GetRequestById(messageId, userId);
         }
 
     }

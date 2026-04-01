@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ENPO.Dto.HubSync;
@@ -188,6 +189,280 @@ namespace Persistence.Services
                 }
 
                 response.Data = summaries;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<string>> CreateEditTokenAsync(SummerCreateEditTokenRequest request, string userId, string ip)
+        {
+            var response = new CommonResponse<string>();
+            request ??= new SummerCreateEditTokenRequest();
+            try
+            {
+                var normalizedUserId = (userId ?? string.Empty).Trim();
+                if (request.MessageId <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم الطلب مطلوب." });
+                    return response;
+                }
+
+                if (string.IsNullOrWhiteSpace(normalizedUserId))
+                {
+                    response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح." });
+                    return response;
+                }
+
+                var message = await _connectContext.Messages
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.MessageId == request.MessageId);
+                if (message == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
+                    return response;
+                }
+
+                var summerRules = await GetSummerRulesAsync();
+                if (!summerRules.ContainsKey(message.CategoryCd))
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    return response;
+                }
+
+                if (!await CanUserEditSummerMessageAsync(normalizedUserId, message))
+                {
+                    _logger.LogWarning(
+                        "Summer edit token creation denied due to missing authorization. MessageId={MessageId}, UserId={UserId}, IP={IP}",
+                        request.MessageId,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    return response;
+                }
+
+                var messageFields = await _connectContext.TkmendFields
+                    .AsNoTracking()
+                    .Where(field => field.FildRelted == message.MessageId)
+                    .ToListAsync();
+                var paidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind));
+                if (message.Status == MessageStatus.Rejected || paidAtUtc.HasValue)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن إنشاء رابط تعديل لهذا الطلب في حالته الحالية." });
+                    return response;
+                }
+
+                var now = DateTime.UtcNow;
+                var lifetimeMinutes = NormalizeEditTokenLifetimeMinutes(request.ExpireMinutes);
+                var purpose = SummerWorkflowDomainConstants.RequestTokenPurposes.SummerEdit;
+
+                var previouslyActiveTokens = await _connectContext.RequestTokens
+                    .Where(tokenRow =>
+                        tokenRow.MessageId == request.MessageId
+                        && tokenRow.TokenPurpose == purpose
+                        && tokenRow.RevokedAt == null
+                        && (!tokenRow.ExpiresAt.HasValue || tokenRow.ExpiresAt > now)
+                        && (!tokenRow.IsOneTimeUse || !tokenRow.IsUsed)
+                        && (tokenRow.UserId == null || tokenRow.UserId == normalizedUserId))
+                    .ToListAsync();
+                if (previouslyActiveTokens.Count > 0)
+                {
+                    foreach (var activeToken in previouslyActiveTokens)
+                    {
+                        activeToken.RevokedAt = now;
+                        activeToken.RevokedBy = normalizedUserId;
+                    }
+                }
+
+                var rawToken = GenerateSecureToken();
+                var tokenHash = ComputeTokenHash(rawToken);
+                var entity = new RequestToken
+                {
+                    Token = Guid.NewGuid().ToString("N"),
+                    TokenHash = tokenHash,
+                    MessageId = request.MessageId,
+                    TokenPurpose = purpose,
+                    IsUsed = false,
+                    IsOneTimeUse = request.OneTimeUse,
+                    UsedAt = null,
+                    CreatedAt = now,
+                    CreatedBy = normalizedUserId,
+                    UserId = normalizedUserId,
+                    ExpiresAt = now.AddMinutes(lifetimeMinutes),
+                    RevokedAt = null,
+                    RevokedBy = null
+                };
+
+                await _connectContext.RequestTokens.AddAsync(entity);
+                await _connectContext.SaveChangesAsync();
+
+                response.Data = rawToken;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerEditTokenResolutionDto>> ResolveEditTokenAsync(string token, string userId, string ip)
+        {
+            var response = new CommonResponse<SummerEditTokenResolutionDto>();
+            try
+            {
+                var normalizedToken = (token ?? string.Empty).Trim();
+                var normalizedUserId = (userId ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(normalizedToken))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "رمز الرابط مطلوب." });
+                    return response;
+                }
+
+                if (string.IsNullOrWhiteSpace(normalizedUserId))
+                {
+                    response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح." });
+                    return response;
+                }
+
+                var tokenHash = ComputeTokenHash(normalizedToken);
+                var tokenRow = await _connectContext.RequestTokens
+                    .OrderByDescending(item => item.CreatedAt)
+                    .FirstOrDefaultAsync(item =>
+                        (item.TokenHash != null && item.TokenHash == tokenHash)
+                        || (item.TokenHash == null && item.Token == normalizedToken));
+                if (tokenRow == null)
+                {
+                    _logger.LogWarning(
+                        "Summer edit token lookup failed (not found). UserId={UserId}, IP={IP}, TokenPrefix={TokenPrefix}",
+                        normalizedUserId,
+                        ip,
+                        normalizedToken.Length > 8 ? normalizedToken[..8] : normalizedToken);
+                    response.Errors.Add(new Error { Code = "404", Message = "رابط التعديل غير صالح." });
+                    return response;
+                }
+
+                var tokenPurpose = (tokenRow.TokenPurpose ?? string.Empty).Trim();
+                if (!string.Equals(tokenPurpose, SummerWorkflowDomainConstants.RequestTokenPurposes.SummerEdit, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected due to invalid purpose. TokenId={TokenId}, Purpose={Purpose}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenPurpose,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "404", Message = "رابط التعديل غير صالح." });
+                    return response;
+                }
+
+                var now = DateTime.UtcNow;
+                if (tokenRow.RevokedAt.HasValue)
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected (revoked). TokenId={TokenId}, MessageId={MessageId}, RevokedAt={RevokedAt}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        tokenRow.RevokedAt,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "410", Message = "انتهت صلاحية رابط التعديل." });
+                    return response;
+                }
+
+                if (tokenRow.ExpiresAt.HasValue && tokenRow.ExpiresAt.Value <= now)
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected (expired). TokenId={TokenId}, MessageId={MessageId}, ExpiresAt={ExpiresAt}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        tokenRow.ExpiresAt,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "410", Message = "انتهت صلاحية رابط التعديل." });
+                    return response;
+                }
+
+                if (tokenRow.IsOneTimeUse && tokenRow.IsUsed)
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected (already used). TokenId={TokenId}, MessageId={MessageId}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "410", Message = "تم استخدام رابط التعديل مسبقاً." });
+                    return response;
+                }
+
+                if (!string.IsNullOrWhiteSpace(tokenRow.UserId)
+                    && !string.Equals(tokenRow.UserId.Trim(), normalizedUserId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected (user mismatch). TokenId={TokenId}, MessageId={MessageId}, TokenUserId={TokenUserId}, CurrentUserId={CurrentUserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        tokenRow.UserId,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "404", Message = "رابط التعديل غير صالح." });
+                    return response;
+                }
+
+                var message = await _connectContext.Messages
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.MessageId == tokenRow.MessageId);
+                if (message == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
+                    return response;
+                }
+
+                var summerRules = await GetSummerRulesAsync();
+                if (!summerRules.ContainsKey(message.CategoryCd))
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    return response;
+                }
+
+                if (!await CanUserEditSummerMessageAsync(normalizedUserId, message))
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected due to access check. TokenId={TokenId}, MessageId={MessageId}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "404", Message = "رابط التعديل غير صالح." });
+                    return response;
+                }
+
+                var messageFields = await _connectContext.TkmendFields
+                    .AsNoTracking()
+                    .Where(field => field.FildRelted == message.MessageId)
+                    .ToListAsync();
+                var paidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind));
+                if (message.Status == MessageStatus.Rejected || paidAtUtc.HasValue)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تعديل الطلب في حالته الحالية." });
+                    return response;
+                }
+
+                if (tokenRow.IsOneTimeUse && !tokenRow.IsUsed)
+                {
+                    tokenRow.IsUsed = true;
+                    tokenRow.UsedAt = now;
+                    await _connectContext.SaveChangesAsync();
+                }
+
+                response.Data = new SummerEditTokenResolutionDto
+                {
+                    MessageId = tokenRow.MessageId,
+                    ExpiresAtUtc = tokenRow.ExpiresAt,
+                    IsOneTimeUse = tokenRow.IsOneTimeUse
+                };
             }
             catch (Exception ex)
             {
@@ -1317,6 +1592,72 @@ namespace Persistence.Services
                 || userUnitIds.Contains(currentResponsibleSectorId, StringComparer.OrdinalIgnoreCase);
         }
 
+        private async Task<bool> CanUserEditSummerMessageAsync(string userId, Message message)
+        {
+            if (message == null)
+            {
+                return false;
+            }
+
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return false;
+            }
+
+            if (string.Equals((message.CreatedBy ?? string.Empty).Trim(), normalizedUserId, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (await CanUserManageMessageAsync(normalizedUserId, message))
+            {
+                return true;
+            }
+
+            var ownerEmployeeId = await ResolveRequestOwnerEmployeeIdAsync(message.MessageId);
+            return string.Equals(ownerEmployeeId, normalizedUserId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static int NormalizeEditTokenLifetimeMinutes(int? requestedMinutes)
+        {
+            var fallback = SummerWorkflowDomainConstants.DefaultEditTokenLifetimeMinutes;
+            var raw = requestedMinutes ?? fallback;
+            if (raw < SummerWorkflowDomainConstants.MinEditTokenLifetimeMinutes)
+            {
+                return SummerWorkflowDomainConstants.MinEditTokenLifetimeMinutes;
+            }
+
+            if (raw > SummerWorkflowDomainConstants.MaxEditTokenLifetimeMinutes)
+            {
+                return SummerWorkflowDomainConstants.MaxEditTokenLifetimeMinutes;
+            }
+
+            return raw;
+        }
+
+        private static string GenerateSecureToken(int bytesLength = 32)
+        {
+            var bytes = RandomNumberGenerator.GetBytes(bytesLength);
+            return Convert.ToBase64String(bytes)
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+        }
+
+        private static string ComputeTokenHash(string token)
+        {
+            var normalized = (token ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var input = Encoding.UTF8.GetBytes(normalized);
+            var hash = SHA256.HashData(input);
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+
         private async Task<bool> CanUserManageSummerPricingAsync(string userId)
         {
             var manageableCategoryIds = await GetManageableSummerCategoryIdsAsync(userId);
@@ -1612,6 +1953,12 @@ namespace Persistence.Services
                     return response;
                 }
 
+                if (!await CanUserEditSummerMessageAsync(userId, message))
+                {
+                    response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بالتعديل على هذا الطلب." });
+                    return response;
+                }
+
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
                 if (message.Status == MessageStatus.Rejected || ParseDate(GetFieldValue(fields, "Summer_CancelledAtUtc")).HasValue)
                 {
@@ -1720,6 +2067,12 @@ namespace Persistence.Services
                 if (message == null)
                 {
                     response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
+                    return response;
+                }
+
+                if (!await CanUserEditSummerMessageAsync(userId, message))
+                {
+                    response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بالتعديل على هذا الطلب." });
                     return response;
                 }
 
@@ -1875,6 +2228,12 @@ namespace Persistence.Services
                 if (message == null)
                 {
                     response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
+                    return response;
+                }
+
+                if (!await CanUserEditSummerMessageAsync(userId, message))
+                {
+                    response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بالتعديل على هذا الطلب." });
                     return response;
                 }
 
