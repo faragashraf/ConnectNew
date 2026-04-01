@@ -550,9 +550,10 @@ export class AuthObjectsService {
     this.DomainAuthenticated$.next(false);
     this.twoFactorProtected$.next(false);
     const fullUrl = (typeof window !== 'undefined' && window.location && window.location.href) ? window.location.href : this.router.url;
-    console.log('SignOut - fullUrl:', fullUrl, ' router.url:', this.router.url);
-    if (!skipNavigate && !fullUrl.includes('mainLayOut')) {
-      const currentPath = this.resolveCurrentAppPath();
+    const currentPath = this.resolveCurrentAppPath();
+    const isLoginScreen = this.isLoginPath(currentPath) || fullUrl.toLowerCase().includes('/auth/login');
+
+    if (!skipNavigate && !fullUrl.includes('mainLayOut') && !isLoginScreen) {
       this.router.navigate(['/Auth/Login'], {
         queryParams: { returnUrl: currentPath }
       });
@@ -585,6 +586,11 @@ export class AuthObjectsService {
     }
 
     return '/Home';
+  }
+
+  private isLoginPath(path: string): boolean {
+    const normalized = String(path ?? '').toLowerCase();
+    return normalized.startsWith('/auth/login');
   }
 
   returnAllFunc(): any[] {

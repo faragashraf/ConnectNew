@@ -172,6 +172,7 @@
 
                     <div class="flex flex-column gap-2 mt-2">
                         <button pButton pRipple type="submit" label="تسجيل الدخول" [loading]="isFlipped"
+                            [disabled]="isFlipped || isAutoLoginInProgress"
                             class="w-full"></button>
                     </div>
                 </form>
