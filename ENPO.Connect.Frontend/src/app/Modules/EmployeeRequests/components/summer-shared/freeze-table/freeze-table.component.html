@@ -32,7 +32,15 @@
           <td>{{ formatDate(row.createdAtUtc) }}</td>
           <td *ngIf="showActions" class="actions">
             <button type="button" class="ghost" (click)="viewDetails.emit(row.freezeId)">تفاصيل</button>
-            <button type="button" class="danger" (click)="releaseFreeze.emit(row.freezeId)" [disabled]="!row.isActive">فك التجميد</button>
+            <button type="button" class="primary" *ngIf="!row.isActive" (click)="reFreeze.emit(row)">إعادة تجميد</button>
+            <button
+              type="button"
+              class="danger"
+              (click)="releaseFreeze.emit(row.freezeId)"
+              [disabled]="!row.isActive"
+              [attr.title]="row.isActive ? null : 'تم فك التجميد بالفعل لهذا السجل'">
+              {{ row.isActive ? 'فك التجميد' : 'تم الفك' }}
+            </button>
           </td>
         </tr>
       </tbody>

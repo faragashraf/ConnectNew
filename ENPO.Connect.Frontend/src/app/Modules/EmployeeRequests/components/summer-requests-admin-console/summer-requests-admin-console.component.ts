@@ -151,7 +151,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   pricingCatalogError = '';
   pricingSeasonYear = this.seasonYear;
   pricingRecords: SummerPricingCatalogRecordDto[] = [];
-  defaultPricingGroupsExpanded = true;
+  defaultPricingGroupsExpanded = false;
   private pricingGroupExpandedState: Record<string, boolean> = {};
 
   actionAttachments: File[] = [];
@@ -770,6 +770,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           if (this.pricingRecords.length === 0) {
             this.pricingRecords = [this.createEmptyPricingRecord()];
           }
+          this.resetPricingGroupExpansionState();
           this.syncPricingGroupExpansionState();
           this.pricingCatalogError = '';
           return;
@@ -863,6 +864,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           if (this.pricingRecords.length === 0) {
             this.pricingRecords = [this.createEmptyPricingRecord()];
           }
+          this.resetPricingGroupExpansionState();
           this.syncPricingGroupExpansionState();
           this.pricingCatalogError = '';
           this.msg.msgSuccess('تم حفظ إعدادات التسعير بنجاح.');
@@ -1340,11 +1342,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   private resolveDefaultPricingGroupExpandState(): boolean {
-    if (typeof window === 'undefined') {
-      return true;
-    }
-
-    return window.innerWidth > 992;
+    return false;
   }
 
   private buildPricingGroupKey(categoryId: number): string {
@@ -1370,6 +1368,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         delete this.pricingGroupExpandedState[key];
       }
     });
+  }
+
+  private resetPricingGroupExpansionState(): void {
+    this.pricingGroupExpandedState = {};
   }
 
   private createEmptyPricingRecord(preferredCategoryId?: number): SummerPricingCatalogRecordDto {

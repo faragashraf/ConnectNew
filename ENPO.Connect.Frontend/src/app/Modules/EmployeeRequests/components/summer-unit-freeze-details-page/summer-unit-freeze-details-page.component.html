@@ -9,13 +9,25 @@
       <button type="button" class="ghost" (click)="backToList()">العودة للقائمة</button>
       <button
         type="button"
+        class="primary"
+        *ngIf="!loading && details?.freeze?.isActive === false"
+        (click)="openRefreezeCreate()">
+        إعادة تجميد
+      </button>
+      <button
+        type="button"
         class="danger"
         (click)="releaseAll()"
-        [disabled]="releasing || loading || !(details?.freeze?.isActive)">
-        {{ releasing ? 'جاري الفك...' : 'فك التجميد بالكامل' }}
+        [disabled]="releasing || loading || !(details?.freeze?.isActive)"
+        [attr.title]="details?.freeze?.isActive ? null : 'تم فك التجميد بالفعل لهذا السجل'">
+        {{ releasing ? 'جاري الفك...' : ((details?.freeze?.isActive) ? 'فك التجميد بالكامل' : 'تم فك التجميد بالفعل') }}
       </button>
     </div>
   </header>
+
+  <p class="released-note" *ngIf="!loading && details?.freeze?.isActive === false">
+    هذا السجل تم فك التجميد بالفعل. إذا كانت الوحدات مؤهلة حالياً يمكنك إنشاء تجميد جديد من شاشة الإنشاء.
+  </p>
 
   <div class="loading-note" *ngIf="loading">جاري تحميل التفاصيل...</div>
   <p class="error" *ngIf="!loading && detailsError.length > 0">{{ detailsError }}</p>

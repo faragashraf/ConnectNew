@@ -59,7 +59,9 @@ export class SummerWorkflowController {
   }
 
   getPricingCatalog(seasonYear: number): Observable<SummerWorkflowCommonResponse<SummerPricingCatalogDto>> {
-    const params = new HttpParams().set('seasonYear', String(seasonYear));
+    const params = new HttpParams()
+      .set('seasonYear', String(seasonYear))
+      .set('_ts', String(Date.now()));
     return this.http.get<SummerWorkflowCommonResponse<SummerPricingCatalogDto>>(`${this.baseUrl}/GetPricingCatalog`, { params });
   }
 

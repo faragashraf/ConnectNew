@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using System.Text.Json.Serialization;
 
 namespace Models.DTO.Correspondance.Summer;
 
@@ -140,7 +141,10 @@ public class SummerPricingCatalogRecordDto
 public class SummerPricingCatalogUpsertRequest
 {
     public int SeasonYear { get; set; } = 2026;
+    [JsonPropertyName("records")]
     public List<SummerPricingCatalogRecordDto> Records { get; set; } = new();
+    [JsonPropertyName("pricingRecords")]
+    public List<SummerPricingCatalogRecordDto>? PricingRecords { get; set; }
 }
 
 public class SummerCancelRequest

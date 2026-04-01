@@ -43,6 +43,7 @@ namespace Api.Controllers
         }
 
         [HttpGet(nameof(GetPricingCatalog))]
+        [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
         public Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalog(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;

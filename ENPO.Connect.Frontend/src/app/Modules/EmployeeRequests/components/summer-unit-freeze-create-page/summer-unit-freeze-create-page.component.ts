@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs/operators';
 import { DynamicMetadataService } from 'src/app/shared/services/helper/dynamic-metadata.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
@@ -25,21 +25,26 @@ import {
   styleUrls: ['./summer-unit-freeze-create-page.component.scss']
 })
 export class SummerUnitFreezeCreatePageComponent implements OnInit {
+  private static readonly RefreezePrefillStorageKey = 'summer.unitFreeze.refreeze.prefill';
   destinations: SummerDestinationConfig[] = [];
   loadingDestinations = false;
   destinationsError = '';
   submitLoading = false;
+  prefillValues: Partial<AdminUnitFreezeCreatePayload> | null = null;
+  prefillSourceFreezeId: number | null = null;
 
   private readonly seasonYear = SUMMER_SEASON_YEAR;
 
   constructor(
     private readonly dynamicMetadataService: DynamicMetadataService,
     private readonly summerWorkflowController: SummerWorkflowController,
+    private readonly route: ActivatedRoute,
     private readonly router: Router,
     private readonly msg: MsgsService
   ) {}
 
   ngOnInit(): void {
+    this.capturePrefillFromQuery();
     this.loadDestinationCatalog();
   }
 
@@ -70,6 +75,30 @@ export class SummerUnitFreezeCreatePageComponent implements OnInit {
 
   onCancel(): void {
     this.router.navigateByUrl('/Admin/resorts/unit-freeze');
+  }
+
+  private capturePrefillFromQuery(): void {
+    const query = this.route.snapshot.queryParamMap;
+    const fromQuery = this.tryBuildPrefillModel(
+      query.get('resortId') ?? query.get('categoryId') ?? query.get('resort') ?? '',
+      query.get('waveId') ?? query.get('waveCode') ?? query.get('wave') ?? '',
+      query.get('capacity') ?? query.get('familyCount') ?? query.get('family') ?? '',
+      query.get('fromFreezeId') ?? query.get('freezeId') ?? ''
+    );
+
+    if (fromQuery) {
+      this.applyPrefillModel(fromQuery);
+      return;
+    }
+
+    const fromStorage = this.tryReadPrefillFromStorage();
+    if (fromStorage) {
+      this.applyPrefillModel(fromStorage);
+      return;
+    }
+
+    this.prefillValues = null;
+    this.prefillSourceFreezeId = null;
   }
 
   private loadDestinationCatalog(): void {
@@ -107,5 +136,68 @@ export class SummerUnitFreezeCreatePageComponent implements OnInit {
       .filter(item => item.length > 0);
 
     return messages.length > 0 ? messages.join('<br/>') : 'تعذر إنشاء عملية التجميد.';
+  }
+
+  private applyPrefillModel(model: { resortId: number; waveId: string; capacity: number; fromFreezeId: number | null }): void {
+    this.prefillSourceFreezeId = model.fromFreezeId;
+    this.prefillValues = {
+      resortId: model.resortId,
+      waveId: model.waveId,
+      capacity: model.capacity,
+      reason: model.fromFreezeId
+        ? `إعادة تجميد بناءً على السجل #${model.fromFreezeId}`
+        : ''
+    };
+  }
+
+  private tryBuildPrefillModel(
+    resortToken: string,
+    waveToken: string,
+    capacityToken: string,
+    freezeToken: string
+  ): { resortId: number; waveId: string; capacity: number; fromFreezeId: number | null } | null {
+    const resortId = Number(resortToken);
+    const capacity = Number(capacityToken);
+    const waveId = String(waveToken ?? '').trim();
+    const sourceFreezeId = Number(freezeToken);
+
+    if (!Number.isFinite(resortId) || resortId <= 0 || !Number.isFinite(capacity) || capacity <= 0 || waveId.length === 0) {
+      return null;
+    }
+
+    return {
+      resortId: Math.floor(resortId),
+      waveId,
+      capacity: Math.floor(capacity),
+      fromFreezeId: Number.isFinite(sourceFreezeId) && sourceFreezeId > 0
+        ? Math.floor(sourceFreezeId)
+        : null
+    };
+  }
+
+  private tryReadPrefillFromStorage(): { resortId: number; waveId: string; capacity: number; fromFreezeId: number | null } | null {
+    try {
+      const payload = sessionStorage.getItem(SummerUnitFreezeCreatePageComponent.RefreezePrefillStorageKey);
+      sessionStorage.removeItem(SummerUnitFreezeCreatePageComponent.RefreezePrefillStorageKey);
+      if (!payload) {
+        return null;
+      }
+
+      const parsed = JSON.parse(payload) as {
+        resortId?: unknown;
+        waveId?: unknown;
+        capacity?: unknown;
+        fromFreezeId?: unknown;
+      };
+
+      return this.tryBuildPrefillModel(
+        String(parsed.resortId ?? ''),
+        String(parsed.waveId ?? ''),
+        String(parsed.capacity ?? ''),
+        String(parsed.fromFreezeId ?? '')
+      );
+    } catch {
+      return null;
+    }
   }
 }

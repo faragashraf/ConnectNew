@@ -58,6 +58,7 @@
     [loading]="loadingList || loadingDestinations"
     [showActions]="true"
     (viewDetails)="openDetails($event)"
+    (reFreeze)="openRefreezePage($event)"
     (releaseFreeze)="releaseFreeze($event)">
   </app-freeze-table>
 </section>

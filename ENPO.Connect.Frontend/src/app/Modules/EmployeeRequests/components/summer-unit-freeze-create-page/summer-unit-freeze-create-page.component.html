@@ -9,10 +9,16 @@
 
   <div class="loading-note" *ngIf="loadingDestinations">جاري تحميل بيانات المصايف...</div>
   <p class="error" *ngIf="!loadingDestinations && destinationsError.length > 0">{{ destinationsError }}</p>
+  <p class="prefill-note" *ngIf="!loadingDestinations && prefillValues">
+    وضع إعادة التجميد مفعل
+    <ng-container *ngIf="prefillSourceFreezeId">من السجل #{{ prefillSourceFreezeId }}</ng-container>.
+    تم تعبئة المصيف والفوج والسعة تلقائياً.
+  </p>
 
   <app-freeze-form
     *ngIf="!loadingDestinations && destinations.length > 0"
     [destinations]="destinations"
+    [initialValues]="prefillValues"
     [submitLoading]="submitLoading"
     [submitLabel]="'تنفيذ التجميد'"
     (formSubmitted)="onSubmit($event)"

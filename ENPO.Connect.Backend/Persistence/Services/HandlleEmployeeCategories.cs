@@ -798,7 +798,7 @@ namespace Persistence.Services
                 response.Errors.Add(new Error
                 {
                     Code = "429",
-                    Message = $"لا توجد وحدات متاحة لعدد الأفراد '{familyCount}' في الفوج '{summerCamp}' بمصيف '{category.CatName}' لأن الوحدات المتبقية مجمدة للإدارة."
+                    Message = $"لا توجد وحدات متاحة لعدد الأفراد '{familyCount}' في الفوج '{summerCamp}' بمصيف '{category.CatName}'."
                 });
                 return false;
             }

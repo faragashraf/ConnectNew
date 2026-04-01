@@ -15,6 +15,7 @@ export class FreezeTableComponent {
 
   @Output() viewDetails = new EventEmitter<number>();
   @Output() releaseFreeze = new EventEmitter<number>();
+  @Output() reFreeze = new EventEmitter<SummerUnitFreezeDto>();
 
   getDestinationName(categoryId: number): string {
     const destination = this.destinations.find(item => item.categoryId === Number(categoryId));

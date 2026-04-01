@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Models.DTO.Common;
 using Models.DTO.Correspondance.Summer;
 using Persistence.Data;
@@ -10,13 +12,17 @@ namespace Persistence.Services.Summer
     public class SummerPricingService
     {
         private readonly ConnectContext _connectContext;
+        private readonly ILogger<SummerPricingService> _logger;
         private const string SummerDynamicApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId;
         private const string SummerPricingCatalogMend = SummerWorkflowDomainConstants.PricingCatalogMend;
         private static readonly TimeZoneInfo CairoTimeZone = ResolveCairoTimeZone();
 
-        public SummerPricingService(ConnectContext connectContext)
+        public SummerPricingService(
+            ConnectContext connectContext,
+            ILogger<SummerPricingService>? logger = null)
         {
             _connectContext = connectContext;
+            _logger = logger ?? NullLogger<SummerPricingService>.Instance;
         }
 
         public async Task<CommonResponse<SummerPricingQuoteDto>> GetQuoteAsync(
@@ -310,6 +316,7 @@ namespace Persistence.Services.Summer
         {
             var response = new CommonResponse<SummerPricingCatalogDto>();
             request ??= new SummerPricingCatalogUpsertRequest();
+            var normalizedAppId = NormalizeApplicationId(applicationId);
 
             try
             {
@@ -317,8 +324,16 @@ namespace Persistence.Services.Summer
                     ? request.SeasonYear
                     : SummerWorkflowDomainConstants.DefaultSeasonYear;
 
+                var requestRecords = ResolveUpsertRecords(request);
+                if ((request.Records?.Count ?? 0) == 0 && (request.PricingRecords?.Count ?? 0) > 0)
+                {
+                    _logger.LogWarning(
+                        "Summer pricing save received legacy payload key 'pricingRecords' instead of 'records'. RecordsCount={RecordsCount}",
+                        request.PricingRecords?.Count ?? 0);
+                }
+
                 var validationErrors = new List<Error>();
-                var normalizedRecords = NormalizeCatalogRecords(request.Records, seasonYear, validationErrors);
+                var normalizedRecords = NormalizeCatalogRecords(requestRecords, seasonYear, validationErrors);
                 if (validationErrors.Count > 0)
                 {
                     foreach (var error in validationErrors)
@@ -356,7 +371,15 @@ namespace Persistence.Services.Summer
                         WriteIndented = true
                     });
 
-                var normalizedAppId = NormalizeApplicationId(applicationId);
+                var firstInputRecord = normalizedRecords.FirstOrDefault();
+                _logger.LogInformation(
+                    "Summer pricing save started. ApplicationId={ApplicationId}, SeasonYear={SeasonYear}, RecordsCount={RecordsCount}, FirstInsuranceAmount={FirstInsuranceAmount}, FirstProxyInsuranceAmount={FirstProxyInsuranceAmount}",
+                    normalizedAppId,
+                    seasonYear,
+                    normalizedRecords.Count,
+                    firstInputRecord?.InsuranceAmount,
+                    firstInputRecord?.ProxyInsuranceAmount);
+
                 var metadataRow = await GetPricingMetadataRowAsync(normalizedAppId, trackChanges: true, cancellationToken);
                 if (metadataRow == null)
                 {
@@ -416,18 +439,54 @@ namespace Persistence.Services.Summer
 
                 await _connectContext.SaveChangesAsync(cancellationToken);
 
+                if (metadataRow != null)
+                {
+                    await _connectContext.Entry(metadataRow).ReloadAsync(cancellationToken);
+                }
+
+                var persistedCatalogPayload = ParseCatalogPayload((metadataRow?.CdmendTbl ?? string.Empty).Trim());
+                var persistedRecords = BuildCatalogRecords(persistedCatalogPayload, seasonYear, includeInactive: true);
+                var firstPersistedRecord = persistedRecords.FirstOrDefault();
+                _logger.LogInformation(
+                    "Summer pricing save completed. ApplicationId={ApplicationId}, SeasonYear={SeasonYear}, PersistedRecordsCount={PersistedRecordsCount}, FirstPersistedInsuranceAmount={FirstPersistedInsuranceAmount}, FirstPersistedProxyInsuranceAmount={FirstPersistedProxyInsuranceAmount}",
+                    normalizedAppId,
+                    seasonYear,
+                    persistedRecords.Count,
+                    firstPersistedRecord?.InsuranceAmount,
+                    firstPersistedRecord?.ProxyInsuranceAmount);
+
                 response.Data = new SummerPricingCatalogDto
                 {
                     SeasonYear = seasonYear,
-                    Records = normalizedRecords.Select(MapCatalogPayloadRecordToDto).ToList()
+                    Records = persistedRecords.Select(MapCatalogRecordToDto).ToList()
                 };
             }
             catch (Exception ex)
             {
+                _logger.LogError(
+                    ex,
+                    "Summer pricing save failed. SeasonYear={SeasonYear}, ApplicationId={ApplicationId}",
+                    request.SeasonYear,
+                    normalizedAppId);
                 response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
             }
 
             return response;
+        }
+
+        private static IReadOnlyList<SummerPricingCatalogRecordDto> ResolveUpsertRecords(SummerPricingCatalogUpsertRequest request)
+        {
+            if (request.Records != null && request.Records.Count > 0)
+            {
+                return request.Records;
+            }
+
+            if (request.PricingRecords != null && request.PricingRecords.Count > 0)
+            {
+                return request.PricingRecords;
+            }
+
+            return request.Records ?? new List<SummerPricingCatalogRecordDto>();
         }
 
         private async Task<List<PricingRule>> LoadPricingRulesAsync(
@@ -456,10 +515,36 @@ namespace Persistence.Services.Summer
             if (trackChanges)
             {
                 var tracked = await _connectContext.Cdmends
-                    .FirstOrDefaultAsync(item =>
+                    .Where(item =>
                         item.ApplicationId == normalizedAppId
-                        && item.CdmendTxt == SummerPricingCatalogMend,
-                        cancellationToken);
+                        && item.CdmendTxt == SummerPricingCatalogMend
+                        && item.CdmendStat == false)
+                    .OrderByDescending(item => item.CdmendSql)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (tracked != null)
+                {
+                    return tracked;
+                }
+
+                tracked = await _connectContext.Cdmends
+                    .Where(item =>
+                        item.ApplicationId == normalizedAppId
+                        && item.CdmendTxt == SummerPricingCatalogMend)
+                    .OrderByDescending(item => item.CdmendSql)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (tracked != null)
+                {
+                    return tracked;
+                }
+
+                tracked = await _connectContext.Cdmends
+                    .Where(item =>
+                        item.CdmendTxt == SummerPricingCatalogMend
+                        && item.CdmendStat == false)
+                    .OrderByDescending(item => item.CdmendSql)
+                    .FirstOrDefaultAsync(cancellationToken);
 
                 if (tracked != null)
                 {
@@ -467,16 +552,45 @@ namespace Persistence.Services.Summer
                 }
 
                 return await _connectContext.Cdmends
-                    .FirstOrDefaultAsync(item => item.CdmendTxt == SummerPricingCatalogMend, cancellationToken);
+                    .Where(item => item.CdmendTxt == SummerPricingCatalogMend)
+                    .OrderByDescending(item => item.CdmendSql)
+                    .FirstOrDefaultAsync(cancellationToken);
             }
 
             var untracked = await _connectContext.Cdmends
                 .AsNoTracking()
-                .FirstOrDefaultAsync(item =>
+                .Where(item =>
                     item.ApplicationId == normalizedAppId
                     && item.CdmendTxt == SummerPricingCatalogMend
-                    && item.CdmendStat == false,
-                    cancellationToken);
+                    && item.CdmendStat == false)
+                .OrderByDescending(item => item.CdmendSql)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (untracked != null)
+            {
+                return untracked;
+            }
+
+            untracked = await _connectContext.Cdmends
+                .AsNoTracking()
+                .Where(item =>
+                    item.ApplicationId == normalizedAppId
+                    && item.CdmendTxt == SummerPricingCatalogMend)
+                .OrderByDescending(item => item.CdmendSql)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (untracked != null)
+            {
+                return untracked;
+            }
+
+            untracked = await _connectContext.Cdmends
+                .AsNoTracking()
+                .Where(item =>
+                    item.CdmendTxt == SummerPricingCatalogMend
+                    && item.CdmendStat == false)
+                .OrderByDescending(item => item.CdmendSql)
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (untracked != null)
             {
@@ -485,10 +599,9 @@ namespace Persistence.Services.Summer
 
             return await _connectContext.Cdmends
                 .AsNoTracking()
-                .FirstOrDefaultAsync(item =>
-                    item.CdmendTxt == SummerPricingCatalogMend
-                    && item.CdmendStat == false,
-                    cancellationToken);
+                .Where(item => item.CdmendTxt == SummerPricingCatalogMend)
+                .OrderByDescending(item => item.CdmendSql)
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
         private static SummerPricingCatalogPayload ParseCatalogPayload(string payload)
@@ -505,8 +618,16 @@ namespace Persistence.Services.Summer
 
             if (payload.StartsWith("{", StringComparison.Ordinal))
             {
-                return JsonSerializer.Deserialize<SummerPricingCatalogPayload>(payload, options)
+                var parsedPayload = JsonSerializer.Deserialize<SummerPricingCatalogPayload>(payload, options)
                     ?? new SummerPricingCatalogPayload();
+
+                if ((parsedPayload.PricingRecords?.Count ?? 0) == 0
+                    && TryParseLegacyRecordsKey(payload, options, out var legacyRecords))
+                {
+                    parsedPayload.PricingRecords = legacyRecords;
+                }
+
+                return parsedPayload;
             }
 
             if (payload.StartsWith("[", StringComparison.Ordinal))
@@ -518,6 +639,37 @@ namespace Persistence.Services.Summer
             }
 
             return new SummerPricingCatalogPayload();
+        }
+
+        private static bool TryParseLegacyRecordsKey(
+            string payload,
+            JsonSerializerOptions options,
+            out List<SummerPricingRecordPayload> records)
+        {
+            records = new List<SummerPricingRecordPayload>();
+            try
+            {
+                using var jsonDocument = JsonDocument.Parse(payload);
+                if (!jsonDocument.RootElement.TryGetProperty("records", out var recordsElement))
+                {
+                    return false;
+                }
+
+                if (recordsElement.ValueKind != JsonValueKind.Array)
+                {
+                    return false;
+                }
+
+                records = JsonSerializer.Deserialize<List<SummerPricingRecordPayload>>(
+                    recordsElement.GetRawText(),
+                    options) ?? new List<SummerPricingRecordPayload>();
+                return true;
+            }
+            catch
+            {
+                records = new List<SummerPricingRecordPayload>();
+                return false;
+            }
         }
 
         private static List<PricingRule> BuildCatalogRecords(

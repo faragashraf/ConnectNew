@@ -49,6 +49,12 @@ button.ghost {
   color: #245f87;
 }
 
+button.primary {
+  border-color: #b9d8f4;
+  background: #e8f4ff;
+  color: #16507a;
+}
+
 button.danger {
   border-color: #f0b9b9;
   background: #fff2f2;
@@ -69,6 +75,16 @@ button:disabled {
   margin: 0;
   color: #b42318;
   font-weight: 700;
+}
+
+.released-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed #cfd9e2;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #44586c;
+  font-weight: 600;
 }
 
 @media (max-width: 860px) {

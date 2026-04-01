@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { SummerDestinationConfig } from '../../summer-requests-workspace/summer-requests-workspace.config';
@@ -13,10 +13,11 @@ import { SummerWorkflowController } from 'src/app/shared/services/BackendService
   templateUrl: './freeze-form.component.html',
   styleUrls: ['./freeze-form.component.scss']
 })
-export class FreezeFormComponent implements OnInit, OnDestroy {
+export class FreezeFormComponent implements OnInit, OnChanges, OnDestroy {
   @Input() destinations: SummerDestinationConfig[] = [];
   @Input() submitLoading = false;
   @Input() submitLabel = 'تنفيذ التجميد';
+  @Input() initialValues: Partial<AdminUnitFreezeCreatePayload> | null = null;
 
   @Output() formSubmitted = new EventEmitter<AdminUnitFreezeCreatePayload>();
   @Output() formCancelled = new EventEmitter<void>();
@@ -27,6 +28,7 @@ export class FreezeFormComponent implements OnInit, OnDestroy {
   availableCount: SummerUnitsAvailableCountDto | null = null;
 
   private readonly subscriptions = new Subscription();
+  private initialValuesApplied = false;
 
   constructor(
     private readonly fb: FormBuilder,
@@ -56,6 +58,14 @@ export class FreezeFormComponent implements OnInit, OnDestroy {
       this.refreshAvailableCount();
     });
     this.subscriptions.add(criteriaSub);
+
+    this.tryApplyInitialValues();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.initialValuesApplied && (changes['initialValues'] || changes['destinations'])) {
+      this.tryApplyInitialValues();
+    }
   }
 
   ngOnDestroy(): void {
@@ -169,5 +179,51 @@ export class FreezeFormComponent implements OnInit, OnDestroy {
       .filter(item => item.length > 0);
 
     return messages.length > 0 ? messages.join(' | ') : 'تعذر تحميل الوحدات المتاحة.';
+  }
+
+  private tryApplyInitialValues(): void {
+    if (this.initialValuesApplied || !this.initialValues) {
+      return;
+    }
+
+    const resortId = Number(this.initialValues.resortId ?? 0);
+    if (!Number.isFinite(resortId) || resortId <= 0) {
+      return;
+    }
+
+    const destination = this.destinations.find(item => item.categoryId === resortId);
+    if (!destination) {
+      return;
+    }
+
+    const waveValue = String(this.initialValues.waveId ?? '').trim();
+    const capacityValue = Number(this.initialValues.capacity ?? 0);
+    const unitsCountValue = Number(this.initialValues.unitsCount ?? 0);
+
+    const waveId = destination.waves.some(item => item.code === waveValue)
+      ? waveValue
+      : '';
+    const capacity = destination.familyOptions.includes(capacityValue)
+      ? capacityValue
+      : null;
+    const unitsCount = Number.isFinite(unitsCountValue) && unitsCountValue > 0
+      ? unitsCountValue
+      : null;
+
+    this.form.patchValue(
+      {
+        resortId,
+        waveId,
+        capacity,
+        unitsCount,
+        reason: String(this.initialValues.reason ?? '').trim(),
+        notes: String(this.initialValues.notes ?? '').trim()
+      },
+      { emitEvent: false }
+    );
+
+    this.syncUnitsCountValidation();
+    this.refreshAvailableCount();
+    this.initialValuesApplied = true;
   }
 }

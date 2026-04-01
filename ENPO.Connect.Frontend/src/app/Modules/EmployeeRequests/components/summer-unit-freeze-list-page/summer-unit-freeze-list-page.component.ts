@@ -25,6 +25,7 @@ import {
   styleUrls: ['./summer-unit-freeze-list-page.component.scss']
 })
 export class SummerUnitFreezeListPageComponent implements OnInit {
+  private static readonly RefreezePrefillStorageKey = 'summer.unitFreeze.refreeze.prefill';
   filtersForm: FormGroup;
 
   destinations: SummerDestinationConfig[] = [];
@@ -97,6 +98,18 @@ export class SummerUnitFreezeListPageComponent implements OnInit {
 
   openCreatePage(): void {
     this.router.navigateByUrl('/Admin/resorts/unit-freeze/create');
+  }
+
+  openRefreezePage(row: SummerUnitFreezeDto): void {
+    this.persistRefreezePrefill(row.categoryId, row.waveCode, row.familyCount, row.freezeId);
+    this.router.navigate(['/Admin/resorts/unit-freeze/create'], {
+      queryParams: {
+        resortId: row.categoryId,
+        waveId: row.waveCode,
+        capacity: row.familyCount,
+        fromFreezeId: row.freezeId
+      }
+    });
   }
 
   openDetails(freezeId: number): void {
@@ -209,5 +222,27 @@ export class SummerUnitFreezeListPageComponent implements OnInit {
       .filter(item => item.length > 0);
 
     return messages.length > 0 ? messages.join('<br/>') : 'تعذر تحميل بيانات التجميد.';
+  }
+
+  private persistRefreezePrefill(
+    resortId: number,
+    waveId: string,
+    capacity: number,
+    fromFreezeId: number
+  ): void {
+    try {
+      sessionStorage.setItem(
+        SummerUnitFreezeListPageComponent.RefreezePrefillStorageKey,
+        JSON.stringify({
+          resortId,
+          waveId,
+          capacity,
+          fromFreezeId,
+          timestampUtc: new Date().toISOString()
+        })
+      );
+    } catch {
+      // No-op. Query params are still sent as the primary source.
+    }
   }
 }

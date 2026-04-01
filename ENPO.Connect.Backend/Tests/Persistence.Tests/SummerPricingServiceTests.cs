@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Models.Correspondance;
 using Models.DTO.Correspondance.Summer;
 using Persistence.Data;
@@ -289,6 +290,421 @@ public class SummerPricingServiceTests
         Assert.NotNull(quoteResponse.Data);
         Assert.Equal(180m, quoteResponse.Data.AppliedInsuranceAmount);
         Assert.Equal(2800m, quoteResponse.Data.GrandTotal);
+    }
+
+    [Fact]
+    public async Task SaveCatalog_PersistsInsuranceAmountsInMetadataPayload_AndGetCatalogReturnsThem()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+        var service = new SummerPricingService(context);
+        var saveResponse = await service.SaveCatalogAsync(new SummerPricingCatalogUpsertRequest
+        {
+            SeasonYear = 2026,
+            Records = new List<SummerPricingCatalogRecordDto>
+            {
+                new()
+                {
+                    PricingConfigId = "SUM2026-MATROUH-UPDATED",
+                    CategoryId = 147,
+                    SeasonYear = 2026,
+                    PeriodKey = "JUN_SEP",
+                    AccommodationPricePerPerson = 700m,
+                    TransportationPricePerPerson = 600m,
+                    InsuranceAmount = 333m,
+                    ProxyInsuranceAmount = 444m,
+                    PricingMode = SummerWorkflowDomainConstants.PricingModes.AccommodationAndTransportationOptional,
+                    TransportationMandatory = false,
+                    IsActive = true
+                }
+            }
+        });
+
+        Assert.True(saveResponse.IsSuccess);
+
+        var metadataRow = await context.Cdmends
+            .AsNoTracking()
+            .Where(item => item.ApplicationId == SummerWorkflowDomainConstants.DynamicApplicationId
+                           && item.CdmendTxt == SummerWorkflowDomainConstants.PricingCatalogMend)
+            .FirstAsync();
+
+        Assert.False(string.IsNullOrWhiteSpace(metadataRow.CdmendTbl));
+        using (var catalogDoc = JsonDocument.Parse(metadataRow.CdmendTbl!))
+        {
+            var persistedRecord = catalogDoc.RootElement.GetProperty("pricingRecords")[0];
+            Assert.Equal(333m, persistedRecord.GetProperty("insuranceAmount").GetDecimal());
+            Assert.Equal(444m, persistedRecord.GetProperty("proxyInsuranceAmount").GetDecimal());
+        }
+
+        var getCatalogResponse = await service.GetCatalogAsync(2026);
+        Assert.True(getCatalogResponse.IsSuccess);
+        Assert.NotNull(getCatalogResponse.Data);
+        var savedRecord = Assert.Single(getCatalogResponse.Data.Records);
+        Assert.Equal(333m, savedRecord.InsuranceAmount);
+        Assert.Equal(444m, savedRecord.ProxyInsuranceAmount);
+    }
+
+    [Fact]
+    public async Task SaveCatalog_WhenUpdatingExistingRecord_PersistsInsuranceAmounts()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+        var service = new SummerPricingService(context);
+
+        var initialCatalogResponse = await service.GetCatalogAsync(2026);
+        Assert.True(initialCatalogResponse.IsSuccess);
+        Assert.NotNull(initialCatalogResponse.Data);
+        Assert.NotEmpty(initialCatalogResponse.Data.Records);
+
+        var recordsToSave = initialCatalogResponse.Data.Records
+            .Select(item => new SummerPricingCatalogRecordDto
+            {
+                PricingConfigId = item.PricingConfigId,
+                CategoryId = item.CategoryId,
+                SeasonYear = item.SeasonYear,
+                WaveCode = item.WaveCode,
+                PeriodKey = item.PeriodKey,
+                DateFrom = item.DateFrom,
+                DateTo = item.DateTo,
+                AccommodationPricePerPerson = item.AccommodationPricePerPerson,
+                TransportationPricePerPerson = item.TransportationPricePerPerson,
+                InsuranceAmount = item.InsuranceAmount,
+                ProxyInsuranceAmount = item.ProxyInsuranceAmount,
+                PricingMode = item.PricingMode,
+                TransportationMandatory = item.TransportationMandatory,
+                IsActive = item.IsActive,
+                DisplayLabel = item.DisplayLabel,
+                Notes = item.Notes
+            })
+            .ToList();
+
+        var targetRecord = recordsToSave
+            .First(item => item.CategoryId == 147 && item.PeriodKey == "JUN_SEP");
+        targetRecord.InsuranceAmount = 555m;
+        targetRecord.ProxyInsuranceAmount = 666m;
+
+        var saveResponse = await service.SaveCatalogAsync(new SummerPricingCatalogUpsertRequest
+        {
+            SeasonYear = 2026,
+            Records = recordsToSave
+        });
+
+        Assert.True(saveResponse.IsSuccess);
+
+        var refreshedCatalogResponse = await service.GetCatalogAsync(2026);
+        Assert.True(refreshedCatalogResponse.IsSuccess);
+        Assert.NotNull(refreshedCatalogResponse.Data);
+
+        var updatedRecord = refreshedCatalogResponse.Data.Records
+            .Single(item => item.PricingConfigId == targetRecord.PricingConfigId);
+        Assert.Equal(555m, updatedRecord.InsuranceAmount);
+        Assert.Equal(666m, updatedRecord.ProxyInsuranceAmount);
+    }
+
+    [Fact]
+    public async Task SaveCatalog_AcceptsLegacyPricingRecordsPayload_AndPersistsInsurance()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+        var service = new SummerPricingService(context);
+
+        const string legacyPayload = @"
+{
+  ""seasonYear"": 2026,
+  ""pricingRecords"": [
+    {
+      ""pricingConfigId"": ""SUM2026-MATROUH-JUN-SEP"",
+      ""categoryId"": 147,
+      ""seasonYear"": 2026,
+      ""waveCode"": """",
+      ""periodKey"": ""JUN_SEP"",
+      ""accommodationPricePerPerson"": 5000,
+      ""transportationPricePerPerson"": 600,
+      ""insuranceAmount"": 175,
+      ""proxyInsuranceAmount"": 225,
+      ""pricingMode"": ""AccommodationAndTransportationOptional"",
+      ""transportationMandatory"": false,
+      ""isActive"": true,
+      ""displayLabel"": ""مرسى مطروح يونيو/سبتمبر"",
+      ""notes"": ""سعر استرشادي""
+    }
+  ]
+}";
+
+        var request = JsonSerializer.Deserialize<SummerPricingCatalogUpsertRequest>(
+            legacyPayload,
+            new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+        Assert.NotNull(request);
+        Assert.Empty(request!.Records);
+        Assert.NotNull(request.PricingRecords);
+        Assert.Single(request.PricingRecords);
+
+        var saveResponse = await service.SaveCatalogAsync(request);
+        Assert.True(saveResponse.IsSuccess);
+
+        var getCatalogResponse = await service.GetCatalogAsync(2026);
+        Assert.True(getCatalogResponse.IsSuccess);
+        Assert.NotNull(getCatalogResponse.Data);
+        var savedRecord = Assert.Single(getCatalogResponse.Data.Records);
+        Assert.Equal(175m, savedRecord.InsuranceAmount);
+        Assert.Equal(225m, savedRecord.ProxyInsuranceAmount);
+    }
+
+    [Fact]
+    public async Task SaveCatalog_LegacyPayloadWithoutInsuranceFields_DefaultsInsuranceToZero()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+        var service = new SummerPricingService(context);
+
+        const string legacyPayloadWithoutInsurance = @"
+{
+  ""seasonYear"": 2026,
+  ""pricingRecords"": [
+    {
+      ""pricingConfigId"": ""SUM2026-MATROUH-JUN-SEP"",
+      ""categoryId"": 147,
+      ""seasonYear"": 2026,
+      ""waveCode"": """",
+      ""periodKey"": ""JUN_SEP"",
+      ""accommodationPricePerPerson"": 5000,
+      ""transportationPricePerPerson"": 600,
+      ""pricingMode"": ""AccommodationAndTransportationOptional"",
+      ""transportationMandatory"": false,
+      ""isActive"": true,
+      ""displayLabel"": ""مرسى مطروح يونيو/سبتمبر"",
+      ""notes"": ""سعر استرشادي""
+    }
+  ]
+}";
+
+        var request = JsonSerializer.Deserialize<SummerPricingCatalogUpsertRequest>(
+            legacyPayloadWithoutInsurance,
+            new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+        Assert.NotNull(request);
+
+        var saveResponse = await service.SaveCatalogAsync(request!);
+        Assert.True(saveResponse.IsSuccess);
+
+        var getCatalogResponse = await service.GetCatalogAsync(2026);
+        Assert.True(getCatalogResponse.IsSuccess);
+        Assert.NotNull(getCatalogResponse.Data);
+        var savedRecord = Assert.Single(getCatalogResponse.Data.Records);
+        Assert.Equal(0m, savedRecord.InsuranceAmount);
+        Assert.Null(savedRecord.ProxyInsuranceAmount);
+    }
+
+    [Fact]
+    public async Task GetCatalog_SerializedResponse_IncludesInsuranceFields()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+        var service = new SummerPricingService(context);
+
+        var saveResponse = await service.SaveCatalogAsync(new SummerPricingCatalogUpsertRequest
+        {
+            SeasonYear = 2026,
+            Records = new List<SummerPricingCatalogRecordDto>
+            {
+                new()
+                {
+                    PricingConfigId = "SUM2026-MATROUH-JUN-SEP",
+                    CategoryId = 147,
+                    SeasonYear = 2026,
+                    PeriodKey = "JUN_SEP",
+                    AccommodationPricePerPerson = 5000m,
+                    TransportationPricePerPerson = 600m,
+                    InsuranceAmount = 1500m,
+                    ProxyInsuranceAmount = null,
+                    PricingMode = SummerWorkflowDomainConstants.PricingModes.AccommodationAndTransportationOptional,
+                    TransportationMandatory = false,
+                    IsActive = true,
+                    DisplayLabel = "مرسى مطروح يونيو/سبتمبر",
+                    Notes = "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
+                }
+            }
+        });
+
+        Assert.True(saveResponse.IsSuccess);
+
+        var getCatalogResponse = await service.GetCatalogAsync(2026);
+        Assert.True(getCatalogResponse.IsSuccess);
+        Assert.NotNull(getCatalogResponse.Data);
+
+        var serialized = JsonSerializer.Serialize(
+            getCatalogResponse.Data,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Contains("\"insuranceAmount\":1500", serialized);
+        Assert.Contains("\"proxyInsuranceAmount\":null", serialized);
+    }
+
+    [Fact]
+    public async Task GetCatalog_WhenMetadataUsesRecordsKey_LoadsInsuranceFieldsCorrectly()
+    {
+        await using var context = CreateContext();
+        context.Cdmends.Add(new Cdmend
+        {
+            CdmendSql = 100,
+            CdmendType = "Textarea",
+            CdmendTxt = SummerWorkflowDomainConstants.PricingCatalogMend,
+            CDMendLbl = "إعدادات تسعير المصايف",
+            Placeholder = string.Empty,
+            DefaultValue = string.Empty,
+            CdmendTbl = @"
+{
+  ""seasonYear"": 2026,
+  ""records"": [
+    {
+      ""pricingConfigId"": ""SUM2026-MATROUH-JUN-SEP"",
+      ""categoryId"": 147,
+      ""seasonYear"": 2026,
+      ""waveCode"": """",
+      ""periodKey"": ""JUN_SEP"",
+      ""dateFrom"": null,
+      ""dateTo"": null,
+      ""accommodationPricePerPerson"": 5000,
+      ""transportationPricePerPerson"": 600,
+      ""insuranceAmount"": 175,
+      ""proxyInsuranceAmount"": 225,
+      ""pricingMode"": ""AccommodationAndTransportationOptional"",
+      ""transportationMandatory"": false,
+      ""isActive"": true,
+      ""displayLabel"": ""مرسى مطروح يونيو/سبتمبر"",
+      ""notes"": ""سعر استرشادي قابل للتعديل بعد اعتماد اللجنة""
+    }
+  ]
+}",
+            CdmendDatatype = "json",
+            Required = false,
+            RequiredTrue = false,
+            Email = false,
+            Pattern = false,
+            MinValue = null,
+            MaxValue = null,
+            Cdmendmask = null,
+            CdmendStat = false,
+            Width = 0,
+            Height = 0,
+            IsDisabledInit = false,
+            IsSearchable = false,
+            ApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId
+        });
+        await context.SaveChangesAsync();
+
+        var service = new SummerPricingService(context);
+        var response = await service.GetCatalogAsync(2026);
+
+        Assert.True(response.IsSuccess);
+        Assert.NotNull(response.Data);
+        var record = Assert.Single(response.Data.Records);
+        Assert.Equal(175m, record.InsuranceAmount);
+        Assert.Equal(225m, record.ProxyInsuranceAmount);
+    }
+
+    [Fact]
+    public async Task SaveCatalog_WhenExistingMetadataUsesRecordsKey_ConvertsAndPersistsInsurance()
+    {
+        await using var context = CreateContext();
+
+        context.Cdmends.Add(new Cdmend
+        {
+            CdmendSql = 20,
+            CdmendType = "Textarea",
+            CdmendTxt = SummerWorkflowDomainConstants.PricingCatalogMend,
+            CDMendLbl = "إعدادات تسعير المصايف",
+            Placeholder = string.Empty,
+            DefaultValue = string.Empty,
+            CdmendTbl = @"
+{
+  ""seasonYear"": 2026,
+  ""records"": [
+    {
+      ""pricingConfigId"": ""SUM2026-LEGACY"",
+      ""categoryId"": 147,
+      ""seasonYear"": 2026,
+      ""periodKey"": ""JUN_SEP"",
+      ""accommodationPricePerPerson"": 1000,
+      ""transportationPricePerPerson"": 100,
+      ""insuranceAmount"": 10,
+      ""proxyInsuranceAmount"": 20,
+      ""pricingMode"": ""AccommodationAndTransportationOptional"",
+      ""transportationMandatory"": false,
+      ""isActive"": true
+    }
+  ]
+}",
+            CdmendDatatype = "json",
+            Required = false,
+            RequiredTrue = false,
+            Email = false,
+            Pattern = false,
+            MinValue = null,
+            MaxValue = null,
+            Cdmendmask = null,
+            CdmendStat = false,
+            Width = 0,
+            Height = 0,
+            IsDisabledInit = false,
+            IsSearchable = false,
+            ApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId
+        });
+        await context.SaveChangesAsync();
+        var service = new SummerPricingService(context);
+
+        var saveResponse = await service.SaveCatalogAsync(new SummerPricingCatalogUpsertRequest
+        {
+            SeasonYear = 2026,
+            Records = new List<SummerPricingCatalogRecordDto>
+            {
+                new()
+                {
+                    PricingConfigId = "SUM2026-UPDATED",
+                    CategoryId = 147,
+                    SeasonYear = 2026,
+                    PeriodKey = "JUN_SEP",
+                    AccommodationPricePerPerson = 5000m,
+                    TransportationPricePerPerson = 600m,
+                    InsuranceAmount = 777m,
+                    ProxyInsuranceAmount = 888m,
+                    PricingMode = SummerWorkflowDomainConstants.PricingModes.AccommodationAndTransportationOptional,
+                    TransportationMandatory = false,
+                    IsActive = true
+                }
+            }
+        });
+
+        Assert.True(saveResponse.IsSuccess);
+
+        var row = await context.Cdmends
+            .AsNoTracking()
+            .Where(item => item.ApplicationId == SummerWorkflowDomainConstants.DynamicApplicationId
+                           && item.CdmendTxt == SummerWorkflowDomainConstants.PricingCatalogMend)
+            .SingleAsync();
+
+        using (var rowDoc = JsonDocument.Parse(row.CdmendTbl!))
+        {
+            Assert.True(rowDoc.RootElement.TryGetProperty("pricingRecords", out var pricingRecords));
+            var latestInsurance = pricingRecords[0].GetProperty("insuranceAmount").GetDecimal();
+            var latestProxyInsurance = pricingRecords[0].GetProperty("proxyInsuranceAmount").GetDecimal();
+            Assert.Equal(777m, latestInsurance);
+            Assert.Equal(888m, latestProxyInsurance);
+        }
+
+        var getCatalogResponse = await service.GetCatalogAsync(2026);
+        Assert.True(getCatalogResponse.IsSuccess);
+        Assert.NotNull(getCatalogResponse.Data);
+        var savedRecord = Assert.Single(getCatalogResponse.Data.Records);
+        Assert.Equal(777m, savedRecord.InsuranceAmount);
+        Assert.Equal(888m, savedRecord.ProxyInsuranceAmount);
     }
 
     private static ConnectContext CreateContext()
