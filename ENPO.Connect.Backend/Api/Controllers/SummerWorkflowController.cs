@@ -56,10 +56,11 @@ namespace Api.Controllers
         public Task<CommonResponse<SummerWaveBookingsPrintReportDto>> GetWaveBookingsPrintReport(
             int categoryId,
             string waveCode,
-            int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear)
+            int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear,
+            bool includeFinancials = false)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.GetWaveBookingsPrintReportAsync(categoryId, waveCode, seasonYear, userId);
+            return _summerWorkflowService.GetWaveBookingsPrintReportAsync(categoryId, waveCode, seasonYear, userId, includeFinancials);
         }
 
         [HttpPost(nameof(GetPricingQuote))]

@@ -182,6 +182,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.filtersForm = this.fb.group({
       categoryId: [null],
       waveCode: [''],
+      includeFinancialsInPrint: [false],
       status: [''],
       paymentState: [''],
       employeeId: [''],
@@ -372,8 +373,35 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.waveBookingsPrintData?.sections ?? [];
   }
 
+  get includeFinancialsInWaveBookingsPrint(): boolean {
+    return Boolean(this.filtersForm.get('includeFinancialsInPrint')?.value);
+  }
+
   get hasWaveBookingsPrintRows(): boolean {
     return (this.waveBookingsPrintData?.totalBookings ?? 0) > 0;
+  }
+
+  get showWaveBookingsFinancialColumns(): boolean {
+    return this.includeFinancialsInWaveBookingsPrint;
+  }
+
+  get showWaveBookingsFinancialSummary(): boolean {
+    return this.showWaveBookingsFinancialColumns && this.hasWaveBookingsPrintRows;
+  }
+
+  get waveBookingsPrintTotalBookingAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalBookingAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintTotalInsuranceAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalInsuranceAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintTotalFinalAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalFinalAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
   }
 
   get waveBookingsPrintUserName(): string {
@@ -584,6 +612,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.filtersForm.patchValue({
       categoryId: null,
       waveCode: '',
+      includeFinancialsInPrint: false,
       status: '',
       paymentState: '',
       employeeId: '',
@@ -796,7 +825,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     this.summerWorkflowController
-      .getWaveBookingsPrintReport(this.selectedFilterCategoryId, this.selectedFilterWaveCode, this.seasonYear)
+      .getWaveBookingsPrintReport(
+        this.selectedFilterCategoryId,
+        this.selectedFilterWaveCode,
+        this.seasonYear,
+        this.includeFinancialsInWaveBookingsPrint
+      )
       .subscribe({
         next: response => {
           if (response?.isSuccess && response.data) {
@@ -1243,6 +1277,18 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     return `${day}/${month}/${year}`;
+  }
+
+  formatMoney(value: number | string | null | undefined): string {
+    const amount = Number(value ?? 0);
+    if (!Number.isFinite(amount)) {
+      return '0.00';
+    }
+
+    return new Intl.NumberFormat('ar-EG', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
   }
 
   resolveWaveBookingsPrintText(value: string | null | undefined): string {
@@ -1764,6 +1810,18 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     if (waveSub) {
       this.subscriptions.add(waveSub);
+    }
+
+    const financialViewSub = this.filtersForm.get('includeFinancialsInPrint')?.valueChanges.subscribe(() => {
+      if (!this.bookingsPrintDialogVisible || !this.canOpenWaveCapacityDialog) {
+        return;
+      }
+
+      this.refreshWaveBookingsPrintReport(true);
+    });
+
+    if (financialViewSub) {
+      this.subscriptions.add(financialViewSub);
     }
   }
 

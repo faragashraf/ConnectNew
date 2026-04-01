@@ -84,12 +84,18 @@ export interface SummerWaveBookingsPrintRowDto {
   personsCount: number;
   statusLabel: string;
   notes: string;
+  bookingAmount: number;
+  insuranceAmount: number;
+  finalAmount: number;
 }
 
 export interface SummerWaveBookingsPrintSectionDto {
   familyCount?: number | null;
   sectionLabel: string;
   totalBookings: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
   rows: SummerWaveBookingsPrintRowDto[];
 }
 
@@ -101,7 +107,11 @@ export interface SummerWaveBookingsPrintReportDto {
   waveEndAtUtc?: string | null;
   generatedAtUtc?: string;
   generatedByUserId: string;
+  includeFinancials: boolean;
   totalBookings: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
   sections: SummerWaveBookingsPrintSectionDto[];
 }
 

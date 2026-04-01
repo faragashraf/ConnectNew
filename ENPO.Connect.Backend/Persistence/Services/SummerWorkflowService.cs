@@ -89,6 +89,30 @@ namespace Persistence.Services
             "Summer_AdminComment",
             "Summer_PaymentNotes"
         };
+        private static readonly string[] PricingAccommodationTotalFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationTotal
+        };
+        private static readonly string[] PricingTransportationTotalFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.TransportationTotal
+        };
+        private static readonly string[] PricingInsuranceAmountFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.InsuranceAmount
+        };
+        private static readonly string[] PricingProxyInsuranceAmountFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.ProxyInsuranceAmount
+        };
+        private static readonly string[] PricingAppliedInsuranceAmountFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.AppliedInsuranceAmount
+        };
+        private static readonly string[] PricingGrandTotalFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal
+        };
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -1884,7 +1908,8 @@ namespace Persistence.Services
             int categoryId,
             string waveCode,
             int seasonYear,
-            string userId)
+            string userId,
+            bool includeFinancials = false)
         {
             var response = new CommonResponse<SummerWaveBookingsPrintReportDto>();
             try
@@ -1932,6 +1957,7 @@ namespace Persistence.Services
                     WaveEndAtUtc = waveEndAtUtc,
                     GeneratedAtUtc = DateTime.UtcNow,
                     GeneratedByUserId = normalizedUserId,
+                    IncludeFinancials = includeFinancials,
                     TotalBookings = 0
                 };
 
@@ -1989,6 +2015,10 @@ namespace Persistence.Services
                         GetFieldValue(messageFields, SummerWorkflowDomainConstants.PricingFieldKinds.PricingMode) ?? string.Empty,
                         GetFirstFieldValue(messageFields, SummerWorkflowDomainConstants.ProxyModeFieldKinds));
 
+                    var (bookingAmount, insuranceAmount, finalAmount) = includeFinancials
+                        ? ResolveRowFinancialAmounts(messageFields)
+                        : (0m, 0m, 0m);
+
                     var row = new SummerWaveBookingPrintRowDto
                     {
                         MessageId = message.MessageId,
@@ -2001,7 +2031,10 @@ namespace Persistence.Services
                         UnitNumber = ResolveDisplayText(GetFirstFieldValue(messageFields, UnitNumberFieldKinds)),
                         PersonsCount = Math.Max(0, personsCount),
                         StatusLabel = ResolveDisplayText(statusLabel),
-                        Notes = ResolveDisplayText(GetFirstFieldValue(messageFields, NotesFieldKinds))
+                        Notes = ResolveDisplayText(GetFirstFieldValue(messageFields, NotesFieldKinds)),
+                        BookingAmount = bookingAmount,
+                        InsuranceAmount = insuranceAmount,
+                        FinalAmount = finalAmount
                     };
 
                     rows.Add((familyCount, row));
@@ -2024,12 +2057,18 @@ namespace Persistence.Services
                             FamilyCount = group.Key,
                             SectionLabel = ResolveSectionLabel(group.Key),
                             TotalBookings = orderedRows.Count,
+                            TotalBookingAmount = includeFinancials ? orderedRows.Sum(item => item.BookingAmount) : 0m,
+                            TotalInsuranceAmount = includeFinancials ? orderedRows.Sum(item => item.InsuranceAmount) : 0m,
+                            TotalFinalAmount = includeFinancials ? orderedRows.Sum(item => item.FinalAmount) : 0m,
                             Rows = orderedRows
                         };
                     })
                     .ToList();
 
                 report.TotalBookings = report.Sections.Sum(section => section.TotalBookings);
+                report.TotalBookingAmount = includeFinancials ? report.Sections.Sum(section => section.TotalBookingAmount) : 0m;
+                report.TotalInsuranceAmount = includeFinancials ? report.Sections.Sum(section => section.TotalInsuranceAmount) : 0m;
+                report.TotalFinalAmount = includeFinancials ? report.Sections.Sum(section => section.TotalFinalAmount) : 0m;
                 response.Data = report;
             }
             catch (Exception ex)
@@ -2084,6 +2123,49 @@ namespace Persistence.Services
             }
 
             return 0;
+        }
+
+        private static (decimal BookingAmount, decimal InsuranceAmount, decimal FinalAmount) ResolveRowFinancialAmounts(
+            IEnumerable<TkmendField> fields)
+        {
+            var accommodationTotal = ParseDecimal(GetFirstFieldValue(fields, PricingAccommodationTotalFieldKinds), 0m);
+            var transportationTotal = ParseDecimal(GetFirstFieldValue(fields, PricingTransportationTotalFieldKinds), 0m);
+            var explicitBookingAmount = Math.Max(0m, accommodationTotal + transportationTotal);
+
+            var isProxyBooking = ParseBooleanLike(GetFirstFieldValue(fields, SummerWorkflowDomainConstants.ProxyModeFieldKinds)) == true;
+            var appliedInsuranceAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingAppliedInsuranceAmountFieldKinds));
+            var baseInsuranceAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingInsuranceAmountFieldKinds));
+            var proxyInsuranceAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingProxyInsuranceAmountFieldKinds));
+            var insuranceAmount = appliedInsuranceAmount
+                ?? (isProxyBooking && proxyInsuranceAmount.HasValue
+                    ? proxyInsuranceAmount.Value
+                    : baseInsuranceAmount ?? proxyInsuranceAmount ?? 0m);
+            insuranceAmount = Math.Max(0m, insuranceAmount);
+
+            var grandTotalAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingGrandTotalFieldKinds));
+            var bookingAmount = explicitBookingAmount;
+            if (bookingAmount <= 0m && grandTotalAmount.HasValue)
+            {
+                bookingAmount = Math.Max(0m, grandTotalAmount.Value - insuranceAmount);
+            }
+
+            var finalAmount = bookingAmount + insuranceAmount;
+            if (finalAmount <= 0m && grandTotalAmount.HasValue)
+            {
+                var normalizedGrandTotal = Math.Max(0m, grandTotalAmount.Value);
+                bookingAmount = normalizedGrandTotal;
+                finalAmount = normalizedGrandTotal;
+            }
+
+            return (
+                NormalizeMoneyAmount(bookingAmount),
+                NormalizeMoneyAmount(insuranceAmount),
+                NormalizeMoneyAmount(finalAmount));
+        }
+
+        private static decimal NormalizeMoneyAmount(decimal value)
+        {
+            return decimal.Round(Math.Max(0m, value), 2, MidpointRounding.AwayFromZero);
         }
 
         private static string ResolveBookingTypeLabel(
@@ -4222,6 +4304,85 @@ SELECT @result;
         private static int ParseInt(string? value, int fallback = 0)
         {
             return int.TryParse((value ?? string.Empty).Trim(), out var parsed) ? parsed : fallback;
+        }
+
+        private static decimal ParseDecimal(string? value, decimal fallback = 0m)
+        {
+            var parsed = ParseDecimalNullable(value);
+            return parsed ?? fallback;
+        }
+
+        private static decimal? ParseDecimalNullable(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return null;
+            }
+
+            if (TryParseDecimalWithCulture(normalized, out var parsed))
+            {
+                return parsed;
+            }
+
+            var sanitized = NormalizeDecimalText(normalized);
+            if (sanitized.Length == 0)
+            {
+                return null;
+            }
+
+            if (TryParseDecimalWithCulture(sanitized, out parsed))
+            {
+                return parsed;
+            }
+
+            return null;
+        }
+
+        private static bool TryParseDecimalWithCulture(string value, out decimal parsed)
+        {
+            var styles = NumberStyles.AllowLeadingSign
+                | NumberStyles.AllowDecimalPoint
+                | NumberStyles.AllowThousands
+                | NumberStyles.AllowCurrencySymbol
+                | NumberStyles.AllowLeadingWhite
+                | NumberStyles.AllowTrailingWhite;
+
+            return decimal.TryParse(value, styles, CultureInfo.InvariantCulture, out parsed)
+                || decimal.TryParse(value, styles, CultureInfo.GetCultureInfo("ar-EG"), out parsed)
+                || decimal.TryParse(value, styles, CultureInfo.CurrentCulture, out parsed);
+        }
+
+        private static string NormalizeDecimalText(string value)
+        {
+            var text = value
+                .Replace("ج.م", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace("EGP", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Trim();
+
+            var builder = new StringBuilder(text.Length);
+            foreach (var ch in text)
+            {
+                builder.Append(ch switch
+                {
+                    '٠' => '0',
+                    '١' => '1',
+                    '٢' => '2',
+                    '٣' => '3',
+                    '٤' => '4',
+                    '٥' => '5',
+                    '٦' => '6',
+                    '٧' => '7',
+                    '٨' => '8',
+                    '٩' => '9',
+                    '٫' => '.',
+                    '،' => '.',
+                    '٬' => ',',
+                    _ => ch
+                });
+            }
+
+            return builder.ToString();
         }
 
         private static DateTime ResolvePaymentDueAtUtc(Message message, IEnumerable<TkmendField> fields)

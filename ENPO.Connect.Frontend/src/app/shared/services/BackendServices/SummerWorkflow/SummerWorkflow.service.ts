@@ -69,12 +69,14 @@ export class SummerWorkflowController {
   getWaveBookingsPrintReport(
     categoryId: number,
     waveCode: string,
-    seasonYear: number
+    seasonYear: number,
+    includeFinancials = false
   ): Observable<SummerWorkflowCommonResponse<SummerWaveBookingsPrintReportDto>> {
     const params = new HttpParams()
       .set('categoryId', String(categoryId))
       .set('waveCode', waveCode)
-      .set('seasonYear', String(seasonYear));
+      .set('seasonYear', String(seasonYear))
+      .set('includeFinancials', String(Boolean(includeFinancials)));
     return this.http.get<SummerWorkflowCommonResponse<SummerWaveBookingsPrintReportDto>>(
       `${this.baseUrl}/GetWaveBookingsPrintReport`,
       { params }

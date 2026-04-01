@@ -61,7 +61,11 @@ public class SummerWaveBookingsPrintReportDto
     public DateTime? WaveEndAtUtc { get; set; }
     public DateTime GeneratedAtUtc { get; set; }
     public string GeneratedByUserId { get; set; } = string.Empty;
+    public bool IncludeFinancials { get; set; }
     public int TotalBookings { get; set; }
+    public decimal TotalBookingAmount { get; set; }
+    public decimal TotalInsuranceAmount { get; set; }
+    public decimal TotalFinalAmount { get; set; }
     public List<SummerWaveBookingsPrintSectionDto> Sections { get; set; } = new();
 }
 
@@ -70,6 +74,9 @@ public class SummerWaveBookingsPrintSectionDto
     public int? FamilyCount { get; set; }
     public string SectionLabel { get; set; } = string.Empty;
     public int TotalBookings { get; set; }
+    public decimal TotalBookingAmount { get; set; }
+    public decimal TotalInsuranceAmount { get; set; }
+    public decimal TotalFinalAmount { get; set; }
     public List<SummerWaveBookingPrintRowDto> Rows { get; set; } = new();
 }
 
@@ -84,6 +91,9 @@ public class SummerWaveBookingPrintRowDto
     public int PersonsCount { get; set; }
     public string StatusLabel { get; set; } = string.Empty;
     public string Notes { get; set; } = string.Empty;
+    public decimal BookingAmount { get; set; }
+    public decimal InsuranceAmount { get; set; }
+    public decimal FinalAmount { get; set; }
 }
 
 public class SummerDestinationConfigDto

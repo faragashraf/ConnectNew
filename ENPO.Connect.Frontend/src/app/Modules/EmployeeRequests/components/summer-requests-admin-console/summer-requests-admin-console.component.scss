@@ -708,6 +708,18 @@ label span {
   letter-spacing: 0.1px;
 }
 
+.wave-field {
+  display: grid;
+  gap: 6px;
+}
+
+.wave-field > span {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #2c4f65;
+  letter-spacing: 0.1px;
+}
+
 input,
 select,
 textarea {
@@ -763,6 +775,32 @@ textarea:focus {
   height: 44px;
   padding: 0 14px;
   font-size: 12px;
+}
+
+.bookings-amount-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #d5e4f2;
+  border-radius: 10px;
+  background: #f7fbff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bookings-amount-toggle input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #0d5f9b;
+}
+
+.bookings-amount-toggle span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f4d6a;
 }
 
 button.primary,
@@ -1092,6 +1130,8 @@ button.ghost:hover:not(:disabled) {
 .wave-bookings-dialog-shell {
   display: grid;
   gap: 12px;
+  direction: rtl;
+  text-align: right;
 }
 
 .wave-bookings-dialog-actions {
@@ -1107,6 +1147,8 @@ button.ghost:hover:not(:disabled) {
 }
 
 .wave-bookings-dialog-title small {
+  display: block;
+  margin-top: 4px;
   color: #5b778a;
 }
 
@@ -1114,6 +1156,21 @@ button.ghost:hover:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.wave-bookings-version-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid #cfe3f2;
+  background: #f4fbff;
+  color: #1a5a7f;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .wave-bookings-loading {
@@ -1126,6 +1183,12 @@ button.ghost:hover:not(:disabled) {
   border-radius: 14px;
   padding: 14px;
   background: #fff;
+  direction: rtl;
+  text-align: right;
+}
+
+.wave-bookings-print-doc.financial-version {
+  border-color: #c5ddf0;
 }
 
 .wave-bookings-doc-header {
@@ -1154,6 +1217,7 @@ button.ghost:hover:not(:disabled) {
   border-radius: 9px;
   padding: 8px;
   background: #fff;
+  text-align: right;
 }
 
 .wave-bookings-meta-grid span {
@@ -1175,10 +1239,16 @@ button.ghost:hover:not(:disabled) {
 
 .wave-bookings-section-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.wave-bookings-section-title {
+  display: grid;
+  gap: 4px;
 }
 
 .wave-bookings-section-header h3 {
@@ -1193,6 +1263,32 @@ button.ghost:hover:not(:disabled) {
   font-weight: 700;
 }
 
+.wave-bookings-section-financial {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wave-bookings-section-financial span {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d7e8f5;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #f7fbff;
+  color: #1f5576;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.wave-bookings-section-financial span.is-final {
+  background: #eaf6ff;
+  border-color: #b9d8ef;
+  color: #0f4f7b;
+}
+
 .wave-bookings-table-wrap {
   border: 1px solid #d8e8f5;
   border-radius: 10px;
@@ -1203,19 +1299,27 @@ button.ghost:hover:not(:disabled) {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  direction: rtl;
+  text-align: right;
+}
+
+.wave-bookings-table.financial-version {
+  font-size: 12.5px;
 }
 
 .wave-bookings-table th,
 .wave-bookings-table td {
   border-bottom: 1px solid #e4eef7;
-  border-left: 1px solid #edf4fb;
+  border-inline-start: 1px solid #edf4fb;
   padding: 8px 6px;
   vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
 }
 
-.wave-bookings-table th:last-child,
-.wave-bookings-table td:last-child {
-  border-left: 0;
+.wave-bookings-table th:first-child,
+.wave-bookings-table td:first-child {
+  border-inline-start: 0;
 }
 
 .wave-bookings-table th {
@@ -1223,6 +1327,64 @@ button.ghost:hover:not(:disabled) {
   background: #edf5fd;
   color: #1d4b69;
   font-weight: 800;
+}
+
+.wave-bookings-table .col-index {
+  width: 56px;
+  min-width: 56px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.wave-bookings-table .col-booker {
+  min-width: 180px;
+}
+
+.wave-bookings-table .col-work-entity {
+  min-width: 150px;
+}
+
+.wave-bookings-table .col-booking-type {
+  min-width: 130px;
+}
+
+.wave-bookings-table .col-request-ref {
+  min-width: 96px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.wave-bookings-table .col-persons {
+  min-width: 84px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.wave-bookings-table .col-status {
+  min-width: 100px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.wave-bookings-table .col-unit {
+  min-width: 96px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.wave-bookings-table .col-notes {
+  min-width: 170px;
+}
+
+.wave-bookings-table .col-money {
+  min-width: 118px;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.wave-bookings-table .col-money-final {
+  color: #0d4f79;
 }
 
 .wave-bookings-table tbody tr:nth-child(even) td {
@@ -1237,6 +1399,39 @@ button.ghost:hover:not(:disabled) {
   background: #f3f9ff;
   color: #123f5f;
   font-size: 15px;
+  display: grid;
+  gap: 10px;
+}
+
+.wave-bookings-summary-count {
+  font-size: 16px;
+}
+
+.wave-bookings-summary-financial {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wave-bookings-summary-financial span {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbe0f2;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: #fff;
+  color: #164a6e;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.wave-bookings-summary-financial .is-grand-total {
+  background: #e6f4ff;
+  border-color: #95c8e6;
+  color: #0c4b74;
 }
 
 .owner-card,
@@ -1415,6 +1610,11 @@ button.ghost:hover:not(:disabled) {
   .wave-bookings-meta-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .wave-bookings-section-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 @media (max-width: 700px) {
@@ -1446,6 +1646,11 @@ button.ghost:hover:not(:disabled) {
     width: 100%;
   }
 
+  .bookings-amount-toggle {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .wave-bookings-dialog-actions {
     flex-direction: column;
     align-items: stretch;
@@ -1459,8 +1664,22 @@ button.ghost:hover:not(:disabled) {
     flex: 1 1 0;
   }
 
+  .wave-bookings-version-tag {
+    width: 100%;
+    justify-content: center;
+  }
+
   .wave-bookings-meta-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wave-bookings-section-financial {
+    justify-content: flex-start;
+  }
+
+  .wave-bookings-summary-financial span {
+    width: 100%;
+    justify-content: center;
   }
 
   .pager,
@@ -1489,6 +1708,11 @@ button.ghost:hover:not(:disabled) {
 }
 
 @media print {
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
+
   ::ng-deep body * {
     visibility: hidden;
   }
@@ -1507,6 +1731,8 @@ button.ghost:hover:not(:disabled) {
     box-shadow: none !important;
     border: 0 !important;
     background: #fff !important;
+    direction: rtl !important;
+    text-align: right !important;
   }
 
   ::ng-deep .wave-bookings-print-dialog .p-dialog-header,
@@ -1521,8 +1747,26 @@ button.ghost:hover:not(:disabled) {
     border: 0 !important;
   }
 
+  ::ng-deep .wave-bookings-print-doc {
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
   ::ng-deep .wave-bookings-table thead {
     display: table-header-group;
+  }
+
+  ::ng-deep .wave-bookings-table {
+    font-size: 11px !important;
+    table-layout: fixed;
+    direction: rtl !important;
+  }
+
+  ::ng-deep .wave-bookings-table th,
+  ::ng-deep .wave-bookings-table td {
+    padding: 4px 3px !important;
+    border-color: #d6dee6 !important;
   }
 
   ::ng-deep .wave-bookings-table tr,
@@ -1531,5 +1775,11 @@ button.ghost:hover:not(:disabled) {
   ::ng-deep .wave-bookings-section {
     page-break-inside: avoid;
     break-inside: avoid;
+  }
+
+  ::ng-deep .wave-bookings-summary-financial span,
+  ::ng-deep .wave-bookings-section-financial span {
+    border-color: #ccd8e3 !important;
+    background: #fff !important;
   }
 }
