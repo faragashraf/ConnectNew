@@ -2239,11 +2239,24 @@ namespace Persistence.Services
             return _summerPricingService.GetQuoteAsync(request);
         }
 
-        public async Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalogAsync(int seasonYear, string userId)
+        public async Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalogAsync(
+            int seasonYear,
+            string userId,
+            bool hasSummerPricingPermission = true)
         {
             var response = new CommonResponse<SummerPricingCatalogDto>();
             try
             {
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض إعدادات تسعير المصايف. يتطلب SummerPricingFunc."
+                    });
+                    return response;
+                }
+
                 if (!await CanUserManageSummerPricingAsync(userId))
                 {
                     response.Errors.Add(new Error
@@ -2274,11 +2287,24 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerPricingCatalogDto>> SavePricingCatalogAsync(SummerPricingCatalogUpsertRequest request, string userId)
+        public async Task<CommonResponse<SummerPricingCatalogDto>> SavePricingCatalogAsync(
+            SummerPricingCatalogUpsertRequest request,
+            string userId,
+            bool hasSummerPricingPermission = true)
         {
             var response = new CommonResponse<SummerPricingCatalogDto>();
             try
             {
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بتعديل إعدادات تسعير المصايف. يتطلب SummerPricingFunc."
+                    });
+                    return response;
+                }
+
                 if (!await CanUserManageSummerPricingAsync(userId))
                 {
                     response.Errors.Add(new Error

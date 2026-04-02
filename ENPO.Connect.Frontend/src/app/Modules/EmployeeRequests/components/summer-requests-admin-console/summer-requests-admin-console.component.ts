@@ -24,6 +24,7 @@ import { AttchedObjectService } from 'src/app/shared/services/helper/attched-obj
 import { DynamicMetadataService } from 'src/app/shared/services/helper/dynamic-metadata.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
+import { AuthObjectsService } from 'src/app/shared/services/helper/auth-objects.service';
 import {
   SUMMER_DESTINATION_CATALOG_KEY,
   SUMMER_DYNAMIC_APPLICATION_ID
@@ -248,6 +249,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   pricingCatalogError = '';
   pricingSeasonYear = this.seasonYear;
   pricingRecords: SummerPricingCatalogRecordDto[] = [];
+  canManageSummerPricing = false;
   defaultPricingGroupsExpanded = false;
   private pricingGroupExpandedState: Record<string, boolean> = {};
 
@@ -286,6 +288,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     private readonly dynamicMetadataService: DynamicMetadataService,
     private readonly attachmentsController: AttachmentsController,
     private readonly attchedObjectService: AttchedObjectService,
+    private readonly authObjectsService: AuthObjectsService,
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
     private readonly summerRealtimeService: SummerRequestsRealtimeService,
@@ -316,9 +319,14 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.defaultPricingGroupsExpanded = this.resolveDefaultPricingGroupExpandState();
+    this.refreshSummerPricingAccess();
     this.bindActionRules();
     this.bindFilterDependencies();
     this.bindSignalRefresh();
+    const authSub = this.authObjectsService.authObject$.subscribe(() => {
+      this.refreshSummerPricingAccess();
+    });
+    this.subscriptions.add(authSub);
     this.loadDestinationCatalog();
   }
 
@@ -339,9 +347,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         if (response?.isSuccess) {
           this.destinations = parseSummerDestinationCatalog(response.data, this.seasonYear);
           if (this.destinations.length > 0) {
-            this.loadDashboard();
-            this.loadRequests();
-            this.loadPricingCatalog();
+            this.initializeAdminConsoleData();
             return;
           }
         }
@@ -351,21 +357,28 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         this.destinationsError = errors.length > 0
           ? errors.join('<br/>')
           : SUMMER_UI_TEXTS_AR.errors.destinationCatalogInvalid;
-        this.loadDashboard();
-        this.loadRequests();
-        this.loadPricingCatalog();
+        this.initializeAdminConsoleData();
       },
       error: () => {
         this.destinations = [];
         this.destinationsError = SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed;
-        this.loadDashboard();
-        this.loadRequests();
-        this.loadPricingCatalog();
+        this.initializeAdminConsoleData();
       },
       complete: () => {
         this.loadingDestinations = false;
       }
     });
+  }
+
+  private initializeAdminConsoleData(): void {
+    this.loadDashboard();
+    this.loadRequests();
+    if (this.canManageSummerPricing) {
+      this.loadPricingCatalog();
+      return;
+    }
+
+    this.resetPricingStateForUnauthorizedUser();
   }
 
   get selectedRequest(): SummerRequestSummaryDto | undefined {
@@ -1478,6 +1491,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   loadPricingCatalog(silent = true): void {
+    if (!this.canManageSummerPricing) {
+      this.resetPricingStateForUnauthorizedUser();
+      return;
+    }
+
     this.pricingCatalogLoading = true;
     if (!silent) {
       this.pricingCatalogError = '';
@@ -1520,11 +1538,19 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   addPricingRecord(categoryId?: number): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
     this.pricingRecords = [...this.pricingRecords, this.createEmptyPricingRecord(categoryId)];
     this.syncPricingGroupExpansionState();
   }
 
   duplicatePricingRecord(index: number): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
     if (index < 0 || index >= this.pricingRecords.length) {
       return;
     }
@@ -1546,6 +1572,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   removePricingRecord(index: number): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
     if (index < 0 || index >= this.pricingRecords.length) {
       return;
     }
@@ -1558,6 +1588,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   onPricingModeChanged(record: SummerPricingCatalogRecordDto): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
     const normalizedMode = String(record?.pricingMode ?? '').trim();
     if (normalizedMode === 'TransportationMandatoryIncluded') {
       record.transportationMandatory = true;
@@ -1571,6 +1605,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   savePricingCatalog(): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
     const payload: SummerPricingCatalogUpsertRequest = {
       seasonYear: Number(this.pricingSeasonYear) || this.seasonYear,
       records: this.pricingRecords.map((record, index) => this.normalizePricingRecordForSave(record, index))
@@ -2811,6 +2849,27 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     return Math.round(numericValue);
+  }
+
+  private refreshSummerPricingAccess(): void {
+    try {
+      this.canManageSummerPricing = this.authObjectsService.checkAuthFun('SummerPricingFunc');
+    } catch {
+      this.canManageSummerPricing = false;
+    }
+
+    if (!this.canManageSummerPricing) {
+      this.resetPricingStateForUnauthorizedUser();
+    }
+  }
+
+  private resetPricingStateForUnauthorizedUser(): void {
+    this.pricingCatalogLoading = false;
+    this.pricingCatalogSaving = false;
+    this.pricingCatalogError = '';
+    this.pricingSeasonYear = this.seasonYear;
+    this.pricingRecords = [];
+    this.resetPricingGroupExpansionState();
   }
 
   private loadSelectedRequestDetails(messageId: number): void {

@@ -76,5 +76,11 @@ namespace Persistence.Services.Summer
             public const string Generic = "GENERIC_REQUEST_LINK";
             public const string SummerEdit = "SUMMER_REQUEST_EDIT";
         }
+
+        public static class AuthorizationFunctions
+        {
+            public const string SummerAdmin = "SummerAdminFunc";
+            public const string SummerPricing = "SummerPricingFunc";
+        }
     }
 }

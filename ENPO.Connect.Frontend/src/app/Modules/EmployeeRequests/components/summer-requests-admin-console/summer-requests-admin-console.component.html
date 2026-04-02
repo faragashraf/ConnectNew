@@ -31,16 +31,21 @@
     </div>
   </section>
 
-  <section class="pricing-panel">
+  <section class="scope-panel">
+    <div class="scope-row">
+      <button type="button" class="ghost" routerLink="/Admin/resorts/unit-freeze">
+        إدارة تجميد الوحدات
+      </button>
+    </div>
+  </section>
+
+  <section class="pricing-panel" *ngIf="canManageSummerPricing">
     <header class="pricing-header">
       <div>
         <h3>إعدادات التسعير (قابلة للتعديل من الإدارة)</h3>
         <p class="pricing-note">الأسعار استرشادية وقابلة للتعديل بعد اعتماد اللجنة.</p>
       </div>
       <div class="pricing-actions">
-        <button type="button" class="ghost" routerLink="/Admin/resorts/unit-freeze">
-          إدارة تجميد الوحدات
-        </button>
         <button type="button" class="ghost" (click)="loadPricingCatalog(false)" [disabled]="pricingCatalogLoading || pricingCatalogSaving">
           {{ pricingCatalogLoading ? 'جاري التحميل...' : 'تحديث' }}
         </button>
