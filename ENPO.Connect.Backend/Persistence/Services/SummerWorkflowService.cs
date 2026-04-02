@@ -1350,7 +1350,7 @@ namespace Persistence.Services
                     actionCode,
                     userId);
 
-                if (!_helperService.ValidateFileSizes(request.files, response))
+                if (!ValidateAttachmentFileSizes(request.files, response))
                 {
                     return response;
                 }
@@ -2321,7 +2321,7 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (!_helperService.ValidateFileSizes(request.files, response))
+                if (!ValidateAttachmentFileSizes(request.files, response))
                 {
                     return response;
                 }
@@ -2426,7 +2426,7 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (!_helperService.ValidateFileSizes(request.files, response))
+                if (!ValidateAttachmentFileSizes(request.files, response))
                 {
                     return response;
                 }
@@ -2599,7 +2599,7 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (!_helperService.ValidateFileSizes(request.files, response))
+                if (!ValidateAttachmentFileSizes(request.files, response))
                 {
                     return response;
                 }
@@ -3301,6 +3301,11 @@ namespace Persistence.Services
 
         private async Task<bool> AcquireCapacityLockAsync(int categoryId, string waveCode)
         {
+            if (!_connectContext.Database.IsSqlServer())
+            {
+                return true;
+            }
+
             var currentTransaction = _connectContext.Database.CurrentTransaction;
             if (currentTransaction == null)
             {
@@ -3345,6 +3350,11 @@ SELECT @result;
             if (messageId <= 0)
             {
                 return false;
+            }
+
+            if (!_connectContext.Database.IsSqlServer())
+            {
+                return true;
             }
 
             var connection = _connectContext.Database.GetDbConnection();
@@ -3714,18 +3724,48 @@ SELECT @result;
         private async Task AddReplyWithAttachmentsAsync(int messageId, string message, string userId, string ip, List<IFormFile>? files)
         {
             var normalizedMessage = NormalizePotentialMojibake(message);
-            var reply = _helperService.CreateReply(messageId, normalizedMessage, userId, userId, ip);
+            var reply = CreateReplyEntity(messageId, normalizedMessage, userId, userId, ip);
             await _connectContext.Replies.AddAsync(reply);
 
             if (files != null && files.Any())
             {
                 var attachments = new List<AttchShipment>();
-                await _helperService.SaveAttachments(files, reply.ReplyId, attachments);
+                await SaveReplyAttachmentsAsync(files, reply.ReplyId, attachments);
                 if (attachments.Any())
                 {
                     await _attachHeldContext.AttchShipments.AddRangeAsync(attachments);
                 }
             }
+        }
+
+        protected virtual bool ValidateAttachmentFileSizes<T>(List<IFormFile>? files, CommonResponse<T> response)
+        {
+            if (_helperService == null)
+            {
+                throw new InvalidOperationException("Helper service is not configured.");
+            }
+
+            return _helperService.ValidateFileSizes(files, response);
+        }
+
+        protected virtual Reply CreateReplyEntity(int messageId, string msg, string userId, string parentSectorId, string ip)
+        {
+            if (_helperService == null)
+            {
+                throw new InvalidOperationException("Helper service is not configured.");
+            }
+
+            return _helperService.CreateReply(messageId, msg, userId, parentSectorId, ip);
+        }
+
+        protected virtual Task SaveReplyAttachmentsAsync(List<IFormFile> files, int replyId, List<AttchShipment> attachments)
+        {
+            if (_helperService == null)
+            {
+                throw new InvalidOperationException("Helper service is not configured.");
+            }
+
+            return _helperService.SaveAttachments(files, replyId, attachments);
         }
 
         private async Task<SummerRequestSummaryDto> BuildSummaryAsync(int messageId)

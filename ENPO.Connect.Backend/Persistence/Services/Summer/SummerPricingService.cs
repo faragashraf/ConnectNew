@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,12 @@ namespace Persistence.Services.Summer
         private const string SummerDynamicApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId;
         private const string SummerPricingCatalogMend = SummerWorkflowDomainConstants.PricingCatalogMend;
         private static readonly TimeZoneInfo CairoTimeZone = ResolveCairoTimeZone();
+        private static readonly JsonSerializerOptions CatalogJsonSerializerOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
 
         public SummerPricingService(
             ConnectContext connectContext,
@@ -52,13 +59,28 @@ namespace Persistence.Services.Summer
                     return response;
                 }
 
-                var pricingRules = await LoadPricingRulesAsync(seasonYear, applicationId, cancellationToken);
+                var pricingRules = await LoadPricingRulesAsync(
+                    seasonYear,
+                    applicationId,
+                    includeInactive: false,
+                    cancellationToken);
                 if (pricingRules.Count == 0)
                 {
+                    var allCatalogRules = await LoadPricingRulesAsync(
+                        seasonYear,
+                        applicationId,
+                        includeInactive: true,
+                        cancellationToken);
+                    var categoryHasConfiguredRules = allCatalogRules.Any(rule =>
+                        rule.CategoryId == request.CategoryId
+                        && (rule.SeasonYear <= 0 || rule.SeasonYear == seasonYear));
+
                     response.Errors.Add(new Error
                     {
                         Code = "404",
-                        Message = "لا توجد إعدادات تسعير فعّالة لهذا الموسم. يرجى مراجعة إعدادات التسعير."
+                        Message = categoryHasConfiguredRules
+                            ? "التسعير غير مفعل لهذا المصيف في الموسم الحالي."
+                            : "لا توجد إعدادات تسعير فعّالة لهذا الموسم. يرجى مراجعة إعدادات التسعير."
                     });
                     return response;
                 }
@@ -78,12 +100,44 @@ namespace Persistence.Services.Summer
 
                 if (selectedRule == null)
                 {
+                    var catalogRules = await LoadPricingRulesAsync(
+                        seasonYear,
+                        applicationId,
+                        includeInactive: true,
+                        cancellationToken);
+
+                    var noMatchMessage = ResolveNoMatchMessage(
+                        catalogRules,
+                        request.CategoryId,
+                        seasonYear,
+                        normalizedWaveCode,
+                        effectivePeriodKey,
+                        waveDate);
+
                     response.Errors.Add(new Error
                     {
                         Code = "404",
-                        Message = "لا يوجد تسعير مفعّل للمصيف/الفوج الحالي. يرجى مراجعة إدارة التسعير."
+                        Message = noMatchMessage
                     });
+                    _logger.LogWarning(
+                        "Summer pricing quote no-match. CategoryId={CategoryId}, SeasonYear={SeasonYear}, WaveCode={WaveCode}, PeriodKey={PeriodKey}, WaveDate={WaveDate}",
+                        request.CategoryId,
+                        seasonYear,
+                        normalizedWaveCode,
+                        effectivePeriodKey,
+                        waveDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                     return response;
+                }
+
+                if (IsPeriodFallbackMatch(selectedRule, effectivePeriodKey, waveDate))
+                {
+                    _logger.LogWarning(
+                        "Summer pricing quote used period fallback by date range. CategoryId={CategoryId}, RuleConfigId={RuleConfigId}, RequestedPeriodKey={RequestedPeriodKey}, RulePeriodKey={RulePeriodKey}, WaveDate={WaveDate}",
+                        request.CategoryId,
+                        selectedRule.PricingConfigId,
+                        effectivePeriodKey,
+                        selectedRule.PeriodKey,
+                        waveDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                 }
 
                 var normalizedPricingMode = NormalizePricingMode(selectedRule.PricingMode);
@@ -357,6 +411,17 @@ namespace Persistence.Services.Summer
                     return response;
                 }
 
+                var overlapErrors = ValidateActiveDateRangeOverlaps(normalizedRecords);
+                if (overlapErrors.Count > 0)
+                {
+                    foreach (var error in overlapErrors)
+                    {
+                        response.Errors.Add(error);
+                    }
+
+                    return response;
+                }
+
                 var catalogPayload = new SummerPricingCatalogPayload
                 {
                     SeasonYear = seasonYear,
@@ -365,11 +430,7 @@ namespace Persistence.Services.Summer
 
                 var payload = JsonSerializer.Serialize(
                     catalogPayload,
-                    new JsonSerializerOptions
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true
-                    });
+                    CatalogJsonSerializerOptions);
 
                 var firstInputRecord = normalizedRecords.FirstOrDefault();
                 _logger.LogInformation(
@@ -492,12 +553,13 @@ namespace Persistence.Services.Summer
         private async Task<List<PricingRule>> LoadPricingRulesAsync(
             int seasonYear,
             string? applicationId,
+            bool includeInactive,
             CancellationToken cancellationToken)
         {
             var normalizedAppId = NormalizeApplicationId(applicationId);
             var metadataRow = await GetPricingMetadataRowAsync(normalizedAppId, trackChanges: false, cancellationToken);
             var catalogPayload = ParseCatalogPayload((metadataRow?.CdmendTbl ?? string.Empty).Trim());
-            return BuildCatalogRecords(catalogPayload, seasonYear, includeInactive: false);
+            return BuildCatalogRecords(catalogPayload, seasonYear, includeInactive);
         }
 
         private static string NormalizeApplicationId(string? applicationId)
@@ -717,14 +779,22 @@ namespace Persistence.Services.Summer
                     continue;
                 }
 
+                var normalizedWaveCode = NormalizeCodeToken(item.WaveCode);
+                var normalizedPeriodKey = NormalizePeriodKey(item.PeriodKey);
+                var derivedPeriodKeyFromRange = DerivePeriodKeyFromDateRange(parsedDateFrom, parsedDateTo);
+                if (normalizedWaveCode.Length == 0 && derivedPeriodKeyFromRange.Length > 0)
+                {
+                    normalizedPeriodKey = derivedPeriodKeyFromRange;
+                }
+
                 rules.Add(new PricingRule
                 {
                     SortOrder = index,
                     PricingConfigId = (item.PricingConfigId ?? string.Empty).Trim(),
                     CategoryId = item.CategoryId,
                     SeasonYear = effectiveSeasonYear,
-                    WaveCode = NormalizeCodeToken(item.WaveCode),
-                    PeriodKey = NormalizePeriodKey(item.PeriodKey),
+                    WaveCode = normalizedWaveCode,
+                    PeriodKey = normalizedPeriodKey,
                     DateFrom = parsedDateFrom,
                     DateTo = parsedDateTo,
                     AccommodationPricePerPerson = item.AccommodationPricePerPerson,
@@ -874,6 +944,12 @@ namespace Persistence.Services.Summer
 
                 var normalizedWaveCode = NormalizeCodeToken(record.WaveCode);
                 var normalizedPeriodKey = NormalizePeriodKey(record.PeriodKey);
+                var derivedPeriodKeyFromRange = DerivePeriodKeyFromDateRange(dateFrom, dateTo);
+                if (normalizedWaveCode.Length == 0 && derivedPeriodKeyFromRange.Length > 0)
+                {
+                    normalizedPeriodKey = derivedPeriodKeyFromRange;
+                }
+
                 var transportationMandatory = record.TransportationMandatory
                     || string.Equals(
                         mode,
@@ -953,6 +1029,196 @@ namespace Persistence.Services.Summer
             return $"SUM{seasonYear}-CAT{categoryId}-{slot}";
         }
 
+        private static string ResolveNoMatchMessage(
+            IReadOnlyCollection<PricingRule> catalogRules,
+            int categoryId,
+            int seasonYear,
+            string waveCode,
+            string periodKey,
+            DateOnly? waveDate)
+        {
+            var scopedByCategory = catalogRules
+                .Where(rule => rule.CategoryId == categoryId)
+                .Where(rule => rule.SeasonYear <= 0 || rule.SeasonYear == seasonYear)
+                .ToList();
+
+            if (scopedByCategory.Count == 0)
+            {
+                return "لا يوجد تسعير للمصيف المختار في الموسم الحالي.";
+            }
+
+            var activeRules = scopedByCategory
+                .Where(rule => rule.IsActive)
+                .ToList();
+
+            if (activeRules.Count == 0)
+            {
+                return "التسعير غير مفعل للمصيف المختار.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(waveCode))
+            {
+                var hasWaveCompatibleRule = activeRules.Any(rule =>
+                    rule.WaveCode.Length == 0
+                    || string.Equals(rule.WaveCode, waveCode, StringComparison.OrdinalIgnoreCase));
+                if (!hasWaveCompatibleRule)
+                {
+                    return "لا توجد مطابقة مناسبة للفوج المختار ضمن قواعد التسعير.";
+                }
+            }
+
+            if (periodKey.Length > 0)
+            {
+                var hasPeriodCompatibleRule = activeRules.Any(rule =>
+                    rule.PeriodKey.Length == 0
+                    || string.Equals(rule.PeriodKey, periodKey, StringComparison.OrdinalIgnoreCase));
+                if (!hasPeriodCompatibleRule)
+                {
+                    return "لا توجد مطابقة مناسبة لفترة التسعير المختارة.";
+                }
+            }
+
+            var hasDateScopedRules = activeRules.Any(rule => rule.DateFrom.HasValue || rule.DateTo.HasValue);
+            if (hasDateScopedRules && !waveDate.HasValue)
+            {
+                return "البيانات غير مكتملة لحساب التسعير: تاريخ الفوج غير متاح.";
+            }
+
+            if (waveDate.HasValue)
+            {
+                var hasDateCompatibleRule = activeRules.Any(rule =>
+                    !(rule.DateFrom.HasValue || rule.DateTo.HasValue)
+                    || IsWaveDateWithinRuleDateRange(rule, waveDate.Value));
+                if (!hasDateCompatibleRule)
+                {
+                    return "لا توجد مطابقة مناسبة لتاريخ الفوج ضمن نطاقات التسعير المفعلة.";
+                }
+            }
+
+            return "لا توجد مطابقة مناسبة لبيانات التسعير المطلوبة. يرجى مراجعة إعدادات التسعير.";
+        }
+
+        private static List<Error> ValidateActiveDateRangeOverlaps(
+            IReadOnlyCollection<SummerPricingRecordPayload> records)
+        {
+            var errors = new List<Error>();
+            var activeRecords = records
+                .Where(item => item.IsActive ?? true)
+                .ToList();
+
+            var groups = activeRecords
+                .GroupBy(item => string.Join('|', new[]
+                {
+                    item.CategoryId.ToString(CultureInfo.InvariantCulture),
+                    item.SeasonYear.ToString(CultureInfo.InvariantCulture),
+                    NormalizeCodeToken(item.WaveCode),
+                    NormalizePeriodKey(item.PeriodKey)
+                }), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var group in groups)
+            {
+                var items = group.ToList();
+                for (var i = 0; i < items.Count; i += 1)
+                {
+                    for (var j = i + 1; j < items.Count; j += 1)
+                    {
+                        if (!DoDateRangesOverlap(items[i], items[j]))
+                        {
+                            continue;
+                        }
+
+                        var firstId = NormalizeCodeToken(items[i].PricingConfigId);
+                        var secondId = NormalizeCodeToken(items[j].PricingConfigId);
+                        var firstRef = firstId.Length > 0 ? firstId : $"ROW{i + 1}";
+                        var secondRef = secondId.Length > 0 ? secondId : $"ROW{j + 1}";
+
+                        errors.Add(new Error
+                        {
+                            Code = "400",
+                            Message = $"يوجد تداخل في نطاقات التاريخ بين قواعد التسعير الفعالة ({firstRef}) و({secondRef}) لنفس المصيف/الموسم/الفترة."
+                        });
+                    }
+                }
+            }
+
+            return errors;
+        }
+
+        private static bool DoDateRangesOverlap(SummerPricingRecordPayload left, SummerPricingRecordPayload right)
+        {
+            var leftFrom = ParseDateOnly(left.DateFrom) ?? DateOnly.MinValue;
+            var leftTo = ParseDateOnly(left.DateTo) ?? DateOnly.MaxValue;
+            var rightFrom = ParseDateOnly(right.DateFrom) ?? DateOnly.MinValue;
+            var rightTo = ParseDateOnly(right.DateTo) ?? DateOnly.MaxValue;
+
+            return leftFrom <= rightTo && rightFrom <= leftTo;
+        }
+
+        private static string DerivePeriodKeyFromDateRange(DateOnly? dateFrom, DateOnly? dateTo)
+        {
+            if (!dateFrom.HasValue && !dateTo.HasValue)
+            {
+                return string.Empty;
+            }
+
+            if (dateFrom.HasValue && dateTo.HasValue)
+            {
+                if (dateFrom.Value > dateTo.Value)
+                {
+                    return string.Empty;
+                }
+
+                var months = EnumerateMonthsInRange(dateFrom.Value, dateTo.Value).Distinct().ToList();
+                if (months.Count == 0)
+                {
+                    return string.Empty;
+                }
+
+                if (months.All(month => month == 6 || month == 9))
+                {
+                    return "JUN_SEP";
+                }
+
+                if (months.All(month => month == 7 || month == 8))
+                {
+                    return "JUL_AUG";
+                }
+
+                if (months.Count == 1)
+                {
+                    return $"M{months[0]:D2}";
+                }
+
+                return string.Empty;
+            }
+
+            var month = (dateFrom ?? dateTo)!.Value.Month;
+            return ResolveMonthPeriodKey(month);
+        }
+
+        private static IEnumerable<int> EnumerateMonthsInRange(DateOnly from, DateOnly to)
+        {
+            var cursor = new DateOnly(from.Year, from.Month, 1);
+            var guard = 0;
+            while (cursor <= to && guard < 24)
+            {
+                yield return cursor.Month;
+                cursor = cursor.AddMonths(1);
+                guard += 1;
+            }
+        }
+
+        private static string ResolveMonthPeriodKey(int month)
+        {
+            return month switch
+            {
+                6 or 9 => "JUN_SEP",
+                7 or 8 => "JUL_AUG",
+                >= 1 and <= 12 => $"M{month:D2}",
+                _ => string.Empty
+            };
+        }
+
         private static PricingRule? SelectBestRule(
             IEnumerable<PricingRule> rules,
             int categoryId,
@@ -990,28 +1256,30 @@ namespace Persistence.Services.Summer
                 return -1;
             }
 
-            if (rule.PeriodKey.Length > 0
-                && !string.Equals(rule.PeriodKey, periodKey, StringComparison.OrdinalIgnoreCase))
-            {
-                return -1;
-            }
-
-            if (rule.DateFrom.HasValue || rule.DateTo.HasValue)
+            var hasDateRange = rule.DateFrom.HasValue || rule.DateTo.HasValue;
+            if (hasDateRange)
             {
                 if (!waveDate.HasValue)
                 {
                     return -1;
                 }
 
-                if (rule.DateFrom.HasValue && waveDate.Value < rule.DateFrom.Value)
+                if (!IsWaveDateWithinRuleDateRange(rule, waveDate.Value))
+                {
+                    return -1;
+                }
+            }
+
+            var usedPeriodFallback = false;
+            if (rule.PeriodKey.Length > 0
+                && !string.Equals(rule.PeriodKey, periodKey, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!hasDateRange || !waveDate.HasValue)
                 {
                     return -1;
                 }
 
-                if (rule.DateTo.HasValue && waveDate.Value > rule.DateTo.Value)
-                {
-                    return -1;
-                }
+                usedPeriodFallback = true;
             }
 
             var score = 0;
@@ -1022,10 +1290,10 @@ namespace Persistence.Services.Summer
 
             if (rule.PeriodKey.Length > 0)
             {
-                score += 50;
+                score += usedPeriodFallback ? 5 : 50;
             }
 
-            if (rule.DateFrom.HasValue || rule.DateTo.HasValue)
+            if (hasDateRange)
             {
                 score += 40;
             }
@@ -1041,6 +1309,46 @@ namespace Persistence.Services.Summer
             }
 
             return score;
+        }
+
+        private static bool IsWaveDateWithinRuleDateRange(PricingRule rule, DateOnly waveDate)
+        {
+            if (rule.DateFrom.HasValue && waveDate < rule.DateFrom.Value)
+            {
+                return false;
+            }
+
+            if (rule.DateTo.HasValue && waveDate > rule.DateTo.Value)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool IsPeriodFallbackMatch(PricingRule rule, string requestedPeriodKey, DateOnly? waveDate)
+        {
+            if (rule.PeriodKey.Length == 0 || requestedPeriodKey.Length == 0)
+            {
+                return false;
+            }
+
+            if (string.Equals(rule.PeriodKey, requestedPeriodKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (!waveDate.HasValue)
+            {
+                return false;
+            }
+
+            if (!(rule.DateFrom.HasValue || rule.DateTo.HasValue))
+            {
+                return false;
+            }
+
+            return IsWaveDateWithinRuleDateRange(rule, waveDate.Value);
         }
 
         private static int ResolvePersonsCount(SummerPricingQuoteRequest request)
@@ -1101,12 +1409,7 @@ namespace Persistence.Services.Summer
                 return string.Empty;
             }
 
-            return waveDate.Value.Month switch
-            {
-                6 or 9 => "JUN_SEP",
-                7 or 8 => "JUL_AUG",
-                _ => $"M{waveDate.Value.Month:D2}"
-            };
+            return ResolveMonthPeriodKey(waveDate.Value.Month);
         }
 
         private static DateOnly ToCairoDate(DateTime valueUtc)
@@ -1126,6 +1429,30 @@ namespace Persistence.Services.Summer
                 return null;
             }
 
+            var dateOnlyFormats = new[]
+            {
+                "yyyy-MM-dd",
+                "yyyy/MM/dd",
+                "dd/MM/yyyy",
+                "d/M/yyyy",
+                "MM/dd/yyyy",
+                "M/d/yyyy",
+                "dd-MM-yyyy",
+                "d-M-yyyy",
+                "MM-dd-yyyy",
+                "M-d-yyyy"
+            };
+
+            if (DateOnly.TryParseExact(
+                value,
+                dateOnlyFormats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces,
+                out var dateOnly))
+            {
+                return dateOnly;
+            }
+
             if (DateTimeOffset.TryParse(
                 value,
                 CultureInfo.InvariantCulture,
@@ -1133,25 +1460,6 @@ namespace Persistence.Services.Summer
                 out var dto))
             {
                 return ToCairoDate(dto.UtcDateTime);
-            }
-
-            var supportedFormats = new[]
-            {
-                "yyyy-MM-dd",
-                "dd/MM/yyyy",
-                "d/M/yyyy",
-                "MM/dd/yyyy",
-                "M/d/yyyy"
-            };
-
-            if (DateOnly.TryParseExact(
-                value,
-                supportedFormats,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AllowWhiteSpaces,
-                out var dateOnly))
-            {
-                return dateOnly;
             }
 
             if (DateOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out dateOnly))

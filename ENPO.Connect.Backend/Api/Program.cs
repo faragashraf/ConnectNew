@@ -22,6 +22,7 @@ using Persistence.UnitOfWorks;
 using SignalR.Notification;
 using System.Data;
 using System.Reflection;
+using System.Text.Encodings.Web;
 using System.Text;
 
 string AllowAllCors = "AllowAll";
@@ -32,6 +33,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add(new AuthorizeFilter()); //Authorize All Controllers
+})
+.AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
 });
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -198,12 +203,6 @@ builder.Services.AddSwaggerGen(option =>
     option.SchemaFilter<Api.CustomSwagger.EnumDescriptionSchemaFilter>();
 });
 
-//builder.Services.AddControllers().AddJsonOptions(opts =>
-//{
-//    opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-//});
-
-builder.Services.AddControllers();
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 builder.Services.AddCors(options =>
 {

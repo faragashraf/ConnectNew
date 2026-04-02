@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using AutoMapper;
 using ENPO.CreateLogFile;
@@ -21,6 +22,11 @@ using Persistence.Services.Notifications;
 using Persistence.Services.Summer;
 
 var options = SeedRunnerOptions.Parse(args);
+var prettyJsonOptions = new JsonSerializerOptions
+{
+    WriteIndented = true,
+    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+};
 
 var repoRoot = ResolveRepoRoot();
 var apiDir = Path.Combine(repoRoot, "ENPO.Connect.Backend", "Api");
@@ -102,7 +108,7 @@ var backupSnapshot = new
 
 await File.WriteAllTextAsync(
     backupPath,
-    JsonSerializer.Serialize(backupSnapshot, new JsonSerializerOptions { WriteIndented = true }));
+    JsonSerializer.Serialize(backupSnapshot, prettyJsonOptions));
 
 if (options.DryRun)
 {
@@ -273,7 +279,7 @@ if (createdMessageIds.Count != options.TotalRequests)
     Directory.CreateDirectory(Path.GetDirectoryName(failureReportPath)!);
     await File.WriteAllTextAsync(
         failureReportPath,
-        JsonSerializer.Serialize(failureReport, new JsonSerializerOptions { WriteIndented = true }));
+        JsonSerializer.Serialize(failureReport, prettyJsonOptions));
 
     var firstError = seedErrors.FirstOrDefault() ?? "N/A";
     throw new InvalidOperationException(
@@ -315,7 +321,7 @@ var report = new SeedExecutionReport
 Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
 await File.WriteAllTextAsync(
     reportPath,
-    JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+    JsonSerializer.Serialize(report, prettyJsonOptions));
 
 Console.WriteLine($"Backup snapshot: {backupPath}");
 Console.WriteLine($"Execution report: {reportPath}");

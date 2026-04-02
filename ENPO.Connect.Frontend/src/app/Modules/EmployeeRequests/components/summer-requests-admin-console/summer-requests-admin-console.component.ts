@@ -2205,8 +2205,108 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       notes: String(record?.notes ?? '').trim()
     };
 
+    this.syncPricingPeriodKeyWithDateRange(normalized);
     this.onPricingModeChanged(normalized);
     return normalized;
+  }
+
+  private syncPricingPeriodKeyWithDateRange(record: SummerPricingCatalogRecordDto): void {
+    const normalizedWaveCode = String(record?.waveCode ?? '').trim();
+    if (normalizedWaveCode.length > 0) {
+      return;
+    }
+
+    const derivedPeriodKey = this.derivePricingPeriodKeyFromDateRange(record?.dateFrom, record?.dateTo);
+    if (derivedPeriodKey.length > 0) {
+      record.periodKey = derivedPeriodKey;
+    }
+  }
+
+  private derivePricingPeriodKeyFromDateRange(
+    rawDateFrom: string | null | undefined,
+    rawDateTo: string | null | undefined
+  ): string {
+    const fromMonth = this.parsePricingMonth(rawDateFrom);
+    const toMonth = this.parsePricingMonth(rawDateTo);
+
+    if (fromMonth === null && toMonth === null) {
+      return '';
+    }
+
+    if (fromMonth !== null && toMonth !== null) {
+      const months: number[] = [];
+      let cursor = fromMonth;
+      let guard = 0;
+      while (cursor <= toMonth && guard < 24) {
+        months.push(cursor);
+        cursor += 1;
+        guard += 1;
+      }
+
+      if (months.length === 0) {
+        return '';
+      }
+
+      const normalizedMonths = months.map(value => ((value - 1) % 12) + 1);
+      if (normalizedMonths.every(month => month === 6 || month === 9)) {
+        return 'JUN_SEP';
+      }
+
+      if (normalizedMonths.every(month => month === 7 || month === 8)) {
+        return 'JUL_AUG';
+      }
+
+      const uniqueMonths = Array.from(new Set(normalizedMonths));
+      if (uniqueMonths.length === 1) {
+        return `M${String(uniqueMonths[0]).padStart(2, '0')}`;
+      }
+
+      return '';
+    }
+
+    const singleMonth = fromMonth ?? toMonth;
+    if (singleMonth === null) {
+      return '';
+    }
+
+    const normalizedMonth = ((singleMonth - 1) % 12) + 1;
+    if (normalizedMonth === 6 || normalizedMonth === 9) {
+      return 'JUN_SEP';
+    }
+
+    if (normalizedMonth === 7 || normalizedMonth === 8) {
+      return 'JUL_AUG';
+    }
+
+    return `M${String(normalizedMonth).padStart(2, '0')}`;
+  }
+
+  private parsePricingMonth(value: string | null | undefined): number | null {
+    const text = String(value ?? '').trim();
+    if (!text) {
+      return null;
+    }
+
+    const isoMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+    if (isoMatch) {
+      const year = Number(isoMatch[1]);
+      const month = Number(isoMatch[2]);
+      if (Number.isFinite(year) && Number.isFinite(month) && month >= 1 && month <= 12) {
+        return (year * 12) + month;
+      }
+    }
+
+    const slashMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
+    if (slashMatch) {
+      const day = Number(slashMatch[1]);
+      const month = Number(slashMatch[2]);
+      const year = Number(slashMatch[3]);
+      if (Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year) && month >= 1 && month <= 12) {
+        return (year * 12) + month;
+      }
+    }
+
+    return null;
   }
 
   private normalizePricingRecordForSave(record: SummerPricingCatalogRecordDto, index: number): SummerPricingCatalogRecordDto {
