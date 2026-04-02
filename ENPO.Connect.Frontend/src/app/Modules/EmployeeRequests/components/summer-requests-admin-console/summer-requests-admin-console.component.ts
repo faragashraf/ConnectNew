@@ -1,6 +1,6 @@
-﻿import { Component, OnDestroy, OnInit } from '@angular/core';
+﻿import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { MessageDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { AttachmentsController } from 'src/app/shared/services/BackendServices/Attachments/Attachments.service';
@@ -71,12 +71,90 @@ type SummerPricingRecordGroup = {
   inactiveCount: number;
 };
 
+type WaveBookingsPrintFooterMarker = {
+  pageNumber: number;
+  topPx: number;
+};
+
+type SummerResortBookingsWaveGroupVm = {
+  waveCode: string;
+  waveStartAtUtc?: string | null;
+  waveEndAtUtc?: string | null;
+  totalBookings: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  sections: SummerWaveBookingsPrintSectionDto[];
+};
+
+type SummerResortBookingsPrintReportVm = {
+  categoryId: number;
+  categoryName: string;
+  generatedAtUtc: string;
+  generatedByUserId: string;
+  includeFinancials: boolean;
+  totalConfiguredWaves: number;
+  totalWavesWithBookings: number;
+  totalBookings: number;
+  totalPersons: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  waveGroups: SummerResortBookingsWaveGroupVm[];
+};
+
+type SummerAllResortsSummaryWaveVm = {
+  waveCode: string;
+  totalBookings: number;
+  totalPersons: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+};
+
+type SummerAllResortsSummaryResortVm = {
+  categoryId: number;
+  categoryName: string;
+  totalConfiguredWaves: number;
+  totalWavesWithBookings: number;
+  totalBookings: number;
+  totalPersons: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  waves: SummerAllResortsSummaryWaveVm[];
+};
+
+type SummerAllResortsSummaryPrintReportVm = {
+  generatedAtUtc: string;
+  generatedByUserId: string;
+  includeFinancials: boolean;
+  totalResorts: number;
+  totalConfiguredWaves: number;
+  totalWavesWithBookings: number;
+  totalBookings: number;
+  totalPersons: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  resorts: SummerAllResortsSummaryResortVm[];
+};
+
 @Component({
   selector: 'app-summer-requests-admin-console',
   templateUrl: './summer-requests-admin-console.component.html',
   styleUrls: ['./summer-requests-admin-console.component.scss']
 })
 export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
+  @ViewChild('waveBookingsPrintDocument')
+  private waveBookingsPrintDocumentRef?: ElementRef<HTMLElement>;
+  @ViewChild('resortBookingsPrintDocument')
+  private resortBookingsPrintDocumentRef?: ElementRef<HTMLElement>;
+  @ViewChild('allResortsSummaryPrintDocument')
+  private allResortsSummaryPrintDocumentRef?: ElementRef<HTMLElement>;
+  @ViewChild('requestAdminPrintDocument')
+  private requestAdminPrintDocumentRef?: ElementRef<HTMLElement>;
+
   readonly seasonYear = SUMMER_SEASON_YEAR;
   readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   destinations: SummerDestinationConfig[] = [];
@@ -147,6 +225,18 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   loadingWaveBookingsPrint = false;
   waveBookingsPrintErrorText = '';
   waveBookingsPrintData: SummerWaveBookingsPrintReportDto | null = null;
+  resortBookingsPrintDialogVisible = false;
+  loadingResortBookingsPrint = false;
+  resortBookingsPrintErrorText = '';
+  resortBookingsPrintData: SummerResortBookingsPrintReportVm | null = null;
+  allResortsSummaryDialogVisible = false;
+  loadingAllResortsSummaryPrint = false;
+  allResortsSummaryErrorText = '';
+  allResortsSummaryData: SummerAllResortsSummaryPrintReportVm | null = null;
+  requestAdminPrintDialogVisible = false;
+  requestAdminPrintGeneratedAt = '';
+  requestAdminPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
+  requestAdminPrintTotalPages = 0;
 
   readonly pricingModeOptions: Array<{ value: string; label: string }> = [
     { value: 'AccommodationOnlyAllowed', label: 'إقامة فقط' },
@@ -166,6 +256,28 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   private readonly subscriptions = new Subscription();
   private requestsLoadVersion = 0;
   private dashboardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly integerNumberFormatter = new Intl.NumberFormat('ar-EG', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  });
+  waveBookingsPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
+  waveBookingsPrintTotalPages = 0;
+  resortBookingsPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
+  resortBookingsPrintTotalPages = 0;
+  allResortsSummaryPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
+  allResortsSummaryPrintTotalPages = 0;
+  private readonly waveBookingsPrintPageContentHeightPx = (277 * 96) / 25.4;
+  private readonly waveBookingsPrintFooterInsetPx = (4 * 96) / 25.4;
+  private isWaveBookingsPrintModeEnabled = false;
+  private waveBookingsPrintMediaQueryList: MediaQueryList | null = null;
+  private readonly onWaveBookingsAfterPrint = () => {
+    this.disableWaveBookingsPrintMode();
+  };
+  private readonly onWaveBookingsPrintMediaChange = (event: MediaQueryListEvent): void => {
+    if (!event.matches) {
+      this.disableWaveBookingsPrintMode();
+    }
+  };
 
   constructor(
     private readonly fb: FormBuilder,
@@ -211,6 +323,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.disableWaveBookingsPrintMode();
     if (this.dashboardRefreshTimer) {
       clearTimeout(this.dashboardRefreshTimer);
       this.dashboardRefreshTimer = null;
@@ -389,6 +502,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.showWaveBookingsFinancialColumns && this.hasWaveBookingsPrintRows;
   }
 
+  get waveBookingsDialogWidth(): string {
+    return this.showWaveBookingsFinancialColumns ? '1360px' : '1220px';
+  }
+
   get waveBookingsPrintTotalBookingAmount(): number {
     const total = Number(this.waveBookingsPrintData?.totalBookingAmount ?? 0);
     return Number.isFinite(total) ? total : 0;
@@ -402,6 +519,50 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   get waveBookingsPrintTotalFinalAmount(): number {
     const total = Number(this.waveBookingsPrintData?.totalFinalAmount ?? 0);
     return Number.isFinite(total) ? total : 0;
+  }
+
+  get canOpenResortBookingsPrintDialog(): boolean {
+    return this.selectedFilterCategoryId > 0;
+  }
+
+  get hasResortBookingsPrintRows(): boolean {
+    return (this.resortBookingsPrintData?.totalBookings ?? 0) > 0;
+  }
+
+  get resortBookingsWaveGroups(): SummerResortBookingsWaveGroupVm[] {
+    return this.resortBookingsPrintData?.waveGroups ?? [];
+  }
+
+  get resortBookingsPrintSectionsFlat(): SummerWaveBookingsPrintSectionDto[] {
+    return this.resortBookingsWaveGroups.flatMap(group => group.sections ?? []);
+  }
+
+  get showResortBookingsPrintRequestRefColumn(): boolean {
+    return this.hasAnyResortBookingsPrintText(row => row.requestRef);
+  }
+
+  get showResortBookingsPrintUnitNumberColumn(): boolean {
+    return this.hasAnyResortBookingsPrintText(row => row.unitNumber);
+  }
+
+  get showResortBookingsPrintPersonsCountColumn(): boolean {
+    return this.hasAnyResortBookingsPrintNumeric(row => row.personsCount);
+  }
+
+  get showResortBookingsPrintStatusColumn(): boolean {
+    return this.hasAnyResortBookingsPrintText(row => row.statusLabel);
+  }
+
+  get showResortBookingsPrintNotesColumn(): boolean {
+    return this.hasAnyResortBookingsPrintText(row => row.notes);
+  }
+
+  get hasAllResortsSummaryRows(): boolean {
+    return (this.allResortsSummaryData?.resorts?.length ?? 0) > 0;
+  }
+
+  get allResortsSummaryResorts(): SummerAllResortsSummaryResortVm[] {
+    return this.allResortsSummaryData?.resorts ?? [];
   }
 
   get waveBookingsPrintUserName(): string {
@@ -601,6 +762,41 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     };
   }
 
+  formatRequestPrintFieldValue(value: unknown): string {
+    const text = String(value ?? '').trim();
+    if (!text || text === '-') {
+      return '-';
+    }
+
+    const normalized = text.toLowerCase();
+    if (normalized === 'true') {
+      return 'نعم';
+    }
+    if (normalized === 'false') {
+      return 'لا';
+    }
+
+    if (this.looksLikeIsoDate(text)) {
+      return this.formatDate(text);
+    }
+
+    return text;
+  }
+
+  isRequestPrintFieldWide(row: SummerRequestFieldGridRow): boolean {
+    const label = String(row?.label ?? '').trim();
+    const value = String(row?.value ?? '').trim();
+    if (!label && !value) {
+      return false;
+    }
+
+    if (/نص\s*رسالة|ملاحظ|تعليق|description|message/i.test(label)) {
+      return true;
+    }
+
+    return value.length >= 90 || value.includes('\n');
+  }
+
   onSearch(): void {
     this.filtersForm.patchValue({ pageNumber: 1 });
     this.syncQuickFiltersFromForm();
@@ -624,6 +820,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.activeDashboardPaymentState = '';
     this.capacityDialogVisible = false;
     this.bookingsPrintDialogVisible = false;
+    this.resortBookingsPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = false;
+    this.requestAdminPrintDialogVisible = false;
     this.loadRequests();
     this.loadDashboard();
   }
@@ -801,6 +1000,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.resortBookingsPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = false;
+    this.requestAdminPrintDialogVisible = false;
     this.bookingsPrintDialogVisible = true;
     this.refreshWaveBookingsPrintReport();
   }
@@ -811,6 +1013,16 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   onWaveBookingsPrintDialogHide(): void {
     this.bookingsPrintDialogVisible = false;
+    this.waveBookingsPrintFooterMarkers = [];
+    this.waveBookingsPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
+  }
+
+  closeWaveBookingsPrintDialog(): void {
+    this.bookingsPrintDialogVisible = false;
+    this.waveBookingsPrintFooterMarkers = [];
+    this.waveBookingsPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
   }
 
   refreshWaveBookingsPrintReport(silent = false): void {
@@ -835,10 +1047,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         next: response => {
           if (response?.isSuccess && response.data) {
             this.waveBookingsPrintData = response.data;
+            this.scheduleWaveBookingsPrintPaginationRefresh();
             return;
           }
 
           this.waveBookingsPrintData = null;
+          this.waveBookingsPrintFooterMarkers = [];
+          this.waveBookingsPrintTotalPages = 0;
           this.waveBookingsPrintErrorText = this.collectErrors(response);
           if (!silent) {
             this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
@@ -846,6 +1061,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.waveBookingsPrintData = null;
+          this.waveBookingsPrintFooterMarkers = [];
+          this.waveBookingsPrintTotalPages = 0;
           this.waveBookingsPrintErrorText = 'تعذر تحميل كشف الحاجزين حالياً.';
           if (!silent) {
             this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
@@ -858,7 +1075,371 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   printWaveBookingsReport(): void {
-    window.print();
+    if (this.loadingWaveBookingsPrint || this.waveBookingsPrintErrorText.length > 0 || !this.waveBookingsPrintData) {
+      return;
+    }
+
+    this.enableWaveBookingsPrintMode();
+    this.prepareWaveBookingsPrintPagination();
+    setTimeout(() => {
+      window.print();
+    }, 0);
+  }
+
+  openResortBookingsPrintPreview(): void {
+    if (!this.canOpenResortBookingsPrintDialog) {
+      this.msg.msgError('خطأ', '<h5>يرجى اختيار المصيف أولًا لتشغيل تقرير المصيف.</h5>', true);
+      return;
+    }
+
+    this.bookingsPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = false;
+    this.requestAdminPrintDialogVisible = false;
+    this.resortBookingsPrintDialogVisible = true;
+    this.refreshResortBookingsPrintReport();
+  }
+
+  closeResortBookingsPrintDialog(): void {
+    this.resortBookingsPrintDialogVisible = false;
+    this.resortBookingsPrintFooterMarkers = [];
+    this.resortBookingsPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
+  }
+
+  onResortBookingsPrintDialogHide(): void {
+    this.closeResortBookingsPrintDialog();
+  }
+
+  async refreshResortBookingsPrintReport(silent = false): Promise<void> {
+    if (!this.selectedFilterCategoryId) {
+      return;
+    }
+
+    const destination = this.destinations.find(item => item.categoryId === this.selectedFilterCategoryId);
+    const waves = [...(destination?.waves ?? [])];
+    this.loadingResortBookingsPrint = true;
+    this.resortBookingsPrintErrorText = '';
+    if (!silent) {
+      this.resortBookingsPrintData = null;
+    }
+
+    try {
+      const includeFinancials = this.includeFinancialsInWaveBookingsPrint;
+      const waveGroups: SummerResortBookingsWaveGroupVm[] = [];
+      for (const wave of waves) {
+        const waveCode = String(wave?.code ?? '').trim();
+        if (!waveCode) {
+          continue;
+        }
+
+        const response = await firstValueFrom(this.summerWorkflowController.getWaveBookingsPrintReport(
+          this.selectedFilterCategoryId,
+          waveCode,
+          this.seasonYear,
+          includeFinancials
+        ));
+
+        if (!response?.isSuccess || !response.data) {
+          this.resortBookingsPrintErrorText = this.collectErrors(response);
+          this.resortBookingsPrintData = null;
+          this.resortBookingsPrintFooterMarkers = [];
+          this.resortBookingsPrintTotalPages = 0;
+          if (!silent) {
+            this.msg.msgError('خطأ', `<h5>${this.resortBookingsPrintErrorText}</h5>`, true);
+          }
+          return;
+        }
+
+        const waveData = response.data;
+        if ((waveData.totalBookings ?? 0) <= 0) {
+          continue;
+        }
+
+        waveGroups.push({
+          waveCode,
+          waveStartAtUtc: waveData.waveStartAtUtc,
+          waveEndAtUtc: waveData.waveEndAtUtc,
+          totalBookings: Number(waveData.totalBookings ?? 0) || 0,
+          totalBookingAmount: includeFinancials ? Number(waveData.totalBookingAmount ?? 0) || 0 : 0,
+          totalInsuranceAmount: includeFinancials ? Number(waveData.totalInsuranceAmount ?? 0) || 0 : 0,
+          totalFinalAmount: includeFinancials ? Number(waveData.totalFinalAmount ?? 0) || 0 : 0,
+          sections: [...(waveData.sections ?? [])]
+        });
+      }
+
+      const totalPersons = waveGroups.reduce((sum, waveGroup) => {
+        return sum + waveGroup.sections.reduce((sectionSum, section) => {
+          return sectionSum + (section.rows ?? []).reduce((rowsSum, row) => rowsSum + Math.max(0, Number(row.personsCount ?? 0) || 0), 0);
+        }, 0);
+      }, 0);
+
+      this.resortBookingsPrintData = {
+        categoryId: this.selectedFilterCategoryId,
+        categoryName: destination?.name ?? this.selectedFilterDestinationName,
+        generatedAtUtc: new Date().toISOString(),
+        generatedByUserId: this.waveBookingsPrintUserName,
+        includeFinancials,
+        totalConfiguredWaves: waves.length,
+        totalWavesWithBookings: waveGroups.length,
+        totalBookings: waveGroups.reduce((sum, group) => sum + group.totalBookings, 0),
+        totalPersons,
+        totalBookingAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalBookingAmount, 0) : 0,
+        totalInsuranceAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalInsuranceAmount, 0) : 0,
+        totalFinalAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalFinalAmount, 0) : 0,
+        waveGroups
+      };
+
+      this.scheduleResortBookingsPrintPaginationRefresh();
+    } catch {
+      this.resortBookingsPrintData = null;
+      this.resortBookingsPrintFooterMarkers = [];
+      this.resortBookingsPrintTotalPages = 0;
+      this.resortBookingsPrintErrorText = 'تعذر تحميل كشف الحاجزين للمصيف حالياً.';
+      if (!silent) {
+        this.msg.msgError('خطأ', `<h5>${this.resortBookingsPrintErrorText}</h5>`, true);
+      }
+    } finally {
+      this.loadingResortBookingsPrint = false;
+    }
+  }
+
+  printResortBookingsReport(): void {
+    if (this.loadingResortBookingsPrint || this.resortBookingsPrintErrorText.length > 0 || !this.resortBookingsPrintData) {
+      return;
+    }
+
+    this.enableWaveBookingsPrintMode();
+    this.prepareResortBookingsPrintPagination();
+    setTimeout(() => {
+      window.print();
+    }, 0);
+  }
+
+  openAllResortsSummaryPrintPreview(): void {
+    if (this.destinations.length === 0) {
+      this.msg.msgError('خطأ', '<h5>لا توجد مصايف متاحة لتوليد التقرير.</h5>', true);
+      return;
+    }
+
+    this.bookingsPrintDialogVisible = false;
+    this.resortBookingsPrintDialogVisible = false;
+    this.requestAdminPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = true;
+    this.refreshAllResortsSummaryPrintReport();
+  }
+
+  closeAllResortsSummaryPrintDialog(): void {
+    this.allResortsSummaryDialogVisible = false;
+    this.allResortsSummaryPrintFooterMarkers = [];
+    this.allResortsSummaryPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
+  }
+
+  onAllResortsSummaryPrintDialogHide(): void {
+    this.closeAllResortsSummaryPrintDialog();
+  }
+
+  async refreshAllResortsSummaryPrintReport(silent = false): Promise<void> {
+    this.loadingAllResortsSummaryPrint = true;
+    this.allResortsSummaryErrorText = '';
+    if (!silent) {
+      this.allResortsSummaryData = null;
+    }
+
+    try {
+      const includeFinancials = this.includeFinancialsInWaveBookingsPrint;
+      const resorts: SummerAllResortsSummaryResortVm[] = [];
+      for (const destination of this.destinations) {
+        const categoryId = Number(destination?.categoryId ?? 0);
+        if (categoryId <= 0) {
+          continue;
+        }
+
+        const waves = [...(destination.waves ?? [])];
+        const waveSummaries: SummerAllResortsSummaryWaveVm[] = [];
+        for (const wave of waves) {
+          const waveCode = String(wave?.code ?? '').trim();
+          if (!waveCode) {
+            continue;
+          }
+
+          const response = await firstValueFrom(this.summerWorkflowController.getWaveBookingsPrintReport(
+            categoryId,
+            waveCode,
+            this.seasonYear,
+            includeFinancials
+          ));
+
+          if (!response?.isSuccess || !response.data) {
+            this.allResortsSummaryErrorText = this.collectErrors(response);
+            this.allResortsSummaryData = null;
+            this.allResortsSummaryPrintFooterMarkers = [];
+            this.allResortsSummaryPrintTotalPages = 0;
+            if (!silent) {
+              this.msg.msgError('خطأ', `<h5>${this.allResortsSummaryErrorText}</h5>`, true);
+            }
+            return;
+          }
+
+          const waveData = response.data;
+          const totalBookings = Number(waveData.totalBookings ?? 0) || 0;
+          if (totalBookings <= 0) {
+            continue;
+          }
+
+          const totalPersons = (waveData.sections ?? []).reduce((sum, section) => {
+            return sum + (section.rows ?? []).reduce((rowsSum, row) => rowsSum + Math.max(0, Number(row.personsCount ?? 0) || 0), 0);
+          }, 0);
+
+          waveSummaries.push({
+            waveCode,
+            totalBookings,
+            totalPersons,
+            totalBookingAmount: includeFinancials ? Number(waveData.totalBookingAmount ?? 0) || 0 : 0,
+            totalInsuranceAmount: includeFinancials ? Number(waveData.totalInsuranceAmount ?? 0) || 0 : 0,
+            totalFinalAmount: includeFinancials ? Number(waveData.totalFinalAmount ?? 0) || 0 : 0
+          });
+        }
+
+        resorts.push({
+          categoryId,
+          categoryName: destination.name ?? `مصيف ${categoryId}`,
+          totalConfiguredWaves: waves.length,
+          totalWavesWithBookings: waveSummaries.length,
+          totalBookings: waveSummaries.reduce((sum, item) => sum + item.totalBookings, 0),
+          totalPersons: waveSummaries.reduce((sum, item) => sum + item.totalPersons, 0),
+          totalBookingAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalBookingAmount, 0) : 0,
+          totalInsuranceAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalInsuranceAmount, 0) : 0,
+          totalFinalAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalFinalAmount, 0) : 0,
+          waves: waveSummaries
+        });
+      }
+
+      this.allResortsSummaryData = {
+        generatedAtUtc: new Date().toISOString(),
+        generatedByUserId: this.waveBookingsPrintUserName,
+        includeFinancials,
+        totalResorts: resorts.length,
+        totalConfiguredWaves: resorts.reduce((sum, resort) => sum + resort.totalConfiguredWaves, 0),
+        totalWavesWithBookings: resorts.reduce((sum, resort) => sum + resort.totalWavesWithBookings, 0),
+        totalBookings: resorts.reduce((sum, resort) => sum + resort.totalBookings, 0),
+        totalPersons: resorts.reduce((sum, resort) => sum + resort.totalPersons, 0),
+        totalBookingAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalBookingAmount, 0) : 0,
+        totalInsuranceAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalInsuranceAmount, 0) : 0,
+        totalFinalAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalFinalAmount, 0) : 0,
+        resorts
+      };
+
+      this.scheduleAllResortsSummaryPrintPaginationRefresh();
+    } catch {
+      this.allResortsSummaryData = null;
+      this.allResortsSummaryPrintFooterMarkers = [];
+      this.allResortsSummaryPrintTotalPages = 0;
+      this.allResortsSummaryErrorText = 'تعذر تحميل تقرير جميع المصايف حالياً.';
+      if (!silent) {
+        this.msg.msgError('خطأ', `<h5>${this.allResortsSummaryErrorText}</h5>`, true);
+      }
+    } finally {
+      this.loadingAllResortsSummaryPrint = false;
+    }
+  }
+
+  printAllResortsSummaryReport(): void {
+    if (this.loadingAllResortsSummaryPrint || this.allResortsSummaryErrorText.length > 0 || !this.allResortsSummaryData) {
+      return;
+    }
+
+    this.enableWaveBookingsPrintMode();
+    this.prepareAllResortsSummaryPrintPagination();
+    setTimeout(() => {
+      window.print();
+    }, 0);
+  }
+
+  openSelectedRequestPrintPreview(): void {
+    if (!this.selectedRequest) {
+      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب أولًا.</h5>', true);
+      return;
+    }
+
+    this.bookingsPrintDialogVisible = false;
+    this.resortBookingsPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = false;
+    this.requestAdminPrintDialogVisible = true;
+    this.requestAdminPrintGeneratedAt = new Date().toISOString();
+    if (!this.selectedRequestDetails || Number(this.selectedRequestDetails.messageId ?? 0) !== Number(this.selectedRequest.messageId ?? 0)) {
+      this.loadSelectedRequestDetails(this.selectedRequest.messageId);
+    }
+    this.scheduleRequestAdminPrintPaginationRefresh();
+  }
+
+  closeSelectedRequestPrintDialog(): void {
+    this.requestAdminPrintDialogVisible = false;
+    this.requestAdminPrintGeneratedAt = '';
+    this.requestAdminPrintFooterMarkers = [];
+    this.requestAdminPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
+  }
+
+  onRequestAdminPrintDialogHide(): void {
+    this.closeSelectedRequestPrintDialog();
+  }
+
+  printSelectedRequestReport(): void {
+    if (!this.selectedRequest) {
+      return;
+    }
+
+    this.enableWaveBookingsPrintMode();
+    this.prepareRequestAdminPrintPagination();
+    setTimeout(() => {
+      window.print();
+    }, 0);
+  }
+
+  @HostListener('window:beforeprint')
+  onBeforeWindowPrint(): void {
+    if (this.bookingsPrintDialogVisible && !this.loadingWaveBookingsPrint && this.waveBookingsPrintErrorText.length === 0 && this.waveBookingsPrintData) {
+      this.enableWaveBookingsPrintMode();
+      this.prepareWaveBookingsPrintPagination();
+      return;
+    }
+
+    if (this.resortBookingsPrintDialogVisible && !this.loadingResortBookingsPrint && this.resortBookingsPrintErrorText.length === 0 && this.resortBookingsPrintData) {
+      this.enableWaveBookingsPrintMode();
+      this.prepareResortBookingsPrintPagination();
+      return;
+    }
+
+    if (this.allResortsSummaryDialogVisible && !this.loadingAllResortsSummaryPrint && this.allResortsSummaryErrorText.length === 0 && this.allResortsSummaryData) {
+      this.enableWaveBookingsPrintMode();
+      this.prepareAllResortsSummaryPrintPagination();
+      return;
+    }
+
+    if (this.requestAdminPrintDialogVisible && this.selectedRequest) {
+      this.enableWaveBookingsPrintMode();
+      this.prepareRequestAdminPrintPagination();
+    }
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    if (this.bookingsPrintDialogVisible && !this.loadingWaveBookingsPrint && this.waveBookingsPrintData) {
+      this.scheduleWaveBookingsPrintPaginationRefresh();
+    }
+
+    if (this.resortBookingsPrintDialogVisible && !this.loadingResortBookingsPrint && this.resortBookingsPrintData) {
+      this.scheduleResortBookingsPrintPaginationRefresh();
+    }
+
+    if (this.allResortsSummaryDialogVisible && !this.loadingAllResortsSummaryPrint && this.allResortsSummaryData) {
+      this.scheduleAllResortsSummaryPrintPaginationRefresh();
+    }
+
+    if (this.requestAdminPrintDialogVisible && this.selectedRequest) {
+      this.scheduleRequestAdminPrintPaginationRefresh();
+    }
   }
 
   refreshWaveCapacity(silent = false): void {
@@ -1280,15 +1861,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   formatMoney(value: number | string | null | undefined): string {
-    const amount = Number(value ?? 0);
-    if (!Number.isFinite(amount)) {
-      return '0.00';
-    }
+    return this.formatWholeNumber(value);
+  }
 
-    return new Intl.NumberFormat('ar-EG', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount);
+  formatWholeNumber(value: number | string | null | undefined): string {
+    return this.integerNumberFormatter.format(this.normalizeDisplayInteger(value));
   }
 
   resolveWaveBookingsPrintText(value: string | null | undefined): string {
@@ -1478,6 +2055,30 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return configId;
     }
     return `row:${entry?.index ?? _index}`;
+  }
+
+  trackByWaveBookingsPrintFooter(_index: number, marker: WaveBookingsPrintFooterMarker): number {
+    return marker.pageNumber;
+  }
+
+  trackByResortBookingsWaveGroup(_index: number, group: SummerResortBookingsWaveGroupVm): string {
+    return String(group.waveCode ?? '');
+  }
+
+  trackByAllResortsSummaryResort(_index: number, resort: SummerAllResortsSummaryResortVm): number {
+    return Number(resort.categoryId ?? 0);
+  }
+
+  trackByAllResortsSummaryWave(_index: number, wave: SummerAllResortsSummaryWaveVm): string {
+    return String(wave.waveCode ?? '');
+  }
+
+  formatReplyAttachmentNames(attachments: Array<{ id: number; name: string }>): string {
+    const names = attachments
+      .map(item => String(item?.name ?? '').trim())
+      .filter(name => name.length > 0 && name !== '-');
+
+    return names.length > 0 ? names.join(' - ') : '-';
   }
 
   isPricingGroupExpanded(groupKey: string): boolean {
@@ -1781,6 +2382,14 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.bookingsPrintDialogVisible = false;
         }
       }
+
+      if (this.resortBookingsPrintDialogVisible) {
+        if (selectedCategoryId > 0) {
+          this.refreshResortBookingsPrintReport(true);
+        } else {
+          this.resortBookingsPrintDialogVisible = false;
+        }
+      }
     });
 
     if (categorySub) {
@@ -1806,6 +2415,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.bookingsPrintDialogVisible = false;
         }
       }
+
+      if (this.resortBookingsPrintDialogVisible && this.selectedFilterCategoryId > 0) {
+        this.refreshResortBookingsPrintReport(true);
+      }
     });
 
     if (waveSub) {
@@ -1813,11 +2426,17 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     const financialViewSub = this.filtersForm.get('includeFinancialsInPrint')?.valueChanges.subscribe(() => {
-      if (!this.bookingsPrintDialogVisible || !this.canOpenWaveCapacityDialog) {
-        return;
+      if (this.bookingsPrintDialogVisible && this.canOpenWaveCapacityDialog) {
+        this.refreshWaveBookingsPrintReport(true);
       }
 
-      this.refreshWaveBookingsPrintReport(true);
+      if (this.resortBookingsPrintDialogVisible && this.canOpenResortBookingsPrintDialog) {
+        this.refreshResortBookingsPrintReport(true);
+      }
+
+      if (this.allResortsSummaryDialogVisible) {
+        this.refreshAllResortsSummaryPrintReport(true);
+      }
     });
 
     if (financialViewSub) {
@@ -1938,6 +2557,162 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }, { emitEvent: false });
   }
 
+  private enableWaveBookingsPrintMode(): void {
+    this.disableWaveBookingsPrintMode();
+    document.body.classList.add('wave-bookings-print-mode');
+    this.isWaveBookingsPrintModeEnabled = true;
+    window.addEventListener('afterprint', this.onWaveBookingsAfterPrint);
+
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQueryList = window.matchMedia('print');
+    this.waveBookingsPrintMediaQueryList = mediaQueryList;
+    if (typeof mediaQueryList.addEventListener === 'function') {
+      mediaQueryList.addEventListener('change', this.onWaveBookingsPrintMediaChange);
+      return;
+    }
+
+    if (typeof mediaQueryList.addListener === 'function') {
+      mediaQueryList.addListener(this.onWaveBookingsPrintMediaChange);
+    }
+  }
+
+  private disableWaveBookingsPrintMode(): void {
+    if (!this.isWaveBookingsPrintModeEnabled && !document.body.classList.contains('wave-bookings-print-mode')) {
+      return;
+    }
+
+    document.body.classList.remove('wave-bookings-print-mode');
+    this.isWaveBookingsPrintModeEnabled = false;
+    window.removeEventListener('afterprint', this.onWaveBookingsAfterPrint);
+
+    if (!this.waveBookingsPrintMediaQueryList) {
+      return;
+    }
+
+    const mediaQueryList = this.waveBookingsPrintMediaQueryList;
+    if (typeof mediaQueryList.removeEventListener === 'function') {
+      mediaQueryList.removeEventListener('change', this.onWaveBookingsPrintMediaChange);
+    } else if (typeof mediaQueryList.removeListener === 'function') {
+      mediaQueryList.removeListener(this.onWaveBookingsPrintMediaChange);
+    }
+
+    this.waveBookingsPrintMediaQueryList = null;
+  }
+
+  private scheduleWaveBookingsPrintPaginationRefresh(): void {
+    setTimeout(() => {
+      this.prepareWaveBookingsPrintPagination();
+    }, 0);
+  }
+
+  private prepareWaveBookingsPrintPagination(): void {
+    if (!this.bookingsPrintDialogVisible || this.loadingWaveBookingsPrint || !this.waveBookingsPrintData) {
+      this.waveBookingsPrintFooterMarkers = [];
+      this.waveBookingsPrintTotalPages = 0;
+      return;
+    }
+
+    const result = this.buildPrintFooterPagination(this.waveBookingsPrintDocumentRef);
+    this.waveBookingsPrintFooterMarkers = result.markers;
+    this.waveBookingsPrintTotalPages = result.totalPages;
+  }
+
+  private scheduleResortBookingsPrintPaginationRefresh(): void {
+    setTimeout(() => {
+      this.prepareResortBookingsPrintPagination();
+    }, 0);
+  }
+
+  private prepareResortBookingsPrintPagination(): void {
+    if (!this.resortBookingsPrintDialogVisible || this.loadingResortBookingsPrint || !this.resortBookingsPrintData) {
+      this.resortBookingsPrintFooterMarkers = [];
+      this.resortBookingsPrintTotalPages = 0;
+      return;
+    }
+
+    const result = this.buildPrintFooterPagination(this.resortBookingsPrintDocumentRef);
+    this.resortBookingsPrintFooterMarkers = result.markers;
+    this.resortBookingsPrintTotalPages = result.totalPages;
+  }
+
+  private scheduleAllResortsSummaryPrintPaginationRefresh(): void {
+    setTimeout(() => {
+      this.prepareAllResortsSummaryPrintPagination();
+    }, 0);
+  }
+
+  private prepareAllResortsSummaryPrintPagination(): void {
+    if (!this.allResortsSummaryDialogVisible || this.loadingAllResortsSummaryPrint || !this.allResortsSummaryData) {
+      this.allResortsSummaryPrintFooterMarkers = [];
+      this.allResortsSummaryPrintTotalPages = 0;
+      return;
+    }
+
+    const result = this.buildPrintFooterPagination(this.allResortsSummaryPrintDocumentRef);
+    this.allResortsSummaryPrintFooterMarkers = result.markers;
+    this.allResortsSummaryPrintTotalPages = result.totalPages;
+  }
+
+  private scheduleRequestAdminPrintPaginationRefresh(): void {
+    setTimeout(() => {
+      this.prepareRequestAdminPrintPagination();
+    }, 0);
+  }
+
+  private prepareRequestAdminPrintPagination(): void {
+    if (!this.requestAdminPrintDialogVisible || !this.selectedRequest) {
+      this.requestAdminPrintFooterMarkers = [];
+      this.requestAdminPrintTotalPages = 0;
+      return;
+    }
+
+    const result = this.buildPrintFooterPagination(this.requestAdminPrintDocumentRef);
+    this.requestAdminPrintFooterMarkers = result.markers;
+    this.requestAdminPrintTotalPages = result.totalPages;
+  }
+
+  private buildPrintFooterPagination(
+    documentRef?: ElementRef<HTMLElement>
+  ): { markers: WaveBookingsPrintFooterMarker[]; totalPages: number } {
+    const documentElement = documentRef?.nativeElement;
+    if (!documentElement) {
+      return { markers: [], totalPages: 0 };
+    }
+
+    const totalContentHeight = Math.max(documentElement.scrollHeight, documentElement.offsetHeight);
+    const pageContentHeight = Math.max(1, this.waveBookingsPrintPageContentHeightPx);
+    const totalPages = Math.max(1, Math.ceil(totalContentHeight / pageContentHeight));
+    const markers = Array.from({ length: totalPages }, (_item, index) => {
+      const pageNumber = index + 1;
+      const topPx = Math.max(
+        this.waveBookingsPrintFooterInsetPx,
+        Math.round((pageNumber * pageContentHeight) - this.waveBookingsPrintFooterInsetPx)
+      );
+
+      return {
+        pageNumber,
+        topPx
+      };
+    });
+
+    return {
+      markers,
+      totalPages
+    };
+  }
+
+  private normalizeDisplayInteger(value: number | string | null | undefined): number {
+    const numericValue = Number(value ?? 0);
+    if (!Number.isFinite(numericValue)) {
+      return 0;
+    }
+
+    return Math.round(numericValue);
+  }
+
   private loadSelectedRequestDetails(messageId: number): void {
     this.loadingDetails = true;
     this.dynamicFormController.getRequestById(messageId).subscribe({
@@ -1949,6 +2724,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       },
       complete: () => {
         this.loadingDetails = false;
+        if (this.requestAdminPrintDialogVisible && this.selectedRequest) {
+          this.scheduleRequestAdminPrintPaginationRefresh();
+        }
       }
     });
   }
@@ -1968,6 +2746,28 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     selector: (row: SummerWaveBookingsPrintRowDto) => number | null | undefined
   ): boolean {
     return this.waveBookingsPrintSections.some(section =>
+      section.rows.some(row => {
+        const value = Number(selector(row) ?? 0);
+        return Number.isFinite(value) && value > 0;
+      })
+    );
+  }
+
+  private hasAnyResortBookingsPrintText(
+    selector: (row: SummerWaveBookingsPrintRowDto) => string | null | undefined
+  ): boolean {
+    return this.resortBookingsPrintSectionsFlat.some(section =>
+      section.rows.some(row => {
+        const text = String(selector(row) ?? '').trim();
+        return text.length > 0 && text !== '-';
+      })
+    );
+  }
+
+  private hasAnyResortBookingsPrintNumeric(
+    selector: (row: SummerWaveBookingsPrintRowDto) => number | null | undefined
+  ): boolean {
+    return this.resortBookingsPrintSectionsFlat.some(section =>
       section.rows.some(row => {
         const value = Number(selector(row) ?? 0);
         return Number.isFinite(value) && value > 0;
@@ -2029,6 +2829,16 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     const normalized = String(value ?? '').trim().toLowerCase();
     return normalized === 'true' || normalized === '1';
+  }
+
+  private looksLikeIsoDate(value: string): boolean {
+    const text = String(value ?? '').trim();
+    if (text.length < 10 || !text.includes('T')) {
+      return false;
+    }
+
+    const parsed = Date.parse(text);
+    return Number.isFinite(parsed);
   }
 
   private getWaveOrder(code: string): number {

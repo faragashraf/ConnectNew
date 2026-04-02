@@ -17,7 +17,8 @@
     "generate:dto-shapes": "node tools/generate-dto-shapes.js",
     "save-config-server": "node tools/save-config-server.js",
     "save-nswag-server": "node tools/save-nswag-server.js",
-    "check:text-encoding": "node tools/check-text-encoding.js"
+    "check:text-encoding": "node tools/check-text-encoding.js",
+    "TestSummerRequests": "dotnet run --project ENPO.Connect.Backend/tools/SummerSeedRunner/SummerSeedRunner.csproj -- --totalRequests=800 --randomSeed=20270001 --proxyRatio=0.2 --includeCompanionsRatio=0.5 --destinationWeights=147:1,148:1,149:1.5 --wipeExistingFirst=true"
   },
   "private": true,
   "dependencies": {

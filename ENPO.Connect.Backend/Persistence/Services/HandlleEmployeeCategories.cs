@@ -128,10 +128,16 @@ namespace Persistence.Services
         }
 
         // SummerRequests: creates message + reply and persists with retry and basic unique-requestRef handling to reduce overwrite collisions
-        public async Task SummerRequests(MessageRequest messageRequest, CategoryWithParent categoryInfo, CommonResponse<MessageDto> response, string? actingUserId = null)
+        public async Task SummerRequests(
+            MessageRequest messageRequest,
+            CategoryWithParent categoryInfo,
+            CommonResponse<MessageDto> response,
+            string? actingUserId = null,
+            SummerRequestRuntimeOptions? runtimeOptions = null)
         {
             if (messageRequest == null) throw new ArgumentNullException(nameof(messageRequest));
             if (response == null) throw new ArgumentNullException(nameof(response));
+            var runtime = runtimeOptions ?? SummerRequestRuntimeOptions.Default;
 
             if (string.IsNullOrWhiteSpace(messageRequest.CreatedBy))
             {
@@ -530,26 +536,53 @@ namespace Persistence.Services
                     _logger.AppendLine($"SummerRequests: {(isEditOperation ? "updated" : "created")} message {messageId} with RequestRef {messageRequest.RequestRef}");
 
                     // Post commit actions (notifications, etc.) and fetch created message
-                    try
+                    if (!runtime.SuppressNotifications)
                     {
-                        await PostCommitActionsAsync(messageRequest, reply, categoryInfo);
-                        await PublishCapacityUpdateAsync(categoryInfo.Category.CatId, summerCamp, capacityAction);
-                        if (isEditOperation
-                            && previousCategoryId > 0
-                            && !string.IsNullOrWhiteSpace(previousWaveCode)
-                            && (previousCategoryId != categoryInfo.Category.CatId
-                                || !string.Equals(previousWaveCode.Trim(), summerCamp.Trim(), StringComparison.OrdinalIgnoreCase)))
+                        try
                         {
-                            await PublishCapacityUpdateAsync(previousCategoryId, previousWaveCode, "EDIT_PREVIOUS");
+                            await PostCommitActionsAsync(messageRequest, reply, categoryInfo);
+                            await PublishCapacityUpdateAsync(categoryInfo.Category.CatId, summerCamp, capacityAction);
+                            if (isEditOperation
+                                && previousCategoryId > 0
+                                && !string.IsNullOrWhiteSpace(previousWaveCode)
+                                && (previousCategoryId != categoryInfo.Category.CatId
+                                    || !string.Equals(previousWaveCode.Trim(), summerCamp.Trim(), StringComparison.OrdinalIgnoreCase)))
+                            {
+                                await PublishCapacityUpdateAsync(previousCategoryId, previousWaveCode, "EDIT_PREVIOUS");
+                            }
+                        }
+                        catch (Exception postEx)
+                        {
+                            _logger.AppendLine($"PostCommitActions failed: {postEx.Message}");
                         }
                     }
-                    catch (Exception postEx)
+
+                    if (runtime.SkipResponseHydration)
                     {
-                        _logger.AppendLine($"PostCommitActions failed: {postEx.Message}");
+                        response.Data = new MessageDto
+                        {
+                            MessageId = messageId,
+                            RequestRef = messageRequest.RequestRef,
+                            CategoryCd = categoryInfo.Category.CatId,
+                            Subject = messageRequest.Subject,
+                            Description = messageRequest.Description,
+                            CreatedBy = messageRequest.CreatedBy,
+                            AssignedSectorId = messageRequest.AssignedSectorId ?? string.Empty,
+                            CurrentResponsibleSectorId = messageRequest.CurrentResponsibleSectorId,
+                            CreatedDate = DateTime.UtcNow,
+                            Status = MessageStatus.New,
+                            Fields = messageRequest.Fields
+                        };
+                    }
+                    else
+                    {
+                        await _helperService.GetMessageRequestById(messageId, response);
                     }
 
-                    await _helperService.GetMessageRequestById(messageId, response);
-                    if (!isEditOperation && response.IsSuccess && response.Data != null)
+                    if (!runtime.SuppressNotifications
+                        && !isEditOperation
+                        && response.IsSuccess
+                        && response.Data != null)
                     {
                         try
                         {
