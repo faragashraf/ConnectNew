@@ -1,0 +1,67 @@
+<section class="list-page">
+  <header class="header">
+    <h2>قائمة الموضوعات والطلبات</h2>
+    <button type="button" (click)="toggleOnlyMine()">
+      {{ query.onlyMyItems ? 'عرض الكل' : 'عناصري فقط' }}
+    </button>
+  </header>
+
+  <div class="filters">
+    <input type="text" #searchBox placeholder="ابحث بالمرجع أو الموضوع أو الوصف" (keyup.enter)="applySearch(searchBox.value)" />
+    <button type="button" (click)="applySearch(searchBox.value)">بحث</button>
+
+    <select (change)="onStatusFilterChanged($any($event.target).value)">
+      <option value="">كل الحالات</option>
+      <option value="10">مسودة</option>
+      <option value="11">مقدم</option>
+      <option value="12">قيد المراجعة</option>
+      <option value="13">بانتظار الاستكمال</option>
+      <option value="14">قيد التنفيذ</option>
+      <option value="15">مكتمل</option>
+      <option value="16">مرفوض</option>
+      <option value="17">مؤرشف</option>
+    </select>
+
+    <button type="button" (click)="load()">تحديث</button>
+  </div>
+
+  <div class="loading" *ngIf="loading">جاري تحميل البيانات...</div>
+
+  <table *ngIf="!loading">
+    <thead>
+      <tr>
+        <th>المرجع</th>
+        <th>الموضوع</th>
+        <th>الحالة</th>
+        <th>الوحدة المسندة</th>
+        <th>آخر تعديل</th>
+        <th>المرفقات</th>
+        <th>الإجراءات</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let item of items">
+        <td>{{ item.requestRef }}</td>
+        <td>{{ item.subject }}</td>
+        <td><span class="status-pill">{{ toArabicStatusLabel(item.status, item.statusLabel) }}</span></td>
+        <td>{{ item.assignedUnitId }}</td>
+        <td>{{ item.lastModifiedDate || item.createdDate | date:'short' }}</td>
+        <td>{{ item.attachmentsCount }}</td>
+        <td>
+          <a [routerLink]="['/DynamicSubjects/subjects', item.messageId]">التفاصيل</a>
+          <a [routerLink]="['/DynamicSubjects/subjects', item.messageId, 'edit']">تعديل</a>
+        </td>
+      </tr>
+      <tr *ngIf="items.length === 0">
+        <td colspan="7" class="empty-state">لا توجد عناصر مطابقة للبحث الحالي.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <footer class="pager" *ngIf="!loading">
+    <span>الإجمالي: {{ totalCount }}</span>
+    <button type="button" (click)="previousPage()">السابق</button>
+    <span>الصفحة {{ query.pageNumber }}</span>
+    <button type="button" (click)="nextPage()">التالي</button>
+  </footer>
+</section>

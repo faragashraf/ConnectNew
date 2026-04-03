@@ -45,6 +45,18 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<SummerUnitFreezeDetail> SummerUnitFreezeDetails { get; set; }
 
+    public virtual DbSet<SubjectEnvelope> SubjectEnvelopes { get; set; }
+
+    public virtual DbSet<SubjectEnvelopeLink> SubjectEnvelopeLinks { get; set; }
+
+    public virtual DbSet<SubjectReferencePolicy> SubjectReferencePolicies { get; set; }
+
+    public virtual DbSet<SubjectStatusHistory> SubjectStatusHistories { get; set; }
+
+    public virtual DbSet<SubjectTimelineEvent> SubjectTimelineEvents { get; set; }
+
+    public virtual DbSet<SubjectTask> SubjectTasks { get; set; }
+
     public override int SaveChanges()
     {
         var UserId = _httpContextAccessor.HttpContext?.User?.Claims.FirstOrDefault((Claim u) => u.Type == "UserId").Value;
@@ -514,6 +526,194 @@ public partial class ConnectContext : DbContext
                 .HasForeignKey(detail => detail.FreezeId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_SummerUnitFreezeDetails_Batches");
+        });
+
+        modelBuilder.Entity<SubjectEnvelope>(entity =>
+        {
+            entity.ToTable("SubjectEnvelopes");
+
+            entity.HasKey(e => e.EnvelopeId).HasName("PK_SubjectEnvelopes");
+
+            entity.Property(e => e.EnvelopeId)
+                .HasColumnName("EnvelopeID")
+                .ValueGeneratedOnAdd();
+            entity.Property(e => e.EnvelopeRef)
+                .HasMaxLength(100)
+                .IsRequired();
+            entity.Property(e => e.IncomingDate)
+                .HasColumnType("datetime2")
+                .IsRequired();
+            entity.Property(e => e.SourceEntity).HasMaxLength(250);
+            entity.Property(e => e.DeliveryDelegate).HasMaxLength(250);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.CreatedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.LastModifiedBy).HasMaxLength(64);
+            entity.Property(e => e.LastModifiedAtUtc).HasColumnType("datetime2");
+
+            entity.HasIndex(e => e.EnvelopeRef, "UX_SubjectEnvelopes_EnvelopeRef")
+                .IsUnique();
+            entity.HasIndex(e => e.IncomingDate, "IX_SubjectEnvelopes_IncomingDate");
+        });
+
+        modelBuilder.Entity<SubjectEnvelopeLink>(entity =>
+        {
+            entity.ToTable("SubjectEnvelopeLinks");
+
+            entity.HasKey(e => e.EnvelopeLinkId).HasName("PK_SubjectEnvelopeLinks");
+
+            entity.Property(e => e.EnvelopeLinkId)
+                .HasColumnName("EnvelopeLinkID")
+                .ValueGeneratedOnAdd();
+            entity.Property(e => e.EnvelopeId).HasColumnName("EnvelopeID");
+            entity.Property(e => e.MessageId).HasColumnName("MessageID");
+            entity.Property(e => e.LinkedBy)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.LinkedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasIndex(e => e.EnvelopeId, "IX_SubjectEnvelopeLinks_EnvelopeID");
+            entity.HasIndex(e => e.MessageId, "IX_SubjectEnvelopeLinks_MessageID");
+            entity.HasIndex(e => new { e.EnvelopeId, e.MessageId }, "UX_SubjectEnvelopeLinks_Envelope_Message")
+                .IsUnique();
+
+            entity.HasOne(e => e.Envelope)
+                .WithMany(e => e.LinkedSubjects)
+                .HasForeignKey(e => e.EnvelopeId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_SubjectEnvelopeLinks_SubjectEnvelopes");
+        });
+
+        modelBuilder.Entity<SubjectReferencePolicy>(entity =>
+        {
+            entity.ToTable("SubjectReferencePolicies");
+
+            entity.HasKey(e => e.PolicyId).HasName("PK_SubjectReferencePolicies");
+
+            entity.Property(e => e.PolicyId)
+                .HasColumnName("PolicyID")
+                .ValueGeneratedOnAdd();
+            entity.Property(e => e.CategoryId).HasColumnName("CategoryID");
+            entity.Property(e => e.Prefix)
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(e => e.Separator)
+                .HasMaxLength(10)
+                .HasDefaultValue("-");
+            entity.Property(e => e.SourceFieldKeys).HasMaxLength(500);
+            entity.Property(e => e.IncludeYear).HasDefaultValue(true);
+            entity.Property(e => e.UseSequence).HasDefaultValue(true);
+            entity.Property(e => e.SequenceName).HasMaxLength(80);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.CreatedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.LastModifiedBy).HasMaxLength(64);
+            entity.Property(e => e.LastModifiedAtUtc).HasColumnType("datetime2");
+
+            entity.HasIndex(e => e.CategoryId, "UX_SubjectReferencePolicies_CategoryID")
+                .IsUnique();
+            entity.HasIndex(e => e.IsActive, "IX_SubjectReferencePolicies_IsActive");
+        });
+
+        modelBuilder.Entity<SubjectStatusHistory>(entity =>
+        {
+            entity.ToTable("SubjectStatusHistory");
+
+            entity.HasKey(e => e.StatusHistoryId).HasName("PK_SubjectStatusHistory");
+
+            entity.Property(e => e.StatusHistoryId)
+                .HasColumnName("StatusHistoryID")
+                .ValueGeneratedOnAdd();
+            entity.Property(e => e.MessageId).HasColumnName("MessageID");
+            entity.Property(e => e.OldStatus).HasColumnName("OldStatus");
+            entity.Property(e => e.NewStatus).HasColumnName("NewStatus");
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.ChangedBy)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.ChangedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasIndex(e => e.MessageId, "IX_SubjectStatusHistory_MessageID");
+            entity.HasIndex(e => e.ChangedAtUtc, "IX_SubjectStatusHistory_ChangedAtUtc");
+        });
+
+        modelBuilder.Entity<SubjectTimelineEvent>(entity =>
+        {
+            entity.ToTable("SubjectTimelineEvents");
+
+            entity.HasKey(e => e.TimelineEventId).HasName("PK_SubjectTimelineEvents");
+
+            entity.Property(e => e.TimelineEventId)
+                .HasColumnName("TimelineEventID")
+                .ValueGeneratedOnAdd();
+            entity.Property(e => e.MessageId).HasColumnName("MessageID");
+            entity.Property(e => e.EventType)
+                .HasMaxLength(80)
+                .IsRequired();
+            entity.Property(e => e.EventTitle)
+                .HasMaxLength(250)
+                .IsRequired();
+            entity.Property(e => e.EventPayloadJson);
+            entity.Property(e => e.StatusFrom);
+            entity.Property(e => e.StatusTo);
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.CreatedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasIndex(e => e.MessageId, "IX_SubjectTimelineEvents_MessageID");
+            entity.HasIndex(e => e.CreatedAtUtc, "IX_SubjectTimelineEvents_CreatedAtUtc");
+            entity.HasIndex(e => e.EventType, "IX_SubjectTimelineEvents_EventType");
+        });
+
+        modelBuilder.Entity<SubjectTask>(entity =>
+        {
+            entity.ToTable("SubjectTasks");
+
+            entity.HasKey(e => e.TaskId).HasName("PK_SubjectTasks");
+
+            entity.Property(e => e.TaskId)
+                .HasColumnName("TaskID")
+                .ValueGeneratedOnAdd();
+            entity.Property(e => e.MessageId).HasColumnName("MessageID");
+            entity.Property(e => e.ActionTitle)
+                .HasMaxLength(250)
+                .IsRequired();
+            entity.Property(e => e.ActionDescription).HasMaxLength(2000);
+            entity.Property(e => e.AssignedToUserId).HasMaxLength(64);
+            entity.Property(e => e.AssignedUnitId).HasMaxLength(50);
+            entity.Property(e => e.Status)
+                .HasDefaultValue((byte)0)
+                .IsRequired();
+            entity.Property(e => e.DueDateUtc).HasColumnType("datetime2");
+            entity.Property(e => e.CompletedAtUtc).HasColumnType("datetime2");
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.CreatedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.LastModifiedBy).HasMaxLength(64);
+            entity.Property(e => e.LastModifiedAtUtc).HasColumnType("datetime2");
+
+            entity.HasIndex(e => e.MessageId, "IX_SubjectTasks_MessageID");
+            entity.HasIndex(e => e.AssignedUnitId, "IX_SubjectTasks_AssignedUnitID");
+            entity.HasIndex(e => e.AssignedToUserId, "IX_SubjectTasks_AssignedUserID");
+            entity.HasIndex(e => e.Status, "IX_SubjectTasks_Status");
         });
 
         modelBuilder.HasSequence<int>("Seq_Categories").StartsAt(101L);

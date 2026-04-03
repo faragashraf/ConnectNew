@@ -12,7 +12,7 @@ import { WindowsNotificationService } from '../helper/windowsNotification.servic
 import { SpinnerService } from '../helper/spinner.service';
 import { AuthObjectsService } from '../helper/auth-objects.service';
 import { ConditionalDate } from '../../Pipe/Conditional-date.pipe';
-import { SummerNotificationDisplayMapperService } from 'src/app/Modules/EmployeeRequests/components/summer-shared/core/summer-notification-display-mapper.service';
+import { NotificationDisplayMapperService } from '../notifications/notification-display-mapper.service';
 
 export enum NotificationType {
   info = 'Info',
@@ -79,7 +79,7 @@ export class SignalRService {
     private msgsService: MsgsService, public primMsg: MessageService,
     private router: Router, private conditionalDate: ConditionalDate,
     private spinnerService: SpinnerService,
-    private summerNotificationDisplayMapper: SummerNotificationDisplayMapperService) { }
+    private notificationDisplayMapper: NotificationDisplayMapperService) { }
 
 
   fixNotificationOnRecieve$ = new Subject<boolean>(); //Subscribe from app.component, and next from HubSync.component
@@ -400,14 +400,14 @@ export class SignalRService {
       this.primMsgCount = 0;
 
       const normalizedNotifications = (Array.isArray(notifications) ? notifications : [])
-        .map(notification => this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto)
+        .map(notification => this.notificationDisplayMapper.toDisplayNotification(notification) as unknown as NotificationDto)
         .sort((a, b) => this.toEpochMs(b?.time) - this.toEpochMs(a?.time));
 
-      normalizedNotifications.forEach((displayNotification: NotificationDto) => {
+      normalizedNotifications.forEach(displayNotification => {
         this.Notification.push(displayNotification);
         let _notification = {
           severity: displayNotification.type,
-          summary: this.summerNotificationDisplayMapper.buildToastSummary(displayNotification as any),
+          summary: this.notificationDisplayMapper.buildToastSummary(displayNotification),
           detail: `${this.conditionalDate.transform(displayNotification?.time ?? null, "full")}`,
           sticky: false,
           life: 5000 // notificat

@@ -1,0 +1,116 @@
+<section class="editor">
+  <header class="header">
+    <div>
+      <h2>{{ isEditMode ? 'تعديل موضوع/طلب' : 'إنشاء موضوع/طلب' }}</h2>
+      <p>يمكنك الحفظ كمسودة أو الإرسال الآن مع متابعة التحديثات المباشرة.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="secondary" (click)="saveDraft()" [disabled]="saving || loading">حفظ كمسودة</button>
+      <button type="button" class="primary" (click)="submitSubject()" [disabled]="saving || loading">إرسال</button>
+    </div>
+  </header>
+
+  <div class="live-notice" *ngIf="liveEventNotice">{{ liveEventNotice }}</div>
+  <div class="loading" *ngIf="loading">جاري تحميل البيانات...</div>
+
+  <ng-container *ngIf="!loading">
+    <form [formGroup]="editorForm" class="main-form">
+      <div class="field">
+        <label>نوع الموضوع/الطلب *</label>
+        <select formControlName="categoryId" (change)="onCategoryChanged()" [disabled]="isEditMode">
+          <option value="0">اختر النوع</option>
+          <option *ngFor="let option of categoryOptions" [value]="option.id">
+            {{ option.name }}
+          </option>
+        </select>
+        <small class="error" *ngIf="shouldShowEditorError('categoryId')">{{ getEditorErrorMessage('categoryId') }}</small>
+      </div>
+
+      <div class="field">
+        <label>عنوان الموضوع/الطلب</label>
+        <input type="text" formControlName="subject" />
+      </div>
+
+      <div class="field field-wide">
+        <label>الوصف</label>
+        <textarea rows="3" formControlName="description"></textarea>
+      </div>
+
+      <div class="field">
+        <label>الظرف المرتبط</label>
+        <select formControlName="envelopeId">
+          <option [ngValue]="null">بدون ربط</option>
+          <option *ngFor="let envelope of availableEnvelopes" [ngValue]="envelope.envelopeId">
+            {{ envelope.envelopeRef }} - {{ envelope.incomingDate | date:'shortDate' }}
+          </option>
+        </select>
+      </div>
+    </form>
+
+    <section class="panel">
+      <h3>الحقول الديناميكية</h3>
+      <app-dynamic-fields-section [form]="dynamicControls" [groups]="renderGroups"></app-dynamic-fields-section>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h3>الجهات المعنية / أصحاب العلاقة</h3>
+        <button type="button" (click)="addStakeholder()">إضافة جهة</button>
+      </div>
+      <div *ngFor="let group of stakeholdersControls; let i = index">
+        <div [formGroup]="group" class="row-item">
+          <input type="number" placeholder="رقم الجهة / الوحدة" formControlName="stockholderId" />
+          <select formControlName="partyType">
+            <option value="Viewer">مشاهد</option>
+            <option value="Assignee">مكلف</option>
+          </select>
+          <label class="checkbox"><input type="checkbox" formControlName="requiredResponse" /> يتطلب رد</label>
+          <input type="date" formControlName="dueDate" />
+          <input type="text" placeholder="ملاحظات" formControlName="notes" />
+          <button type="button" class="danger" (click)="removeStakeholder(i)">حذف</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h3>المهام / الإجراءات</h3>
+        <button type="button" (click)="addTask()">إضافة مهمة</button>
+      </div>
+      <div *ngFor="let group of tasksControls; let i = index">
+        <div [formGroup]="group" class="row-item">
+          <input type="text" placeholder="عنوان المهمة" formControlName="actionTitle" />
+          <input type="text" placeholder="الوصف" formControlName="actionDescription" />
+          <input type="text" placeholder="رقم المستخدم المكلف" formControlName="assignedToUserId" />
+          <input type="text" placeholder="رقم الوحدة المكلفة" formControlName="assignedUnitId" />
+          <input type="date" formControlName="dueDateUtc" />
+          <select formControlName="status">
+            <option [ngValue]="0">مفتوحة</option>
+            <option [ngValue]="1">منتهية</option>
+          </select>
+          <button type="button" class="danger" (click)="removeTask(i)">حذف</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>المرفقات</h3>
+      <div class="attachments-existing" *ngIf="existingAttachments.length > 0">
+        <h4>المرفقات الحالية</h4>
+        <ul>
+          <li *ngFor="let attachment of existingAttachments">
+            <span>{{ attachment.fileName }}</span>
+            <button type="button" class="danger" (click)="removeExistingAttachment(attachment.attachmentId)">حذف</button>
+          </li>
+        </ul>
+      </div>
+      <label class="upload-label">
+        <input type="file" multiple (change)="onFilesChanged($event)" />
+        <span>اختر ملفات جديدة</span>
+      </label>
+      <ul class="pending-list" *ngIf="pendingFiles.length > 0">
+        <li *ngFor="let file of pendingFiles">{{ file.fileName }}</li>
+      </ul>
+    </section>
+  </ng-container>
+</section>

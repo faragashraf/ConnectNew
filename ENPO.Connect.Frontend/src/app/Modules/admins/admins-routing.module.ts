@@ -13,6 +13,7 @@ import { ComponentConfigManagerComponent } from './Managementcomponents/componen
 import { NswagEditorComponent } from './Managementcomponents/nswag-editor/nswag-editor.component';
 import { ModuleChartsComponent } from '../GenericComponents/ConnectComponents/module-charts/module-charts.component';
 import { ApplicationGenericManagerComponent } from './components/application-generic-manager/application-generic-manager.component';
+import { DynamicSubjectTypeAdminComponent } from './components/dynamic-subject-type-admin/dynamic-subject-type-admin.component';
 
 const routes: Routes =
   [
@@ -137,6 +138,13 @@ const routes: Routes =
       component: ModuleChartsComponent,
       canActivate: [AuthNewGuardService], data: {
         func: 'ServiceDashboardFunc'
+      }
+    },
+    {
+      path: 'DynamicSubjectTypes',
+      component: DynamicSubjectTypeAdminComponent,
+      canActivate: [AuthNewGuardService], data: {
+        func: 'ConnectSupperAdminFunc'
       }
     }
   ];

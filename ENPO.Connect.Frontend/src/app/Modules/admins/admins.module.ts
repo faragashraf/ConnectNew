@@ -23,6 +23,7 @@ import { ChartConfigManagerComponent } from './Managementcomponents/chart-config
 import { NswagEditorComponent } from './Managementcomponents/nswag-editor/nswag-editor.component';
 import { ComponentConfigManagerComponent } from './Managementcomponents/component-config-manager/component-config-manager.component';
 import { ApplicationGenericManagerComponent } from './components/application-generic-manager/application-generic-manager.component';
+import { DynamicSubjectTypeAdminComponent } from './components/dynamic-subject-type-admin/dynamic-subject-type-admin.component';
 // SidebarComponent is provided by GenericModuleModule now
 
 
@@ -40,7 +41,8 @@ import { ApplicationGenericManagerComponent } from './components/application-gen
     ChartConfigManagerComponent,
     ComponentConfigManagerComponent,
     NswagEditorComponent,
-    ApplicationGenericManagerComponent
+    ApplicationGenericManagerComponent,
+    DynamicSubjectTypeAdminComponent
   ],
   imports: [
     CommonModule,

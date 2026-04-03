@@ -1,0 +1,34 @@
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>أنواع الموضوعات والطلبات</h2>
+      <button type="button" (click)="loadTree()">تحديث</button>
+    </div>
+
+    <app-tree-sidebar
+      [tree]="treeNodes"
+      [showTreeContextMenu]="false"
+      [allExpanded]="true"
+      [expandedWidth]="100"
+      [scrollHeight]="56"
+      [title]="'شجرة الموضوعات والطلبات'"
+      (onNodeSelect)="onNodeSelect($event)">
+    </app-tree-sidebar>
+
+    <div class="sidebar-loading" *ngIf="loadingTree">جاري تحميل الشجرة...</div>
+  </aside>
+
+  <section class="content">
+    <nav class="toolbar">
+      <a routerLink="/DynamicSubjects/dashboard" routerLinkActive="active-link">لوحة المتابعة</a>
+      <a routerLink="/DynamicSubjects/subjects" routerLinkActive="active-link">الموضوعات والطلبات</a>
+      <a routerLink="/DynamicSubjects/envelopes" routerLinkActive="active-link">الأظرف الواردة</a>
+      <a routerLink="/DynamicSubjects/subjects/new" routerLinkActive="active-link">إضافة موضوع/طلب</a>
+      <a routerLink="/DynamicSubjects/envelopes/new" routerLinkActive="active-link">إضافة ظرف وارد</a>
+    </nav>
+
+    <div class="page">
+      <router-outlet></router-outlet>
+    </div>
+  </section>
+</div>

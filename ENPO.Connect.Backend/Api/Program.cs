@@ -17,6 +17,7 @@ using Models.DTO.Common;
 using Persistence.Data;
 using Persistence.HelperServices;
 using Persistence.Services;
+using Persistence.Services.DynamicSubjects;
 using Persistence.Services.Notifications;
 using Persistence.UnitOfWorks;
 using SignalR.Notification;
@@ -75,6 +76,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.AddScoped<helperService>();
 builder.Services.AddScoped<SummerWorkflowService>();
 builder.Services.AddScoped<IConnectNotificationService, ConnectNotificationService>();
+builder.Services.AddScoped<IDynamicSubjectsService, DynamicSubjectsService>();
+builder.Services.AddScoped<IDynamicSubjectsRealtimePublisher, DynamicSubjectsRealtimePublisher>();
+builder.Services.AddScoped<ISubjectReferenceGenerator, SubjectReferenceGenerator>();
 builder.Services.AddHostedService<SummerPaymentAutoCancellationHostedService>();
 builder.Services.AddSingleton<ENPOCreateLogFile>(provider => new ENPOCreateLogFile("YourStringValue", "YourSecondStringValue", FileExtension.txt));
 
