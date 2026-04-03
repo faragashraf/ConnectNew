@@ -1,4 +1,5 @@
-﻿using Core;
+﻿using Api.Authorization;
+using Core;
 using Api.HostedServices;
 using ENPO.CreateLogFile;
 using ENPO.CustomSwagger;
@@ -152,7 +153,13 @@ builder.Services.Configure<FormOptions>(o =>
     o.MultipartBodyLengthLimit = int.MaxValue;
     o.MemoryBufferThreshold = int.MaxValue;
 });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(
+        DynamicSubjectsAdminAuthorization.PolicyName,
+        policy => policy.RequireAssertion(context =>
+            DynamicSubjectsAdminAuthorization.HasRequiredRoleClaim(context.User)));
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(option =>

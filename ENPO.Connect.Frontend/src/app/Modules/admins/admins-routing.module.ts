@@ -87,7 +87,7 @@ const routes: Routes =
       component: DynamicFieldsManagerComponent,
       canActivate: [AuthNewGuardService],
       data: {
-        func: 'ConnectAdminFunc'
+        func: 'ConnectSupperAdminFunc'
       }
     }, {
       path: 'ServerMonitorManager',
@@ -144,14 +144,14 @@ const routes: Routes =
       path: 'DynamicSubjectTypes',
       component: DynamicSubjectTypeAdminComponent,
       canActivate: [AuthNewGuardService], data: {
-        roleId: '2003'
+        func: 'ConnectSupperAdminFunc'
       }
     },
     {
       path: 'DynamicSubjectManagement',
       component: DynamicSubjectTypeAdminComponent,
       canActivate: [AuthNewGuardService], data: {
-        roleId: '2003'
+        func: 'ConnectSupperAdminFunc'
       }
     }
   ];
