@@ -21,6 +21,7 @@ export interface SubjectCategoryTreeNodeDto {
   applicationId?: string;
   hasDynamicFields: boolean;
   canCreate: boolean;
+  displayOrder: number;
   children: SubjectCategoryTreeNodeDto[];
 }
 
@@ -55,6 +56,9 @@ export interface SubjectFieldDefinitionDto {
   width: number;
   height: number;
   applicationId?: string;
+  displayOrder: number;
+  isVisible: boolean;
+  displaySettingsJson?: string;
   group?: SubjectGroupDefinitionDto;
 }
 
@@ -309,9 +313,17 @@ export interface SubjectTypeAdminDto {
   parentCategoryId: number;
   categoryName: string;
   applicationId?: string;
+  catMend?: string;
+  catWorkFlow: number;
+  catSms: boolean;
+  catMailNotification: boolean;
+  to?: string;
+  cc?: string;
   isActive: boolean;
   hasDynamicFields: boolean;
   canCreate: boolean;
+  displayOrder: number;
+  settingsJson?: string;
   referencePolicyId?: number;
   referencePolicyEnabled: boolean;
   referencePrefix?: string;
@@ -333,6 +345,134 @@ export interface SubjectTypeAdminUpsertRequestDto {
   includeYear: boolean;
   useSequence: boolean;
   sequenceName?: string;
+}
+
+export interface SubjectTypeAdminTreeMoveRequestDto {
+  newParentCategoryId: number;
+  newIndex: number;
+}
+
+export interface SubjectTypeAdminStatusRequestDto {
+  isActive: boolean;
+}
+
+export interface SubjectTypeAdminCreateRequestDto {
+  parentCategoryId: number;
+  categoryName: string;
+  applicationId?: string;
+  catMend?: string;
+  catWorkFlow: number;
+  catSms: boolean;
+  catMailNotification: boolean;
+  to?: string;
+  cc?: string;
+  isActive: boolean;
+}
+
+export interface SubjectTypeAdminUpdateRequestDto {
+  categoryName: string;
+  applicationId?: string;
+  catMend?: string;
+  catWorkFlow: number;
+  catSms: boolean;
+  catMailNotification: boolean;
+  to?: string;
+  cc?: string;
+  isActive: boolean;
+}
+
+export interface SubjectAdminFieldDto {
+  cdmendSql: number;
+  fieldKey: string;
+  fieldType: string;
+  fieldLabel?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  optionsPayload?: string;
+  dataType?: string;
+  required: boolean;
+  requiredTrue: boolean;
+  email: boolean;
+  pattern: boolean;
+  minValue?: string;
+  maxValue?: string;
+  mask?: string;
+  isActive: boolean;
+  width: number;
+  height: number;
+  isDisabledInit: boolean;
+  isSearchable: boolean;
+  applicationId?: string;
+  linkedCategoriesCount: number;
+}
+
+export interface SubjectAdminFieldUpsertRequestDto {
+  cdmendSql?: number;
+  fieldKey: string;
+  fieldType: string;
+  fieldLabel?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  optionsPayload?: string;
+  dataType?: string;
+  required: boolean;
+  requiredTrue: boolean;
+  email: boolean;
+  pattern: boolean;
+  minValue?: string;
+  maxValue?: string;
+  mask?: string;
+  isActive: boolean;
+  width: number;
+  height: number;
+  isDisabledInit: boolean;
+  isSearchable: boolean;
+  applicationId?: string;
+}
+
+export interface SubjectAdminGroupDto {
+  groupId: number;
+  groupName?: string;
+  groupDescription?: string;
+  isExtendable: boolean;
+  groupWithInRow?: number;
+  linkedFieldsCount: number;
+}
+
+export interface SubjectAdminGroupUpsertRequestDto {
+  groupName?: string;
+  groupDescription?: string;
+  isExtendable: boolean;
+  groupWithInRow?: number;
+}
+
+export interface SubjectCategoryFieldLinkAdminDto {
+  mendSql: number;
+  categoryId: number;
+  fieldKey: string;
+  fieldLabel?: string;
+  fieldType?: string;
+  groupId: number;
+  groupName?: string;
+  isActive: boolean;
+  displayOrder: number;
+  isVisible: boolean;
+  displaySettingsJson?: string;
+  applicationId?: string;
+}
+
+export interface SubjectCategoryFieldLinkUpsertItemDto {
+  mendSql?: number;
+  fieldKey: string;
+  groupId: number;
+  isActive: boolean;
+  displayOrder: number;
+  isVisible: boolean;
+  displaySettingsJson?: string;
+}
+
+export interface SubjectCategoryFieldLinksUpsertRequestDto {
+  links: SubjectCategoryFieldLinkUpsertItemDto[];
 }
 
 export const DYNAMIC_SUBJECT_EVENT_KIND = 'DYNAMIC_SUBJECT_EVENT';

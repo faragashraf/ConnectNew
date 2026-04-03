@@ -1,139 +1,286 @@
-.subject-types-admin {
+.workspace {
   direction: rtl;
-  text-align: right;
+  display: grid;
+  gap: 1rem;
 }
 
-header {
+.workspace-header {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
   align-items: flex-start;
-  margin-bottom: 0.9rem;
-}
-
-header h2 {
-  margin: 0;
-}
-
-header p {
-  margin: 0.25rem 0 0;
-  color: #64748b;
-}
-
-header button,
-footer button {
-  border: 1px solid #1d4ed8;
-  background: #1d4ed8;
-  color: #ffffff;
-  border-radius: 8px;
-  padding: 0.45rem 0.8rem;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: 320px 1fr;
   gap: 1rem;
-}
-
-aside {
-  border: 1px solid #dbeafe;
-  border-radius: 12px;
-  background: #f8fafc;
-  padding: 0.75rem;
-}
-
-aside h3 {
-  margin: 0 0 0.5rem;
-}
-
-aside ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 0.45rem;
-  max-height: 70vh;
-  overflow: auto;
-}
-
-aside .empty-state {
-  margin: 0.75rem 0 0;
-  color: #64748b;
-  font-size: 0.85rem;
-}
-
-aside li {
+  padding: 0.9rem 1rem;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 0.45rem 0.55rem;
-  cursor: pointer;
-  display: grid;
-  gap: 0.15rem;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+
+  h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: #0f172a;
+  }
+
+  p {
+    margin: 0.35rem 0 0;
+    color: #475569;
+    font-size: 0.9rem;
+  }
 }
 
-aside li.active {
-  border-color: #3b82f6;
-  background: #eff6ff;
+.header-actions {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
 }
 
-aside li strong {
-  color: #0f172a;
-}
-
-aside li span,
-aside li small {
-  color: #64748b;
-  font-size: 0.8rem;
-}
-
-.editor {
+:host ::ng-deep .workspace-splitter {
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 0.85rem;
+  border-radius: 14px;
+  overflow: hidden;
 }
 
-.editor h3 {
-  margin: 0 0 0.7rem;
-}
-
-form {
+.tree-panel {
+  height: 100%;
+  background: #ffffff;
   display: grid;
-  gap: 0.65rem;
+  grid-template-rows: auto 1fr;
+
+  .panel-head {
+    padding: 0.8rem;
+    border-bottom: 1px solid #e2e8f0;
+
+    h3 {
+      margin: 0;
+      color: #1e293b;
+      font-size: 0.98rem;
+    }
+
+    small {
+      color: #64748b;
+      font-size: 0.78rem;
+    }
+  }
+
+  :host ::ng-deep .p-tree {
+    border: 0;
+    height: 100%;
+    overflow: auto;
+  }
 }
 
-.check {
+.tree-node-row {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 0.45rem;
+  justify-content: space-between;
+
+  .node-title {
+    color: #1e293b;
+    font-weight: 600;
+    font-size: 0.87rem;
+  }
+
+  .node-status {
+    font-size: 0.72rem;
+    color: #065f46;
+    background: #d1fae5;
+    border-radius: 999px;
+    padding: 0.13rem 0.42rem;
+
+    &.inactive {
+      color: #991b1b;
+      background: #fee2e2;
+    }
+  }
+}
+
+.content-panel {
+  height: 100%;
+  background: #ffffff;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.selected-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.85rem 1rem;
+
+  h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: #0f172a;
+  }
+
+  span {
+    color: #64748b;
+    font-size: 0.84rem;
+  }
+}
+
+:host ::ng-deep .content-panel .p-tabview {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+:host ::ng-deep .content-panel .p-tabview-panels {
+  overflow: auto;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
 .field {
+  display: grid;
+  gap: 0.35rem;
+
+  label {
+    font-size: 0.83rem;
+    color: #334155;
+    font-weight: 600;
+  }
+}
+
+.switches {
+  grid-column: 1 / -1;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+
+  label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 180px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.45rem 0.55rem;
+    background: #f8fafc;
+
+    span {
+      color: #334155;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+  }
+}
+
+.actions-row,
+.tab-head-actions {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.actions-col {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.preview-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 260px;
+}
+
+.preview-container {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.preview-group {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+
+  > header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.7rem 0.85rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+
+    h4 {
+      margin: 0;
+      font-size: 0.92rem;
+      color: #0f172a;
+    }
+
+    span {
+      color: #64748b;
+      font-size: 0.78rem;
+    }
+  }
+}
+
+.preview-fields {
+  padding: 0.85rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.preview-field {
+  display: grid;
   gap: 0.3rem;
+
+  label {
+    color: #334155;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .field-control {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.42rem 0.58rem;
+    background: #f8fafc;
+    color: #0f172a;
+  }
 }
 
-.field input {
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 0.45rem 0.6rem;
-}
-
-.field .error {
-  color: #b91c1c;
-  font-size: 0.76rem;
-}
-
-footer {
-  margin-top: 0.7rem;
-}
-
-.loading {
+.no-selection,
+.empty-state {
   color: #64748b;
+  text-align: center;
+  padding: 1.2rem;
 }
 
-@media (max-width: 1024px) {
-  .layout {
+.global-spinner {
+  margin: 2rem auto;
+}
+
+.switch-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@media (max-width: 1200px) {
+  .form-grid,
+  .preview-fields {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }

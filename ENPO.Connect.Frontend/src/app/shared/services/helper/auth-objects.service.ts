@@ -510,6 +510,8 @@ export class AuthObjectsService {
       'Publications/FullPublication': { icon: 'pi pi-fw pi-copy', color: '#6b7280' },
       'Admin/ResetPassword': { icon: 'pi pi-fw pi-key', color: '#f97316' },
       'Admin/DynamicFiledsManager': { icon: 'pi pi-fw pi-sliders-h', color: '#8b5cf6' },
+      'Admin/DynamicSubjectTypes': { icon: 'pi pi-fw pi-sitemap', color: '#1d4ed8' },
+      'Admin/DynamicSubjectManagement': { icon: 'pi pi-fw pi-sitemap', color: '#1d4ed8' },
       'Admin/ServerMonitorManager': { icon: 'pi pi-fw pi-desktop', color: '#64748b' },
       'TopManagement/AddSubject': { icon: 'pi pi-fw pi-plus-circle', color: '#16a34a' },
       'Admin/ApplicationConfiguration': { icon: 'pi pi-fw pi-cog', color: '#2563eb' },

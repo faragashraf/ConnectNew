@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,8 +16,10 @@ namespace Api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class DynamicSubjectsController : ControllerBase
-    {
+public class DynamicSubjectsController : ControllerBase
+{
+        private const string SuperAdminRoleId = "2003";
+
         private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
         {
             PropertyNameCaseInsensitive = true
@@ -223,6 +226,11 @@ namespace Api.Controllers
             string? appId,
             CancellationToken cancellationToken = default)
         {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<IEnumerable<SubjectTypeAdminDto>>();
+            }
+
             return _dynamicSubjectsService.GetSubjectTypeAdminConfigsAsync(GetCurrentUserId(), appId, cancellationToken);
         }
 
@@ -232,7 +240,239 @@ namespace Api.Controllers
             [FromBody] SubjectTypeAdminUpsertRequestDto request,
             CancellationToken cancellationToken = default)
         {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<SubjectTypeAdminDto>();
+            }
+
             return _dynamicSubjectsService.UpsertSubjectTypeAdminConfigAsync(categoryId, request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpGet("Admin/CategoryTree")]
+        public Task<CommonResponse<IEnumerable<SubjectTypeAdminDto>>> GetAdminCategoryTree(
+            string? appId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<IEnumerable<SubjectTypeAdminDto>>();
+            }
+
+            return _dynamicSubjectsService.GetAdminCategoryTreeAsync(GetCurrentUserId(), appId, cancellationToken);
+        }
+
+        [HttpPost("Admin/CategoryTypes")]
+        public Task<CommonResponse<SubjectTypeAdminDto>> CreateAdminCategory(
+            [FromBody] SubjectTypeAdminCreateRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<SubjectTypeAdminDto>();
+            }
+
+            return _dynamicSubjectsService.CreateAdminCategoryAsync(request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpPut("Admin/CategoryTypes/{categoryId:int}")]
+        public Task<CommonResponse<SubjectTypeAdminDto>> UpdateAdminCategory(
+            int categoryId,
+            [FromBody] SubjectTypeAdminUpdateRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<SubjectTypeAdminDto>();
+            }
+
+            return _dynamicSubjectsService.UpdateAdminCategoryAsync(categoryId, request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpDelete("Admin/CategoryTypes/{categoryId:int}")]
+        public Task<CommonResponse<bool>> DeleteAdminCategory(
+            int categoryId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<bool>();
+            }
+
+            return _dynamicSubjectsService.DeleteAdminCategoryAsync(categoryId, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpPatch("Admin/CategoryTypes/{categoryId:int}/Status")]
+        public Task<CommonResponse<SubjectTypeAdminDto>> SetAdminCategoryStatus(
+            int categoryId,
+            [FromBody] SubjectTypeAdminStatusRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<SubjectTypeAdminDto>();
+            }
+
+            return _dynamicSubjectsService.SetAdminCategoryStatusAsync(categoryId, request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpPatch("Admin/CategoryTypes/{categoryId:int}/Move")]
+        public Task<CommonResponse<IEnumerable<SubjectTypeAdminDto>>> MoveAdminCategory(
+            int categoryId,
+            [FromBody] SubjectTypeAdminTreeMoveRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<IEnumerable<SubjectTypeAdminDto>>();
+            }
+
+            return _dynamicSubjectsService.MoveAdminCategoryAsync(categoryId, request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpGet("Admin/Fields")]
+        public Task<CommonResponse<IEnumerable<SubjectAdminFieldDto>>> GetAdminFields(
+            string? appId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<IEnumerable<SubjectAdminFieldDto>>();
+            }
+
+            return _dynamicSubjectsService.GetAdminFieldsAsync(GetCurrentUserId(), appId, cancellationToken);
+        }
+
+        [HttpPost("Admin/Fields")]
+        public Task<CommonResponse<SubjectAdminFieldDto>> CreateAdminField(
+            [FromBody] SubjectAdminFieldUpsertRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<SubjectAdminFieldDto>();
+            }
+
+            return _dynamicSubjectsService.CreateAdminFieldAsync(request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpPut("Admin/Fields/{fieldKey}")]
+        public Task<CommonResponse<SubjectAdminFieldDto>> UpdateAdminField(
+            string fieldKey,
+            [FromBody] SubjectAdminFieldUpsertRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<SubjectAdminFieldDto>();
+            }
+
+            return _dynamicSubjectsService.UpdateAdminFieldAsync(fieldKey, request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpDelete("Admin/Fields/{fieldKey}")]
+        public Task<CommonResponse<bool>> DeleteAdminField(
+            string fieldKey,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<bool>();
+            }
+
+            return _dynamicSubjectsService.DeleteAdminFieldAsync(fieldKey, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpGet("Admin/Groups")]
+        public Task<CommonResponse<IEnumerable<SubjectAdminGroupDto>>> GetAdminGroups(
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<IEnumerable<SubjectAdminGroupDto>>();
+            }
+
+            return _dynamicSubjectsService.GetAdminGroupsAsync(GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpPost("Admin/Groups")]
+        public Task<CommonResponse<SubjectAdminGroupDto>> CreateAdminGroup(
+            [FromBody] SubjectAdminGroupUpsertRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<SubjectAdminGroupDto>();
+            }
+
+            return _dynamicSubjectsService.CreateAdminGroupAsync(request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpPut("Admin/Groups/{groupId:int}")]
+        public Task<CommonResponse<SubjectAdminGroupDto>> UpdateAdminGroup(
+            int groupId,
+            [FromBody] SubjectAdminGroupUpsertRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<SubjectAdminGroupDto>();
+            }
+
+            return _dynamicSubjectsService.UpdateAdminGroupAsync(groupId, request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpDelete("Admin/Groups/{groupId:int}")]
+        public Task<CommonResponse<bool>> DeleteAdminGroup(
+            int groupId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<bool>();
+            }
+
+            return _dynamicSubjectsService.DeleteAdminGroupAsync(groupId, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpGet("Admin/CategoryTypes/{categoryId:int}/FieldLinks")]
+        public Task<CommonResponse<IEnumerable<SubjectCategoryFieldLinkAdminDto>>> GetAdminCategoryFieldLinks(
+            int categoryId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<IEnumerable<SubjectCategoryFieldLinkAdminDto>>();
+            }
+
+            return _dynamicSubjectsService.GetAdminCategoryFieldLinksAsync(categoryId, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpPut("Admin/CategoryTypes/{categoryId:int}/FieldLinks")]
+        public Task<CommonResponse<IEnumerable<SubjectCategoryFieldLinkAdminDto>>> UpsertAdminCategoryFieldLinks(
+            int categoryId,
+            [FromBody] SubjectCategoryFieldLinksUpsertRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<IEnumerable<SubjectCategoryFieldLinkAdminDto>>();
+            }
+
+            return _dynamicSubjectsService.UpsertAdminCategoryFieldLinksAsync(categoryId, request, GetCurrentUserId(), cancellationToken);
+        }
+
+        [HttpGet("Admin/CategoryTypes/{categoryId:int}/Preview")]
+        public Task<CommonResponse<SubjectFormDefinitionDto>> GetAdminCategoryPreview(
+            int categoryId,
+            string? appId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!HasRequiredRole(SuperAdminRoleId))
+            {
+                return ForbiddenAdminResponse<SubjectFormDefinitionDto>();
+            }
+
+            return _dynamicSubjectsService.GetAdminPreviewAsync(categoryId, GetCurrentUserId(), appId, cancellationToken);
         }
 
         private static SubjectUpsertRequestDto ParseUpsertRequest(SubjectUpsertFormRequestDto form)
@@ -291,6 +531,103 @@ namespace Api.Controllers
         private string GetCurrentUserId()
         {
             return HttpContext.User.Claims.FirstOrDefault(claim => claim.Type == "UserId")?.Value ?? string.Empty;
+        }
+
+        private static Task<CommonResponse<T>> ForbiddenAdminResponse<T>()
+        {
+            var response = new CommonResponse<T>();
+            response.Errors.Add(new Error
+            {
+                Code = "403",
+                Message = "هذه الشاشة متاحة فقط للمستخدمين الذين يحملون الدور 2003."
+            });
+            return Task.FromResult(response);
+        }
+
+        private bool HasRequiredRole(string requiredRoleId)
+        {
+            var normalizedRequiredRole = (requiredRoleId ?? string.Empty).Trim();
+            if (normalizedRequiredRole.Length == 0)
+            {
+                return false;
+            }
+
+            var claims = HttpContext?.User?.Claims;
+            if (claims == null)
+            {
+                return false;
+            }
+
+            foreach (var claim in claims)
+            {
+                if (!string.Equals(claim.Type, "RoleId", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(claim.Type, "roleId", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(claim.Type, "role", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(claim.Type, "roles", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(claim.Type, ClaimTypes.Role, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (var roleToken in ExpandClaimTokens(claim.Value))
+                {
+                    if (string.Equals(roleToken, normalizedRequiredRole, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<string> ExpandClaimTokens(string? claimValue)
+        {
+            var rawValue = (claimValue ?? string.Empty).Trim();
+            if (rawValue.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            if (rawValue.StartsWith("[", StringComparison.Ordinal))
+            {
+                try
+                {
+                    using var jsonDocument = JsonDocument.Parse(rawValue);
+                    if (jsonDocument.RootElement.ValueKind == JsonValueKind.Array)
+                    {
+                        var parsedItems = new List<string>();
+                        foreach (var element in jsonDocument.RootElement.EnumerateArray())
+                        {
+                            var token = element.ValueKind switch
+                            {
+                                JsonValueKind.String => (element.GetString() ?? string.Empty).Trim(),
+                                JsonValueKind.Number => element.ToString().Trim(),
+                                JsonValueKind.True => "true",
+                                JsonValueKind.False => "false",
+                                _ => string.Empty
+                            };
+
+                            if (token.Length > 0)
+                            {
+                                parsedItems.Add(token);
+                            }
+                        }
+
+                        return parsedItems;
+                    }
+                }
+                catch
+                {
+                    // Fallback to delimiter parsing below.
+                }
+            }
+
+            return rawValue
+                .Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(item => item.Trim())
+                .Where(item => item.Length > 0)
+                .ToArray();
         }
     }
 }

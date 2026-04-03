@@ -1,63 +1,384 @@
-<section class="subject-types-admin">
-  <header>
+<section class="workspace" dir="rtl">
+  <header class="workspace-header">
     <div>
-      <h2>إدارة أنواع الموضوعات والطلبات</h2>
-      <p>هذه الإعدادات تتحكم مباشرة في شاشة التشغيل للموضوعات والطلبات.</p>
+      <h2>لوحة الإدارة المركزية لأنواع الطلبات</h2>
+      <p>إدارة الشجرة، الحقول، الجروبات، الربط، الإعدادات، والمعاينة الحقيقية من نفس بيانات التعريف الديناميكية.</p>
     </div>
-    <button type="button" (click)="load()">تحديث</button>
+
+    <div class="header-actions">
+      <button pButton type="button" label="تحديث" icon="pi pi-refresh" class="p-button-outlined" (click)="loadWorkspace()"></button>
+      <button pButton type="button" label="نوع جديد" icon="pi pi-plus" (click)="openCreateCategoryDialog()"></button>
+    </div>
   </header>
 
-  <div class="loading" *ngIf="loading">جاري تحميل إعدادات الأنواع...</div>
+  <p-progressSpinner *ngIf="loading" styleClass="global-spinner"></p-progressSpinner>
 
-  <div class="layout" *ngIf="!loading">
-    <aside>
-      <h3>الأنواع المتاحة</h3>
-      <ul>
-        <li
-          *ngFor="let item of subjectTypes"
-          [class.active]="selectedType?.categoryId === item.categoryId"
-          (click)="selectType(item)">
-          <strong>{{ item.categoryName }}</strong>
-          <span>المعرف: {{ item.categoryId }}</span>
-          <small>{{ toArabicTypeState(item) }}</small>
-        </li>
-      </ul>
-      <p class="empty-state" *ngIf="subjectTypes.length === 0">لا توجد أنواع متاحة للإدارة حالياً.</p>
-    </aside>
-
-    <section class="editor" *ngIf="selectedType">
-      <h3>إعدادات النوع - {{ selectedType.categoryName }}</h3>
-      <form [formGroup]="configForm">
-        <label class="check"><input type="checkbox" formControlName="isActive" /> تفعيل هذا النوع</label>
-        <label class="check"><input type="checkbox" formControlName="referencePolicyEnabled" /> تفعيل سياسة الترقيم المرجعي</label>
-        <label class="check"><input type="checkbox" formControlName="includeYear" /> تضمين السنة في المرجع</label>
-        <label class="check"><input type="checkbox" formControlName="useSequence" /> استخدام الترقيم التسلسلي</label>
-
-        <div class="field">
-          <label>بادئة المرجع *</label>
-          <input type="text" formControlName="referencePrefix" />
-          <small class="error" *ngIf="shouldShowError('referencePrefix')">{{ getControlErrorMessage('referencePrefix') }}</small>
+  <p-splitter *ngIf="!loading" [panelSizes]="[28, 72]" [minSizes]="[20, 40]" [style]="{ height: 'calc(100vh - 270px)' }" styleClass="workspace-splitter">
+    <ng-template pTemplate>
+      <div class="tree-panel">
+        <div class="panel-head">
+          <h3>شجرة أنواع الطلبات</h3>
+          <small>يدعم السحب والإفلات لإعادة ترتيب الشجرة</small>
         </div>
 
-        <div class="field">
-          <label>فاصل المرجع</label>
-          <input type="text" formControlName="referenceSeparator" />
+        <p-tree
+          [value]="categoryTree"
+          selectionMode="single"
+          [(selection)]="selectedCategoryNode"
+          [draggableNodes]="true"
+          [droppableNodes]="true"
+          (onNodeSelect)="onCategoryNodeSelect($event)"
+          (onNodeDrop)="onCategoryTreeDrop($event)">
+          <ng-template let-node pTemplate="default">
+            <div class="tree-node-row">
+              <span class="node-title">{{ node.label }}</span>
+              <span class="node-status" [class.inactive]="!node.data?.isActive">{{ node.data?.isActive ? 'مفعل' : 'غير مفعل' }}</span>
+            </div>
+          </ng-template>
+        </p-tree>
+      </div>
+    </ng-template>
+
+    <ng-template pTemplate>
+      <div class="content-panel" *ngIf="selectedCategory; else noSelection">
+        <div class="selected-title">
+          <h3>{{ selectedCategory.categoryName }}</h3>
+          <span>المعرف: {{ selectedCategory.categoryId }}</span>
         </div>
 
-        <div class="field">
-          <label>مفاتيح الحقول المصدر</label>
-          <input type="text" formControlName="sourceFieldKeys" placeholder="حقل1,حقل2,حقل3" />
-        </div>
+        <p-tabView [(activeIndex)]="activeTabIndex">
+          <p-tabPanel header="البيانات الأساسية">
+            <form class="form-grid" [formGroup]="categoryForm">
+              <div class="field">
+                <label>اسم النوع *</label>
+                <input pInputText type="text" formControlName="categoryName" />
+              </div>
 
-        <div class="field">
-          <label>اسم المتسلسل</label>
-          <input type="text" formControlName="sequenceName" />
-        </div>
-      </form>
+              <div class="field">
+                <label>معرف التطبيق</label>
+                <input pInputText type="text" formControlName="applicationId" />
+              </div>
 
-      <footer>
-        <button type="button" (click)="save()" [disabled]="saving || configForm.invalid">حفظ الإعدادات</button>
-      </footer>
-    </section>
-  </div>
+              <div class="field">
+                <label>بيانات وصفية</label>
+                <input pInputText type="text" formControlName="catMend" />
+              </div>
+
+              <div class="field">
+                <label>رقم مسار العمل</label>
+                <input pInputText type="number" formControlName="catWorkFlow" />
+              </div>
+
+              <div class="field">
+                <label>إلى</label>
+                <input pInputText type="text" formControlName="to" />
+              </div>
+
+              <div class="field">
+                <label>نسخة</label>
+                <input pInputText type="text" formControlName="cc" />
+              </div>
+
+              <div class="switches">
+                <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
+                <label><span>إشعارات الرسائل النصية</span><p-inputSwitch formControlName="catSms"></p-inputSwitch></label>
+                <label><span>إشعارات البريد الإلكتروني</span><p-inputSwitch formControlName="catMailNotification"></p-inputSwitch></label>
+              </div>
+            </form>
+
+            <div class="actions-row">
+              <button pButton type="button" label="حفظ البيانات الأساسية" icon="pi pi-save" [loading]="savingCategory" (click)="saveCategory()"></button>
+              <button pButton type="button" label="حذف النوع" icon="pi pi-trash" class="p-button-danger p-button-outlined" (click)="deleteCategory()"></button>
+            </div>
+          </p-tabPanel>
+
+          <p-tabPanel header="الحقول الديناميكية">
+            <app-dynamic-fields-manager
+              [embeddedMode]="true"
+              [selectedCategoryId]="selectedCategory.categoryId || null"
+              [selectedApplicationId]="selectedCategory.applicationId || null"
+              (fieldsChanged)="onFieldsChanged()">
+            </app-dynamic-fields-manager>
+          </p-tabPanel>
+
+          <p-tabPanel header="الجروبات">
+            <div class="tab-head-actions">
+              <button pButton type="button" icon="pi pi-plus" label="إضافة جروب" (click)="openCreateGroupDialog()"></button>
+            </div>
+
+            <p-table [value]="groups" responsiveLayout="scroll" styleClass="p-datatable-sm">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>المعرف</th>
+                  <th>اسم الجروب</th>
+                  <th>الوصف</th>
+                  <th>قابل للتكرار</th>
+                  <th>عدد الحقول</th>
+                  <th>إجراءات</th>
+                </tr>
+              </ng-template>
+
+              <ng-template pTemplate="body" let-group>
+                <tr>
+                  <td>{{ group.groupId }}</td>
+                  <td>{{ group.groupName || '-' }}</td>
+                  <td>{{ group.groupDescription || '-' }}</td>
+                  <td>{{ group.isExtendable ? 'نعم' : 'لا' }}</td>
+                  <td>{{ group.linkedFieldsCount }}</td>
+                  <td class="actions-col">
+                    <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text"
+                      (click)="openEditGroupDialog(group)"></button>
+                    <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger"
+                      (click)="deleteGroup(group)"></button>
+                  </td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </p-tabPanel>
+
+          <p-tabPanel header="ربط الحقول بالجروبات">
+            <div class="tab-head-actions">
+              <button pButton type="button" icon="pi pi-plus" label="إضافة ربط" class="p-button-outlined" (click)="addEmptyLink()"></button>
+              <button pButton type="button" icon="pi pi-save" label="حفظ الربط" [loading]="savingLinks" (click)="saveLinks()"></button>
+            </div>
+
+            <p-table [value]="editableLinks" [loading]="loadingLinks" responsiveLayout="scroll" styleClass="p-datatable-sm">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th style="width: 90px;">الترتيب</th>
+                  <th>الحقل</th>
+                  <th>الجروب</th>
+                  <th style="width: 110px;">مفعل</th>
+                  <th style="width: 110px;">مرئي</th>
+                  <th>إعدادات عرض</th>
+                  <th style="width: 80px;">حذف</th>
+                </tr>
+              </ng-template>
+
+              <ng-template pTemplate="body" let-link let-rowIndex="rowIndex">
+                <tr>
+                  <td>
+                    <input pInputText type="number" [(ngModel)]="link.displayOrder" [ngModelOptions]="{ standalone: true }" />
+                  </td>
+                  <td>
+                    <p-dropdown
+                      [options]="toFieldOptions()"
+                      [(ngModel)]="link.fieldKey"
+                      [ngModelOptions]="{ standalone: true }"
+                      appendTo="body">
+                    </p-dropdown>
+                  </td>
+                  <td>
+                    <p-dropdown
+                      [options]="toGroupOptions()"
+                      [(ngModel)]="link.groupId"
+                      [ngModelOptions]="{ standalone: true }"
+                      appendTo="body">
+                    </p-dropdown>
+                  </td>
+                  <td><p-inputSwitch [(ngModel)]="link.isActive" [ngModelOptions]="{ standalone: true }"></p-inputSwitch></td>
+                  <td><p-inputSwitch [(ngModel)]="link.isVisible" [ngModelOptions]="{ standalone: true }"></p-inputSwitch></td>
+                  <td>
+                    <input pInputText type="text" [(ngModel)]="link.displaySettingsJson" [ngModelOptions]="{ standalone: true }" />
+                  </td>
+                  <td class="actions-col">
+                    <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger"
+                      (click)="removeLink(rowIndex)"></button>
+                  </td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </p-tabPanel>
+
+          <p-tabPanel header="الإعدادات">
+            <form class="form-grid" [formGroup]="settingsForm">
+              <div class="field">
+                <label>تفعيل سياسة الترقيم</label>
+                <p-inputSwitch formControlName="referencePolicyEnabled"></p-inputSwitch>
+              </div>
+
+              <div class="field">
+                <label>بادئة المرجع *</label>
+                <input pInputText type="text" formControlName="referencePrefix" />
+              </div>
+
+              <div class="field">
+                <label>فاصل المرجع</label>
+                <input pInputText type="text" formControlName="referenceSeparator" />
+              </div>
+
+              <div class="field">
+                <label>حقول المصدر (مفصولة بفاصلة)</label>
+                <input pInputText type="text" formControlName="sourceFieldKeys" />
+              </div>
+
+              <div class="field">
+                <label>اسم التسلسل</label>
+                <input pInputText type="text" formControlName="sequenceName" />
+              </div>
+
+              <div class="switches">
+                <label><span>تضمين السنة</span><p-inputSwitch formControlName="includeYear"></p-inputSwitch></label>
+                <label><span>استخدام تسلسل رقمي</span><p-inputSwitch formControlName="useSequence"></p-inputSwitch></label>
+              </div>
+            </form>
+
+            <div class="actions-row">
+              <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" (click)="saveCategorySettings()"></button>
+            </div>
+          </p-tabPanel>
+
+          <p-tabPanel header="المعاينة">
+            <div class="preview-loading" *ngIf="loadingPreview">
+              <p-progressSpinner></p-progressSpinner>
+            </div>
+
+            <div *ngIf="!loadingPreview" class="preview-container" [formGroup]="previewForm">
+              <ng-container *ngIf="previewGroups.length > 0; else emptyPreview">
+                <section class="preview-group" *ngFor="let group of previewGroups">
+                  <header>
+                    <h4>{{ getPreviewGroupTitle(group) }}</h4>
+                    <span>{{ group.fields.length }} حقل</span>
+                  </header>
+
+                  <div class="preview-fields">
+                    <div class="preview-field" *ngFor="let item of group.fields">
+                      <label>{{ item.definition.fieldLabel || item.definition.fieldKey }}</label>
+
+                      <ng-container *ngIf="isSelectField(item.definition); else nonSelectField">
+                        <select class="field-control" [formControlName]="item.controlName" [disabled]="true">
+                          <option value="">اختر...</option>
+                          <option *ngFor="let option of parseFieldOptions(item.definition)" [value]="option.value">{{ option.label }}</option>
+                        </select>
+                      </ng-container>
+
+                      <ng-template #nonSelectField>
+                        <ng-container *ngIf="isBooleanField(item.definition); else nonBooleanField">
+                          <input type="checkbox" [formControlName]="item.controlName" [disabled]="true" />
+                        </ng-container>
+                      </ng-template>
+
+                      <ng-template #nonBooleanField>
+                        <ng-container *ngIf="isTextareaField(item.definition); else regularInputField">
+                          <textarea class="field-control" [formControlName]="item.controlName" [readonly]="true"></textarea>
+                        </ng-container>
+                      </ng-template>
+
+                      <ng-template #regularInputField>
+                        <input class="field-control"
+                          [type]="isDateField(item.definition) ? 'date' : (isNumberField(item.definition) ? 'number' : 'text')"
+                          [formControlName]="item.controlName"
+                          [readonly]="true" />
+                      </ng-template>
+                    </div>
+                  </div>
+                </section>
+              </ng-container>
+
+              <ng-template #emptyPreview>
+                <p class="empty-state">لا توجد حقول مهيأة للمعاينة لهذا النوع.</p>
+              </ng-template>
+            </div>
+          </p-tabPanel>
+        </p-tabView>
+      </div>
+    </ng-template>
+  </p-splitter>
+
+  <ng-template #noSelection>
+    <div class="no-selection">اختر نوعًا من الشجرة للبدء.</div>
+  </ng-template>
 </section>
+
+<p-dialog
+  [(visible)]="groupDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(560px, 95vw)' }"
+  [header]="editingGroupId ? 'تعديل جروب' : 'إضافة جروب'"
+  appendTo="body">
+  <form class="form-grid" [formGroup]="groupForm">
+    <div class="field">
+      <label>اسم الجروب *</label>
+      <input pInputText type="text" formControlName="groupName" />
+    </div>
+
+    <div class="field">
+      <label>الوصف</label>
+      <input pInputText type="text" formControlName="groupDescription" />
+    </div>
+
+    <div class="field">
+      <label>عدد العناصر في الصف</label>
+      <input pInputText type="number" formControlName="groupWithInRow" />
+    </div>
+
+    <div class="field switch-inline">
+      <label>قابل للتكرار</label>
+      <p-inputSwitch formControlName="isExtendable"></p-inputSwitch>
+    </div>
+  </form>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="إلغاء" class="p-button-text" (click)="groupDialogVisible = false"></button>
+    <button pButton type="button" label="حفظ" icon="pi pi-save" (click)="saveGroup()"></button>
+  </ng-template>
+</p-dialog>
+
+<p-dialog
+  [(visible)]="createCategoryDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(760px, 95vw)' }"
+  header="إضافة نوع جديد"
+  appendTo="body">
+  <form class="form-grid" [formGroup]="createCategoryForm">
+    <div class="field">
+      <label>الأب</label>
+      <input pInputText type="number" formControlName="parentCategoryId" />
+    </div>
+
+    <div class="field">
+      <label>اسم النوع *</label>
+      <input pInputText type="text" formControlName="categoryName" />
+    </div>
+
+    <div class="field">
+      <label>معرف التطبيق</label>
+      <input pInputText type="text" formControlName="applicationId" />
+    </div>
+
+    <div class="field">
+      <label>رقم مسار العمل</label>
+      <input pInputText type="number" formControlName="catWorkFlow" />
+    </div>
+
+    <div class="field">
+      <label>بيانات وصفية</label>
+      <input pInputText type="text" formControlName="catMend" />
+    </div>
+
+    <div class="field">
+      <label>إلى</label>
+      <input pInputText type="text" formControlName="to" />
+    </div>
+
+    <div class="field">
+      <label>نسخة</label>
+      <input pInputText type="text" formControlName="cc" />
+    </div>
+
+    <div class="switches">
+      <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
+      <label><span>إشعارات الرسائل النصية</span><p-inputSwitch formControlName="catSms"></p-inputSwitch></label>
+      <label><span>إشعارات البريد الإلكتروني</span><p-inputSwitch formControlName="catMailNotification"></p-inputSwitch></label>
+    </div>
+  </form>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="إلغاء" class="p-button-text" (click)="createCategoryDialogVisible = false"></button>
+    <button pButton type="button" label="إنشاء" icon="pi pi-check" [loading]="savingCategory" (click)="createCategory()"></button>
+  </ng-template>
+</p-dialog>

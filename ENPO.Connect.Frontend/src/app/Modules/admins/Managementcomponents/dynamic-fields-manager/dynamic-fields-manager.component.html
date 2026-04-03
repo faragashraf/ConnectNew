@@ -1,201 +1,178 @@
-<div class="dfm-container" dir="rtl" [class.dfm--dark]="isDarkMode" [class.dfm--compact]="compactMode" [class.dfm--high-contrast]="highContrast" [class.animations-disabled]="disableAnimations">
-    
-    <!-- HEADER -->
-    <div class="dfm-header">
-        <div class="header-content">
-            <div class="icon-box">
-                <i class="pi pi-cog"></i>
-            </div>
-            <div class="text-box">
-                <h1>إدارة الحقول</h1>
-                <p>Fields Manager - System Configuration & Controls</p>
-            </div>
-        </div>
-        <div class="header-actions">
-            <div class="action-group">
-                <button pButton type="button" class="p-button-outlined p-button-sm" (click)="toggleCompactMode()" pTooltip="Toggle Compact/Dense View" [class.p-button-primary]="compactMode" [attr.aria-pressed]="compactMode">
-                    <i class="pi pi-bars"></i>
-                </button>
-                <button pButton type="button" class="p-button-outlined p-button-sm" (click)="toggleDarkMode()" pTooltip="Toggle Dark Mode" [class.p-button-primary]="isDarkMode" [attr.aria-pressed]="isDarkMode">
-                    <i class="pi" [ngClass]="isDarkMode ? 'pi-sun' : 'pi-moon'"></i>
-                </button>
-                <button pButton type="button" class="p-button-outlined p-button-sm" (click)="toggleHighContrast()" pTooltip="High Contrast" [class.p-button-primary]="highContrast" [attr.aria-pressed]="highContrast">
-                    <i class="pi pi-eye"></i>
-                </button>
-            </div>
-        </div>
+<div class="dfm-shell" dir="rtl">
+  <section class="dfm-header" *ngIf="!embeddedMode">
+    <div>
+      <h2>إدارة الحقول الديناميكية</h2>
+      <p>تعريف الحقول الديناميكية المستخدمة في جميع أنواع الطلبات.</p>
     </div>
-
-    <!-- STATISTICS GRID -->
-    <div class="dfm-stats-grid">
-        <div class="stat-card is-indigo">
-            <div class="stat-icon">
-                <i class="pi pi-sitemap"></i>
-            </div>
-            <div class="stat-info">
-                <span class="stat-value">{{ stats.apps }}</span>
-                <span class="stat-label">Applications</span>
-            </div>
-        </div>
-
-        <div class="stat-card is-blue">
-            <div class="stat-icon">
-                <i class="pi pi-folder"></i>
-            </div>
-            <div class="stat-info">
-                <span class="stat-value">{{ stats.types }}</span>
-                <span class="stat-label">Field Types</span>
-            </div>
-        </div>
-
-        <div class="stat-card is-amber">
-            <div class="stat-icon">
-                <i class="pi pi-file"></i>
-            </div>
-            <div class="stat-info">
-                <span class="stat-value">{{ stats.fields }}</span>
-                <span class="stat-label">Total Fields</span>
-            </div>
-        </div>
-
-        <div class="stat-card is-green clickable" [class.is-selected]="filterStatus === 'active'" (click)="filterByStatus('active')">
-            <div class="stat-icon">
-                <i class="pi pi-check-circle"></i>
-            </div>
-            <div class="stat-info">
-                <span class="stat-value">{{ stats.active }}</span>
-                <span class="stat-label">Active Fields</span>
-            </div>
-        </div>
-
-        <div class="stat-card is-red clickable" [class.is-selected]="filterStatus === 'inactive'" (click)="filterByStatus('inactive')">
-            <div class="stat-icon">
-                <i class="pi pi-times-circle"></i>
-            </div>
-            <div class="stat-info">
-                <span class="stat-value">{{ stats.inactive }}</span>
-                <span class="stat-label">Inactive Fields</span>
-            </div>
-        </div>
+    <div class="actions">
+      <button pButton type="button" label="تحديث" icon="pi pi-refresh" class="p-button-outlined" (click)="loadFields()"></button>
+      <button pButton type="button" label="إضافة حقل" icon="pi pi-plus" (click)="openCreateDialog()"></button>
     </div>
+  </section>
 
-    <!-- TOOLBAR -->
-    <div class="dfm-toolbar">
-        <div class="toolbar-group">
-            <button pButton type="button" class="p-button-success p-button-md" (click)="showAddFieldDialog()"
-                    pTooltip="Add New Field">
-                <i class="pi pi-plus"></i>
-                <span class="p-mr-2">Add Field</span>
-            </button>
+  <section class="dfm-toolbar">
+    <button pButton type="button" label="إضافة" icon="pi pi-plus" class="p-button-success"
+      *ngIf="embeddedMode" (click)="openCreateDialog()"></button>
 
+    <span class="search-box">
+      <i class="pi pi-search"></i>
+      <input pInputText type="text" [(ngModel)]="searchTerm" placeholder="بحث بالاسم أو النوع أو التطبيق" />
+    </span>
 
-             <button pButton type="button" class="p-button-outlined p-button-info p-button-md" (click)="expandAll()"
-                    pTooltip="Expand All">
-                <i class="pi pi-angle-double-down"></i>
-                <span class="p-mr-2">Expand All</span>
-            </button>
-            <button pButton type="button" class="p-button-outlined p-button-info p-button-md" (click)="collapseAll()"
-                pTooltip="Collapse All">
-                <i class="pi pi-angle-double-up"></i>
-                <span class="p-mr-2">Collapse All</span>
-            </button>
+    <p-dropdown
+      *ngIf="!embeddedMode"
+      [options]="appOptions"
+      [(ngModel)]="appFilter"
+      (onChange)="onStandaloneAppFilterChange()"
+      [showClear]="true"
+      placeholder="تصفية حسب التطبيق"
+      appendTo="body">
+    </p-dropdown>
 
-            <button pButton type="button" class="p-button-outlined p-button-secondary p-button-md" (click)="exportData()"
-                    pTooltip="Export Data">
-                <i class="pi pi-download"></i>
-                <span class="p-mr-2">Export</span>
-            </button>
-        </div>
+    <p-dropdown
+      [options]="[
+        { label: 'الكل', value: 'all' },
+        { label: 'مفعل فقط', value: 'active' },
+        { label: 'غير مفعل فقط', value: 'inactive' }
+      ]"
+      [(ngModel)]="statusFilter"
+      placeholder="حالة الحقل"
+      appendTo="body">
+    </p-dropdown>
+  </section>
 
-        <div class="toolbar-group">
-            <span class="search-wrapper">
-                <i class="pi pi-search search-icon"></i>
-                <input type="text" pInputText placeholder="Search fields..." 
-                       [(ngModel)]="searchTerm" (input)="onSearch($event)" />
-            </span>
-            
-            <p-dropdown [options]="applicationFilters" [(ngModel)]="selectedAppFilter" 
-                        placeholder="Filter by App" (onChange)="onApplicationFilter($event)" 
-                        [style]="{'min-width':'180px'}" appendTo="body" [filter]="true">
-            </p-dropdown>
-        </div>
-    </div>
+  <p-table [value]="filteredFields" [loading]="loading" responsiveLayout="scroll" styleClass="p-datatable-sm">
+    <ng-template pTemplate="header">
+      <tr>
+        <th>المفتاح</th>
+        <th>الاسم</th>
+        <th>النوع</th>
+        <th>التطبيق</th>
+        <th>مربوط بأنواع</th>
+        <th>الحالة</th>
+        <th class="actions-col">إجراءات</th>
+      </tr>
+    </ng-template>
 
-    <!-- MAIN CONTENT AREA -->
-    <div class="dfm-content">
-        <div class="content-header">
-            <h3>
-                <i class="pi pi-list-check"></i>
-                <span>Fields Hierarchy</span>
-            </h3>
-        </div>
+    <ng-template pTemplate="body" let-item>
+      <tr>
+        <td><code>{{ item.fieldKey }}</code></td>
+        <td>{{ item.fieldLabel || '-' }}</td>
+        <td>{{ item.fieldType }}</td>
+        <td>{{ item.applicationId || '-' }}</td>
+        <td>{{ item.linkedCategoriesCount }}</td>
+        <td>
+          <span class="status" [class.active]="item.isActive" [class.inactive]="!item.isActive">
+            {{ item.isActive ? 'مفعل' : 'غير مفعل' }}
+          </span>
+        </td>
+        <td class="actions-col">
+          <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text"
+            pTooltip="تعديل" tooltipPosition="top" (click)="openEditDialog(item)"></button>
+          <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger"
+            pTooltip="حذف" tooltipPosition="top" (click)="deleteField(item)"></button>
+        </td>
+      </tr>
+    </ng-template>
 
-        <!-- ACCORDION VIEW -->
-        <div class="accordion-view-container">
-            <p-accordion [multiple]="true" expandIcon="pi pi-chevron-left" collapseIcon="pi pi-chevron-down">
-                <p-accordionTab *ngFor="let app of groupedFields" [selected]="app.expanded">
-                    <ng-template pTemplate="header">
-                        <div class="flex-center w-100">
-                            <i class="pi pi-sitemap p-ml-2 text-primary"></i>
-                            <span class="font-bold text-lg">{{ app.data?.applicationId }}</span>
-                            <span class="badge-pill bg-indigo p-mr-auto">{{ app.children?.length || 0 }} Types</span>
-                        </div>
-                    </ng-template>
-
-                    <p-accordion [multiple]="true" class="p-mt-2" expandIcon="pi pi-chevron-left" collapseIcon="pi pi-chevron-down">
-                        <p-accordionTab *ngFor="let type of app.children" [selected]="type.expanded">
-                            <ng-template pTemplate="header">
-                                <div class="flex-center w-100">
-                                    <i class="pi pi-folder p-ml-2 text-secondary"></i>
-                                    <span class="font-semibold">{{ type.data?.cdmendType }}</span>
-                                    <span class="badge-pill bg-slate p-mr-auto">{{ type.children?.length || 0 }} Fields</span>
-                                </div>
-                            </ng-template>
-    
-                            <div class="grid-auto-fit">
-                                <div *ngFor="let field of type.children" class="field-card">
-                                    <div class="card-header">
-                                        <div class="title-group">
-                                            <span class="status-dot" [ngClass]="field.data?.cdmendStat ? 'is-active' : 'is-inactive'"></span>
-                                            <h4>{{ field.data?.cdMendLbl }}</h4>
-                                        </div>
-                                    </div>
-                                    <div class="card-body">
-                                        <code>{{ field.data?.cdmendTxt }}</code>
-                                        <div class="p-mt-2">
-                                            <small class="text-muted block mb-1">Type</small>
-                                            <span class="badge-pill bg-slate">{{ field.data?.cdmendType }}</span>
-                                        </div>
-                                    </div>
-                                    <div class="card-actions">
-                                        <button pButton type="button" icon="pi pi-eye" class="p-button-outlined p-button-sm p-button-info"
-                                            (click)="openFieldDialog(field.data)" pTooltip="View Details"></button>
-                                    </div>
-                                </div>
-                            </div>
-                        </p-accordionTab>
-                    </p-accordion>
-                </p-accordionTab>
-            </p-accordion>
-        </div>
-    </div>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="7" class="empty-row">لا توجد بيانات متاحة.</td>
+      </tr>
+    </ng-template>
+  </p-table>
 </div>
 
+<p-dialog
+  [(visible)]="dialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(980px, 95vw)' }"
+  [header]="getDialogTitle()"
+  appendTo="body">
 
-<!-- Field Details / Edit Dialog (Unified) -->
-<app-generic-element-details 
-    [(visible)]="displayFieldDialog"
-    [field]="selectedFieldForDialog"
-    [fieldForm]="fieldForm"
-    [cdmendTbl]="cdmendTbl"
-    [isEditing]="isEditing"
-    [fieldTypes]="fieldTypes"
-    [headerTitle]="selectedFieldForDialog.cdmendTxt ? 'Field Details & Edit' : 'Add New Field'"
-    (onClose)="closeFieldDialog()"
-    (tree)="refreshTree()"
-    *ngIf="displayFieldDialog && (selectedFieldForDialog?.cdmendTxt || true)">
-</app-generic-element-details>
-<!-- Note: If selectedFieldForDialog is null (Add Mode), app-generic-element-details must handle it. 
-     If it doesn't, we might need a fallback. Based on code, it binds to [field]. 
--->
- <p-dialog [(visible)]="displayFieldDialog" *ngIf="false"></p-dialog>
+  <form class="field-form" [formGroup]="form">
+    <div class="grid two-cols">
+      <div class="field">
+        <label>مفتاح الحقل *</label>
+        <input pInputText type="text" formControlName="fieldKey" />
+      </div>
+
+      <div class="field">
+        <label>اسم العرض *</label>
+        <input pInputText type="text" formControlName="fieldLabel" />
+      </div>
+
+      <div class="field">
+        <label>نوع الحقل *</label>
+        <p-dropdown [options]="fieldTypes" optionLabel="label" optionValue="value" formControlName="fieldType" appendTo="body"></p-dropdown>
+      </div>
+
+      <div class="field">
+        <label>التطبيق *</label>
+        <input pInputText type="text" formControlName="applicationId" />
+      </div>
+
+      <div class="field">
+        <label>النص الإرشادي</label>
+        <input pInputText type="text" formControlName="placeholder" />
+      </div>
+
+      <div class="field">
+        <label>القيمة الافتراضية</label>
+        <input pInputText type="text" formControlName="defaultValue" />
+      </div>
+
+      <div class="field">
+        <label>نوع البيانات</label>
+        <input pInputText type="text" formControlName="dataType" />
+      </div>
+
+      <div class="field">
+        <label>قناع الإدخال</label>
+        <input pInputText type="text" formControlName="mask" />
+      </div>
+
+      <div class="field">
+        <label>أقل قيمة</label>
+        <input pInputText type="text" formControlName="minValue" />
+      </div>
+
+      <div class="field">
+        <label>أقصى قيمة</label>
+        <input pInputText type="text" formControlName="maxValue" />
+      </div>
+
+      <div class="field">
+        <label>العرض</label>
+        <input pInputText type="number" formControlName="width" />
+      </div>
+
+      <div class="field">
+        <label>الارتفاع</label>
+        <input pInputText type="number" formControlName="height" />
+      </div>
+    </div>
+
+    <div class="field" *ngIf="isOptionsTypeSelected()">
+      <label>خيارات الحقل (JSON أو نص مفصول بفاصلة)</label>
+      <textarea pInputTextarea rows="4" formControlName="optionsPayload"></textarea>
+    </div>
+
+    <div class="toggles">
+      <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
+      <label><span>مطلوب</span><p-inputSwitch formControlName="required"></p-inputSwitch></label>
+      <label><span>يشترط القيمة (True)</span><p-inputSwitch formControlName="requiredTrue"></p-inputSwitch></label>
+      <label><span>تحقق البريد الإلكتروني</span><p-inputSwitch formControlName="email"></p-inputSwitch></label>
+      <label><span>تحقق النمط</span><p-inputSwitch formControlName="pattern"></p-inputSwitch></label>
+      <label><span>معطل مبدئيًا</span><p-inputSwitch formControlName="isDisabledInit"></p-inputSwitch></label>
+      <label><span>قابل للبحث</span><p-inputSwitch formControlName="isSearchable"></p-inputSwitch></label>
+    </div>
+  </form>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="إلغاء" class="p-button-text" (click)="dialogVisible = false"></button>
+    <button pButton type="button" label="حفظ" icon="pi pi-check" [loading]="saving" (click)="saveField()"></button>
+  </ng-template>
+</p-dialog>

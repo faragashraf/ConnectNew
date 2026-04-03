@@ -20,6 +20,8 @@ public sealed class SubjectCategoryTreeNodeDto
 
     public bool CanCreate { get; set; }
 
+    public int DisplayOrder { get; set; }
+
     public List<SubjectCategoryTreeNodeDto> Children { get; set; } = new();
 }
 
@@ -81,6 +83,12 @@ public sealed class SubjectFieldDefinitionDto
     public int Height { get; set; }
 
     public string? ApplicationId { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public bool IsVisible { get; set; } = true;
+
+    public string? DisplaySettingsJson { get; set; }
 
     public SubjectGroupDefinitionDto? Group { get; set; }
 }
@@ -531,11 +539,27 @@ public sealed class SubjectTypeAdminDto
 
     public string? ApplicationId { get; set; }
 
+    public string? CatMend { get; set; }
+
+    public int CatWorkFlow { get; set; }
+
+    public bool CatSms { get; set; }
+
+    public bool CatMailNotification { get; set; }
+
+    public string? To { get; set; }
+
+    public string? Cc { get; set; }
+
     public bool IsActive { get; set; }
 
     public bool HasDynamicFields { get; set; }
 
     public bool CanCreate { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public string? SettingsJson { get; set; }
 
     public int? ReferencePolicyId { get; set; }
 
@@ -575,6 +599,229 @@ public sealed class SubjectTypeAdminUpsertRequestDto
     public bool UseSequence { get; set; } = true;
 
     public string? SequenceName { get; set; }
+}
+
+public sealed class SubjectTypeAdminTreeMoveRequestDto
+{
+    public int NewParentCategoryId { get; set; }
+
+    public int NewIndex { get; set; }
+}
+
+public sealed class SubjectTypeAdminStatusRequestDto
+{
+    public bool IsActive { get; set; } = true;
+}
+
+public sealed class SubjectTypeAdminCreateRequestDto
+{
+    public int ParentCategoryId { get; set; }
+
+    public string CategoryName { get; set; } = string.Empty;
+
+    public string? ApplicationId { get; set; }
+
+    public string? CatMend { get; set; }
+
+    public int CatWorkFlow { get; set; }
+
+    public bool CatSms { get; set; }
+
+    public bool CatMailNotification { get; set; }
+
+    public string? To { get; set; }
+
+    public string? Cc { get; set; }
+
+    public bool IsActive { get; set; } = true;
+}
+
+public sealed class SubjectTypeAdminUpdateRequestDto
+{
+    public string CategoryName { get; set; } = string.Empty;
+
+    public string? ApplicationId { get; set; }
+
+    public string? CatMend { get; set; }
+
+    public int CatWorkFlow { get; set; }
+
+    public bool CatSms { get; set; }
+
+    public bool CatMailNotification { get; set; }
+
+    public string? To { get; set; }
+
+    public string? Cc { get; set; }
+
+    public bool IsActive { get; set; } = true;
+}
+
+public sealed class SubjectAdminFieldDto
+{
+    public int CdmendSql { get; set; }
+
+    public string FieldKey { get; set; } = string.Empty;
+
+    public string FieldType { get; set; } = string.Empty;
+
+    public string? FieldLabel { get; set; }
+
+    public string? Placeholder { get; set; }
+
+    public string? DefaultValue { get; set; }
+
+    public string? OptionsPayload { get; set; }
+
+    public string? DataType { get; set; }
+
+    public bool Required { get; set; }
+
+    public bool RequiredTrue { get; set; }
+
+    public bool Email { get; set; }
+
+    public bool Pattern { get; set; }
+
+    public string? MinValue { get; set; }
+
+    public string? MaxValue { get; set; }
+
+    public string? Mask { get; set; }
+
+    public bool IsActive { get; set; }
+
+    public int Width { get; set; }
+
+    public int Height { get; set; }
+
+    public bool IsDisabledInit { get; set; }
+
+    public bool IsSearchable { get; set; }
+
+    public string? ApplicationId { get; set; }
+
+    public int LinkedCategoriesCount { get; set; }
+}
+
+public sealed class SubjectAdminFieldUpsertRequestDto
+{
+    public int? CdmendSql { get; set; }
+
+    public string FieldKey { get; set; } = string.Empty;
+
+    public string FieldType { get; set; } = string.Empty;
+
+    public string? FieldLabel { get; set; }
+
+    public string? Placeholder { get; set; }
+
+    public string? DefaultValue { get; set; }
+
+    public string? OptionsPayload { get; set; }
+
+    public string? DataType { get; set; }
+
+    public bool Required { get; set; }
+
+    public bool RequiredTrue { get; set; }
+
+    public bool Email { get; set; }
+
+    public bool Pattern { get; set; }
+
+    public string? MinValue { get; set; }
+
+    public string? MaxValue { get; set; }
+
+    public string? Mask { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public int Width { get; set; }
+
+    public int Height { get; set; }
+
+    public bool IsDisabledInit { get; set; }
+
+    public bool IsSearchable { get; set; }
+
+    public string? ApplicationId { get; set; }
+}
+
+public sealed class SubjectAdminGroupDto
+{
+    public int GroupId { get; set; }
+
+    public string? GroupName { get; set; }
+
+    public string? GroupDescription { get; set; }
+
+    public bool IsExtendable { get; set; }
+
+    public short? GroupWithInRow { get; set; }
+
+    public int LinkedFieldsCount { get; set; }
+}
+
+public sealed class SubjectAdminGroupUpsertRequestDto
+{
+    public string? GroupName { get; set; }
+
+    public string? GroupDescription { get; set; }
+
+    public bool IsExtendable { get; set; }
+
+    public short? GroupWithInRow { get; set; }
+}
+
+public sealed class SubjectCategoryFieldLinkAdminDto
+{
+    public int MendSql { get; set; }
+
+    public int CategoryId { get; set; }
+
+    public string FieldKey { get; set; } = string.Empty;
+
+    public string? FieldLabel { get; set; }
+
+    public string? FieldType { get; set; }
+
+    public int GroupId { get; set; }
+
+    public string? GroupName { get; set; }
+
+    public bool IsActive { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public bool IsVisible { get; set; } = true;
+
+    public string? DisplaySettingsJson { get; set; }
+
+    public string? ApplicationId { get; set; }
+}
+
+public sealed class SubjectCategoryFieldLinkUpsertItemDto
+{
+    public int? MendSql { get; set; }
+
+    public string FieldKey { get; set; } = string.Empty;
+
+    public int GroupId { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public int DisplayOrder { get; set; }
+
+    public bool IsVisible { get; set; } = true;
+
+    public string? DisplaySettingsJson { get; set; }
+}
+
+public sealed class SubjectCategoryFieldLinksUpsertRequestDto
+{
+    public List<SubjectCategoryFieldLinkUpsertItemDto> Links { get; set; } = new();
 }
 
 public sealed class DynamicSubjectRealtimeEventDto

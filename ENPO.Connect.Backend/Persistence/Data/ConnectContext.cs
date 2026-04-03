@@ -51,6 +51,10 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<SubjectReferencePolicy> SubjectReferencePolicies { get; set; }
 
+    public virtual DbSet<SubjectTypeAdminSetting> SubjectTypeAdminSettings { get; set; }
+
+    public virtual DbSet<SubjectCategoryFieldSetting> SubjectCategoryFieldSettings { get; set; }
+
     public virtual DbSet<SubjectStatusHistory> SubjectStatusHistories { get; set; }
 
     public virtual DbSet<SubjectTimelineEvent> SubjectTimelineEvents { get; set; }
@@ -623,6 +627,50 @@ public partial class ConnectContext : DbContext
             entity.HasIndex(e => e.CategoryId, "UX_SubjectReferencePolicies_CategoryID")
                 .IsUnique();
             entity.HasIndex(e => e.IsActive, "IX_SubjectReferencePolicies_IsActive");
+        });
+
+        modelBuilder.Entity<SubjectTypeAdminSetting>(entity =>
+        {
+            entity.ToTable("SubjectTypeAdminSettings");
+
+            entity.HasKey(e => e.CategoryId).HasName("PK_SubjectTypeAdminSettings");
+
+            entity.Property(e => e.CategoryId)
+                .HasColumnName("CategoryID")
+                .ValueGeneratedNever();
+            entity.Property(e => e.DisplayOrder).HasDefaultValue(0);
+            entity.Property(e => e.SettingsJson);
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.LastModifiedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasIndex(e => e.DisplayOrder, "IX_SubjectTypeAdminSettings_DisplayOrder");
+        });
+
+        modelBuilder.Entity<SubjectCategoryFieldSetting>(entity =>
+        {
+            entity.ToTable("SubjectCategoryFieldSettings");
+
+            entity.HasKey(e => e.MendSql).HasName("PK_SubjectCategoryFieldSettings");
+
+            entity.Property(e => e.MendSql)
+                .HasColumnName("MendSQL")
+                .ValueGeneratedNever();
+            entity.Property(e => e.DisplayOrder).HasDefaultValue(0);
+            entity.Property(e => e.IsVisible).HasDefaultValue(true);
+            entity.Property(e => e.DisplaySettingsJson);
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.LastModifiedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasIndex(e => e.DisplayOrder, "IX_SubjectCategoryFieldSettings_DisplayOrder");
+            entity.HasIndex(e => e.IsVisible, "IX_SubjectCategoryFieldSettings_IsVisible");
         });
 
         modelBuilder.Entity<SubjectStatusHistory>(entity =>

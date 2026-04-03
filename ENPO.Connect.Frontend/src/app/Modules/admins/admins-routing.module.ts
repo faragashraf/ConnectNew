@@ -144,7 +144,14 @@ const routes: Routes =
       path: 'DynamicSubjectTypes',
       component: DynamicSubjectTypeAdminComponent,
       canActivate: [AuthNewGuardService], data: {
-        func: 'ConnectSupperAdminFunc'
+        roleId: '2003'
+      }
+    },
+    {
+      path: 'DynamicSubjectManagement',
+      component: DynamicSubjectTypeAdminComponent,
+      canActivate: [AuthNewGuardService], data: {
+        roleId: '2003'
       }
     }
   ];

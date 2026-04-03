@@ -17,7 +17,7 @@ using System.Threading.Tasks;
 
 namespace Persistence.Services.DynamicSubjects;
 
-public sealed class DynamicSubjectsService : IDynamicSubjectsService
+public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -58,7 +58,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -66,6 +66,10 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var scopedCategories = await LoadScopedCategoriesAsync(unitIds, appId, cancellationToken);
 
             var categoryIds = scopedCategories.Select(cat => cat.CatId).ToHashSet();
+            var categorySettingsMap = await _connectContext.SubjectTypeAdminSettings
+                .AsNoTracking()
+                .Where(setting => categoryIds.Contains(setting.CategoryId))
+                .ToDictionaryAsync(setting => setting.CategoryId, cancellationToken);
             var categoriesWithFields = await _connectContext.CdCategoryMands
                 .AsNoTracking()
                 .Where(link => categoryIds.Contains(link.MendCategory) && !link.MendStat)
@@ -76,7 +80,15 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
 
             var lookup = scopedCategories
                 .GroupBy(cat => cat.CatParent)
-                .ToDictionary(group => group.Key, group => group.OrderBy(item => item.CatName).ToList());
+                .ToDictionary(
+                    group => group.Key,
+                    group => group
+                        .OrderBy(item =>
+                            categorySettingsMap.TryGetValue(item.CatId, out var setting)
+                                ? setting.DisplayOrder
+                                : int.MaxValue)
+                        .ThenBy(item => item.CatName)
+                        .ToList());
 
             List<SubjectCategoryTreeNodeDto> BuildChildren(int parentId)
             {
@@ -94,6 +106,9 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
                     ApplicationId = category.ApplicationId,
                     HasDynamicFields = categoriesWithFieldsSet.Contains(category.CatId),
                     CanCreate = !category.CatStatus && categoriesWithFieldsSet.Contains(category.CatId),
+                    DisplayOrder = categorySettingsMap.TryGetValue(category.CatId, out var setting)
+                        ? setting.DisplayOrder
+                        : 0,
                     Children = BuildChildren(category.CatId)
                 }).ToList();
             }
@@ -120,7 +135,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -129,20 +144,20 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
                 .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
             if (category == null)
             {
-                response.Errors.Add(new Error { Code = "404", Message = "Category not found." });
+                response.Errors.Add(new Error { Code = "404", Message = "النوع غير موجود." });
                 return response;
             }
 
             if (category.CatStatus)
             {
-                response.Errors.Add(new Error { Code = "403", Message = "Category is inactive." });
+                response.Errors.Add(new Error { Code = "403", Message = "النوع غير مفعل." });
                 return response;
             }
 
             if (!string.IsNullOrWhiteSpace(appId)
                 && !string.Equals(category.ApplicationId ?? string.Empty, appId, StringComparison.OrdinalIgnoreCase))
             {
-                response.Errors.Add(new Error { Code = "404", Message = "Category is outside requested app scope." });
+                response.Errors.Add(new Error { Code = "404", Message = "النوع خارج نطاق التطبيق المطلوب." });
                 return response;
             }
 
@@ -152,8 +167,16 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
                                    join mandGroup in _connectContext.MandGroups.AsNoTracking()
                                         on link.MendGroup equals mandGroup.GroupId into groupJoin
                                    from mandGroup in groupJoin.DefaultIfEmpty()
-                                   where link.MendCategory == categoryId && !link.MendStat && !mend.CdmendStat
-                                   orderby link.MendGroup, link.MendSql
+                                   join fieldSetting in _connectContext.SubjectCategoryFieldSettings.AsNoTracking()
+                                        on link.MendSql equals fieldSetting.MendSql into fieldSettingJoin
+                                   from fieldSetting in fieldSettingJoin.DefaultIfEmpty()
+                                   where link.MendCategory == categoryId
+                                         && !link.MendStat
+                                         && !mend.CdmendStat
+                                         && (fieldSetting == null || fieldSetting.IsVisible)
+                                   orderby link.MendGroup,
+                                           fieldSetting != null ? fieldSetting.DisplayOrder : link.MendSql,
+                                           link.MendSql
                                    select new SubjectFieldDefinitionDto
                                    {
                                        MendSql = link.MendSql,
@@ -178,6 +201,9 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
                                        Width = mend.Width,
                                        Height = mend.Height,
                                        ApplicationId = mend.ApplicationId,
+                                       DisplayOrder = fieldSetting != null ? fieldSetting.DisplayOrder : link.MendSql,
+                                       IsVisible = fieldSetting == null || fieldSetting.IsVisible,
+                                       DisplaySettingsJson = fieldSetting != null ? fieldSetting.DisplaySettingsJson : null,
                                        Group = new SubjectGroupDefinitionDto
                                        {
                                            GroupId = link.MendGroup,
@@ -225,7 +251,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -342,7 +368,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -477,7 +503,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -517,7 +543,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -654,7 +680,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -757,7 +783,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -826,7 +852,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -905,7 +931,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -975,7 +1001,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -1080,7 +1106,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -1159,7 +1185,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -1241,7 +1267,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -1350,7 +1376,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -1383,7 +1409,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -1419,7 +1445,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -1474,7 +1500,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
@@ -1609,12 +1635,21 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
-            var unitIds = await GetCurrentUserUnitIdsAsync(normalizedUserId, cancellationToken);
-            var categories = await LoadScopedCategoriesAsync(unitIds, appId, cancellationToken);
+            IQueryable<Cdcategory> categoriesQuery = _connectContext.Cdcategories.AsNoTracking();
+            if (!string.IsNullOrWhiteSpace(appId))
+            {
+                categoriesQuery = categoriesQuery.Where(category =>
+                    string.Equals(category.ApplicationId ?? string.Empty, appId, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var categories = await categoriesQuery
+                .OrderBy(category => category.CatParent)
+                .ThenBy(category => category.CatName)
+                .ToListAsync(cancellationToken);
             var categoryIds = categories.Select(item => item.CatId).ToList();
 
             var categoriesWithFields = await _connectContext.CdCategoryMands
@@ -1629,14 +1664,23 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
                 .AsNoTracking()
                 .Where(policy => categoryIds.Contains(policy.CategoryId))
                 .ToDictionaryAsync(policy => policy.CategoryId, cancellationToken);
+            var settingsMap = await _connectContext.SubjectTypeAdminSettings
+                .AsNoTracking()
+                .Where(setting => categoryIds.Contains(setting.CategoryId))
+                .ToDictionaryAsync(setting => setting.CategoryId, cancellationToken);
 
             response.Data = categories
                 .OrderBy(category => category.CatParent)
+                .ThenBy(category =>
+                    settingsMap.TryGetValue(category.CatId, out var setting)
+                        ? setting.DisplayOrder
+                        : int.MaxValue)
                 .ThenBy(category => category.CatName)
                 .Select(category =>
                 {
                     policyMap.TryGetValue(category.CatId, out var policy);
-                    return BuildSubjectTypeAdminDto(category, categoriesWithFieldsSet.Contains(category.CatId), policy);
+                    settingsMap.TryGetValue(category.CatId, out var settings);
+                    return BuildSubjectTypeAdminDto(category, categoriesWithFieldsSet.Contains(category.CatId), policy, settings);
                 })
                 .ToList();
         }
@@ -1660,13 +1704,13 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedUserId = NormalizeUser(userId);
             if (normalizedUserId.Length == 0)
             {
-                response.Errors.Add(new Error { Code = "401", Message = "Unauthorized user." });
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
                 return response;
             }
 
             if (categoryId <= 0)
             {
-                response.Errors.Add(new Error { Code = "400", Message = "Category is required." });
+                response.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
                 return response;
             }
 
@@ -1675,14 +1719,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
                 .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
             if (category == null)
             {
-                response.Errors.Add(new Error { Code = "404", Message = "Category not found." });
-                return response;
-            }
-
-            var unitIds = await GetCurrentUserUnitIdsAsync(normalizedUserId, cancellationToken);
-            if (!HasCategoryAccess(categoryId, unitIds))
-            {
-                response.Errors.Add(new Error { Code = "403", Message = "Not allowed to configure this category." });
+                response.Errors.Add(new Error { Code = "404", Message = "النوع غير موجود." });
                 return response;
             }
 
@@ -1746,14 +1783,17 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             var hasDynamicFields = await _connectContext.CdCategoryMands
                 .AsNoTracking()
                 .AnyAsync(link => link.MendCategory == categoryId && !link.MendStat, cancellationToken);
+            var categorySetting = await _connectContext.SubjectTypeAdminSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(setting => setting.CategoryId == categoryId, cancellationToken);
 
-            response.Data = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy);
+            response.Data = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy, categorySetting);
 
             var scope = new DynamicSubjectRealtimeScope
             {
                 CategoryIds = new List<int> { categoryId },
                 UserIds = new List<string> { normalizedUserId },
-                UnitGroupIds = unitIds.ToList()
+                UnitGroupIds = new List<string>()
             };
             var payload = new DynamicSubjectRealtimeEventDto
             {
@@ -1791,7 +1831,7 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
         var categoryId = request?.CategoryId ?? 0;
         if (categoryId <= 0)
         {
-            errors.Add(new Error { Code = "400", Message = "Category is required." });
+            errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
             return (null, errors);
         }
 
@@ -1800,20 +1840,20 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
         if (category == null)
         {
-            errors.Add(new Error { Code = "404", Message = "Category not found." });
+            errors.Add(new Error { Code = "404", Message = "النوع غير موجود." });
             return (null, errors);
         }
 
         if (category.CatStatus)
         {
-            errors.Add(new Error { Code = "403", Message = "Category is inactive." });
+            errors.Add(new Error { Code = "403", Message = "النوع غير مفعل." });
             return (category, errors);
         }
 
         var unitIds = await GetCurrentUserUnitIdsAsync(userId, cancellationToken);
-        if (!HasCategoryAccess(category.CatId, unitIds))
+        if (!await HasCategoryAccessAsync(category.CatId, unitIds, cancellationToken))
         {
-            errors.Add(new Error { Code = "403", Message = "User cannot create requests for this category." });
+            errors.Add(new Error { Code = "403", Message = "غير مسموح بإنشاء طلبات على هذا النوع." });
         }
 
         return (category, errors);
@@ -1936,7 +1976,8 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
     private static SubjectTypeAdminDto BuildSubjectTypeAdminDto(
         Cdcategory category,
         bool hasDynamicFields,
-        SubjectReferencePolicy? policy)
+        SubjectReferencePolicy? policy,
+        SubjectTypeAdminSetting? settings)
     {
         return new SubjectTypeAdminDto
         {
@@ -1944,9 +1985,17 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
             ParentCategoryId = category.CatParent,
             CategoryName = category.CatName,
             ApplicationId = category.ApplicationId,
+            CatMend = category.CatMend,
+            CatWorkFlow = category.CatWorkFlow,
+            CatSms = category.CatSms,
+            CatMailNotification = category.CatMailNotification,
+            To = category.To,
+            Cc = category.Cc,
             IsActive = !category.CatStatus,
             HasDynamicFields = hasDynamicFields,
             CanCreate = hasDynamicFields && !category.CatStatus,
+            DisplayOrder = settings?.DisplayOrder ?? 0,
+            SettingsJson = settings?.SettingsJson,
             ReferencePolicyId = policy?.PolicyId,
             ReferencePolicyEnabled = policy?.IsActive == true,
             ReferencePrefix = policy?.Prefix,
@@ -2643,6 +2692,54 @@ public sealed class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return false;
+    }
+
+    private async Task<bool> HasCategoryAccessAsync(
+        int categoryId,
+        IReadOnlyCollection<string> unitIds,
+        CancellationToken cancellationToken)
+    {
+        if (HasCategoryAccess(categoryId, unitIds))
+        {
+            return true;
+        }
+
+        if (unitIds == null || unitIds.Count == 0)
+        {
+            return true;
+        }
+
+        var numericUnitIds = unitIds
+            .Select(unit => int.TryParse(unit, out var parsed) ? parsed : 0)
+            .Where(parsed => parsed > 0)
+            .ToHashSet();
+
+        if (numericUnitIds.Count == 0)
+        {
+            return true;
+        }
+
+        var parentMap = await _connectContext.Cdcategories
+            .AsNoTracking()
+            .Select(category => new { category.CatId, category.CatParent })
+            .ToDictionaryAsync(category => category.CatId, category => category.CatParent, cancellationToken);
+
+        if (parentMap.Count == 0 || !parentMap.ContainsKey(categoryId))
+        {
+            return false;
+        }
+
+        var cursor = categoryId;
+        var safety = 0;
+        while (safety++ < 150
+            && parentMap.TryGetValue(cursor, out var parentId)
+            && parentId > 0
+            && parentMap.ContainsKey(parentId))
+        {
+            cursor = parentId;
+        }
+
+        return numericUnitIds.Contains(60) || numericUnitIds.Contains(cursor);
     }
 
     private async Task<List<string>> GetCurrentUserUnitIdsAsync(string userId, CancellationToken cancellationToken)
