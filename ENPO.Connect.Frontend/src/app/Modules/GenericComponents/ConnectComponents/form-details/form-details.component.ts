@@ -39,6 +39,7 @@ export class FormDetailsComponent {
   @Input() formSubmited: boolean = false;
   @Input() fileParameters: FileParameter[] = [];
   @Input() customFilteredCategoryMand: CdCategoryMandDto[] = [];
+  @Input() previewOnly: boolean = false;
 
   selectedNode: TreeNode = {} as TreeNode
 
@@ -162,6 +163,25 @@ export class FormDetailsComponent {
   }
 
   ngOnChanges(changes: SimpleChanges) {
+    try { this.ensureConfigDefaults(); } catch (e) { }
+
+    if (changes['customFilteredCategoryMand']) {
+      const curr = changes['customFilteredCategoryMand'].currentValue as CdCategoryMandDto[] | undefined;
+      const prev = changes['customFilteredCategoryMand'].previousValue as CdCategoryMandDto[] | undefined;
+      const currLength = Array.isArray(curr) ? curr.length : 0;
+      const prevLength = Array.isArray(prev) ? prev.length : 0;
+
+      if (currLength > 0) {
+        this._lastPopulatedMessageId = null;
+        this.populateForm();
+      } else if (prevLength > 0) {
+        this.filtered_CategoryMand = [];
+        this.genericFormService.dynamicGroups = [];
+        this.initForm();
+        this.resetFormSnapshot();
+      }
+    }
+
     if (changes['messageDto']) {
       const curr = changes['messageDto'].currentValue;
       // Reset the duplicate-call guard so a new messageDto gets processed

@@ -1,7 +1,16 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
 .dfm-shell {
   direction: rtl;
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 0.9rem;
+  height: 100%;
+  min-height: 0;
 }
 
 .dfm-header {
@@ -16,19 +25,20 @@
 
   h2 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 1.08rem;
     color: #0f172a;
   }
 
   p {
     margin: 0.3rem 0 0;
     color: #64748b;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
   }
 
   .actions {
     display: flex;
     gap: 0.5rem;
+    flex-wrap: wrap;
   }
 }
 
@@ -39,7 +49,7 @@
   gap: 0.6rem;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 0.75rem;
+  padding: 0.72rem;
   background: #f8fafc;
 }
 
@@ -58,6 +68,16 @@
     min-width: 260px;
     padding-right: 2rem;
   }
+}
+
+.table-shell {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .actions-col {
@@ -89,15 +109,40 @@
   color: #64748b;
 }
 
+.dialog-body {
+  direction: rtl;
+}
+
 .field-form {
   display: grid;
   gap: 0.9rem;
 }
 
+.form-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.75rem;
+
+  h4 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 0.92rem;
+  }
+
+  p {
+    margin: 0.25rem 0 0;
+    color: #64748b;
+    font-size: 0.8rem;
+  }
+}
+
 .grid.two-cols {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
+  gap: 0.75rem;
 }
 
 .field {
@@ -105,7 +150,7 @@
   gap: 0.35rem;
 
   label {
-    font-size: 0.86rem;
+    font-size: 0.84rem;
     color: #1e293b;
     font-weight: 600;
   }
@@ -115,6 +160,48 @@
   color: #b91c1c;
   font-size: 0.78rem;
   line-height: 1.2;
+}
+
+.options-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.options-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.options-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+
+  th,
+  td {
+    border-bottom: 1px solid #edf2f7;
+    padding: 0.5rem;
+    text-align: right;
+    vertical-align: middle;
+  }
+
+  th {
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.79rem;
+    font-weight: 700;
+  }
+}
+
+.payload-preview textarea {
+  background: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.78rem;
+  direction: ltr;
+  text-align: left;
 }
 
 .toggles {
@@ -128,7 +215,7 @@
     justify-content: space-between;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
-    padding: 0.5rem 0.65rem;
+    padding: 0.48rem 0.65rem;
     background: #f8fafc;
 
     span {
@@ -139,8 +226,45 @@
   }
 }
 
-:host ::ng-deep .p-dialog .p-dialog-content {
-  overflow: visible;
+:host ::ng-deep .rtl-table,
+:host ::ng-deep .rtl-dialog,
+:host ::ng-deep .rtl-overlay-panel {
+  direction: rtl;
+  text-align: right;
+}
+
+:host ::ng-deep .table-shell .p-datatable-wrapper {
+  height: 100%;
+  min-height: 0;
+}
+
+:host ::ng-deep .table-shell .p-datatable {
+  height: 100%;
+}
+
+:host ::ng-deep .table-shell .p-datatable-scrollable-wrapper,
+:host ::ng-deep .table-shell .p-datatable-scrollable-view {
+  height: 100%;
+  min-height: 0;
+}
+
+:host ::ng-deep .table-shell .p-datatable-scrollable-body {
+  min-height: 0;
+}
+
+:host ::ng-deep .rtl-overlay-panel .p-dropdown-items {
+  text-align: right;
+}
+
+:host ::ng-deep .dynamic-field-dialog .p-dialog-header,
+:host ::ng-deep .dynamic-field-dialog .p-dialog-content,
+:host ::ng-deep .dynamic-field-dialog .p-dialog-footer {
+  direction: rtl;
+  text-align: right;
+}
+
+:host ::ng-deep .dynamic-field-dialog .p-dialog-content {
+  overflow: auto;
 }
 
 @media (max-width: 960px) {
@@ -157,4 +281,13 @@
   .search-box input {
     min-width: 220px;
   }
+
+  .options-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+:host-context(.field-library-panel) .dfm-shell {
+  min-height: min(30rem, 72vh);
 }

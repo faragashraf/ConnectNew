@@ -1,310 +1,424 @@
-<section class="workspace" dir="rtl">
+<section class="workspace" [class.management-mode]="managementMode" dir="rtl">
   <header class="workspace-header">
     <div>
-      <h2>لوحة الإدارة المركزية لأنواع الطلبات</h2>
-      <p>إدارة الشجرة، الحقول، الجروبات، الربط، الإعدادات، والمعاينة الحقيقية من نفس بيانات التعريف الديناميكية.</p>
+      <h2>إدارة أنواع الطلبات الديناميكية</h2>
+      <p>اختيار النوع من الشجرة ثم إدارة البيانات الأساسية والجروبات والحقول المرتبطة والمعاينة النهائية من شاشة واحدة.</p>
     </div>
 
     <div class="header-actions">
+      <button
+        pButton
+        *ngIf="managementMode"
+        type="button"
+        label="إضافة جروب"
+        icon="pi pi-plus"
+        class="p-button-outlined"
+        (click)="openCreateGroupDialog()"></button>
+      <button
+        pButton
+        *ngIf="managementMode"
+        type="button"
+        label="حفظ الربط"
+        icon="pi pi-save"
+        [loading]="savingLinks"
+        [disabled]="savingLinks || loadingLinks || !selectedCategory"
+        (click)="saveLinks()"></button>
       <button pButton type="button" label="تحديث" icon="pi pi-refresh" class="p-button-outlined" (click)="loadWorkspace()"></button>
-      <button pButton type="button" label="نوع جديد" icon="pi pi-plus" (click)="openCreateCategoryDialog()"></button>
+      <button pButton type="button" label="نوع جديد" icon="pi pi-plus" (click)="openCreateCategoryDialog(null)"></button>
     </div>
   </header>
 
   <p-progressSpinner *ngIf="loading" styleClass="global-spinner"></p-progressSpinner>
 
-  <p-splitter *ngIf="!loading" [panelSizes]="[28, 72]" [minSizes]="[20, 40]" [style]="{ height: 'calc(100vh - 270px)' }" styleClass="workspace-splitter">
+  <p-splitter
+    *ngIf="!loading && !managementMode"
+    [panelSizes]="[30, 70]"
+    [minSizes]="[22, 40]"
+    [style]="{ height: '100%' }"
+    styleClass="workspace-splitter">
+
     <ng-template pTemplate>
       <div class="tree-panel">
         <div class="panel-head">
-          <h3>شجرة أنواع الطلبات</h3>
-          <small>يدعم السحب والإفلات لإعادة ترتيب الشجرة</small>
+          <div>
+            <h3>شجرة أنواع الطلبات</h3>
+            <small>يدعم السحب والإفلات، وكليك يمين للإضافة/التعديل/الحذف.</small>
+          </div>
+          <button pButton type="button" icon="pi pi-plus" class="p-button-rounded p-button-text" (click)="openCreateCategoryDialog(selectedCategoryNode)"></button>
         </div>
 
-        <p-tree
-          [value]="categoryTree"
-          selectionMode="single"
-          [(selection)]="selectedCategoryNode"
-          [draggableNodes]="true"
-          [droppableNodes]="true"
-          (onNodeSelect)="onCategoryNodeSelect($event)"
-          (onNodeDrop)="onCategoryTreeDrop($event)">
-          <ng-template let-node pTemplate="default">
-            <div class="tree-node-row">
-              <span class="node-title">{{ node.label }}</span>
-              <span class="node-status" [class.inactive]="!node.data?.isActive">{{ node.data?.isActive ? 'مفعل' : 'غير مفعل' }}</span>
-            </div>
-          </ng-template>
-        </p-tree>
+        <p-contextMenu #treeMenu [model]="treeContextMenuItems" appendTo="body" styleClass="rtl-overlay-menu"></p-contextMenu>
+
+        <div class="tree-scroll">
+          <p-tree
+            [value]="categoryTree"
+            selectionMode="single"
+            [(selection)]="selectedCategoryNode"
+            [draggableNodes]="true"
+            [droppableNodes]="true"
+            [contextMenu]="treeMenu"
+            (onNodeSelect)="onCategoryNodeSelect($event)"
+            (onNodeContextMenuSelect)="onCategoryNodeContextMenu($event)"
+            (onNodeExpand)="onTreeNodeExpand($event)"
+            (onNodeCollapse)="onTreeNodeCollapse($event)"
+            (onNodeDrop)="onCategoryTreeDrop($event)">
+            <ng-template let-node pTemplate="default">
+              <div class="tree-node-row">
+                <span class="node-title">{{ node.label }}</span>
+                <span class="node-status" [class.inactive]="!node.data?.isActive">{{ node.data?.isActive ? 'مفعل' : 'غير مفعل' }}</span>
+              </div>
+            </ng-template>
+          </p-tree>
+        </div>
       </div>
     </ng-template>
 
     <ng-template pTemplate>
-      <div class="content-panel" *ngIf="selectedCategory; else noSelection">
+      <div class="content-panel" *ngIf="selectedCategory as category; else noSelection">
         <div class="selected-title">
-          <h3>{{ selectedCategory.categoryName }}</h3>
-          <span>المعرف: {{ selectedCategory.categoryId }}</span>
+          <div>
+            <h3>{{ category.categoryName }}</h3>
+            <span>المعرف: {{ category.categoryId }} | التطبيق: {{ category.applicationId || '-' }}</span>
+          </div>
+          <button pButton type="button" icon="pi pi-plus" label="إضافة طلب ابن" class="p-button-outlined p-button-sm" (click)="openCreateCategoryDialog(selectedCategoryNode)"></button>
         </div>
 
-        <p-tabView [(activeIndex)]="activeTabIndex">
-          <p-tabPanel header="البيانات الأساسية">
-            <form class="form-grid" [formGroup]="categoryForm">
-              <div class="field">
-                <label>اسم النوع *</label>
-                <input pInputText type="text" formControlName="categoryName" />
-                <small class="field-error" *ngIf="isInvalid(categoryForm, 'categoryName')">
-                  {{ getValidationMessage(categoryForm, 'categoryName', 'اسم النوع') }}
-                </small>
+        <p-tabView [(activeIndex)]="activeTabIndex" (onChange)="onMainTabChange($event)" styleClass="admin-tabs">
+          <p-tabPanel header="الإدارة الأساسية">
+            <div #overviewScroll class="tab-scroll tab-scroll--overview" tabindex="0">
+              <div class="scroll-tools">
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(overviewScroll)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(overviewScroll, -480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(overviewScroll, 480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(overviewScroll)"></button>
               </div>
+              <section class="overview-grid">
+                <article class="info-card">
+                  <h4>ملخص النوع الحالي</h4>
+                  <div class="kv-grid">
+                    <div>
+                      <span>اسم النوع</span>
+                      <strong>{{ category.categoryName }}</strong>
+                    </div>
+                    <div>
+                      <span>الأب</span>
+                      <strong>{{ selectedParentName }}</strong>
+                    </div>
+                    <div>
+                      <span>الحالة</span>
+                      <strong>{{ category.isActive ? 'مفعل' : 'غير مفعل' }}</strong>
+                    </div>
+                    <div>
+                      <span>رقم مسار العمل</span>
+                      <strong>{{ category.catWorkFlow }}</strong>
+                    </div>
+                    <div>
+                      <span>إجمالي الجروبات المرتبطة</span>
+                      <strong>{{ linkedGroups.length }}</strong>
+                    </div>
+                    <div>
+                      <span>إجمالي الحقول المرتبطة</span>
+                      <strong>{{ editableLinks.length }}</strong>
+                    </div>
+                    <div>
+                      <span>حقول غير مرتبطة</span>
+                      <strong>{{ unlinkedFieldsCount }}</strong>
+                    </div>
+                    <div>
+                      <span>آخر سياسة ترقيم</span>
+                      <strong>{{ category.referencePrefix || '-' }}</strong>
+                    </div>
+                  </div>
+                </article>
 
-              <div class="field">
-                <label>معرف التطبيق</label>
-                <input pInputText type="text" formControlName="applicationId" />
-                <small class="field-error" *ngIf="isInvalid(categoryForm, 'applicationId')">
-                  {{ getValidationMessage(categoryForm, 'applicationId', 'معرف التطبيق') }}
-                </small>
-              </div>
-
-              <div class="field">
-                <label>بيانات وصفية</label>
-                <input pInputText type="text" formControlName="catMend" />
-              </div>
-
-              <div class="field">
-                <label>رقم مسار العمل</label>
-                <input pInputText type="number" formControlName="catWorkFlow" />
-                <small class="field-error" *ngIf="isInvalid(categoryForm, 'catWorkFlow')">
-                  {{ getValidationMessage(categoryForm, 'catWorkFlow', 'رقم مسار العمل') }}
-                </small>
-              </div>
-
-              <div class="field">
-                <label>إلى</label>
-                <input pInputText type="text" formControlName="to" />
-                <small class="field-error" *ngIf="isInvalid(categoryForm, 'to')">
-                  {{ getValidationMessage(categoryForm, 'to', 'حقل إلى') }}
-                </small>
-              </div>
-
-              <div class="field">
-                <label>نسخة</label>
-                <input pInputText type="text" formControlName="cc" />
-                <small class="field-error" *ngIf="isInvalid(categoryForm, 'cc')">
-                  {{ getValidationMessage(categoryForm, 'cc', 'حقل نسخة') }}
-                </small>
-              </div>
-
-              <div class="switches">
-                <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
-                <label><span>إشعارات الرسائل النصية</span><p-inputSwitch formControlName="catSms"></p-inputSwitch></label>
-                <label><span>إشعارات البريد الإلكتروني</span><p-inputSwitch formControlName="catMailNotification"></p-inputSwitch></label>
-              </div>
-            </form>
-
-            <div class="actions-row">
-              <button pButton type="button" label="حفظ البيانات الأساسية" icon="pi pi-save" [loading]="savingCategory" [disabled]="savingCategory || categoryForm.invalid" (click)="saveCategory()"></button>
-              <button pButton type="button" label="حذف النوع" icon="pi pi-trash" class="p-button-danger p-button-outlined" (click)="deleteCategory()"></button>
+                <article class="info-card">
+                  <h4>إجراءات سريعة</h4>
+                  <p>نفّذ الإجراءات الشائعة بدون التنقل بين الشاشات.</p>
+                  <div class="actions-row compact">
+                    <button pButton type="button" label="تعديل البيانات" icon="pi pi-pencil" class="p-button-outlined" (click)="activeTabIndex = tabEditIndex"></button>
+                    <button pButton type="button" label="إدارة الجروبات" icon="pi pi-th-large" class="p-button-outlined" (click)="activeTabIndex = tabGroupsIndex"></button>
+                    <button pButton type="button" label="ربط الحقول" icon="pi pi-link" class="p-button-outlined" (click)="openRelationsDialog()"></button>
+                    <button pButton type="button" label="فتح المعاينة" icon="pi pi-eye" class="p-button-outlined" (click)="activeTabIndex = tabPreviewIndex"></button>
+                    <button pButton type="button" label="إضافة طلب ابن" icon="pi pi-plus" (click)="openCreateCategoryDialog(selectedCategoryNode)"></button>
+                    <button pButton type="button" label="حذف النوع" icon="pi pi-trash" class="p-button-danger p-button-outlined" (click)="deleteCategory()"></button>
+                  </div>
+                </article>
+              </section>
             </div>
           </p-tabPanel>
 
-          <p-tabPanel header="الحقول الديناميكية">
-            <app-dynamic-fields-manager
-              [embeddedMode]="true"
-              [selectedCategoryId]="selectedCategory.categoryId || null"
-              [selectedApplicationId]="selectedCategory.applicationId || null"
-              (fieldsChanged)="onFieldsChanged()">
-            </app-dynamic-fields-manager>
-          </p-tabPanel>
+          <p-tabPanel header="بيانات الطلب وإعداداته">
+            <div #editScroll class="tab-scroll tab-scroll--edit" tabindex="0">
+              <div class="scroll-tools">
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(editScroll)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(editScroll, -480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(editScroll, 480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(editScroll)"></button>
+              </div>
+              <section class="form-section">
+                <header>
+                  <h4>البيانات الأساسية للطلب</h4>
+                  <p>تحديث اسم النوع وربطه بالتطبيق ومسار العمل وقنوات الإشعار.</p>
+                </header>
 
-          <p-tabPanel header="الجروبات">
-            <div class="tab-head-actions">
-              <button pButton type="button" icon="pi pi-plus" label="إضافة جروب" (click)="openCreateGroupDialog()"></button>
+                <form class="form-grid" [formGroup]="categoryForm">
+                  <div class="field">
+                    <label>اسم النوع *</label>
+                    <input pInputText type="text" formControlName="categoryName" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'categoryName')">
+                      {{ getValidationMessage(categoryForm, 'categoryName', 'اسم النوع') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>معرف التطبيق</label>
+                    <input pInputText type="text" formControlName="applicationId" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'applicationId')">
+                      {{ getValidationMessage(categoryForm, 'applicationId', 'معرف التطبيق') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>بيانات وصفية</label>
+                    <input pInputText type="text" formControlName="catMend" />
+                  </div>
+
+                  <div class="field">
+                    <label>رقم مسار العمل</label>
+                    <input pInputText type="number" formControlName="catWorkFlow" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'catWorkFlow')">
+                      {{ getValidationMessage(categoryForm, 'catWorkFlow', 'رقم مسار العمل') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>إلى</label>
+                    <input pInputText type="text" formControlName="to" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'to')">
+                      {{ getValidationMessage(categoryForm, 'to', 'حقل إلى') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>نسخة</label>
+                    <input pInputText type="text" formControlName="cc" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'cc')">
+                      {{ getValidationMessage(categoryForm, 'cc', 'حقل نسخة') }}
+                    </small>
+                  </div>
+
+                  <div class="switches">
+                    <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
+                    <label><span>إشعارات الرسائل النصية</span><p-inputSwitch formControlName="catSms"></p-inputSwitch></label>
+                    <label><span>إشعارات البريد الإلكتروني</span><p-inputSwitch formControlName="catMailNotification"></p-inputSwitch></label>
+                  </div>
+                </form>
+
+                <div class="actions-row">
+                  <button pButton type="button" label="حفظ البيانات الأساسية" icon="pi pi-save" [loading]="savingCategory" [disabled]="savingCategory || categoryForm.invalid" (click)="saveCategory()"></button>
+                </div>
+              </section>
+
+              <section class="form-section">
+                <header>
+                  <h4>إعدادات النوع والسياسات</h4>
+                  <p>إدارة سياسة الترقيم المرجعي وإعدادات المصدر والتسلسل.</p>
+                </header>
+
+                <form class="form-grid" [formGroup]="settingsForm">
+                  <div class="field switch-field">
+                    <label>تفعيل سياسة الترقيم</label>
+                    <p-inputSwitch formControlName="referencePolicyEnabled"></p-inputSwitch>
+                  </div>
+
+                  <div class="field">
+                    <label>بادئة المرجع *</label>
+                    <input pInputText type="text" formControlName="referencePrefix" />
+                    <small class="field-error" *ngIf="isInvalid(settingsForm, 'referencePrefix') || hasRequiredError(settingsForm, 'referencePrefix')">
+                      {{ getValidationMessage(settingsForm, 'referencePrefix', 'بادئة المرجع') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>فاصل المرجع</label>
+                    <input pInputText type="text" formControlName="referenceSeparator" />
+                    <small class="field-error" *ngIf="isInvalid(settingsForm, 'referenceSeparator')">
+                      {{ getValidationMessage(settingsForm, 'referenceSeparator', 'فاصل المرجع') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>حقول المصدر (مفصولة بفاصلة)</label>
+                    <input pInputText type="text" formControlName="sourceFieldKeys" />
+                    <small class="field-error" *ngIf="isInvalid(settingsForm, 'sourceFieldKeys')">
+                      {{ getValidationMessage(settingsForm, 'sourceFieldKeys', 'حقول المصدر') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>اسم التسلسل</label>
+                    <input pInputText type="text" formControlName="sequenceName" />
+                    <small class="field-error" *ngIf="isInvalid(settingsForm, 'sequenceName') || hasRequiredError(settingsForm, 'sequenceName')">
+                      {{ getValidationMessage(settingsForm, 'sequenceName', 'اسم التسلسل') }}
+                    </small>
+                  </div>
+
+                  <div class="switches">
+                    <label><span>تضمين السنة</span><p-inputSwitch formControlName="includeYear"></p-inputSwitch></label>
+                    <label><span>استخدام تسلسل رقمي</span><p-inputSwitch formControlName="useSequence"></p-inputSwitch></label>
+                  </div>
+                </form>
+
+                <div class="actions-row">
+                  <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid" (click)="saveCategorySettings()"></button>
+                </div>
+              </section>
             </div>
-
-            <p-table [value]="groups" responsiveLayout="scroll" styleClass="p-datatable-sm">
-              <ng-template pTemplate="header">
-                <tr>
-                  <th>المعرف</th>
-                  <th>اسم الجروب</th>
-                  <th>الوصف</th>
-                  <th>قابل للتكرار</th>
-                  <th>عدد الحقول</th>
-                  <th>إجراءات</th>
-                </tr>
-              </ng-template>
-
-              <ng-template pTemplate="body" let-group>
-                <tr>
-                  <td>{{ group.groupId }}</td>
-                  <td>{{ group.groupName || '-' }}</td>
-                  <td>{{ group.groupDescription || '-' }}</td>
-                  <td>{{ group.isExtendable ? 'نعم' : 'لا' }}</td>
-                  <td>{{ group.linkedFieldsCount }}</td>
-                  <td class="actions-col">
-                    <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text"
-                      (click)="openEditGroupDialog(group)"></button>
-                    <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger"
-                      (click)="deleteGroup(group)"></button>
-                  </td>
-                </tr>
-              </ng-template>
-            </p-table>
           </p-tabPanel>
 
-          <p-tabPanel header="ربط الحقول بالجروبات">
-            <div class="tab-head-actions">
-              <button pButton type="button" icon="pi pi-plus" label="إضافة ربط" class="p-button-outlined" (click)="addEmptyLink()"></button>
-              <button pButton type="button" icon="pi pi-save" label="حفظ الربط" [loading]="savingLinks" (click)="saveLinks()"></button>
-            </div>
+          <p-tabPanel header="الجروبات المرتبطة بالطلب">
+            <div #groupsScroll class="tab-scroll tab-scroll--groups" tabindex="0">
+              <div class="scroll-tools">
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(groupsScroll)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(groupsScroll, -480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(groupsScroll, 480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(groupsScroll)"></button>
+              </div>
+              <div class="tab-head-actions">
+                <button pButton type="button" icon="pi pi-plus" label="إضافة جروب" (click)="openCreateGroupDialog()"></button>
+                <button pButton type="button" icon="pi pi-sitemap" class="p-button-outlined" label="فتح نافذة ربط الحقول" (click)="openRelationsDialog()"></button>
+              </div>
 
-            <p-table [value]="editableLinks" [loading]="loadingLinks" responsiveLayout="scroll" styleClass="p-datatable-sm">
-              <ng-template pTemplate="header">
-                <tr>
-                  <th style="width: 90px;">الترتيب</th>
-                  <th>الحقل</th>
-                  <th>الجروب</th>
-                  <th style="width: 110px;">مفعل</th>
-                  <th style="width: 110px;">مرئي</th>
-                  <th>إعدادات عرض</th>
-                  <th style="width: 80px;">حذف</th>
-                </tr>
+              <div class="table-wrap" *ngIf="linkedGroups.length > 0; else noLinkedGroups">
+                <p-table
+                  [value]="linkedGroups"
+                  [scrollable]="true"
+                  scrollHeight="flex"
+                  responsiveLayout="scroll"
+                  styleClass="p-datatable-sm rtl-table">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th>المعرف</th>
+                      <th>اسم الجروب</th>
+                      <th>الوصف</th>
+                      <th>قابل للتكرار</th>
+                      <th>عدد الحقول داخل الطلب</th>
+                      <th>إجراءات</th>
+                    </tr>
+                  </ng-template>
+
+                  <ng-template pTemplate="body" let-group>
+                    <tr>
+                      <td>{{ group.groupId }}</td>
+                      <td>{{ group.groupName || '-' }}</td>
+                      <td>{{ group.groupDescription || '-' }}</td>
+                      <td>{{ group.isExtendable ? 'نعم' : 'لا' }}</td>
+                      <td>{{ getGroupLinkedFieldsCount(group.groupId) }}</td>
+                      <td class="actions-col">
+                        <button pButton type="button" icon="pi pi-link" class="p-button-rounded p-button-text" (click)="focusGroup(group.groupId, { activateRelationsTab: true, scroll: true })"></button>
+                        <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text" (click)="openEditGroupDialog(group)"></button>
+                        <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="deleteGroup(group)"></button>
+                      </td>
+                    </tr>
+                  </ng-template>
+                </p-table>
+              </div>
+
+              <ng-template #noLinkedGroups>
+                <p class="empty-state">لا توجد جروبات مرتبطة بهذا الطلب حاليًا. أنشئ جروبًا ثم اربط به الحقول من نافذة الربط.</p>
               </ng-template>
-
-              <ng-template pTemplate="body" let-link let-rowIndex="rowIndex">
-                <tr>
-                  <td>
-                    <input pInputText type="number" [(ngModel)]="link.displayOrder" [ngModelOptions]="{ standalone: true }" />
-                  </td>
-                  <td>
-                    <p-dropdown
-                      [options]="toFieldOptions()"
-                      [(ngModel)]="link.fieldKey"
-                      [ngModelOptions]="{ standalone: true }"
-                      appendTo="body">
-                    </p-dropdown>
-                  </td>
-                  <td>
-                    <p-dropdown
-                      [options]="toGroupOptions()"
-                      [(ngModel)]="link.groupId"
-                      [ngModelOptions]="{ standalone: true }"
-                      appendTo="body">
-                    </p-dropdown>
-                  </td>
-                  <td><p-inputSwitch [(ngModel)]="link.isActive" [ngModelOptions]="{ standalone: true }"></p-inputSwitch></td>
-                  <td><p-inputSwitch [(ngModel)]="link.isVisible" [ngModelOptions]="{ standalone: true }"></p-inputSwitch></td>
-                  <td>
-                    <input pInputText type="text" [(ngModel)]="link.displaySettingsJson" [ngModelOptions]="{ standalone: true }" />
-                  </td>
-                  <td class="actions-col">
-                    <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger"
-                      (click)="removeLink(rowIndex)"></button>
-                  </td>
-                </tr>
-              </ng-template>
-            </p-table>
-          </p-tabPanel>
-
-          <p-tabPanel header="الإعدادات">
-            <form class="form-grid" [formGroup]="settingsForm">
-              <div class="field">
-                <label>تفعيل سياسة الترقيم</label>
-                <p-inputSwitch formControlName="referencePolicyEnabled"></p-inputSwitch>
-              </div>
-
-              <div class="field">
-                <label>بادئة المرجع *</label>
-                <input pInputText type="text" formControlName="referencePrefix" />
-                <small class="field-error" *ngIf="isInvalid(settingsForm, 'referencePrefix') || hasRequiredError(settingsForm, 'referencePrefix')">
-                  {{ getValidationMessage(settingsForm, 'referencePrefix', 'بادئة المرجع') }}
-                </small>
-              </div>
-
-              <div class="field">
-                <label>فاصل المرجع</label>
-                <input pInputText type="text" formControlName="referenceSeparator" />
-                <small class="field-error" *ngIf="isInvalid(settingsForm, 'referenceSeparator')">
-                  {{ getValidationMessage(settingsForm, 'referenceSeparator', 'فاصل المرجع') }}
-                </small>
-              </div>
-
-              <div class="field">
-                <label>حقول المصدر (مفصولة بفاصلة)</label>
-                <input pInputText type="text" formControlName="sourceFieldKeys" />
-                <small class="field-error" *ngIf="isInvalid(settingsForm, 'sourceFieldKeys')">
-                  {{ getValidationMessage(settingsForm, 'sourceFieldKeys', 'حقول المصدر') }}
-                </small>
-              </div>
-
-              <div class="field">
-                <label>اسم التسلسل</label>
-                <input pInputText type="text" formControlName="sequenceName" />
-                <small class="field-error" *ngIf="isInvalid(settingsForm, 'sequenceName') || hasRequiredError(settingsForm, 'sequenceName')">
-                  {{ getValidationMessage(settingsForm, 'sequenceName', 'اسم التسلسل') }}
-                </small>
-              </div>
-
-              <div class="switches">
-                <label><span>تضمين السنة</span><p-inputSwitch formControlName="includeYear"></p-inputSwitch></label>
-                <label><span>استخدام تسلسل رقمي</span><p-inputSwitch formControlName="useSequence"></p-inputSwitch></label>
-              </div>
-            </form>
-
-            <div class="actions-row">
-              <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid" (click)="saveCategorySettings()"></button>
             </div>
           </p-tabPanel>
 
           <p-tabPanel header="المعاينة">
-            <div class="preview-loading" *ngIf="loadingPreview">
-              <p-progressSpinner></p-progressSpinner>
-            </div>
+            <div #previewScroll class="tab-scroll tab-scroll--preview" tabindex="0">
+              <div class="scroll-tools">
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(previewScroll)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(previewScroll, -480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(previewScroll, 480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(previewScroll)"></button>
+              </div>
+              <div class="tab-head-actions">
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-search"
+                  class="p-button-outlined p-button-sm"
+                  [label]="previewDiagnosticsVisible ? 'إخفاء فحص المعاينة' : 'إظهار فحص المعاينة'"
+                  (click)="previewDiagnosticsVisible = !previewDiagnosticsVisible"></button>
+              </div>
+              <div class="preview-loading" *ngIf="loadingPreview">
+                <p-progressSpinner></p-progressSpinner>
+              </div>
 
-            <div *ngIf="!loadingPreview" class="preview-container" [formGroup]="previewForm">
-              <ng-container *ngIf="previewGroups.length > 0; else emptyPreview">
-                <section class="preview-group" *ngFor="let group of previewGroups">
-                  <header>
-                    <h4>{{ getPreviewGroupTitle(group) }}</h4>
-                    <span>{{ group.fields.length }} حقل</span>
-                  </header>
-
-                  <div class="preview-fields">
-                    <div class="preview-field" *ngFor="let item of group.fields">
-                      <label>{{ item.definition.fieldLabel || item.definition.fieldKey }}</label>
-
-                      <ng-container *ngIf="isSelectField(item.definition); else nonSelectField">
-                        <select class="field-control" [formControlName]="item.controlName" [disabled]="true">
-                          <option value="">اختر...</option>
-                          <option *ngFor="let option of parseFieldOptions(item.definition)" [value]="option.value">{{ option.label }}</option>
-                        </select>
-                      </ng-container>
-
-                      <ng-template #nonSelectField>
-                        <ng-container *ngIf="isBooleanField(item.definition); else nonBooleanField">
-                          <input type="checkbox" [formControlName]="item.controlName" [disabled]="true" />
-                        </ng-container>
-                      </ng-template>
-
-                      <ng-template #nonBooleanField>
-                        <ng-container *ngIf="isTextareaField(item.definition); else regularInputField">
-                          <textarea class="field-control" [formControlName]="item.controlName" [readonly]="true"></textarea>
-                        </ng-container>
-                      </ng-template>
-
-                      <ng-template #regularInputField>
-                        <input class="field-control"
-                          [type]="isDateField(item.definition) ? 'date' : (isNumberField(item.definition) ? 'number' : 'text')"
-                          [formControlName]="item.controlName"
-                          [readonly]="true" />
-                      </ng-template>
-                    </div>
+              <div *ngIf="!loadingPreview" class="preview-container">
+                <ng-container *ngIf="previewCategoryMand.length > 0; else emptyPreview">
+                  <div class="preview-form-details-shell">
+                    <app-form-details
+                      [previewOnly]="true"
+                      [config]="previewFormConfig"
+                      [messageDto]="previewMessageDto"
+                      [isCurrentUser]="false"
+                      [tree]="previewEmptyTree"
+                      [categoryTree]="previewEmptyCategoryTree"
+                      [unitTree]="previewEmptyTree"
+                      [formSubmited]="false"
+                      [fileParameters]="previewEmptyFiles"
+                      [customFilteredCategoryMand]="previewCategoryMand">
+                    </app-form-details>
                   </div>
-                </section>
-              </ng-container>
+                </ng-container>
 
-              <ng-template #emptyPreview>
-                <p class="empty-state">لا توجد حقول مهيأة للمعاينة لهذا النوع.</p>
-              </ng-template>
+                <ng-template #emptyPreview>
+                  <p class="empty-state">لا توجد حقول مهيأة للمعاينة لهذا النوع.</p>
+                </ng-template>
+              </div>
+
+              <section class="preview-diagnostics" *ngIf="previewDiagnosticsVisible && !loadingPreview && !managementMode && selectedCategory && previewInspection as audit">
+                <header>
+                  <h4>فحص المعاينة لهذا النوع</h4>
+                  <p>تشخيص مباشر يوضح سبب ظهور أو استبعاد كل حقل في المعاينة.</p>
+                </header>
+                <div class="kv-grid preview-kv-grid">
+                  <div><span>إجمالي الحقول المرتبطة</span><strong>{{ audit.totalLinked }}</strong></div>
+                  <div><span>حقول مرئية</span><strong>{{ audit.visibleLinked }}</strong></div>
+                  <div><span>حقول مخفية</span><strong>{{ audit.hiddenLinked }}</strong></div>
+                  <div><span>تعريفات حقول غير مفعلة</span><strong>{{ audit.inactiveDefinitions }}</strong></div>
+                  <div><span>تعريفات مفقودة</span><strong>{{ audit.missingDefinitions }}</strong></div>
+                  <div><span>مدرجة فعليًا في المعاينة</span><strong>{{ audit.includedInPreview }}</strong></div>
+                  <div><span>مستبعدة من المعاينة</span><strong>{{ audit.excludedFromPreview }}</strong></div>
+                </div>
+
+                <div class="table-wrap preview-audit-table-wrap" *ngIf="audit.items.length > 0">
+                  <table class="links-table preview-audit-table">
+                    <thead>
+                      <tr>
+                        <th>المجموعة</th>
+                        <th>الحقل</th>
+                        <th>مرئي</th>
+                        <th>تعريف الحقل مفعل</th>
+                        <th>ظهر في المعاينة</th>
+                        <th>السبب</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let item of audit.items; trackBy: trackByPreviewInspection">
+                        <td>{{ item.groupName }}</td>
+                        <td>
+                          <div class="field-meta">
+                            <strong>{{ item.fieldLabel }}</strong>
+                            <small>{{ item.fieldKey }}</small>
+                          </div>
+                        </td>
+                        <td>{{ item.isVisible ? 'نعم' : 'لا' }}</td>
+                        <td>{{ item.isFieldActive ? 'نعم' : 'لا' }}</td>
+                        <td>{{ item.inPreview ? 'نعم' : 'لا' }}</td>
+                        <td>{{ item.reason }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </div>
           </p-tabPanel>
         </p-tabView>
@@ -312,10 +426,268 @@
     </ng-template>
   </p-splitter>
 
+  <div class="management-content" *ngIf="!loading && managementMode">
+    <div *ngIf="selectedCategory as category; else noSelection">
+      <div class="scroll-tools scroll-tools--management">
+        <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(null)"></button>
+        <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(null, -480)"></button>
+        <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(null, 480)"></button>
+        <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(null)"></button>
+      </div>
+      <div class="groups-relations">
+        <article
+          class="group-card"
+          *ngFor="let group of managementGroupsForRelations; trackBy: trackByGroupId"
+          [id]="'group-card-' + group.groupId"
+          [class.focused]="focusedGroupId === group.groupId">
+          <header class="group-card-head">
+            <div>
+              <h4>{{ group.groupName || ('جروب #' + group.groupId) }}</h4>
+              <p>{{ getGroupLinkedFieldsCount(group.groupId) }} حقل داخل هذا الجروب ضمن الطلب الحالي</p>
+            </div>
+            <div class="group-head-actions">
+              <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text" (click)="openEditGroupDialog(group)"></button>
+              <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="deleteGroup(group)"></button>
+            </div>
+          </header>
+
+          <div class="group-add-row">
+            <p-dropdown
+              [options]="toAvailableFieldOptions(group.groupId)"
+              [(ngModel)]="groupFieldDraft[group.groupId]"
+              [ngModelOptions]="{ standalone: true }"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="اختر حقلًا لإضافته"
+              [showClear]="true"
+              appendTo="body"
+              panelStyleClass="rtl-overlay-panel">
+            </p-dropdown>
+            <button
+              pButton
+              type="button"
+              icon="pi pi-plus"
+              label="إضافة الحقل"
+              [disabled]="toAvailableFieldOptions(group.groupId).length === 0"
+              (click)="addFieldToGroup(group.groupId)"></button>
+          </div>
+
+          <div class="links-table-wrap" *ngIf="getGroupLinks(group.groupId).length > 0; else emptyManagementGroupLinks">
+            <table class="links-table">
+              <thead>
+                <tr>
+                  <th>الترتيب</th>
+                  <th>الحقل</th>
+                  <th>النوع</th>
+                  <th>مفعل</th>
+                  <th>مرئي</th>
+                  <th>إعدادات عرض</th>
+                  <th>إزالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let link of getGroupLinks(group.groupId); trackBy: trackByLink">
+                  <td class="order-cell">
+                    <button pButton type="button" icon="pi pi-chevron-up" class="p-button-rounded p-button-text p-button-sm" (click)="moveLinkWithinGroup(group.groupId, link, -1)"></button>
+                    <button pButton type="button" icon="pi pi-chevron-down" class="p-button-rounded p-button-text p-button-sm" (click)="moveLinkWithinGroup(group.groupId, link, 1)"></button>
+                    <input
+                      pInputText
+                      type="number"
+                      [(ngModel)]="link.displayOrder"
+                      [ngModelOptions]="{ standalone: true }"
+                      (blur)="onDisplayOrderInput(group.groupId)" />
+                  </td>
+                  <td>
+                    <div class="field-meta">
+                      <strong>{{ getFieldDisplayName(link.fieldKey) }}</strong>
+                      <small>{{ link.fieldKey }}</small>
+                    </div>
+                  </td>
+                  <td>{{ getFieldTypeDisplay(link.fieldType) }}</td>
+                  <td>
+                    <p-inputSwitch [(ngModel)]="link.isActive" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+                  </td>
+                  <td>
+                    <p-inputSwitch [(ngModel)]="link.isVisible" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+                  </td>
+                  <td>
+                    <input pInputText type="text" [(ngModel)]="link.displaySettingsJson" [ngModelOptions]="{ standalone: true }" placeholder="JSON أو إعدادات عرض" />
+                  </td>
+                  <td class="actions-col">
+                    <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="removeLinkFromGroup(link)"></button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <ng-template #emptyManagementGroupLinks>
+            <p class="group-empty">لا توجد حقول داخل هذا الجروب حتى الآن.</p>
+          </ng-template>
+        </article>
+
+        <p class="empty-state" *ngIf="managementGroupsForRelations.length === 0">لا توجد جروبات معرفة بعد. أضف جروبًا ثم ابدأ الربط.</p>
+      </div>
+    </div>
+  </div>
+
   <ng-template #noSelection>
-    <div class="no-selection">اختر نوعًا من الشجرة للبدء.</div>
+    <div class="no-selection">{{ managementMode ? 'لا توجد أنواع طلبات متاحة حاليًا.' : 'اختر نوعًا من الشجرة للبدء.' }}</div>
   </ng-template>
 </section>
+
+<p-dialog
+  [(visible)]="relationsDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(1280px, 97vw)' }"
+  [contentStyle]="{ 'max-height': '82vh', overflow: 'hidden', padding: '0' }"
+  header="الحقول داخل الجروبات"
+  appendTo="body"
+  styleClass="rtl-dialog dynamic-admin-dialog dynamic-relations-dialog">
+  <div #relationsDialogScroll class="tab-scroll tab-scroll--relations tab-scroll--dialog" tabindex="0" (wheel)="onTabWheel($event, relationsDialogScroll)">
+    <div class="scroll-tools">
+      <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(relationsDialogScroll)"></button>
+      <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(relationsDialogScroll, -480)"></button>
+      <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(relationsDialogScroll, 480)"></button>
+      <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(relationsDialogScroll)"></button>
+    </div>
+    <div class="tab-head-actions">
+      <button pButton type="button" icon="pi pi-save" label="حفظ الربط" [loading]="savingLinks" [disabled]="savingLinks" (click)="saveLinks()"></button>
+      <button pButton type="button" icon="pi pi-database" class="p-button-outlined" [label]="showFieldLibrary ? 'إخفاء مكتبة الحقول' : 'إظهار مكتبة الحقول'" (click)="toggleFieldLibrary()"></button>
+      <span class="muted-text">الحقول غير المرتبطة: {{ unlinkedFieldsCount }}</span>
+    </div>
+
+    <div class="unlinked-box" *ngIf="unlinkedSelectableFields.length > 0">
+      <h5>حقول متاحة للربط</h5>
+      <div class="unlinked-list">
+        <span class="unlinked-item" *ngFor="let field of unlinkedSelectableFields">
+          <strong>{{ field.fieldLabel || field.fieldKey }}</strong>
+          <small>{{ field.fieldKey }}</small>
+        </span>
+      </div>
+    </div>
+
+    <div class="relations-loading" *ngIf="loadingLinks">
+      <p-progressSpinner></p-progressSpinner>
+    </div>
+
+    <div class="groups-relations" *ngIf="!loadingLinks">
+      <article
+        class="group-card"
+        *ngFor="let group of groupsForRelations; trackBy: trackByGroupId"
+        [id]="'group-card-' + group.groupId"
+        [class.focused]="focusedGroupId === group.groupId">
+        <header class="group-card-head">
+          <div>
+            <h4>{{ group.groupName || ('جروب #' + group.groupId) }}</h4>
+            <p>{{ getGroupLinkedFieldsCount(group.groupId) }} حقل داخل هذا الجروب ضمن الطلب الحالي</p>
+          </div>
+          <div class="group-head-actions">
+            <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text" (click)="openEditGroupDialog(group)"></button>
+            <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="deleteGroup(group)"></button>
+          </div>
+        </header>
+
+        <div class="group-add-row">
+          <p-dropdown
+            [options]="toAvailableFieldOptions(group.groupId)"
+            [(ngModel)]="groupFieldDraft[group.groupId]"
+            [ngModelOptions]="{ standalone: true }"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="اختر حقلًا لإضافته"
+            [showClear]="true"
+            appendTo="body"
+            panelStyleClass="rtl-overlay-panel">
+          </p-dropdown>
+          <button
+            pButton
+            type="button"
+            icon="pi pi-plus"
+            label="إضافة الحقل"
+            [disabled]="toAvailableFieldOptions(group.groupId).length === 0"
+            (click)="addFieldToGroup(group.groupId)"></button>
+        </div>
+
+        <div class="links-table-wrap" *ngIf="getGroupLinks(group.groupId).length > 0; else emptyDialogGroupLinks">
+          <table class="links-table">
+            <thead>
+              <tr>
+                <th>الترتيب</th>
+                <th>الحقل</th>
+                <th>النوع</th>
+                <th>مفعل</th>
+                <th>مرئي</th>
+                <th>إعدادات عرض</th>
+                <th>إزالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let link of getGroupLinks(group.groupId); trackBy: trackByLink">
+                <td class="order-cell">
+                  <button pButton type="button" icon="pi pi-chevron-up" class="p-button-rounded p-button-text p-button-sm" (click)="moveLinkWithinGroup(group.groupId, link, -1)"></button>
+                  <button pButton type="button" icon="pi pi-chevron-down" class="p-button-rounded p-button-text p-button-sm" (click)="moveLinkWithinGroup(group.groupId, link, 1)"></button>
+                  <input
+                    pInputText
+                    type="number"
+                    [(ngModel)]="link.displayOrder"
+                    [ngModelOptions]="{ standalone: true }"
+                    (blur)="onDisplayOrderInput(group.groupId)" />
+                </td>
+                <td>
+                  <div class="field-meta">
+                    <strong>{{ getFieldDisplayName(link.fieldKey) }}</strong>
+                    <small>{{ link.fieldKey }}</small>
+                  </div>
+                </td>
+                <td>{{ getFieldTypeDisplay(link.fieldType) }}</td>
+                <td>
+                  <p-inputSwitch [(ngModel)]="link.isActive" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+                </td>
+                <td>
+                  <p-inputSwitch [(ngModel)]="link.isVisible" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+                </td>
+                <td>
+                  <input pInputText type="text" [(ngModel)]="link.displaySettingsJson" [ngModelOptions]="{ standalone: true }" placeholder="JSON أو إعدادات عرض" />
+                </td>
+                <td class="actions-col">
+                  <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="removeLinkFromGroup(link)"></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <ng-template #emptyDialogGroupLinks>
+          <p class="group-empty">لا توجد حقول داخل هذا الجروب حتى الآن.</p>
+        </ng-template>
+      </article>
+
+      <p class="empty-state" *ngIf="groupsForRelations.length === 0">لا توجد جروبات معرفة بعد. أضف جروبًا أولًا من تبويب الجروبات.</p>
+    </div>
+
+    <section class="field-library-panel" *ngIf="showFieldLibrary">
+      <header>
+        <h4>مكتبة الحقول الديناميكية</h4>
+        <p>إدارة تعريف الحقول (إضافة/تعديل/حذف) دون مغادرة شاشة إدارة الأنواع.</p>
+      </header>
+
+      <app-dynamic-fields-manager
+        [embeddedMode]="true"
+        [selectedCategoryId]="selectedCategory?.categoryId || null"
+        [selectedApplicationId]="selectedCategory?.applicationId || null"
+        (fieldsChanged)="onFieldsChanged()">
+      </app-dynamic-fields-manager>
+    </section>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="إغلاق" class="p-button-text" (click)="relationsDialogVisible = false"></button>
+    <button pButton type="button" label="حفظ الربط" icon="pi pi-save" [loading]="savingLinks" [disabled]="savingLinks || !selectedCategory" (click)="saveLinks()"></button>
+  </ng-template>
+</p-dialog>
 
 <p-dialog
   [(visible)]="groupDialogVisible"
@@ -323,38 +695,42 @@
   [draggable]="false"
   [resizable]="false"
   [style]="{ width: 'min(560px, 95vw)' }"
+  [contentStyle]="{ 'max-height': '75vh', overflow: 'auto' }"
   [header]="editingGroupId ? 'تعديل جروب' : 'إضافة جروب'"
-  appendTo="body">
-  <form class="form-grid" [formGroup]="groupForm">
-    <div class="field">
-      <label>اسم الجروب *</label>
-      <input pInputText type="text" formControlName="groupName" />
-      <small class="field-error" *ngIf="isInvalid(groupForm, 'groupName')">
-        {{ getValidationMessage(groupForm, 'groupName', 'اسم الجروب') }}
-      </small>
-    </div>
+  appendTo="body"
+  styleClass="rtl-dialog dynamic-admin-dialog">
+  <div dir="rtl">
+    <form class="form-grid single-col" [formGroup]="groupForm">
+      <div class="field">
+        <label>اسم الجروب *</label>
+        <input pInputText type="text" formControlName="groupName" />
+        <small class="field-error" *ngIf="isInvalid(groupForm, 'groupName')">
+          {{ getValidationMessage(groupForm, 'groupName', 'اسم الجروب') }}
+        </small>
+      </div>
 
-    <div class="field">
-      <label>الوصف</label>
-      <input pInputText type="text" formControlName="groupDescription" />
-      <small class="field-error" *ngIf="isInvalid(groupForm, 'groupDescription')">
-        {{ getValidationMessage(groupForm, 'groupDescription', 'وصف الجروب') }}
-      </small>
-    </div>
+      <div class="field">
+        <label>الوصف</label>
+        <input pInputText type="text" formControlName="groupDescription" />
+        <small class="field-error" *ngIf="isInvalid(groupForm, 'groupDescription')">
+          {{ getValidationMessage(groupForm, 'groupDescription', 'وصف الجروب') }}
+        </small>
+      </div>
 
-    <div class="field">
-      <label>عدد العناصر في الصف</label>
-      <input pInputText type="number" formControlName="groupWithInRow" />
-      <small class="field-error" *ngIf="isInvalid(groupForm, 'groupWithInRow')">
-        {{ getValidationMessage(groupForm, 'groupWithInRow', 'عدد العناصر في الصف') }}
-      </small>
-    </div>
+      <div class="field">
+        <label>عدد العناصر في الصف</label>
+        <input pInputText type="number" formControlName="groupWithInRow" />
+        <small class="field-error" *ngIf="isInvalid(groupForm, 'groupWithInRow')">
+          {{ getValidationMessage(groupForm, 'groupWithInRow', 'عدد العناصر في الصف') }}
+        </small>
+      </div>
 
-    <div class="field switch-inline">
-      <label>قابل للتكرار</label>
-      <p-inputSwitch formControlName="isExtendable"></p-inputSwitch>
-    </div>
-  </form>
+      <div class="field switch-inline">
+        <label>قابل للتكرار</label>
+        <p-inputSwitch formControlName="isExtendable"></p-inputSwitch>
+      </div>
+    </form>
+  </div>
 
   <ng-template pTemplate="footer">
     <button pButton type="button" label="إلغاء" class="p-button-text" (click)="groupDialogVisible = false"></button>
@@ -368,68 +744,72 @@
   [draggable]="false"
   [resizable]="false"
   [style]="{ width: 'min(760px, 95vw)' }"
+  [contentStyle]="{ 'max-height': '75vh', overflow: 'auto' }"
   header="إضافة نوع جديد"
-  appendTo="body">
-  <form class="form-grid" [formGroup]="createCategoryForm">
-    <div class="field">
-      <label>الأب</label>
-      <input pInputText type="number" formControlName="parentCategoryId" />
-      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'parentCategoryId')">
-        {{ getValidationMessage(createCategoryForm, 'parentCategoryId', 'المعرف الأب') }}
-      </small>
-    </div>
+  appendTo="body"
+  styleClass="rtl-dialog dynamic-admin-dialog">
+  <div dir="rtl">
+    <form class="form-grid" [formGroup]="createCategoryForm">
+      <div class="field">
+        <label>المعرف الأب</label>
+        <input pInputText type="number" formControlName="parentCategoryId" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'parentCategoryId')">
+          {{ getValidationMessage(createCategoryForm, 'parentCategoryId', 'المعرف الأب') }}
+        </small>
+      </div>
 
-    <div class="field">
-      <label>اسم النوع *</label>
-      <input pInputText type="text" formControlName="categoryName" />
-      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'categoryName')">
-        {{ getValidationMessage(createCategoryForm, 'categoryName', 'اسم النوع') }}
-      </small>
-    </div>
+      <div class="field">
+        <label>اسم النوع *</label>
+        <input pInputText type="text" formControlName="categoryName" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'categoryName')">
+          {{ getValidationMessage(createCategoryForm, 'categoryName', 'اسم النوع') }}
+        </small>
+      </div>
 
-    <div class="field">
-      <label>معرف التطبيق</label>
-      <input pInputText type="text" formControlName="applicationId" />
-      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'applicationId')">
-        {{ getValidationMessage(createCategoryForm, 'applicationId', 'معرف التطبيق') }}
-      </small>
-    </div>
+      <div class="field">
+        <label>معرف التطبيق</label>
+        <input pInputText type="text" formControlName="applicationId" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'applicationId')">
+          {{ getValidationMessage(createCategoryForm, 'applicationId', 'معرف التطبيق') }}
+        </small>
+      </div>
 
-    <div class="field">
-      <label>رقم مسار العمل</label>
-      <input pInputText type="number" formControlName="catWorkFlow" />
-      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'catWorkFlow')">
-        {{ getValidationMessage(createCategoryForm, 'catWorkFlow', 'رقم مسار العمل') }}
-      </small>
-    </div>
+      <div class="field">
+        <label>رقم مسار العمل</label>
+        <input pInputText type="number" formControlName="catWorkFlow" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'catWorkFlow')">
+          {{ getValidationMessage(createCategoryForm, 'catWorkFlow', 'رقم مسار العمل') }}
+        </small>
+      </div>
 
-    <div class="field">
-      <label>بيانات وصفية</label>
-      <input pInputText type="text" formControlName="catMend" />
-    </div>
+      <div class="field">
+        <label>بيانات وصفية</label>
+        <input pInputText type="text" formControlName="catMend" />
+      </div>
 
-    <div class="field">
-      <label>إلى</label>
-      <input pInputText type="text" formControlName="to" />
-      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'to')">
-        {{ getValidationMessage(createCategoryForm, 'to', 'حقل إلى') }}
-      </small>
-    </div>
+      <div class="field">
+        <label>إلى</label>
+        <input pInputText type="text" formControlName="to" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'to')">
+          {{ getValidationMessage(createCategoryForm, 'to', 'حقل إلى') }}
+        </small>
+      </div>
 
-    <div class="field">
-      <label>نسخة</label>
-      <input pInputText type="text" formControlName="cc" />
-      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'cc')">
-        {{ getValidationMessage(createCategoryForm, 'cc', 'حقل نسخة') }}
-      </small>
-    </div>
+      <div class="field">
+        <label>نسخة</label>
+        <input pInputText type="text" formControlName="cc" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'cc')">
+          {{ getValidationMessage(createCategoryForm, 'cc', 'حقل نسخة') }}
+        </small>
+      </div>
 
-    <div class="switches">
-      <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
-      <label><span>إشعارات الرسائل النصية</span><p-inputSwitch formControlName="catSms"></p-inputSwitch></label>
-      <label><span>إشعارات البريد الإلكتروني</span><p-inputSwitch formControlName="catMailNotification"></p-inputSwitch></label>
-    </div>
-  </form>
+      <div class="switches">
+        <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
+        <label><span>إشعارات الرسائل النصية</span><p-inputSwitch formControlName="catSms"></p-inputSwitch></label>
+        <label><span>إشعارات البريد الإلكتروني</span><p-inputSwitch formControlName="catMailNotification"></p-inputSwitch></label>
+      </div>
+    </form>
+  </div>
 
   <ng-template pTemplate="footer">
     <button pButton type="button" label="إلغاء" class="p-button-text" (click)="createCategoryDialogVisible = false"></button>

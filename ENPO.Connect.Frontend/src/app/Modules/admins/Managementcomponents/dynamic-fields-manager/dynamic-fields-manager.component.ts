@@ -1,5 +1,6 @@
-import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import {
   SubjectAdminFieldDto,
@@ -7,12 +8,17 @@ import {
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
 
+interface FieldOptionRow {
+  key: string;
+  value: string;
+}
+
 @Component({
   selector: 'app-dynamic-fields-manager',
   templateUrl: './dynamic-fields-manager.component.html',
   styleUrls: ['./dynamic-fields-manager.component.scss']
 })
-export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
+export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestroy {
   @Input() embeddedMode = false;
   @Input() selectedCategoryId: number | null = null;
   @Input() selectedApplicationId: string | null = null;
@@ -29,6 +35,12 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
   appFilter = '';
 
   form: FormGroup;
+
+  optionRows: FieldOptionRow[] = [];
+  optionRowsTouched = false;
+
+  private readonly subscriptions = new Subscription();
+  private fieldsRequestSeq = 0;
 
   readonly fieldTypes: Array<{ label: string; value: string }> = [
     { label: 'نص قصير', value: 'InputText' },
@@ -77,14 +89,34 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
       this.appFilter = this.selectedApplicationId;
     }
 
+    const fieldTypeControl = this.form.get('fieldType');
+    if (fieldTypeControl) {
+      this.subscriptions.add(
+        fieldTypeControl.valueChanges.subscribe(() => {
+          this.onFieldTypeChanged();
+        })
+      );
+    }
+
+    this.onFieldTypeChanged();
     this.loadFields();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['selectedApplicationId'] && !changes['selectedApplicationId'].firstChange) {
+      const currentApp = String(changes['selectedApplicationId'].currentValue ?? '').trim();
+      const previousApp = String(changes['selectedApplicationId'].previousValue ?? '').trim();
+      if (currentApp === previousApp) {
+        return;
+      }
+
       this.appFilter = this.selectedApplicationId || '';
       this.loadFields();
     }
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
   }
 
   get appOptions(): Array<{ label: string; value: string }> {
@@ -124,14 +156,24 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
     return rows;
   }
 
+  get optionsPreviewValue(): string {
+    const payload = this.serializeOptionRows(this.optionRows);
+    return payload || '';
+  }
+
   loadFields(): void {
+    const requestSeq = ++this.fieldsRequestSeq;
     this.loading = true;
     const appId = this.embeddedMode
-      ? (this.selectedApplicationId || undefined)
+      ? (String(this.selectedApplicationId ?? '').trim() || undefined)
       : (this.appFilter.trim() || undefined);
 
     this.dynamicSubjectsController.getAdminFields(appId).subscribe({
       next: response => {
+        if (requestSeq !== this.fieldsRequestSeq) {
+          return;
+        }
+
         if (response?.errors?.length) {
           this.fields = [];
           this.appNotification.showApiErrors(response.errors, 'تعذر تحميل الحقول الديناميكية.');
@@ -141,11 +183,17 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
         this.fields = response?.data ?? [];
       },
       error: () => {
+        if (requestSeq !== this.fieldsRequestSeq) {
+          return;
+        }
+
         this.fields = [];
         this.appNotification.error('حدث خطأ أثناء تحميل الحقول الديناميكية.');
       },
       complete: () => {
-        this.loading = false;
+        if (requestSeq === this.fieldsRequestSeq) {
+          this.loading = false;
+        }
       }
     });
   }
@@ -176,6 +224,10 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
       applicationId: this.selectedApplicationId || this.appFilter || ''
     });
 
+    this.optionRows = [];
+    this.optionRowsTouched = false;
+    this.onFieldTypeChanged();
+
     this.dialogVisible = true;
   }
 
@@ -205,6 +257,10 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
       applicationId: item.applicationId ?? ''
     });
 
+    this.optionRows = this.parseOptionsPayloadToRows(item.optionsPayload);
+    this.optionRowsTouched = false;
+    this.onFieldTypeChanged();
+
     this.dialogVisible = true;
   }
 
@@ -213,6 +269,15 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
       this.form.markAllAsTouched();
       this.appNotification.warning('يرجى استكمال البيانات المطلوبة قبل الحفظ.');
       return;
+    }
+
+    if (this.isOptionsTypeSelected()) {
+      const optionsValidationError = this.getOptionsValidationMessage();
+      if (optionsValidationError.length > 0) {
+        this.optionRowsTouched = true;
+        this.appNotification.warning(optionsValidationError);
+        return;
+      }
     }
 
     const payload = this.toUpsertPayload();
@@ -275,7 +340,69 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
 
   isOptionsTypeSelected(): boolean {
     const type = String(this.form.get('fieldType')?.value ?? '').toLowerCase();
-    return type.includes('drop') || type.includes('radio');
+    return type.includes('drop') || type.includes('radio') || type.includes('select') || type.includes('combo');
+  }
+
+  addOptionRow(): void {
+    this.optionRows = [...this.optionRows, this.createEmptyOptionRow()];
+    this.optionRowsTouched = true;
+  }
+
+  removeOptionRow(index: number): void {
+    if (index < 0 || index >= this.optionRows.length) {
+      return;
+    }
+
+    this.optionRows = this.optionRows.filter((_item, idx) => idx !== index);
+    if (this.optionRows.length === 0 && this.isOptionsTypeSelected()) {
+      this.optionRows = [this.createEmptyOptionRow()];
+    }
+
+    this.optionRowsTouched = true;
+  }
+
+  onOptionRowsChanged(): void {
+    this.optionRowsTouched = true;
+  }
+
+  hasOptionsValidationError(): boolean {
+    return this.optionRowsTouched && this.getOptionsValidationMessage().length > 0;
+  }
+
+  getOptionsValidationMessage(): string {
+    if (!this.isOptionsTypeSelected()) {
+      return '';
+    }
+
+    const normalizedRows = this.optionRows.map(row => ({
+      key: String(row.key ?? '').trim(),
+      value: String(row.value ?? '').trim()
+    }));
+
+    if (normalizedRows.length === 0) {
+      return 'يجب إدخال خيار واحد على الأقل لحقول القائمة.';
+    }
+
+    const invalidRowIndex = normalizedRows.findIndex(row => row.key.length === 0 || row.value.length === 0);
+    if (invalidRowIndex >= 0) {
+      return `الصف رقم ${invalidRowIndex + 1} يجب أن يحتوي على key و value.`;
+    }
+
+    const seen = new Set<string>();
+    for (const row of normalizedRows) {
+      const normalizedKey = row.key.toLowerCase();
+      if (seen.has(normalizedKey)) {
+        return `لا يمكن تكرار key '${row.key}'.`;
+      }
+
+      seen.add(normalizedKey);
+    }
+
+    return '';
+  }
+
+  trackByOptionRow(index: number, item: FieldOptionRow): string {
+    return `${index}-${item.key}`;
   }
 
   isInvalid(controlName: string): boolean {
@@ -313,8 +440,30 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
     return `قيمة ${label} غير صالحة.`;
   }
 
+  private onFieldTypeChanged(): void {
+    if (!this.isOptionsTypeSelected()) {
+      return;
+    }
+
+    if (this.optionRows.length > 0) {
+      return;
+    }
+
+    const payload = String(this.form.get('optionsPayload')?.value ?? '').trim();
+    this.optionRows = this.parseOptionsPayloadToRows(payload);
+
+    if (this.optionRows.length === 0) {
+      this.optionRows = [this.createEmptyOptionRow()];
+    }
+  }
+
   private toUpsertPayload(): SubjectAdminFieldUpsertRequestDto {
     const value = this.form.value;
+
+    const optionsPayload = this.isOptionsTypeSelected()
+      ? this.serializeOptionRows(this.optionRows)
+      : String(value.optionsPayload ?? '').trim() || undefined;
+
     return {
       cdmendSql: value.cdmendSql ?? undefined,
       fieldKey: String(value.fieldKey ?? '').trim(),
@@ -322,7 +471,7 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
       fieldLabel: String(value.fieldLabel ?? '').trim() || undefined,
       placeholder: String(value.placeholder ?? '').trim() || undefined,
       defaultValue: String(value.defaultValue ?? '').trim() || undefined,
-      optionsPayload: String(value.optionsPayload ?? '').trim() || undefined,
+      optionsPayload,
       dataType: String(value.dataType ?? '').trim() || undefined,
       required: Boolean(value.required),
       requiredTrue: Boolean(value.requiredTrue),
@@ -338,5 +487,102 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
       isSearchable: Boolean(value.isSearchable),
       applicationId: String(value.applicationId ?? '').trim() || undefined
     };
+  }
+
+  private createEmptyOptionRow(): FieldOptionRow {
+    return { key: '', value: '' };
+  }
+
+  private parseOptionsPayloadToRows(payload: string | undefined): FieldOptionRow[] {
+    const raw = String(payload ?? '').trim();
+    if (raw.length === 0) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(item => {
+            if (item == null) {
+              return null;
+            }
+
+            if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+              const value = String(item);
+              return { key: value, value };
+            }
+
+            const hasExplicitKeyValue = Object.prototype.hasOwnProperty.call(item, 'key')
+              && Object.prototype.hasOwnProperty.call(item, 'value')
+              && !Object.prototype.hasOwnProperty.call(item, 'label');
+            if (hasExplicitKeyValue) {
+              const key = String((item as any).key ?? '').trim();
+              const value = String((item as any).value ?? '').trim();
+              if (key.length === 0 && value.length === 0) {
+                return null;
+              }
+
+              return {
+                key: key || value,
+                value: value || key
+              };
+            }
+
+            const key = String((item as any).value ?? (item as any).id ?? (item as any).key ?? (item as any).code ?? (item as any).label ?? (item as any).name ?? '').trim();
+            const value = String((item as any).label ?? (item as any).name ?? (item as any).text ?? (item as any).value ?? (item as any).key ?? (item as any).id ?? '').trim();
+            if (key.length === 0 && value.length === 0) {
+              return null;
+            }
+
+            return {
+              key: key || value,
+              value: value || key
+            };
+          })
+          .filter((item): item is FieldOptionRow => item !== null);
+      }
+
+      if (parsed && typeof parsed === 'object') {
+        return Object.entries(parsed)
+          .map(([key, value]) => ({
+            key: String(key ?? '').trim(),
+            value: String(value ?? '').trim() || String(key ?? '').trim()
+          }))
+          .filter(item => item.key.length > 0 || item.value.length > 0)
+          .map(item => ({
+            key: item.key || item.value,
+            value: item.value || item.key
+          }));
+      }
+    } catch {
+      // fallback format: tokenized text
+    }
+
+    return raw
+      .split(/[|,;\n]+/g)
+      .map(token => token.trim())
+      .filter(token => token.length > 0)
+      .map(token => ({ key: token, value: token }));
+  }
+
+  private serializeOptionRows(rows: FieldOptionRow[]): string | undefined {
+    const normalizedRows = rows
+      .map(row => ({
+        key: String(row.key ?? '').trim(),
+        value: String(row.value ?? '').trim()
+      }))
+      .filter(row => row.key.length > 0 || row.value.length > 0)
+      .map(row => ({
+        key: row.key || row.value,
+        value: row.value || row.key
+      }));
+
+    if (normalizedRows.length === 0) {
+      return undefined;
+    }
+
+    return JSON.stringify(normalizedRows);
   }
 }

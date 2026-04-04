@@ -11,8 +11,7 @@
   </section>
 
   <section class="dfm-toolbar">
-    <button pButton type="button" label="إضافة" icon="pi pi-plus" class="p-button-success"
-      *ngIf="embeddedMode" (click)="openCreateDialog()"></button>
+    <button pButton type="button" label="إضافة" icon="pi pi-plus" class="p-button-success" *ngIf="embeddedMode" (click)="openCreateDialog()"></button>
 
     <span class="search-box">
       <i class="pi pi-search"></i>
@@ -26,7 +25,8 @@
       (onChange)="onStandaloneAppFilterChange()"
       [showClear]="true"
       placeholder="تصفية حسب التطبيق"
-      appendTo="body">
+      appendTo="body"
+      panelStyleClass="rtl-overlay-panel">
     </p-dropdown>
 
     <p-dropdown
@@ -37,50 +37,57 @@
       ]"
       [(ngModel)]="statusFilter"
       placeholder="حالة الحقل"
-      appendTo="body">
+      appendTo="body"
+      panelStyleClass="rtl-overlay-panel">
     </p-dropdown>
   </section>
 
-  <p-table [value]="filteredFields" [loading]="loading" responsiveLayout="scroll" styleClass="p-datatable-sm">
-    <ng-template pTemplate="header">
-      <tr>
-        <th>المفتاح</th>
-        <th>الاسم</th>
-        <th>النوع</th>
-        <th>التطبيق</th>
-        <th>مربوط بأنواع</th>
-        <th>الحالة</th>
-        <th class="actions-col">إجراءات</th>
-      </tr>
-    </ng-template>
+  <div class="table-shell">
+    <p-table
+      [value]="filteredFields"
+      [loading]="loading"
+      [scrollable]="true"
+      scrollHeight="flex"
+      responsiveLayout="scroll"
+      styleClass="p-datatable-sm rtl-table">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>المفتاح</th>
+          <th>الاسم</th>
+          <th>النوع</th>
+          <th>التطبيق</th>
+          <th>مربوط بأنواع</th>
+          <th>الحالة</th>
+          <th class="actions-col">إجراءات</th>
+        </tr>
+      </ng-template>
 
-    <ng-template pTemplate="body" let-item>
-      <tr>
-        <td><code>{{ item.fieldKey }}</code></td>
-        <td>{{ item.fieldLabel || '-' }}</td>
-        <td>{{ item.fieldType }}</td>
-        <td>{{ item.applicationId || '-' }}</td>
-        <td>{{ item.linkedCategoriesCount }}</td>
-        <td>
-          <span class="status" [class.active]="item.isActive" [class.inactive]="!item.isActive">
-            {{ item.isActive ? 'مفعل' : 'غير مفعل' }}
-          </span>
-        </td>
-        <td class="actions-col">
-          <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text"
-            pTooltip="تعديل" tooltipPosition="top" (click)="openEditDialog(item)"></button>
-          <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger"
-            pTooltip="حذف" tooltipPosition="top" (click)="deleteField(item)"></button>
-        </td>
-      </tr>
-    </ng-template>
+      <ng-template pTemplate="body" let-item>
+        <tr>
+          <td><code>{{ item.fieldKey }}</code></td>
+          <td>{{ item.fieldLabel || '-' }}</td>
+          <td>{{ item.fieldType }}</td>
+          <td>{{ item.applicationId || '-' }}</td>
+          <td>{{ item.linkedCategoriesCount }}</td>
+          <td>
+            <span class="status" [class.active]="item.isActive" [class.inactive]="!item.isActive">
+              {{ item.isActive ? 'مفعل' : 'غير مفعل' }}
+            </span>
+          </td>
+          <td class="actions-col">
+            <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text" (click)="openEditDialog(item)"></button>
+            <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="deleteField(item)"></button>
+          </td>
+        </tr>
+      </ng-template>
 
-    <ng-template pTemplate="emptymessage">
-      <tr>
-        <td colspan="7" class="empty-row">لا توجد بيانات متاحة.</td>
-      </tr>
-    </ng-template>
-  </p-table>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7" class="empty-row">لا توجد بيانات متاحة.</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
 </div>
 
 <p-dialog
@@ -88,112 +95,165 @@
   [modal]="true"
   [draggable]="false"
   [resizable]="false"
-  [style]="{ width: 'min(980px, 95vw)' }"
+  [style]="{ width: 'min(1020px, 95vw)' }"
+  [contentStyle]="{ 'max-height': '78vh', overflow: 'auto' }"
   [header]="getDialogTitle()"
-  appendTo="body">
+  appendTo="body"
+  styleClass="rtl-dialog dynamic-field-dialog">
 
-  <form class="field-form" [formGroup]="form">
-    <div class="grid two-cols">
-      <div class="field">
-        <label>مفتاح الحقل *</label>
-        <input pInputText type="text" formControlName="fieldKey" />
-        <small class="field-error" *ngIf="isInvalid('fieldKey')">
-          {{ getValidationMessage('fieldKey', 'مفتاح الحقل') }}
-        </small>
-      </div>
+  <div dir="rtl" class="dialog-body">
+    <form class="field-form" [formGroup]="form">
+      <section class="form-card">
+        <h4>البيانات الأساسية للحقل</h4>
+        <div class="grid two-cols">
+          <div class="field">
+            <label>مفتاح الحقل *</label>
+            <input pInputText type="text" formControlName="fieldKey" />
+            <small class="field-error" *ngIf="isInvalid('fieldKey')">
+              {{ getValidationMessage('fieldKey', 'مفتاح الحقل') }}
+            </small>
+          </div>
 
-      <div class="field">
-        <label>اسم العرض</label>
-        <input pInputText type="text" formControlName="fieldLabel" />
-        <small class="field-error" *ngIf="isInvalid('fieldLabel')">
-          {{ getValidationMessage('fieldLabel', 'اسم العرض') }}
-        </small>
-      </div>
+          <div class="field">
+            <label>اسم العرض</label>
+            <input pInputText type="text" formControlName="fieldLabel" />
+            <small class="field-error" *ngIf="isInvalid('fieldLabel')">
+              {{ getValidationMessage('fieldLabel', 'اسم العرض') }}
+            </small>
+          </div>
 
-      <div class="field">
-        <label>نوع الحقل *</label>
-        <p-dropdown [options]="fieldTypes" optionLabel="label" optionValue="value" formControlName="fieldType" appendTo="body"></p-dropdown>
-        <small class="field-error" *ngIf="isInvalid('fieldType') || hasRequiredError('fieldType')">
-          {{ getValidationMessage('fieldType', 'نوع الحقل') }}
-        </small>
-      </div>
+          <div class="field">
+            <label>نوع الحقل *</label>
+            <p-dropdown
+              [options]="fieldTypes"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="fieldType"
+              appendTo="body"
+              panelStyleClass="rtl-overlay-panel"></p-dropdown>
+            <small class="field-error" *ngIf="isInvalid('fieldType') || hasRequiredError('fieldType')">
+              {{ getValidationMessage('fieldType', 'نوع الحقل') }}
+            </small>
+          </div>
 
-      <div class="field">
-        <label>التطبيق</label>
-        <input pInputText type="text" formControlName="applicationId" />
-        <small class="field-error" *ngIf="isInvalid('applicationId')">
-          {{ getValidationMessage('applicationId', 'معرف التطبيق') }}
-        </small>
-      </div>
+          <div class="field">
+            <label>التطبيق</label>
+            <input pInputText type="text" formControlName="applicationId" />
+            <small class="field-error" *ngIf="isInvalid('applicationId')">
+              {{ getValidationMessage('applicationId', 'معرف التطبيق') }}
+            </small>
+          </div>
 
-      <div class="field">
-        <label>النص الإرشادي</label>
-        <input pInputText type="text" formControlName="placeholder" />
-      </div>
+          <div class="field">
+            <label>النص الإرشادي</label>
+            <input pInputText type="text" formControlName="placeholder" />
+          </div>
 
-      <div class="field">
-        <label>القيمة الافتراضية</label>
-        <input pInputText type="text" formControlName="defaultValue" />
-      </div>
+          <div class="field">
+            <label>القيمة الافتراضية</label>
+            <input pInputText type="text" formControlName="defaultValue" />
+          </div>
 
-      <div class="field">
-        <label>نوع البيانات</label>
-        <input pInputText type="text" formControlName="dataType" />
-        <small class="field-error" *ngIf="isInvalid('dataType')">
-          {{ getValidationMessage('dataType', 'نوع البيانات') }}
-        </small>
-      </div>
+          <div class="field">
+            <label>نوع البيانات</label>
+            <input pInputText type="text" formControlName="dataType" />
+            <small class="field-error" *ngIf="isInvalid('dataType')">
+              {{ getValidationMessage('dataType', 'نوع البيانات') }}
+            </small>
+          </div>
 
-      <div class="field">
-        <label>قناع الإدخال</label>
-        <input pInputText type="text" formControlName="mask" />
-        <small class="field-error" *ngIf="isInvalid('mask')">
-          {{ getValidationMessage('mask', 'قناع الإدخال') }}
-        </small>
-      </div>
+          <div class="field">
+            <label>قناع الإدخال</label>
+            <input pInputText type="text" formControlName="mask" />
+            <small class="field-error" *ngIf="isInvalid('mask')">
+              {{ getValidationMessage('mask', 'قناع الإدخال') }}
+            </small>
+          </div>
 
-      <div class="field">
-        <label>أقل قيمة</label>
-        <input pInputText type="text" formControlName="minValue" />
-      </div>
+          <div class="field">
+            <label>أقل قيمة</label>
+            <input pInputText type="text" formControlName="minValue" />
+          </div>
 
-      <div class="field">
-        <label>أقصى قيمة</label>
-        <input pInputText type="text" formControlName="maxValue" />
-      </div>
+          <div class="field">
+            <label>أقصى قيمة</label>
+            <input pInputText type="text" formControlName="maxValue" />
+          </div>
 
-      <div class="field">
-        <label>العرض</label>
-        <input pInputText type="number" formControlName="width" />
-        <small class="field-error" *ngIf="isInvalid('width')">
-          {{ getValidationMessage('width', 'العرض') }}
-        </small>
-      </div>
+          <div class="field">
+            <label>العرض</label>
+            <input pInputText type="number" formControlName="width" />
+            <small class="field-error" *ngIf="isInvalid('width')">
+              {{ getValidationMessage('width', 'العرض') }}
+            </small>
+          </div>
 
-      <div class="field">
-        <label>الارتفاع</label>
-        <input pInputText type="number" formControlName="height" />
-        <small class="field-error" *ngIf="isInvalid('height')">
-          {{ getValidationMessage('height', 'الارتفاع') }}
-        </small>
-      </div>
-    </div>
+          <div class="field">
+            <label>الارتفاع</label>
+            <input pInputText type="number" formControlName="height" />
+            <small class="field-error" *ngIf="isInvalid('height')">
+              {{ getValidationMessage('height', 'الارتفاع') }}
+            </small>
+          </div>
+        </div>
+      </section>
 
-    <div class="field" *ngIf="isOptionsTypeSelected()">
-      <label>خيارات الحقل (JSON أو نص مفصول بفاصلة)</label>
-      <textarea pInputTextarea rows="4" formControlName="optionsPayload"></textarea>
-    </div>
+      <section class="form-card" *ngIf="isOptionsTypeSelected()">
+        <div class="options-head">
+          <div>
+            <h4>خيارات القائمة (Key / Value)</h4>
+            <p>أدخل الخيارات كسطور مستقلة بدل JSON خام. سيتم الحفظ في `optionsPayload` تلقائيًا.</p>
+          </div>
+          <button pButton type="button" icon="pi pi-plus" label="إضافة صف" class="p-button-outlined" (click)="addOptionRow()"></button>
+        </div>
 
-    <div class="toggles">
-      <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
-      <label><span>مطلوب</span><p-inputSwitch formControlName="required"></p-inputSwitch></label>
-      <label><span>يشترط القيمة (True)</span><p-inputSwitch formControlName="requiredTrue"></p-inputSwitch></label>
-      <label><span>تحقق البريد الإلكتروني</span><p-inputSwitch formControlName="email"></p-inputSwitch></label>
-      <label><span>تحقق النمط</span><p-inputSwitch formControlName="pattern"></p-inputSwitch></label>
-      <label><span>معطل مبدئيًا</span><p-inputSwitch formControlName="isDisabledInit"></p-inputSwitch></label>
-      <label><span>قابل للبحث</span><p-inputSwitch formControlName="isSearchable"></p-inputSwitch></label>
-    </div>
-  </form>
+        <div class="options-table-wrap">
+          <table class="options-table">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Value</th>
+                <th>حذف</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of optionRows; let i = index; trackBy: trackByOptionRow">
+                <td>
+                  <input pInputText type="text" [(ngModel)]="row.key" [ngModelOptions]="{ standalone: true }" (ngModelChange)="onOptionRowsChanged()" placeholder="مثل: HIGH" />
+                </td>
+                <td>
+                  <input pInputText type="text" [(ngModel)]="row.value" [ngModelOptions]="{ standalone: true }" (ngModelChange)="onOptionRowsChanged()" placeholder="مثل: أولوية عالية" />
+                </td>
+                <td class="actions-col">
+                  <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="removeOptionRow(i)"></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <small class="field-error" *ngIf="hasOptionsValidationError()">{{ getOptionsValidationMessage() }}</small>
+
+        <div class="field payload-preview">
+          <label>معاينة `optionsPayload` الناتج</label>
+          <textarea pInputTextarea rows="3" [readonly]="true" [value]="optionsPreviewValue"></textarea>
+        </div>
+      </section>
+
+      <section class="form-card">
+        <h4>سلوك الحقل</h4>
+        <div class="toggles">
+          <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
+          <label><span>مطلوب</span><p-inputSwitch formControlName="required"></p-inputSwitch></label>
+          <label><span>يشترط القيمة (True)</span><p-inputSwitch formControlName="requiredTrue"></p-inputSwitch></label>
+          <label><span>تحقق البريد الإلكتروني</span><p-inputSwitch formControlName="email"></p-inputSwitch></label>
+          <label><span>تحقق النمط</span><p-inputSwitch formControlName="pattern"></p-inputSwitch></label>
+          <label><span>معطل مبدئيًا</span><p-inputSwitch formControlName="isDisabledInit"></p-inputSwitch></label>
+          <label><span>قابل للبحث</span><p-inputSwitch formControlName="isSearchable"></p-inputSwitch></label>
+        </div>
+      </section>
+    </form>
+  </div>
 
   <ng-template pTemplate="footer">
     <button pButton type="button" label="إلغاء" class="p-button-text" (click)="dialogVisible = false"></button>
