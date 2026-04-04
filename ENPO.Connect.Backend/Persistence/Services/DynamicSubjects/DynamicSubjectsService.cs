@@ -115,9 +115,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
             response.Data = BuildChildren(0);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = "500", Message = "حدث خطأ غير متوقع أثناء تحميل تعريف النموذج." });
         }
 
         return response;
@@ -128,6 +128,16 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         string userId,
         string? appId,
         CancellationToken cancellationToken = default)
+    {
+        return await BuildFormDefinitionAsync(categoryId, userId, appId, allowInactiveCategory: false, cancellationToken);
+    }
+
+    private async Task<CommonResponse<SubjectFormDefinitionDto>> BuildFormDefinitionAsync(
+        int categoryId,
+        string userId,
+        string? appId,
+        bool allowInactiveCategory,
+        CancellationToken cancellationToken)
     {
         var response = new CommonResponse<SubjectFormDefinitionDto>();
         try
@@ -148,7 +158,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
-            if (category.CatStatus)
+            if (!allowInactiveCategory && category.CatStatus)
             {
                 response.Errors.Add(new Error { Code = "403", Message = "النوع غير مفعل." });
                 return response;
@@ -231,9 +241,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 Fields = fieldRows
             };
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = "500", Message = "حدث خطأ غير متوقع أثناء تحميل تعريف النموذج." });
         }
 
         return response;
@@ -347,9 +357,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 normalizedUserId,
                 cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = "500", Message = "حدث خطأ غير متوقع أثناء إنشاء الموضوع." });
         }
 
         return response;
@@ -522,7 +532,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
-            response.Data = await BuildSubjectDetailAsync(messageId, cancellationToken);
+            response.Data = await BuildSubjectDetailAsync(message, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -1640,10 +1650,11 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             }
 
             IQueryable<Cdcategory> categoriesQuery = _connectContext.Cdcategories.AsNoTracking();
-            if (!string.IsNullOrWhiteSpace(appId))
+            var normalizedAppId = NormalizeNullable(appId);
+            if (normalizedAppId != null)
             {
                 categoriesQuery = categoriesQuery.Where(category =>
-                    string.Equals(category.ApplicationId ?? string.Empty, appId, StringComparison.OrdinalIgnoreCase));
+                    (category.ApplicationId ?? string.Empty) == normalizedAppId);
             }
 
             var categories = await categoriesQuery
@@ -1734,16 +1745,41 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 prefix = $"SUBJ{categoryId}";
             }
 
+            if (prefix.Length > 40)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "بادئة المرجع يجب ألا تزيد عن 40 حرفًا." });
+                return response;
+            }
+
             var separator = (safeRequest.ReferenceSeparator ?? "-").Trim();
             if (separator.Length == 0)
             {
                 separator = "-";
             }
 
+            if (separator.Length > 10)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "فاصل المرجع يجب ألا يزيد عن 10 أحرف." });
+                return response;
+            }
+
+            var sourceFieldKeys = NormalizeNullable(safeRequest.SourceFieldKeys);
+            if (sourceFieldKeys != null && sourceFieldKeys.Length > 500)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "حقول المصدر يجب ألا تزيد عن 500 حرف." });
+                return response;
+            }
+
             var sequenceName = NormalizeNullable(safeRequest.SequenceName);
             if (safeRequest.UseSequence && sequenceName == null)
             {
                 sequenceName = "Seq_Tickets";
+            }
+
+            if (sequenceName != null && sequenceName.Length > 80)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "اسم التسلسل يجب ألا يزيد عن 80 حرفًا." });
+                return response;
             }
 
             if (policy == null)
@@ -1753,7 +1789,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     CategoryId = categoryId,
                     Prefix = prefix,
                     Separator = separator,
-                    SourceFieldKeys = NormalizeNullable(safeRequest.SourceFieldKeys),
+                    SourceFieldKeys = sourceFieldKeys,
                     IncludeYear = safeRequest.IncludeYear,
                     UseSequence = safeRequest.UseSequence,
                     SequenceName = sequenceName,
@@ -1769,7 +1805,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             {
                 policy.Prefix = prefix;
                 policy.Separator = separator;
-                policy.SourceFieldKeys = NormalizeNullable(safeRequest.SourceFieldKeys);
+                policy.SourceFieldKeys = sourceFieldKeys;
                 policy.IncludeYear = safeRequest.IncludeYear;
                 policy.UseSequence = safeRequest.UseSequence;
                 policy.SequenceName = sequenceName;
@@ -1814,9 +1850,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             };
             await _realtimePublisher.PublishAsync(payload, scope, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            response.Errors.Add(new Error { Code = "500", Message = "حدث خطأ غير متوقع أثناء حفظ إعدادات النوع." });
         }
 
         return response;
@@ -1864,10 +1900,15 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         string? appId,
         CancellationToken cancellationToken)
     {
-        var categories = await _connectContext.Cdcategories
-            .AsNoTracking()
-            .Where(category => string.IsNullOrWhiteSpace(appId)
-                || string.Equals(category.ApplicationId ?? string.Empty, appId, StringComparison.OrdinalIgnoreCase))
+        var normalizedAppId = NormalizeNullable(appId);
+        IQueryable<Cdcategory> categoriesQuery = _connectContext.Cdcategories.AsNoTracking();
+        if (normalizedAppId != null)
+        {
+            categoriesQuery = categoriesQuery.Where(category =>
+                (category.ApplicationId ?? string.Empty) == normalizedAppId);
+        }
+
+        var categories = await categoriesQuery
             .OrderBy(category => category.CatParent)
             .ThenBy(category => category.CatName)
             .ToListAsync(cancellationToken);
@@ -2275,6 +2316,12 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             return null;
         }
 
+        return await BuildSubjectDetailAsync(message, cancellationToken);
+    }
+
+    private async Task<SubjectDetailDto> BuildSubjectDetailAsync(Message message, CancellationToken cancellationToken)
+    {
+        var messageId = message.MessageId;
         var dynamicFields = await _connectContext.TkmendFields
             .AsNoTracking()
             .Where(item => item.FildRelted == messageId)

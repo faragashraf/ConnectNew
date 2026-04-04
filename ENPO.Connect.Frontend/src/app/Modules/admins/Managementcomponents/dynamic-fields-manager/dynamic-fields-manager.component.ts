@@ -50,25 +50,25 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
     this.form = this.fb.group({
       cdmendSql: [null],
       fieldKey: ['', [Validators.required, Validators.maxLength(50)]],
-      fieldType: ['InputText', Validators.required],
-      fieldLabel: ['', [Validators.required, Validators.maxLength(80)]],
+      fieldType: ['InputText', [Validators.required, Validators.maxLength(50)]],
+      fieldLabel: ['', Validators.maxLength(50)],
       placeholder: [''],
       defaultValue: [''],
       optionsPayload: [''],
-      dataType: [''],
+      dataType: ['', Validators.maxLength(50)],
       required: [false],
       requiredTrue: [false],
       email: [false],
       pattern: [false],
       minValue: [''],
       maxValue: [''],
-      mask: [''],
+      mask: ['', Validators.maxLength(30)],
       isActive: [true],
-      width: [0, Validators.required],
-      height: [0, Validators.required],
+      width: [0, [Validators.required, Validators.min(0)]],
+      height: [0, [Validators.required, Validators.min(0)]],
       isDisabledInit: [false],
       isSearchable: [false],
-      applicationId: ['', Validators.required]
+      applicationId: ['', Validators.maxLength(10)]
     });
   }
 
@@ -276,6 +276,41 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges {
   isOptionsTypeSelected(): boolean {
     const type = String(this.form.get('fieldType')?.value ?? '').toLowerCase();
     return type.includes('drop') || type.includes('radio');
+  }
+
+  isInvalid(controlName: string): boolean {
+    const control = this.form.get(controlName);
+    return !!control && control.invalid && (control.touched || control.dirty);
+  }
+
+  hasRequiredError(controlName: string): boolean {
+    const control = this.form.get(controlName);
+    return !!control?.errors?.['required'] && (control.touched || control.dirty);
+  }
+
+  getValidationMessage(controlName: string, label: string): string {
+    const control = this.form.get(controlName);
+    if (!control?.errors) {
+      return '';
+    }
+
+    if (control.errors['required']) {
+      return `${label} مطلوب.`;
+    }
+
+    if (control.errors['maxlength']) {
+      return `${label} يجب ألا يزيد عن ${control.errors['maxlength'].requiredLength} حرفًا.`;
+    }
+
+    if (control.errors['min']) {
+      return `${label} يجب أن يكون ${control.errors['min'].min} أو أكبر.`;
+    }
+
+    if (control.errors['max']) {
+      return `${label} يجب أن يكون ${control.errors['max'].max} أو أقل.`;
+    }
+
+    return `قيمة ${label} غير صالحة.`;
   }
 
   private toUpsertPayload(): SubjectAdminFieldUpsertRequestDto {

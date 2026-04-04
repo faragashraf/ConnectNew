@@ -2885,7 +2885,12 @@ namespace Persistence.Services
             var candidateMessages = await _connectContext.Messages
                 .AsNoTracking()
                 .Where(m => summerCategoryIds.Contains(m.CategoryCd) && m.Status != MessageStatus.Rejected)
-                .Select(m => new { m.MessageId })
+                .Select(m => new
+                {
+                    m.MessageId,
+                    m.CategoryCd,
+                    m.CreatedDate
+                })
                 .ToListAsync(cancellationToken);
 
             if (!candidateMessages.Any())
@@ -2893,7 +2898,53 @@ namespace Persistence.Services
                 return 0;
             }
 
-            foreach (var item in candidateMessages)
+            var candidateIds = candidateMessages
+                .Select(item => item.MessageId)
+                .ToList();
+            var precheckFields = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(field =>
+                    candidateIds.Contains(field.FildRelted)
+                    && (field.FildKind == PaidAtUtcFieldKind
+                        || field.FildKind == PaymentDueAtUtcFieldKind
+                        || field.FildKind == RequestCreatedAtUtcFieldKind))
+                .ToListAsync(cancellationToken);
+            var precheckFieldsByMessageId = precheckFields
+                .GroupBy(field => field.FildRelted)
+                .ToDictionary(group => group.Key, group => group.ToList());
+
+            var actionableMessageIds = new List<int>();
+            foreach (var candidate in candidateMessages)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                IReadOnlyCollection<TkmendField> fields = precheckFieldsByMessageId.TryGetValue(candidate.MessageId, out var groupedFields)
+                    ? groupedFields
+                    : Array.Empty<TkmendField>();
+                if (ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind)).HasValue)
+                {
+                    continue;
+                }
+
+                var dueAtProbe = new Message
+                {
+                    MessageId = candidate.MessageId,
+                    CategoryCd = candidate.CategoryCd,
+                    CreatedDate = candidate.CreatedDate
+                };
+                var dueAt = ResolvePaymentDueAtUtc(dueAtProbe, fields);
+                if (nowUtc > dueAt)
+                {
+                    actionableMessageIds.Add(candidate.MessageId);
+                }
+            }
+
+            if (!actionableMessageIds.Any())
+            {
+                return 0;
+            }
+
+            foreach (var messageId in actionableMessageIds)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -2908,7 +2959,7 @@ namespace Persistence.Services
                 try
                 {
                     var message = await _connectContext.Messages
-                        .FirstOrDefaultAsync(m => m.MessageId == item.MessageId, cancellationToken);
+                        .FirstOrDefaultAsync(m => m.MessageId == messageId, cancellationToken);
 
                     if (message == null || message.Status == MessageStatus.Rejected)
                     {

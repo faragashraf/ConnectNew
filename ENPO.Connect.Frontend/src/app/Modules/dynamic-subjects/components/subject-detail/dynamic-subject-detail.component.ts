@@ -89,8 +89,15 @@ export class DynamicSubjectDetailComponent implements OnInit, OnDestroy {
           return;
         }
 
+        const updatedStatus = Number(response?.data?.newStatus ?? this.statusToApply ?? this.subject?.status ?? 0);
+        if (this.subject && Number.isFinite(updatedStatus)) {
+          this.subject.status = updatedStatus;
+          this.subject.statusLabel = this.toArabicStatusLabel(updatedStatus, this.subject.statusLabel);
+          this.subject.lastModifiedDate = response?.data?.changedAtUtc || this.subject.lastModifiedDate;
+          this.statusToApply = updatedStatus;
+        }
+
         this.appNotification.success('تم تحديث الحالة بنجاح.');
-        this.loadSubject();
       },
       error: () => {
         this.appNotification.error('حدث خطأ أثناء تحديث الحالة.');

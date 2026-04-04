@@ -97,21 +97,33 @@
       <div class="field">
         <label>مفتاح الحقل *</label>
         <input pInputText type="text" formControlName="fieldKey" />
+        <small class="field-error" *ngIf="isInvalid('fieldKey')">
+          {{ getValidationMessage('fieldKey', 'مفتاح الحقل') }}
+        </small>
       </div>
 
       <div class="field">
-        <label>اسم العرض *</label>
+        <label>اسم العرض</label>
         <input pInputText type="text" formControlName="fieldLabel" />
+        <small class="field-error" *ngIf="isInvalid('fieldLabel')">
+          {{ getValidationMessage('fieldLabel', 'اسم العرض') }}
+        </small>
       </div>
 
       <div class="field">
         <label>نوع الحقل *</label>
         <p-dropdown [options]="fieldTypes" optionLabel="label" optionValue="value" formControlName="fieldType" appendTo="body"></p-dropdown>
+        <small class="field-error" *ngIf="isInvalid('fieldType') || hasRequiredError('fieldType')">
+          {{ getValidationMessage('fieldType', 'نوع الحقل') }}
+        </small>
       </div>
 
       <div class="field">
-        <label>التطبيق *</label>
+        <label>التطبيق</label>
         <input pInputText type="text" formControlName="applicationId" />
+        <small class="field-error" *ngIf="isInvalid('applicationId')">
+          {{ getValidationMessage('applicationId', 'معرف التطبيق') }}
+        </small>
       </div>
 
       <div class="field">
@@ -127,11 +139,17 @@
       <div class="field">
         <label>نوع البيانات</label>
         <input pInputText type="text" formControlName="dataType" />
+        <small class="field-error" *ngIf="isInvalid('dataType')">
+          {{ getValidationMessage('dataType', 'نوع البيانات') }}
+        </small>
       </div>
 
       <div class="field">
         <label>قناع الإدخال</label>
         <input pInputText type="text" formControlName="mask" />
+        <small class="field-error" *ngIf="isInvalid('mask')">
+          {{ getValidationMessage('mask', 'قناع الإدخال') }}
+        </small>
       </div>
 
       <div class="field">
@@ -147,11 +165,17 @@
       <div class="field">
         <label>العرض</label>
         <input pInputText type="number" formControlName="width" />
+        <small class="field-error" *ngIf="isInvalid('width')">
+          {{ getValidationMessage('width', 'العرض') }}
+        </small>
       </div>
 
       <div class="field">
         <label>الارتفاع</label>
         <input pInputText type="number" formControlName="height" />
+        <small class="field-error" *ngIf="isInvalid('height')">
+          {{ getValidationMessage('height', 'الارتفاع') }}
+        </small>
       </div>
     </div>
 
@@ -173,6 +197,6 @@
 
   <ng-template pTemplate="footer">
     <button pButton type="button" label="إلغاء" class="p-button-text" (click)="dialogVisible = false"></button>
-    <button pButton type="button" label="حفظ" icon="pi pi-check" [loading]="saving" (click)="saveField()"></button>
+    <button pButton type="button" label="حفظ" icon="pi pi-check" [loading]="saving" [disabled]="saving || form.invalid" (click)="saveField()"></button>
   </ng-template>
 </p-dialog>

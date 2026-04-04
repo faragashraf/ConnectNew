@@ -148,6 +148,12 @@
   }
 }
 
+.field-error {
+  color: #b91c1c;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
 .switches {
   grid-column: 1 / -1;
   display: flex;

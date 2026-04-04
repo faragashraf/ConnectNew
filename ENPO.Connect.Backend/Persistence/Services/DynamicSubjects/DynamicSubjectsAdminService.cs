@@ -13,6 +13,22 @@ namespace Persistence.Services.DynamicSubjects;
 
 public sealed partial class DynamicSubjectsService
 {
+    private const int CategoryNameMaxLength = 50;
+    private const int ApplicationIdMaxLength = 10;
+    private const int RecipientMaxLength = 100;
+    private const int FieldKeyMaxLength = 50;
+    private const int FieldTypeMaxLength = 50;
+    private const int FieldLabelMaxLength = 50;
+    private const int FieldDataTypeMaxLength = 50;
+    private const int FieldMaskMaxLength = 30;
+    private const int GroupNameMaxLength = 100;
+    private const int GroupDescriptionMaxLength = 255;
+    private const int GroupWithInRowMaxValue = 12;
+    private const int ReferencePrefixMaxLength = 40;
+    private const int ReferenceSeparatorMaxLength = 10;
+    private const int SourceFieldKeysMaxLength = 500;
+    private const int SequenceNameMaxLength = 80;
+
     public async Task<CommonResponse<IEnumerable<SubjectTypeAdminDto>>> GetAdminCategoryTreeAsync(
         string userId,
         string? appId,
@@ -37,6 +53,18 @@ public sealed partial class DynamicSubjectsService
             }
 
             var safeRequest = request ?? new SubjectTypeAdminCreateRequestDto();
+            if (safeRequest.ParentCategoryId < 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "المعرف الأب غير صالح." });
+                return response;
+            }
+
+            if (safeRequest.CatWorkFlow < 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "رقم مسار العمل يجب أن يكون صفرًا أو قيمة موجبة." });
+                return response;
+            }
+
             var categoryName = (safeRequest.CategoryName ?? string.Empty).Trim();
             if (categoryName.Length == 0)
             {
@@ -44,16 +72,66 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (categoryName.Length > CategoryNameMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"اسم النوع يجب ألا يزيد عن {CategoryNameMaxLength} حرفًا." });
+                return response;
+            }
+
+            var applicationId = NormalizeNullable(safeRequest.ApplicationId);
+            if (ExceedsMaxLength(applicationId, ApplicationIdMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"معرف التطبيق يجب ألا يزيد عن {ApplicationIdMaxLength} أحرف." });
+                return response;
+            }
+
+            var to = NormalizeNullable(safeRequest.To);
+            if (ExceedsMaxLength(to, RecipientMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"حقل 'إلى' يجب ألا يزيد عن {RecipientMaxLength} حرفًا." });
+                return response;
+            }
+
+            var cc = NormalizeNullable(safeRequest.Cc);
+            if (ExceedsMaxLength(cc, RecipientMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"حقل 'نسخة' يجب ألا يزيد عن {RecipientMaxLength} حرفًا." });
+                return response;
+            }
+
+            Cdcategory? parentCategory = null;
             if (safeRequest.ParentCategoryId > 0)
             {
-                var parentExists = await _connectContext.Cdcategories
+                parentCategory = await _connectContext.Cdcategories
                     .AsNoTracking()
-                    .AnyAsync(item => item.CatId == safeRequest.ParentCategoryId, cancellationToken);
-                if (!parentExists)
+                    .FirstOrDefaultAsync(item => item.CatId == safeRequest.ParentCategoryId, cancellationToken);
+                if (parentCategory == null)
                 {
                     response.Errors.Add(new Error { Code = "404", Message = "النوع الأب غير موجود." });
                     return response;
                 }
+
+                var parentApplicationId = NormalizeNullable(parentCategory.ApplicationId);
+                if (applicationId == null)
+                {
+                    applicationId = parentApplicationId;
+                }
+                else if (parentApplicationId != null && !EqualsNormalized(parentApplicationId, applicationId))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن إنشاء نوع فرعي بتطبيق مختلف عن النوع الأب." });
+                    return response;
+                }
+            }
+
+            if (await HasSiblingCategoryNameConflictAsync(
+                    excludedCategoryId: null,
+                    parentCategoryId: safeRequest.ParentCategoryId,
+                    categoryName: categoryName,
+                    applicationId: applicationId,
+                    cancellationToken: cancellationToken))
+            {
+                response.Errors.Add(new Error { Code = "409", Message = "يوجد نوع آخر بنفس الاسم داخل نفس المستوى." });
+                return response;
             }
 
             var nextCategoryId = _helperService.GetSequenceNextValue("Seq_Categories");
@@ -73,11 +151,11 @@ public sealed partial class DynamicSubjectsService
                 CatWorkFlow = safeRequest.CatWorkFlow,
                 CatSms = safeRequest.CatSms,
                 CatMailNotification = safeRequest.CatMailNotification,
-                To = NormalizeNullable(safeRequest.To),
-                Cc = NormalizeNullable(safeRequest.Cc),
+                To = to,
+                Cc = cc,
                 StampDate = DateTime.Now,
                 CatCreatedBy = int.TryParse(normalizedUserId, out var parsedCreator) ? parsedCreator : null,
-                ApplicationId = NormalizeNullable(safeRequest.ApplicationId)
+                ApplicationId = applicationId
             };
 
             await _connectContext.Cdcategories.AddAsync(category, cancellationToken);
@@ -104,9 +182,9 @@ public sealed partial class DynamicSubjectsService
                     DisplayOrder = displayOrder
                 });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -128,6 +206,12 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
+                return response;
+            }
+
             var category = await _connectContext.Cdcategories
                 .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
             if (category == null)
@@ -144,14 +228,81 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (categoryName.Length > CategoryNameMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"اسم النوع يجب ألا يزيد عن {CategoryNameMaxLength} حرفًا." });
+                return response;
+            }
+
+            if (safeRequest.CatWorkFlow < 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "رقم مسار العمل يجب أن يكون صفرًا أو قيمة موجبة." });
+                return response;
+            }
+
+            var applicationId = NormalizeNullable(safeRequest.ApplicationId);
+            if (ExceedsMaxLength(applicationId, ApplicationIdMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"معرف التطبيق يجب ألا يزيد عن {ApplicationIdMaxLength} أحرف." });
+                return response;
+            }
+
+            var to = NormalizeNullable(safeRequest.To);
+            if (ExceedsMaxLength(to, RecipientMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"حقل 'إلى' يجب ألا يزيد عن {RecipientMaxLength} حرفًا." });
+                return response;
+            }
+
+            var cc = NormalizeNullable(safeRequest.Cc);
+            if (ExceedsMaxLength(cc, RecipientMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"حقل 'نسخة' يجب ألا يزيد عن {RecipientMaxLength} حرفًا." });
+                return response;
+            }
+
+            if (category.CatParent > 0)
+            {
+                var parentCategory = await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.CatId == category.CatParent, cancellationToken);
+                if (parentCategory == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "النوع الأب غير موجود." });
+                    return response;
+                }
+
+                var parentApplicationId = NormalizeNullable(parentCategory.ApplicationId);
+                if (applicationId == null)
+                {
+                    applicationId = parentApplicationId;
+                }
+                else if (parentApplicationId != null && !EqualsNormalized(parentApplicationId, applicationId))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تعيين تطبيق مختلف عن النوع الأب." });
+                    return response;
+                }
+            }
+
+            if (await HasSiblingCategoryNameConflictAsync(
+                    excludedCategoryId: categoryId,
+                    parentCategoryId: category.CatParent,
+                    categoryName: categoryName,
+                    applicationId: applicationId,
+                    cancellationToken: cancellationToken))
+            {
+                response.Errors.Add(new Error { Code = "409", Message = "يوجد نوع آخر بنفس الاسم داخل نفس المستوى." });
+                return response;
+            }
+
             category.CatName = categoryName;
-            category.ApplicationId = NormalizeNullable(safeRequest.ApplicationId);
+            category.ApplicationId = applicationId;
             category.CatMend = NormalizeNullable(safeRequest.CatMend);
             category.CatWorkFlow = safeRequest.CatWorkFlow;
             category.CatSms = safeRequest.CatSms;
             category.CatMailNotification = safeRequest.CatMailNotification;
-            category.To = NormalizeNullable(safeRequest.To);
-            category.Cc = NormalizeNullable(safeRequest.Cc);
+            category.To = to;
+            category.Cc = cc;
             category.CatStatus = !safeRequest.IsActive;
             category.StampDate = DateTime.Now;
 
@@ -170,9 +321,9 @@ public sealed partial class DynamicSubjectsService
 
             response.Data = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy, setting);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -190,6 +341,12 @@ public sealed partial class DynamicSubjectsService
             if (normalizedUserId.Length == 0)
             {
                 response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
                 return response;
             }
 
@@ -246,9 +403,9 @@ public sealed partial class DynamicSubjectsService
 
             response.Data = true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -270,6 +427,12 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
+                return response;
+            }
+
             var category = await _connectContext.Cdcategories
                 .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
             if (category == null)
@@ -279,6 +442,24 @@ public sealed partial class DynamicSubjectsService
             }
 
             var safeRequest = request ?? new SubjectTypeAdminStatusRequestDto();
+            if (safeRequest.IsActive && category.CatParent > 0)
+            {
+                var parentCategory = await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.CatId == category.CatParent, cancellationToken);
+                if (parentCategory == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "النوع الأب غير موجود." });
+                    return response;
+                }
+
+                if (parentCategory.CatStatus)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تفعيل نوع فرعي تحت نوع أب غير مفعل." });
+                    return response;
+                }
+            }
+
             category.CatStatus = !safeRequest.IsActive;
 
             var setting = await EnsureCategorySettingAsync(category.CatId, category.CatParent, normalizedUserId, cancellationToken);
@@ -296,9 +477,9 @@ public sealed partial class DynamicSubjectsService
 
             response.Data = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy, setting);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -320,6 +501,12 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
+                return response;
+            }
+
             var category = await _connectContext.Cdcategories
                 .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
             if (category == null)
@@ -331,6 +518,13 @@ public sealed partial class DynamicSubjectsService
             var safeRequest = request ?? new SubjectTypeAdminTreeMoveRequestDto();
             var newParentId = safeRequest.NewParentCategoryId;
             var oldParentId = category.CatParent;
+            var safeTargetIndex = Math.Max(0, safeRequest.NewIndex);
+
+            if (newParentId < 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "المعرف الأب الهدف غير صالح." });
+                return response;
+            }
 
             if (newParentId == categoryId)
             {
@@ -349,6 +543,19 @@ public sealed partial class DynamicSubjectsService
                     return response;
                 }
 
+                var parentApplicationId = NormalizeNullable(newParent.ApplicationId);
+                var currentApplicationId = NormalizeNullable(category.ApplicationId);
+                if (parentApplicationId != null && currentApplicationId != null && !EqualsNormalized(parentApplicationId, currentApplicationId))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن نقل النوع تحت نوع أب من تطبيق مختلف." });
+                    return response;
+                }
+
+                if (parentApplicationId != null && currentApplicationId == null)
+                {
+                    category.ApplicationId = parentApplicationId;
+                }
+
                 var descendants = await LoadDescendantCategoryIdsAsync(categoryId, cancellationToken);
                 if (descendants.Contains(newParentId))
                 {
@@ -364,13 +571,13 @@ public sealed partial class DynamicSubjectsService
             await _connectContext.SaveChangesAsync(cancellationToken);
 
             await RebalanceCategoryDisplayOrderAsync(oldParentId, normalizedUserId, cancellationToken);
-            await RebalanceCategoryDisplayOrderAsync(newParentId, normalizedUserId, cancellationToken, categoryId, safeRequest.NewIndex);
+            await RebalanceCategoryDisplayOrderAsync(newParentId, normalizedUserId, cancellationToken, categoryId, safeTargetIndex);
 
             response.Data = (await GetAdminCategoryTreeAsync(normalizedUserId, appId: null, cancellationToken)).Data ?? new List<SubjectTypeAdminDto>();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -392,10 +599,10 @@ public sealed partial class DynamicSubjectsService
             }
 
             IQueryable<Cdmend> query = _connectContext.Cdmends.AsNoTracking();
-            if (!string.IsNullOrWhiteSpace(appId))
+            var normalizedAppId = NormalizeNullable(appId);
+            if (normalizedAppId != null)
             {
-                query = query.Where(item =>
-                    string.Equals(item.ApplicationId ?? string.Empty, appId, StringComparison.OrdinalIgnoreCase));
+                query = query.Where(item => (item.ApplicationId ?? string.Empty) == normalizedAppId);
             }
 
             var fields = await query
@@ -420,9 +627,9 @@ public sealed partial class DynamicSubjectsService
 
             response.Data = fields.Select(field => MapAdminField(field, linkedCounts)).ToList();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -452,6 +659,52 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (fieldKey.Length > FieldKeyMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"مفتاح الحقل يجب ألا يزيد عن {FieldKeyMaxLength} حرفًا." });
+                return response;
+            }
+
+            if (fieldType.Length > FieldTypeMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"نوع الحقل يجب ألا يزيد عن {FieldTypeMaxLength} حرفًا." });
+                return response;
+            }
+
+            var fieldLabel = NormalizeNullable(safeRequest.FieldLabel) ?? fieldKey;
+            if (fieldLabel.Length > FieldLabelMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"وصف الحقل يجب ألا يزيد عن {FieldLabelMaxLength} حرفًا." });
+                return response;
+            }
+
+            var dataType = NormalizeNullable(safeRequest.DataType);
+            if (ExceedsMaxLength(dataType, FieldDataTypeMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"نوع البيانات يجب ألا يزيد عن {FieldDataTypeMaxLength} حرفًا." });
+                return response;
+            }
+
+            var mask = NormalizeNullable(safeRequest.Mask);
+            if (ExceedsMaxLength(mask, FieldMaskMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"قناع الإدخال يجب ألا يزيد عن {FieldMaskMaxLength} حرفًا." });
+                return response;
+            }
+
+            var applicationId = NormalizeNullable(safeRequest.ApplicationId);
+            if (ExceedsMaxLength(applicationId, ApplicationIdMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"معرف التطبيق يجب ألا يزيد عن {ApplicationIdMaxLength} أحرف." });
+                return response;
+            }
+
+            if (safeRequest.Width < 0 || safeRequest.Height < 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "أبعاد الحقل يجب أن تكون صفرًا أو قيمًا موجبة." });
+                return response;
+            }
+
             var exists = await _connectContext.Cdmends
                 .AsNoTracking()
                 .AnyAsync(item => item.CdmendTxt == fieldKey, cancellationToken);
@@ -466,30 +719,41 @@ public sealed partial class DynamicSubjectsService
             {
                 nextSql = (await _connectContext.Cdmends.MaxAsync(item => (int?)item.CdmendSql, cancellationToken) ?? 0) + 1;
             }
+            else
+            {
+                var sqlExists = await _connectContext.Cdmends
+                    .AsNoTracking()
+                    .AnyAsync(item => item.CdmendSql == nextSql, cancellationToken);
+                if (sqlExists)
+                {
+                    response.Errors.Add(new Error { Code = "409", Message = "رقم الحقل مستخدم بالفعل." });
+                    return response;
+                }
+            }
 
             var field = new Cdmend
             {
                 CdmendSql = nextSql,
                 CdmendTxt = fieldKey,
                 CdmendType = fieldType,
-                CDMendLbl = NormalizeNullable(safeRequest.FieldLabel) ?? fieldKey,
+                CDMendLbl = fieldLabel,
                 Placeholder = NormalizeNullable(safeRequest.Placeholder),
                 DefaultValue = NormalizeNullable(safeRequest.DefaultValue),
                 CdmendTbl = NormalizeNullable(safeRequest.OptionsPayload),
-                CdmendDatatype = NormalizeNullable(safeRequest.DataType),
+                CdmendDatatype = dataType,
                 Required = safeRequest.Required,
                 RequiredTrue = safeRequest.RequiredTrue,
                 Email = safeRequest.Email,
                 Pattern = safeRequest.Pattern,
                 MinValue = NormalizeNullable(safeRequest.MinValue),
                 MaxValue = NormalizeNullable(safeRequest.MaxValue),
-                Cdmendmask = NormalizeNullable(safeRequest.Mask),
+                Cdmendmask = mask,
                 CdmendStat = !safeRequest.IsActive,
                 Width = safeRequest.Width,
                 Height = safeRequest.Height,
                 IsDisabledInit = safeRequest.IsDisabledInit,
                 IsSearchable = safeRequest.IsSearchable,
-                ApplicationId = NormalizeNullable(safeRequest.ApplicationId)
+                ApplicationId = applicationId
             };
 
             await _connectContext.Cdmends.AddAsync(field, cancellationToken);
@@ -497,9 +761,9 @@ public sealed partial class DynamicSubjectsService
 
             response.Data = MapAdminField(field, new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -545,6 +809,52 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (newFieldKey.Length > FieldKeyMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"مفتاح الحقل يجب ألا يزيد عن {FieldKeyMaxLength} حرفًا." });
+                return response;
+            }
+
+            if (fieldType.Length > FieldTypeMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"نوع الحقل يجب ألا يزيد عن {FieldTypeMaxLength} حرفًا." });
+                return response;
+            }
+
+            var fieldLabel = NormalizeNullable(safeRequest.FieldLabel) ?? newFieldKey;
+            if (fieldLabel.Length > FieldLabelMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"وصف الحقل يجب ألا يزيد عن {FieldLabelMaxLength} حرفًا." });
+                return response;
+            }
+
+            var dataType = NormalizeNullable(safeRequest.DataType);
+            if (ExceedsMaxLength(dataType, FieldDataTypeMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"نوع البيانات يجب ألا يزيد عن {FieldDataTypeMaxLength} حرفًا." });
+                return response;
+            }
+
+            var mask = NormalizeNullable(safeRequest.Mask);
+            if (ExceedsMaxLength(mask, FieldMaskMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"قناع الإدخال يجب ألا يزيد عن {FieldMaskMaxLength} حرفًا." });
+                return response;
+            }
+
+            var applicationId = NormalizeNullable(safeRequest.ApplicationId);
+            if (ExceedsMaxLength(applicationId, ApplicationIdMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"معرف التطبيق يجب ألا يزيد عن {ApplicationIdMaxLength} أحرف." });
+                return response;
+            }
+
+            if (safeRequest.Width < 0 || safeRequest.Height < 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "أبعاد الحقل يجب أن تكون صفرًا أو قيمًا موجبة." });
+                return response;
+            }
+
             if (!string.Equals(oldFieldKey, newFieldKey, StringComparison.OrdinalIgnoreCase))
             {
                 var targetExists = await _connectContext.Cdmends
@@ -567,24 +877,24 @@ public sealed partial class DynamicSubjectsService
 
             field.CdmendTxt = newFieldKey;
             field.CdmendType = fieldType;
-            field.CDMendLbl = NormalizeNullable(safeRequest.FieldLabel) ?? newFieldKey;
+            field.CDMendLbl = fieldLabel;
             field.Placeholder = NormalizeNullable(safeRequest.Placeholder);
             field.DefaultValue = NormalizeNullable(safeRequest.DefaultValue);
             field.CdmendTbl = NormalizeNullable(safeRequest.OptionsPayload);
-            field.CdmendDatatype = NormalizeNullable(safeRequest.DataType);
+            field.CdmendDatatype = dataType;
             field.Required = safeRequest.Required;
             field.RequiredTrue = safeRequest.RequiredTrue;
             field.Email = safeRequest.Email;
             field.Pattern = safeRequest.Pattern;
             field.MinValue = NormalizeNullable(safeRequest.MinValue);
             field.MaxValue = NormalizeNullable(safeRequest.MaxValue);
-            field.Cdmendmask = NormalizeNullable(safeRequest.Mask);
+            field.Cdmendmask = mask;
             field.CdmendStat = !safeRequest.IsActive;
             field.Width = safeRequest.Width;
             field.Height = safeRequest.Height;
             field.IsDisabledInit = safeRequest.IsDisabledInit;
             field.IsSearchable = safeRequest.IsSearchable;
-            field.ApplicationId = NormalizeNullable(safeRequest.ApplicationId);
+            field.ApplicationId = applicationId;
 
             await _connectContext.SaveChangesAsync(cancellationToken);
 
@@ -602,9 +912,9 @@ public sealed partial class DynamicSubjectsService
                     [newFieldKey] = linkedCount
                 });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -655,9 +965,9 @@ public sealed partial class DynamicSubjectsService
             await _connectContext.SaveChangesAsync(cancellationToken);
             response.Data = true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -703,9 +1013,9 @@ public sealed partial class DynamicSubjectsService
                 LinkedFieldsCount = linkedCounts.TryGetValue(group.GroupId, out var count) ? count : 0
             }).ToList();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -734,6 +1044,39 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (groupName.Length > GroupNameMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"اسم المجموعة يجب ألا يزيد عن {GroupNameMaxLength} حرفًا." });
+                return response;
+            }
+
+            var groupDescription = NormalizeNullable(safeRequest.GroupDescription);
+            if (ExceedsMaxLength(groupDescription, GroupDescriptionMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"وصف المجموعة يجب ألا يزيد عن {GroupDescriptionMaxLength} حرفًا." });
+                return response;
+            }
+
+            var groupWithInRow = safeRequest.GroupWithInRow.GetValueOrDefault(1);
+            if (groupWithInRow <= 0 || groupWithInRow > GroupWithInRowMaxValue)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"عدد العناصر داخل الصف يجب أن يكون بين 1 و {GroupWithInRowMaxValue}."
+                });
+                return response;
+            }
+
+            var duplicateNameExists = await _connectContext.MandGroups
+                .AsNoTracking()
+                .AnyAsync(item => item.GroupName == groupName, cancellationToken);
+            if (duplicateNameExists)
+            {
+                response.Errors.Add(new Error { Code = "409", Message = "اسم المجموعة موجود بالفعل." });
+                return response;
+            }
+
             var nextId = (await _connectContext.MandGroups
                 .AsNoTracking()
                 .MaxAsync(item => (int?)item.GroupId, cancellationToken) ?? 0) + 1;
@@ -742,9 +1085,9 @@ public sealed partial class DynamicSubjectsService
             {
                 GroupId = nextId,
                 GroupName = groupName,
-                GroupDescription = NormalizeNullable(safeRequest.GroupDescription),
+                GroupDescription = groupDescription,
                 IsExtendable = safeRequest.IsExtendable,
-                GroupWithInRow = safeRequest.GroupWithInRow
+                GroupWithInRow = groupWithInRow
             };
 
             await _connectContext.MandGroups.AddAsync(group, cancellationToken);
@@ -760,9 +1103,9 @@ public sealed partial class DynamicSubjectsService
                 LinkedFieldsCount = 0
             };
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -800,10 +1143,43 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (groupName.Length > GroupNameMaxLength)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"اسم المجموعة يجب ألا يزيد عن {GroupNameMaxLength} حرفًا." });
+                return response;
+            }
+
+            var groupDescription = NormalizeNullable(safeRequest.GroupDescription);
+            if (ExceedsMaxLength(groupDescription, GroupDescriptionMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"وصف المجموعة يجب ألا يزيد عن {GroupDescriptionMaxLength} حرفًا." });
+                return response;
+            }
+
+            var groupWithInRow = safeRequest.GroupWithInRow.GetValueOrDefault(1);
+            if (groupWithInRow <= 0 || groupWithInRow > GroupWithInRowMaxValue)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"عدد العناصر داخل الصف يجب أن يكون بين 1 و {GroupWithInRowMaxValue}."
+                });
+                return response;
+            }
+
+            var duplicateNameExists = await _connectContext.MandGroups
+                .AsNoTracking()
+                .AnyAsync(item => item.GroupId != groupId && item.GroupName == groupName, cancellationToken);
+            if (duplicateNameExists)
+            {
+                response.Errors.Add(new Error { Code = "409", Message = "اسم المجموعة موجود بالفعل." });
+                return response;
+            }
+
             group.GroupName = groupName;
-            group.GroupDescription = NormalizeNullable(safeRequest.GroupDescription);
+            group.GroupDescription = groupDescription;
             group.IsExtendable = safeRequest.IsExtendable;
-            group.GroupWithInRow = safeRequest.GroupWithInRow;
+            group.GroupWithInRow = groupWithInRow;
 
             await _connectContext.SaveChangesAsync(cancellationToken);
 
@@ -822,9 +1198,9 @@ public sealed partial class DynamicSubjectsService
                 LinkedFieldsCount = linkedFieldsCount
             };
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -866,9 +1242,9 @@ public sealed partial class DynamicSubjectsService
             await _connectContext.SaveChangesAsync(cancellationToken);
             response.Data = true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -889,6 +1265,12 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
+                return response;
+            }
+
             var category = await _connectContext.Cdcategories
                 .AsNoTracking()
                 .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
@@ -900,9 +1282,9 @@ public sealed partial class DynamicSubjectsService
 
             response.Data = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -924,6 +1306,12 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
+                return response;
+            }
+
             var category = await _connectContext.Cdcategories
                 .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
             if (category == null)
@@ -940,11 +1328,21 @@ public sealed partial class DynamicSubjectsService
                     FieldKey = (item.FieldKey ?? string.Empty).Trim(),
                     GroupId = item.GroupId,
                     IsActive = item.IsActive,
-                    DisplayOrder = item.DisplayOrder,
+                    DisplayOrder = item.DisplayOrder <= 0 ? 1 : item.DisplayOrder,
                     IsVisible = item.IsVisible,
                     DisplaySettingsJson = NormalizeNullable(item.DisplaySettingsJson)
                 })
                 .ToList();
+
+            var duplicatedField = safeItems
+                .GroupBy(item => item.FieldKey, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Count() > 1)?
+                .Key;
+            if (!string.IsNullOrWhiteSpace(duplicatedField))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"الحقل '{duplicatedField}' مكرر داخل نفس النوع." });
+                return response;
+            }
 
             var requestedFieldKeys = safeItems
                 .Select(item => item.FieldKey)
@@ -952,15 +1350,37 @@ public sealed partial class DynamicSubjectsService
                 .ToList();
             var existingFields = await _connectContext.Cdmends
                 .AsNoTracking()
-                .Where(item => requestedFieldKeys.Contains(item.CdmendTxt))
-                .Select(item => item.CdmendTxt)
+                .Where(item => requestedFieldKeys.Contains(item.CdmendTxt) && !item.CdmendStat)
+                .Select(item => new { item.CdmendTxt, item.ApplicationId })
                 .ToListAsync(cancellationToken);
-            var existingFieldsSet = existingFields.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var existingFieldsSet = existingFields
+                .Select(item => item.CdmendTxt)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var missingField = requestedFieldKeys.FirstOrDefault(key => !existingFieldsSet.Contains(key));
             if (!string.IsNullOrWhiteSpace(missingField))
             {
-                response.Errors.Add(new Error { Code = "400", Message = $"الحقل '{missingField}' غير موجود." });
+                response.Errors.Add(new Error { Code = "400", Message = $"الحقل '{missingField}' غير موجود أو غير مفعل." });
                 return response;
+            }
+
+            var categoryApplicationId = NormalizeNullable(category.ApplicationId);
+            if (categoryApplicationId != null)
+            {
+                var incompatibleField = existingFields.FirstOrDefault(field =>
+                {
+                    var fieldApplicationId = NormalizeNullable(field.ApplicationId);
+                    return fieldApplicationId != null && !EqualsNormalized(fieldApplicationId, categoryApplicationId);
+                });
+
+                if (incompatibleField != null)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = $"الحقل '{incompatibleField.CdmendTxt}' يتبع تطبيقًا مختلفًا عن النوع الحالي."
+                    });
+                    return response;
+                }
             }
 
             var requestedGroupIds = safeItems
@@ -1093,9 +1513,9 @@ public sealed partial class DynamicSubjectsService
 
             response.Data = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            AddUnhandledError(response);
         }
 
         return response;
@@ -1107,7 +1527,14 @@ public sealed partial class DynamicSubjectsService
         string? appId,
         CancellationToken cancellationToken = default)
     {
-        return GetFormDefinitionAsync(categoryId, userId, appId, cancellationToken);
+        if (categoryId <= 0)
+        {
+            var invalidResponse = new CommonResponse<SubjectFormDefinitionDto>();
+            invalidResponse.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
+            return Task.FromResult(invalidResponse);
+        }
+
+        return BuildFormDefinitionAsync(categoryId, userId, appId, allowInactiveCategory: true, cancellationToken);
     }
 
     private SubjectAdminFieldDto MapAdminField(Cdmend field, IReadOnlyDictionary<string, int> linkedCounts)
@@ -1321,5 +1748,56 @@ public sealed partial class DynamicSubjectsService
                           DisplaySettingsJson = setting != null ? setting.DisplaySettingsJson : null,
                           ApplicationId = field.ApplicationId
                       }).ToListAsync(cancellationToken);
+    }
+
+    private static bool ExceedsMaxLength(string? value, int maxLength)
+    {
+        return value != null && value.Length > maxLength;
+    }
+
+    private static bool EqualsNormalized(string? left, string? right)
+    {
+        return string.Equals(
+            NormalizeCompare(left),
+            NormalizeCompare(right),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeCompare(string? value)
+    {
+        return (value ?? string.Empty).Trim();
+    }
+
+    private async Task<bool> HasSiblingCategoryNameConflictAsync(
+        int? excludedCategoryId,
+        int parentCategoryId,
+        string categoryName,
+        string? applicationId,
+        CancellationToken cancellationToken)
+    {
+        var siblings = await _connectContext.Cdcategories
+            .AsNoTracking()
+            .Where(item =>
+                item.CatParent == parentCategoryId
+                && (!excludedCategoryId.HasValue || item.CatId != excludedCategoryId.Value))
+            .Select(item => new
+            {
+                item.CatName,
+                item.ApplicationId
+            })
+            .ToListAsync(cancellationToken);
+
+        return siblings.Any(item =>
+            EqualsNormalized(item.CatName, categoryName)
+            && EqualsNormalized(item.ApplicationId, applicationId));
+    }
+
+    private static void AddUnhandledError<T>(CommonResponse<T> response)
+    {
+        response.Errors.Add(new Error
+        {
+            Code = "500",
+            Message = "حدث خطأ غير متوقع أثناء تنفيذ العملية."
+        });
     }
 }

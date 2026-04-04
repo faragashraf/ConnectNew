@@ -52,11 +52,17 @@
               <div class="field">
                 <label>اسم النوع *</label>
                 <input pInputText type="text" formControlName="categoryName" />
+                <small class="field-error" *ngIf="isInvalid(categoryForm, 'categoryName')">
+                  {{ getValidationMessage(categoryForm, 'categoryName', 'اسم النوع') }}
+                </small>
               </div>
 
               <div class="field">
                 <label>معرف التطبيق</label>
                 <input pInputText type="text" formControlName="applicationId" />
+                <small class="field-error" *ngIf="isInvalid(categoryForm, 'applicationId')">
+                  {{ getValidationMessage(categoryForm, 'applicationId', 'معرف التطبيق') }}
+                </small>
               </div>
 
               <div class="field">
@@ -67,16 +73,25 @@
               <div class="field">
                 <label>رقم مسار العمل</label>
                 <input pInputText type="number" formControlName="catWorkFlow" />
+                <small class="field-error" *ngIf="isInvalid(categoryForm, 'catWorkFlow')">
+                  {{ getValidationMessage(categoryForm, 'catWorkFlow', 'رقم مسار العمل') }}
+                </small>
               </div>
 
               <div class="field">
                 <label>إلى</label>
                 <input pInputText type="text" formControlName="to" />
+                <small class="field-error" *ngIf="isInvalid(categoryForm, 'to')">
+                  {{ getValidationMessage(categoryForm, 'to', 'حقل إلى') }}
+                </small>
               </div>
 
               <div class="field">
                 <label>نسخة</label>
                 <input pInputText type="text" formControlName="cc" />
+                <small class="field-error" *ngIf="isInvalid(categoryForm, 'cc')">
+                  {{ getValidationMessage(categoryForm, 'cc', 'حقل نسخة') }}
+                </small>
               </div>
 
               <div class="switches">
@@ -87,7 +102,7 @@
             </form>
 
             <div class="actions-row">
-              <button pButton type="button" label="حفظ البيانات الأساسية" icon="pi pi-save" [loading]="savingCategory" (click)="saveCategory()"></button>
+              <button pButton type="button" label="حفظ البيانات الأساسية" icon="pi pi-save" [loading]="savingCategory" [disabled]="savingCategory || categoryForm.invalid" (click)="saveCategory()"></button>
               <button pButton type="button" label="حذف النوع" icon="pi pi-trash" class="p-button-danger p-button-outlined" (click)="deleteCategory()"></button>
             </div>
           </p-tabPanel>
@@ -200,21 +215,33 @@
               <div class="field">
                 <label>بادئة المرجع *</label>
                 <input pInputText type="text" formControlName="referencePrefix" />
+                <small class="field-error" *ngIf="isInvalid(settingsForm, 'referencePrefix') || hasRequiredError(settingsForm, 'referencePrefix')">
+                  {{ getValidationMessage(settingsForm, 'referencePrefix', 'بادئة المرجع') }}
+                </small>
               </div>
 
               <div class="field">
                 <label>فاصل المرجع</label>
                 <input pInputText type="text" formControlName="referenceSeparator" />
+                <small class="field-error" *ngIf="isInvalid(settingsForm, 'referenceSeparator')">
+                  {{ getValidationMessage(settingsForm, 'referenceSeparator', 'فاصل المرجع') }}
+                </small>
               </div>
 
               <div class="field">
                 <label>حقول المصدر (مفصولة بفاصلة)</label>
                 <input pInputText type="text" formControlName="sourceFieldKeys" />
+                <small class="field-error" *ngIf="isInvalid(settingsForm, 'sourceFieldKeys')">
+                  {{ getValidationMessage(settingsForm, 'sourceFieldKeys', 'حقول المصدر') }}
+                </small>
               </div>
 
               <div class="field">
                 <label>اسم التسلسل</label>
                 <input pInputText type="text" formControlName="sequenceName" />
+                <small class="field-error" *ngIf="isInvalid(settingsForm, 'sequenceName') || hasRequiredError(settingsForm, 'sequenceName')">
+                  {{ getValidationMessage(settingsForm, 'sequenceName', 'اسم التسلسل') }}
+                </small>
               </div>
 
               <div class="switches">
@@ -224,7 +251,7 @@
             </form>
 
             <div class="actions-row">
-              <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" (click)="saveCategorySettings()"></button>
+              <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid" (click)="saveCategorySettings()"></button>
             </div>
           </p-tabPanel>
 
@@ -302,16 +329,25 @@
     <div class="field">
       <label>اسم الجروب *</label>
       <input pInputText type="text" formControlName="groupName" />
+      <small class="field-error" *ngIf="isInvalid(groupForm, 'groupName')">
+        {{ getValidationMessage(groupForm, 'groupName', 'اسم الجروب') }}
+      </small>
     </div>
 
     <div class="field">
       <label>الوصف</label>
       <input pInputText type="text" formControlName="groupDescription" />
+      <small class="field-error" *ngIf="isInvalid(groupForm, 'groupDescription')">
+        {{ getValidationMessage(groupForm, 'groupDescription', 'وصف الجروب') }}
+      </small>
     </div>
 
     <div class="field">
       <label>عدد العناصر في الصف</label>
       <input pInputText type="number" formControlName="groupWithInRow" />
+      <small class="field-error" *ngIf="isInvalid(groupForm, 'groupWithInRow')">
+        {{ getValidationMessage(groupForm, 'groupWithInRow', 'عدد العناصر في الصف') }}
+      </small>
     </div>
 
     <div class="field switch-inline">
@@ -322,7 +358,7 @@
 
   <ng-template pTemplate="footer">
     <button pButton type="button" label="إلغاء" class="p-button-text" (click)="groupDialogVisible = false"></button>
-    <button pButton type="button" label="حفظ" icon="pi pi-save" (click)="saveGroup()"></button>
+    <button pButton type="button" label="حفظ" icon="pi pi-save" [disabled]="groupForm.invalid" (click)="saveGroup()"></button>
   </ng-template>
 </p-dialog>
 
@@ -338,21 +374,33 @@
     <div class="field">
       <label>الأب</label>
       <input pInputText type="number" formControlName="parentCategoryId" />
+      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'parentCategoryId')">
+        {{ getValidationMessage(createCategoryForm, 'parentCategoryId', 'المعرف الأب') }}
+      </small>
     </div>
 
     <div class="field">
       <label>اسم النوع *</label>
       <input pInputText type="text" formControlName="categoryName" />
+      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'categoryName')">
+        {{ getValidationMessage(createCategoryForm, 'categoryName', 'اسم النوع') }}
+      </small>
     </div>
 
     <div class="field">
       <label>معرف التطبيق</label>
       <input pInputText type="text" formControlName="applicationId" />
+      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'applicationId')">
+        {{ getValidationMessage(createCategoryForm, 'applicationId', 'معرف التطبيق') }}
+      </small>
     </div>
 
     <div class="field">
       <label>رقم مسار العمل</label>
       <input pInputText type="number" formControlName="catWorkFlow" />
+      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'catWorkFlow')">
+        {{ getValidationMessage(createCategoryForm, 'catWorkFlow', 'رقم مسار العمل') }}
+      </small>
     </div>
 
     <div class="field">
@@ -363,11 +411,17 @@
     <div class="field">
       <label>إلى</label>
       <input pInputText type="text" formControlName="to" />
+      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'to')">
+        {{ getValidationMessage(createCategoryForm, 'to', 'حقل إلى') }}
+      </small>
     </div>
 
     <div class="field">
       <label>نسخة</label>
       <input pInputText type="text" formControlName="cc" />
+      <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'cc')">
+        {{ getValidationMessage(createCategoryForm, 'cc', 'حقل نسخة') }}
+      </small>
     </div>
 
     <div class="switches">
@@ -379,6 +433,6 @@
 
   <ng-template pTemplate="footer">
     <button pButton type="button" label="إلغاء" class="p-button-text" (click)="createCategoryDialogVisible = false"></button>
-    <button pButton type="button" label="إنشاء" icon="pi pi-check" [loading]="savingCategory" (click)="createCategory()"></button>
+    <button pButton type="button" label="إنشاء" icon="pi pi-check" [loading]="savingCategory" [disabled]="savingCategory || createCategoryForm.invalid" (click)="createCategory()"></button>
   </ng-template>
 </p-dialog>

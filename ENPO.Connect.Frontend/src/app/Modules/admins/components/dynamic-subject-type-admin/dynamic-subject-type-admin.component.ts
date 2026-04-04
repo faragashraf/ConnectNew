@@ -80,44 +80,44 @@ export class DynamicSubjectTypeAdminComponent implements OnInit {
     this.previewForm = this.fb.group({});
 
     this.categoryForm = this.fb.group({
-      categoryName: ['', Validators.required],
-      applicationId: [''],
+      categoryName: ['', [Validators.required, Validators.maxLength(50)]],
+      applicationId: ['', Validators.maxLength(10)],
       catMend: [''],
-      catWorkFlow: [0, Validators.required],
+      catWorkFlow: [0, [Validators.required, Validators.min(0)]],
       catSms: [false],
       catMailNotification: [false],
-      to: [''],
-      cc: [''],
+      to: ['', Validators.maxLength(100)],
+      cc: ['', Validators.maxLength(100)],
       isActive: [true]
     });
 
     this.settingsForm = this.fb.group({
       referencePolicyEnabled: [true],
-      referencePrefix: ['', Validators.required],
-      referenceSeparator: ['-'],
-      sourceFieldKeys: [''],
+      referencePrefix: ['', Validators.maxLength(40)],
+      referenceSeparator: ['-', Validators.maxLength(10)],
+      sourceFieldKeys: ['', Validators.maxLength(500)],
       includeYear: [true],
       useSequence: [true],
-      sequenceName: ['Seq_Tickets']
+      sequenceName: ['Seq_Tickets', Validators.maxLength(80)]
     });
 
     this.groupForm = this.fb.group({
-      groupName: ['', Validators.required],
-      groupDescription: [''],
+      groupName: ['', [Validators.required, Validators.maxLength(100)]],
+      groupDescription: ['', Validators.maxLength(255)],
       isExtendable: [false],
-      groupWithInRow: [1]
+      groupWithInRow: [1, [Validators.required, Validators.min(1), Validators.max(12)]]
     });
 
     this.createCategoryForm = this.fb.group({
-      parentCategoryId: [0],
-      categoryName: ['', Validators.required],
-      applicationId: [''],
+      parentCategoryId: [0, Validators.min(0)],
+      categoryName: ['', [Validators.required, Validators.maxLength(50)]],
+      applicationId: ['', Validators.maxLength(10)],
       catMend: [''],
-      catWorkFlow: [0, Validators.required],
+      catWorkFlow: [0, [Validators.required, Validators.min(0)]],
       catSms: [false],
       catMailNotification: [false],
-      to: [''],
-      cc: [''],
+      to: ['', Validators.maxLength(100)],
+      cc: ['', Validators.maxLength(100)],
       isActive: [true]
     });
   }
@@ -292,15 +292,34 @@ export class DynamicSubjectTypeAdminComponent implements OnInit {
     }
 
     const value = this.settingsForm.value;
+    const referencePolicyEnabled = Boolean(value.referencePolicyEnabled);
+    const referencePrefix = String(value.referencePrefix ?? '').trim();
+    const useSequence = Boolean(value.useSequence);
+    const sequenceName = String(value.sequenceName ?? '').trim();
+
+    if (referencePolicyEnabled && referencePrefix.length === 0) {
+      this.settingsForm.get('referencePrefix')?.setErrors({ required: true });
+      this.settingsForm.get('referencePrefix')?.markAsTouched();
+      this.appNotification.warning('يرجى إدخال بادئة المرجع عند تفعيل سياسة الترقيم.');
+      return;
+    }
+
+    if (useSequence && sequenceName.length === 0) {
+      this.settingsForm.get('sequenceName')?.setErrors({ required: true });
+      this.settingsForm.get('sequenceName')?.markAsTouched();
+      this.appNotification.warning('يرجى إدخال اسم التسلسل عند تفعيل التسلسل الرقمي.');
+      return;
+    }
+
     const payload: SubjectTypeAdminUpsertRequestDto = {
       isActive: Boolean(this.categoryForm.get('isActive')?.value),
-      referencePolicyEnabled: Boolean(value.referencePolicyEnabled),
-      referencePrefix: String(value.referencePrefix ?? '').trim(),
+      referencePolicyEnabled,
+      referencePrefix: referencePrefix || undefined,
       referenceSeparator: String(value.referenceSeparator ?? '-').trim() || '-',
       sourceFieldKeys: String(value.sourceFieldKeys ?? '').trim() || undefined,
       includeYear: Boolean(value.includeYear),
-      useSequence: Boolean(value.useSequence),
-      sequenceName: String(value.sequenceName ?? '').trim() || undefined
+      useSequence,
+      sequenceName: sequenceName || undefined
     };
 
     this.savingSettings = true;
@@ -434,14 +453,27 @@ export class DynamicSubjectTypeAdminComponent implements OnInit {
       return;
     }
 
+    const invalidLink = this.editableLinks.find(item =>
+      String(item.fieldKey ?? '').trim().length === 0 || Number(item.groupId ?? 0) <= 0);
+    if (invalidLink) {
+      this.appNotification.warning('جميع صفوف الربط يجب أن تحتوي على حقل وجروب صحيحين.');
+      return;
+    }
+
+    const invalidOrder = this.editableLinks.find(item => Number(item.displayOrder ?? 0) <= 0);
+    if (invalidOrder) {
+      this.appNotification.warning('ترتيب العرض يجب أن يكون أكبر من صفر لكل صف.');
+      return;
+    }
+
     const payloadLinks: SubjectCategoryFieldLinkUpsertItemDto[] = this.editableLinks
       .filter(item => String(item.fieldKey ?? '').trim().length > 0 && Number(item.groupId ?? 0) > 0)
-      .map(item => ({
+      .map((item, idx) => ({
         mendSql: item.mendSql > 0 ? item.mendSql : undefined,
-        fieldKey: item.fieldKey,
+        fieldKey: String(item.fieldKey ?? '').trim(),
         groupId: Number(item.groupId),
         isActive: Boolean(item.isActive),
-        displayOrder: Number(item.displayOrder ?? 0),
+        displayOrder: Number(item.displayOrder ?? 0) > 0 ? Number(item.displayOrder) : (idx + 1),
         isVisible: Boolean(item.isVisible),
         displaySettingsJson: String(item.displaySettingsJson ?? '').trim() || undefined
       }));
@@ -656,6 +688,41 @@ export class DynamicSubjectTypeAdminComponent implements OnInit {
   getPreviewGroupTitle(group: PreviewGroupRenderItem): string {
     const title = String(group.groupName ?? '').trim();
     return title.length > 0 ? title : `مجموعة ${group.groupId}`;
+  }
+
+  isInvalid(form: FormGroup, controlName: string): boolean {
+    const control = form.get(controlName);
+    return !!control && control.invalid && (control.touched || control.dirty);
+  }
+
+  getValidationMessage(form: FormGroup, controlName: string, label: string): string {
+    const control = form.get(controlName);
+    if (!control?.errors) {
+      return '';
+    }
+
+    if (control.errors['required']) {
+      return `${label} مطلوب.`;
+    }
+
+    if (control.errors['maxlength']) {
+      return `${label} يجب ألا يزيد عن ${control.errors['maxlength'].requiredLength} حرفًا.`;
+    }
+
+    if (control.errors['min']) {
+      return `${label} يجب أن يكون ${control.errors['min'].min} أو أكبر.`;
+    }
+
+    if (control.errors['max']) {
+      return `${label} يجب أن يكون ${control.errors['max'].max} أو أقل.`;
+    }
+
+    return `قيمة ${label} غير صالحة.`;
+  }
+
+  hasRequiredError(form: FormGroup, controlName: string): boolean {
+    const control = form.get(controlName);
+    return !!control?.errors?.['required'] && (control.touched || control.dirty);
   }
 
   private selectCategoryNode(node: AdminTreeNode): void {
