@@ -17,14 +17,14 @@ const routes: Routes = [
     data: { func: 'AllEnpoUsersFunc' },
     children: [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
-      { path: 'dashboard', component: DynamicSubjectDashboardComponent },
-      { path: 'subjects', component: DynamicSubjectListComponent },
-      { path: 'subjects/new', component: DynamicSubjectEditorComponent },
-      { path: 'subjects/:id', component: DynamicSubjectDetailComponent },
-      { path: 'subjects/:id/edit', component: DynamicSubjectEditorComponent },
-      { path: 'envelopes', component: DynamicSubjectEnvelopeListComponent },
-      { path: 'envelopes/new', component: DynamicSubjectEnvelopeEditorComponent },
-      { path: 'envelopes/:id', component: DynamicSubjectEnvelopeEditorComponent }
+      { path: 'dashboard', component: DynamicSubjectDashboardComponent, data: { configRouteKey: 'DynamicSubjects/Dashboard' } },
+      { path: 'subjects', component: DynamicSubjectListComponent, data: { configRouteKey: 'DynamicSubjects/SubjectsList' } },
+      { path: 'subjects/new', component: DynamicSubjectEditorComponent, data: { configRouteKey: 'DynamicSubjects/SubjectEditor' } },
+      { path: 'subjects/:id/edit', component: DynamicSubjectEditorComponent, data: { configRouteKey: 'DynamicSubjects/SubjectEditor' } },
+      { path: 'subjects/:id', component: DynamicSubjectDetailComponent, data: { configRouteKey: 'DynamicSubjects/SubjectDetail' } },
+      { path: 'envelopes', component: DynamicSubjectEnvelopeListComponent, data: { configRouteKey: 'DynamicSubjects/EnvelopesList' } },
+      { path: 'envelopes/new', component: DynamicSubjectEnvelopeEditorComponent, data: { configRouteKey: 'DynamicSubjects/EnvelopeEditor' } },
+      { path: 'envelopes/:id', component: DynamicSubjectEnvelopeEditorComponent, data: { configRouteKey: 'DynamicSubjects/EnvelopeEditor' } }
     ]
   }
 ];

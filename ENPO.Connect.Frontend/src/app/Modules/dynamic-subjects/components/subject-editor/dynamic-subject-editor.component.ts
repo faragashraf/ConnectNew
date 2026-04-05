@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, forkJoin } from 'rxjs';
 import { GenericFormsService } from 'src/app/Modules/GenericComponents/GenericForms.service';
@@ -18,7 +18,7 @@ import {
   SubjectUpsertRequest
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
-import { DynamicGroupRenderItem } from '../shared/dynamic-fields-section/dynamic-fields-section.component';
+import { DynamicGroupRenderItem } from '../shared/models/dynamic-group-render-item.model';
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
 import { DynamicSubjectAccessService } from '../../services/dynamic-subject-access.service';
 
@@ -118,6 +118,35 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
   get tasksControls(): FormGroup[] {
     return this.tasksArray.controls as FormGroup[];
+  }
+
+  trackByGroup = (_index: number, group: DynamicGroupRenderItem): number => group.groupId;
+
+  getGroupDisplayName(group: DynamicGroupRenderItem): string {
+    const groupName = String(group.groupName ?? '').trim();
+    return groupName.length > 0 ? groupName : `مجموعة ${group.groupId}`;
+  }
+
+  getFormArrayControls(formArrayName: string): AbstractControl[] {
+    const formArray = this.getFormArrayInstance(formArrayName);
+    return formArray?.controls ?? [];
+  }
+
+  getFormArrayInstance(formArrayName: string): FormArray | null {
+    const control = this.dynamicControls?.get(formArrayName);
+    return control instanceof FormArray ? control : null;
+  }
+
+  getControlNamesFromGroup(groupControl: AbstractControl): string[] {
+    if (groupControl instanceof FormGroup) {
+      return Object.keys(groupControl.controls);
+    }
+
+    return [];
+  }
+
+  onDynamicFieldGenericEvent(_event: unknown): void {
+    // reserved for future cross-field interactions
   }
 
   onCategoryChanged(): void {
@@ -284,7 +313,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private loadFormDefinition(categoryId: number, detail?: SubjectDetailDto): void {
-    if (this.allowedCategoryIds.size > 0 && !this.allowedCategoryIds.has(categoryId)) {
+    if (!this.isEditMode && this.allowedCategoryIds.size > 0 && !this.allowedCategoryIds.has(categoryId)) {
       this.appNotification.error('غير مسموح بعرض هذا النوع.');
       this.formDefinition = null;
       this.resetDynamicFormState();
@@ -363,6 +392,10 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
               return;
             }
 
+            if (this.tryApplyDetailBasedFallbackDefinition(categoryId, detail)) {
+              return;
+            }
+
             this.formDefinition = null;
             this.resetDynamicFormState();
             this.populateStakeholders(detail);
@@ -379,6 +412,10 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
             return;
           }
 
+          if (this.tryApplyDetailBasedFallbackDefinition(categoryId, detail)) {
+            return;
+          }
+
           this.formDefinition = null;
           this.resetDynamicFormState();
           this.populateStakeholders(detail);
@@ -389,6 +426,96 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     };
 
     tryLoad(this.dynamicSubjectAccess.getApplicationId());
+  }
+
+  private tryApplyDetailBasedFallbackDefinition(categoryId: number, detail?: SubjectDetailDto): boolean {
+    if (!this.isEditMode) {
+      return false;
+    }
+
+    const fallbackDefinition = this.buildDefinitionFromSavedValues(categoryId, detail);
+    if (!this.hasRenderableDefinition(fallbackDefinition)) {
+      return false;
+    }
+
+    this.applyLoadedDefinition(fallbackDefinition, detail);
+    this.appNotification.info('تم تحميل الحقول المحفوظة للطلب في وضع التعديل.');
+    return true;
+  }
+
+  private buildDefinitionFromSavedValues(categoryId: number, detail?: SubjectDetailDto): SubjectFormDefinitionDto | null {
+    const savedFields = (detail?.dynamicFields ?? [])
+      .map(field => ({
+        fieldKey: String(field.fieldKey ?? '').trim(),
+        value: String(field.value ?? '')
+      }))
+      .filter(field => field.fieldKey.length > 0);
+    if (savedFields.length === 0) {
+      return null;
+    }
+
+    const group: SubjectGroupDefinitionDto = {
+      groupId: 1,
+      groupName: 'الحقول المحفوظة',
+      groupDescription: 'تم توليد هذا العرض من القيم المحفوظة للطلب.',
+      isExtendable: false,
+      groupWithInRow: 12
+    };
+
+    const fields: SubjectFieldDefinitionDto[] = savedFields.map((field, index) => ({
+      mendSql: index + 1,
+      categoryId,
+      mendGroup: group.groupId,
+      fieldKey: field.fieldKey,
+      fieldType: this.inferFieldTypeFromSavedValue(field.value),
+      fieldLabel: field.fieldKey,
+      placeholder: '',
+      defaultValue: field.value,
+      optionsPayload: '',
+      dataType: 'string',
+      required: false,
+      requiredTrue: false,
+      email: false,
+      pattern: false,
+      minValue: '',
+      maxValue: '',
+      mask: '',
+      isDisabledInit: false,
+      isSearchable: false,
+      width: 0,
+      height: 0,
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      displayOrder: index + 1,
+      isVisible: true,
+      displaySettingsJson: undefined,
+      group
+    }));
+
+    return {
+      categoryId,
+      categoryName: this.categoryOptions.find(option => Number(option.id) === categoryId)?.name ?? '',
+      parentCategoryId: 0,
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      groups: [group],
+      fields
+    };
+  }
+
+  private inferFieldTypeFromSavedValue(value: string): string {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return 'InputText';
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}(?:[tT ].*)?$/.test(normalized)) {
+      return 'Date';
+    }
+
+    if (['true', 'false', 'yes', 'no', 'on', 'off', '0', '1'].includes(normalized.toLowerCase())) {
+      return 'ToggleSwitch';
+    }
+
+    return 'InputText';
   }
 
   private buildLegacyDefinition(categoryId: number, links: CdCategoryMandDto[], mends: CdmendDto[]): SubjectFormDefinitionDto | null {
@@ -406,13 +533,20 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       return null;
     }
 
-    const mendMap = new Map<string, CdmendDto>();
+    const requestedAppId = this.normalizeLegacyAppId(this.dynamicSubjectAccess.getApplicationId());
+    const categoryAppId = this.normalizeLegacyAppId(
+      categoryLinks.find(link => String(link.applicationId ?? '').trim().length > 0)?.applicationId
+    );
+    const mendMap = new Map<string, CdmendDto[]>();
     (mends ?? []).forEach(mend => {
-      const key = String(mend.cdmendTxt ?? '').trim().toLowerCase();
-      if (!key || Boolean(mend.cdmendStat)) {
+      const key = this.normalizeLegacyFieldKey(mend.cdmendTxt);
+      if (!key) {
         return;
       }
-      mendMap.set(key, mend);
+
+      const existing = mendMap.get(key) ?? [];
+      existing.push(mend);
+      mendMap.set(key, existing);
     });
 
     const groupsMap = new Map<number, SubjectGroupDefinitionDto>();
@@ -424,7 +558,11 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
         return;
       }
 
-      const mend = mendMap.get(fieldKey.toLowerCase());
+      const mend = this.selectLegacyMend(
+        mendMap.get(this.normalizeLegacyFieldKey(fieldKey)) ?? [],
+        requestedAppId,
+        categoryAppId
+      );
       if (!mend) {
         return;
       }
@@ -484,6 +622,63 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       groups: Array.from(groupsMap.values()).sort((left, right) => left.groupId - right.groupId),
       fields
     };
+  }
+
+  private normalizeLegacyFieldKey(value: string | undefined): string {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  private normalizeLegacyAppId(value: string | undefined): string {
+    return String(value ?? '').trim();
+  }
+
+  private getLegacyMendAppRank(mend: CdmendDto, requestedAppId: string, categoryAppId: string): number {
+    const mendAppId = this.normalizeLegacyAppId(mend.applicationId);
+    if (requestedAppId.length > 0 && mendAppId.toLowerCase() === requestedAppId.toLowerCase()) {
+      return 0;
+    }
+
+    if (categoryAppId.length > 0 && mendAppId.toLowerCase() === categoryAppId.toLowerCase()) {
+      return 1;
+    }
+
+    if (mendAppId.length === 0) {
+      return 2;
+    }
+
+    return 3;
+  }
+
+  private selectLegacyMend(candidates: CdmendDto[], requestedAppId: string, categoryAppId: string): CdmendDto | null {
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      return null;
+    }
+
+    const ranked = [...candidates]
+      .sort((left, right) => {
+        const rankDiff = this.getLegacyMendAppRank(left, requestedAppId, categoryAppId)
+          - this.getLegacyMendAppRank(right, requestedAppId, categoryAppId);
+        if (rankDiff !== 0) {
+          return rankDiff;
+        }
+
+        return Number(left.cdmendSql ?? 0) - Number(right.cdmendSql ?? 0);
+      });
+    const bestRank = this.getLegacyMendAppRank(ranked[0], requestedAppId, categoryAppId);
+    const sameRank = ranked.filter(item => this.getLegacyMendAppRank(item, requestedAppId, categoryAppId) === bestRank);
+    if (sameRank.length === 0) {
+      return null;
+    }
+
+    const activeMends = sameRank
+      .filter(item => !Boolean(item.cdmendStat))
+      .sort((left, right) => Number(left.cdmendSql ?? 0) - Number(right.cdmendSql ?? 0));
+    if (activeMends.length > 0) {
+      return activeMends[0];
+    }
+
+    return sameRank
+      .sort((left, right) => Number(left.cdmendSql ?? 0) - Number(right.cdmendSql ?? 0))[0] ?? null;
   }
 
   private rebuildDynamicControls(definition: SubjectFormDefinitionDto | null, values: SubjectFieldValueDto[]): void {

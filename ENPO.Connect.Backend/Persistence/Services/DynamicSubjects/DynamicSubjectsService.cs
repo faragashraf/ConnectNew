@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Models.Attachment;
 using Models.Correspondance;
 using Models.DTO.Common;
@@ -30,6 +31,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
     private readonly helperService _helperService;
     private readonly ISubjectReferenceGenerator _referenceGenerator;
     private readonly IDynamicSubjectsRealtimePublisher _realtimePublisher;
+    private readonly ILogger<DynamicSubjectsService>? _logger;
 
     public DynamicSubjectsService(
         ConnectContext connectContext,
@@ -37,7 +39,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         GPAContext gpaContext,
         helperService helperService,
         ISubjectReferenceGenerator referenceGenerator,
-        IDynamicSubjectsRealtimePublisher realtimePublisher)
+        IDynamicSubjectsRealtimePublisher realtimePublisher,
+        ILogger<DynamicSubjectsService>? logger = null)
     {
         _connectContext = connectContext;
         _attachContext = attachContext;
@@ -45,6 +48,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         _helperService = helperService;
         _referenceGenerator = referenceGenerator;
         _realtimePublisher = realtimePublisher;
+        _logger = logger;
     }
 
     public async Task<CommonResponse<IEnumerable<SubjectCategoryTreeNodeDto>>> GetCategoryTreeAsync(
@@ -181,59 +185,133 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 }
             }
 
-            var fieldRows = await (from link in _connectContext.CdCategoryMands.AsNoTracking()
-                                   join mend in _connectContext.Cdmends.AsNoTracking()
-                                        on link.MendField equals mend.CdmendTxt
-                                   join mandGroup in _connectContext.MandGroups.AsNoTracking()
-                                        on link.MendGroup equals mandGroup.GroupId into groupJoin
-                                   from mandGroup in groupJoin.DefaultIfEmpty()
-                                   join fieldSetting in _connectContext.SubjectCategoryFieldSettings.AsNoTracking()
-                                        on link.MendSql equals fieldSetting.MendSql into fieldSettingJoin
-                                   from fieldSetting in fieldSettingJoin.DefaultIfEmpty()
-                                   where link.MendCategory == categoryId
-                                         && !link.MendStat
-                                         && !mend.CdmendStat
-                                         && (fieldSetting == null || fieldSetting.IsVisible)
-                                   orderby link.MendGroup,
-                                           fieldSetting != null ? fieldSetting.DisplayOrder : link.MendSql,
-                                           link.MendSql
-                                   select new SubjectFieldDefinitionDto
-                                   {
-                                       MendSql = link.MendSql,
-                                       CategoryId = link.MendCategory,
-                                       MendGroup = link.MendGroup,
-                                       FieldKey = mend.CdmendTxt,
-                                       FieldType = mend.CdmendType,
-                                       FieldLabel = mend.CDMendLbl,
-                                       Placeholder = mend.Placeholder,
-                                       DefaultValue = mend.DefaultValue,
-                                       OptionsPayload = mend.CdmendTbl,
-                                       DataType = mend.CdmendDatatype,
-                                       Required = mend.Required == true,
-                                       RequiredTrue = mend.RequiredTrue == true,
-                                       Email = mend.Email == true,
-                                       Pattern = mend.Pattern == true,
-                                       MinValue = mend.MinValue,
-                                       MaxValue = mend.MaxValue,
-                                       Mask = mend.Cdmendmask,
-                                       IsDisabledInit = mend.IsDisabledInit,
-                                       IsSearchable = mend.IsSearchable,
-                                       Width = mend.Width,
-                                       Height = mend.Height,
-                                       ApplicationId = mend.ApplicationId,
-                                       DisplayOrder = fieldSetting != null ? fieldSetting.DisplayOrder : link.MendSql,
-                                       IsVisible = fieldSetting == null || fieldSetting.IsVisible,
-                                       DisplaySettingsJson = fieldSetting != null ? fieldSetting.DisplaySettingsJson : null,
-                                       Group = new SubjectGroupDefinitionDto
-                                       {
-                                           GroupId = link.MendGroup,
-                                           GroupName = mandGroup != null ? (mandGroup.GroupName ?? string.Empty) : string.Empty,
-                                           GroupDescription = mandGroup != null ? mandGroup.GroupDescription : null,
-                                           IsExtendable = mandGroup != null && mandGroup.IsExtendable == true,
-                                           GroupWithInRow = mandGroup != null ? mandGroup.GroupWithInRow : null
-                                       }
-                                   })
+            var linkRows = await (from link in _connectContext.CdCategoryMands.AsNoTracking()
+                                  join mandGroup in _connectContext.MandGroups.AsNoTracking()
+                                       on link.MendGroup equals mandGroup.GroupId into groupJoin
+                                  from mandGroup in groupJoin.DefaultIfEmpty()
+                                  join fieldSetting in _connectContext.SubjectCategoryFieldSettings.AsNoTracking()
+                                       on link.MendSql equals fieldSetting.MendSql into fieldSettingJoin
+                                  from fieldSetting in fieldSettingJoin.DefaultIfEmpty()
+                                  where link.MendCategory == categoryId
+                                        && !link.MendStat
+                                        && (fieldSetting == null || fieldSetting.IsVisible)
+                                  select new FormDefinitionLinkRow
+                                  {
+                                      MendSql = link.MendSql,
+                                      MendCategory = link.MendCategory,
+                                      MendField = link.MendField,
+                                      MendGroup = link.MendGroup,
+                                      GroupName = mandGroup != null ? mandGroup.GroupName : null,
+                                      GroupDescription = mandGroup != null ? mandGroup.GroupDescription : null,
+                                      IsExtendable = mandGroup != null && mandGroup.IsExtendable == true,
+                                      GroupWithInRow = mandGroup != null ? mandGroup.GroupWithInRow : null,
+                                      DisplayOrder = fieldSetting != null ? fieldSetting.DisplayOrder : link.MendSql,
+                                      DisplaySettingsJson = fieldSetting != null ? fieldSetting.DisplaySettingsJson : null
+                                  })
                 .ToListAsync(cancellationToken);
+
+            var normalizedFieldKeys = linkRows
+                .Select(item => NormalizeFieldKey(item.MendField))
+                .Where(item => item.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToHashSet(StringComparer.Ordinal);
+            var allMends = await _connectContext.Cdmends
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+            var mendLookup = allMends
+                .Where(item => normalizedFieldKeys.Contains(NormalizeFieldKey(item.CdmendTxt)))
+                .GroupBy(item => NormalizeFieldKey(item.CdmendTxt))
+                .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+
+            var normalizedRequestAppId = NormalizeApplicationId(appId);
+            var normalizedCategoryAppId = NormalizeApplicationId(category.ApplicationId);
+            var fieldRows = new List<SubjectFieldDefinitionDto>();
+            var unmatchedFieldKeys = new List<string>();
+            var statusFallbackCount = 0;
+
+            foreach (var linkRow in linkRows
+                         .OrderBy(item => item.MendGroup)
+                         .ThenBy(item => item.DisplayOrder)
+                         .ThenBy(item => item.MendSql))
+            {
+                var normalizedFieldKey = NormalizeFieldKey(linkRow.MendField);
+                if (!mendLookup.TryGetValue(normalizedFieldKey, out var fieldCandidates) || fieldCandidates.Count == 0)
+                {
+                    unmatchedFieldKeys.Add(linkRow.MendField ?? string.Empty);
+                    continue;
+                }
+
+                var selectedMetadata = SelectPreferredMend(
+                    fieldCandidates,
+                    normalizedRequestAppId,
+                    normalizedCategoryAppId,
+                    out var usedLegacyStatusFallback);
+                if (selectedMetadata == null)
+                {
+                    unmatchedFieldKeys.Add(linkRow.MendField ?? string.Empty);
+                    continue;
+                }
+
+                if (usedLegacyStatusFallback)
+                {
+                    statusFallbackCount++;
+                }
+
+                fieldRows.Add(new SubjectFieldDefinitionDto
+                {
+                    MendSql = linkRow.MendSql,
+                    CategoryId = linkRow.MendCategory,
+                    MendGroup = linkRow.MendGroup,
+                    FieldKey = selectedMetadata.CdmendTxt,
+                    FieldType = selectedMetadata.CdmendType,
+                    FieldLabel = selectedMetadata.CDMendLbl,
+                    Placeholder = selectedMetadata.Placeholder,
+                    DefaultValue = selectedMetadata.DefaultValue,
+                    OptionsPayload = selectedMetadata.CdmendTbl,
+                    DataType = selectedMetadata.CdmendDatatype,
+                    Required = selectedMetadata.Required == true,
+                    RequiredTrue = selectedMetadata.RequiredTrue == true,
+                    Email = selectedMetadata.Email == true,
+                    Pattern = selectedMetadata.Pattern == true,
+                    MinValue = selectedMetadata.MinValue,
+                    MaxValue = selectedMetadata.MaxValue,
+                    Mask = selectedMetadata.Cdmendmask,
+                    IsDisabledInit = selectedMetadata.IsDisabledInit,
+                    IsSearchable = selectedMetadata.IsSearchable,
+                    Width = selectedMetadata.Width,
+                    Height = selectedMetadata.Height,
+                    ApplicationId = selectedMetadata.ApplicationId,
+                    DisplayOrder = linkRow.DisplayOrder,
+                    IsVisible = true,
+                    DisplaySettingsJson = linkRow.DisplaySettingsJson,
+                    Group = new SubjectGroupDefinitionDto
+                    {
+                        GroupId = linkRow.MendGroup,
+                        GroupName = linkRow.GroupName ?? string.Empty,
+                        GroupDescription = linkRow.GroupDescription,
+                        IsExtendable = linkRow.IsExtendable,
+                        GroupWithInRow = linkRow.GroupWithInRow
+                    }
+                });
+            }
+
+            _logger?.LogDebug(
+                "DynamicSubjects FormDefinition diagnostics for category {CategoryId}: links={LinksCount}, mends={MendsCount}, matched={MatchedCount}, unmatched={UnmatchedCount}, legacyStatusFallback={LegacyStatusFallbackCount}, requestAppId={RequestAppId}, categoryAppId={CategoryAppId}",
+                categoryId,
+                linkRows.Count,
+                allMends.Count,
+                fieldRows.Count,
+                unmatchedFieldKeys.Count,
+                statusFallbackCount,
+                normalizedRequestAppId,
+                normalizedCategoryAppId);
+            if (unmatchedFieldKeys.Count > 0)
+            {
+                _logger?.LogWarning(
+                    "DynamicSubjects FormDefinition unmatched fields for category {CategoryId}: {UnmatchedFields}",
+                    categoryId,
+                    string.Join(", ", unmatchedFieldKeys.Distinct(StringComparer.OrdinalIgnoreCase).Take(20)));
+            }
 
             response.Data = new SubjectFormDefinitionDto
             {
@@ -257,6 +335,98 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return response;
+    }
+
+    private static string NormalizeFieldKey(string? fieldKey)
+    {
+        return (fieldKey ?? string.Empty).Trim().ToLowerInvariant();
+    }
+
+    private static string NormalizeApplicationId(string? applicationId)
+    {
+        return (applicationId ?? string.Empty).Trim();
+    }
+
+    private static Cdmend? SelectPreferredMend(
+        IReadOnlyCollection<Cdmend> candidates,
+        string normalizedRequestAppId,
+        string normalizedCategoryAppId,
+        out bool usedLegacyStatusFallback)
+    {
+        usedLegacyStatusFallback = false;
+        if (candidates == null || candidates.Count == 0)
+        {
+            return null;
+        }
+
+        var rankedPool = candidates
+            .OrderBy(item => GetApplicationRank(item, normalizedRequestAppId, normalizedCategoryAppId))
+            .ThenBy(item => item.CdmendSql)
+            .ToList();
+        if (rankedPool.Count == 0)
+        {
+            return null;
+        }
+
+        var bestRank = GetApplicationRank(rankedPool[0], normalizedRequestAppId, normalizedCategoryAppId);
+        var sameRankPool = rankedPool
+            .Where(item => GetApplicationRank(item, normalizedRequestAppId, normalizedCategoryAppId) == bestRank)
+            .ToList();
+        if (sameRankPool.Count == 0)
+        {
+            return null;
+        }
+
+        var activePool = sameRankPool
+            .Where(item => !item.CdmendStat)
+            .OrderBy(item => item.CdmendSql)
+            .ToList();
+        if (activePool.Count > 0)
+        {
+            return activePool[0];
+        }
+
+        usedLegacyStatusFallback = true;
+        return sameRankPool
+            .OrderBy(item => item.CdmendSql)
+            .FirstOrDefault();
+    }
+
+    private static int GetApplicationRank(Cdmend metadata, string normalizedRequestAppId, string normalizedCategoryAppId)
+    {
+        var metadataAppId = NormalizeApplicationId(metadata.ApplicationId);
+        if (normalizedRequestAppId.Length > 0
+            && string.Equals(metadataAppId, normalizedRequestAppId, StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        if (normalizedCategoryAppId.Length > 0
+            && string.Equals(metadataAppId, normalizedCategoryAppId, StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        if (metadataAppId.Length == 0)
+        {
+            return 2;
+        }
+
+        return 3;
+    }
+
+    private sealed class FormDefinitionLinkRow
+    {
+        public int MendSql { get; set; }
+        public int MendCategory { get; set; }
+        public string MendField { get; set; } = string.Empty;
+        public int MendGroup { get; set; }
+        public string? GroupName { get; set; }
+        public string? GroupDescription { get; set; }
+        public bool IsExtendable { get; set; }
+        public short? GroupWithInRow { get; set; }
+        public int DisplayOrder { get; set; }
+        public string? DisplaySettingsJson { get; set; }
     }
 
     public async Task<CommonResponse<SubjectDetailDto>> CreateSubjectAsync(

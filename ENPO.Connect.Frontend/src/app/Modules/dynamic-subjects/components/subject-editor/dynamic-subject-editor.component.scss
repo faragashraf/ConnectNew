@@ -99,6 +99,49 @@
   margin: 0 0 0.6rem;
 }
 
+.groups-wrap {
+  direction: rtl;
+  text-align: right;
+  display: grid;
+  gap: 1rem;
+}
+
+.group-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 1rem;
+}
+
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.group-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.group-header span {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.form-array {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.empty-text {
+  margin: 0.5rem 0;
+  color: #64748b;
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;

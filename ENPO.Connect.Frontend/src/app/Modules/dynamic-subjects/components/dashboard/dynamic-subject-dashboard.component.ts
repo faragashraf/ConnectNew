@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import {
@@ -26,7 +27,8 @@ export class DynamicSubjectDashboardComponent implements OnInit, OnDestroy {
   constructor(
     private readonly dynamicSubjectsController: DynamicSubjectsController,
     private readonly realtimeService: DynamicSubjectsRealtimeService,
-    private readonly appNotification: AppNotificationService
+    private readonly appNotification: AppNotificationService,
+    private readonly router: Router
   ) {}
 
   ngOnInit(): void {
@@ -233,5 +235,28 @@ export class DynamicSubjectDashboardComponent implements OnInit, OnDestroy {
     if (normalized.includes('task')) return 'تم تحديث المهام.';
 
     return this.toArabicEventType(eventType);
+  }
+
+  canOpenRecentSubject(item: SubjectListItemDto | null | undefined): boolean {
+    return Number(item?.messageId ?? 0) > 0;
+  }
+
+  openRecentSubject(item: SubjectListItemDto): void {
+    const messageId = Number(item?.messageId ?? 0);
+    if (messageId <= 0) {
+      this.appNotification.warning('هذا السجل لا يملك رقم طلب صالح للفتح.');
+      return;
+    }
+
+    this.router.navigate(['/DynamicSubjects/subjects', messageId]);
+  }
+
+  onRecentSubjectKeydown(event: KeyboardEvent, item: SubjectListItemDto): void {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    this.openRecentSubject(item);
   }
 }

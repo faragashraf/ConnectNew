@@ -10,7 +10,6 @@ import { DynamicSubjectsShellComponent } from './components/shell/dynamic-subjec
 import { DynamicSubjectDetailComponent } from './components/subject-detail/dynamic-subject-detail.component';
 import { DynamicSubjectEditorComponent } from './components/subject-editor/dynamic-subject-editor.component';
 import { DynamicSubjectListComponent } from './components/subject-list/dynamic-subject-list.component';
-import { DynamicFieldsSectionComponent } from './components/shared/dynamic-fields-section/dynamic-fields-section.component';
 import { DynamicSubjectsRoutingModule } from './dynamic-subjects-routing.module';
 
 @NgModule({
@@ -21,8 +20,7 @@ import { DynamicSubjectsRoutingModule } from './dynamic-subjects-routing.module'
     DynamicSubjectEditorComponent,
     DynamicSubjectDetailComponent,
     DynamicSubjectEnvelopeListComponent,
-    DynamicSubjectEnvelopeEditorComponent,
-    DynamicFieldsSectionComponent
+    DynamicSubjectEnvelopeEditorComponent
   ],
   imports: [
     CommonModule,

@@ -47,7 +47,14 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let item of dashboard.recentSubjects">
+            <tr
+              *ngFor="let item of dashboard.recentSubjects"
+              [class.row-clickable]="canOpenRecentSubject(item)"
+              [class.row-disabled]="!canOpenRecentSubject(item)"
+              [attr.tabindex]="canOpenRecentSubject(item) ? 0 : -1"
+              [attr.role]="canOpenRecentSubject(item) ? 'button' : null"
+              (click)="canOpenRecentSubject(item) && openRecentSubject(item)"
+              (keydown)="onRecentSubjectKeydown($event, item)">
               <td>{{ item.requestRef }}</td>
               <td>{{ item.subject }}</td>
               <td>{{ toArabicStatusLabel(item.status, item.statusLabel) }}</td>
