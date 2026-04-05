@@ -322,6 +322,31 @@
   padding: 0.35rem 0.45rem;
 }
 
+.sim-select-with-tree {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.tree-launch-btn {
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.74rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+}
+
+.tree-launch-btn[disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .sim-field input[type='checkbox'] {
   width: 1rem;
   height: 1rem;
@@ -347,8 +372,18 @@
   color: #1d4ed8;
 }
 
+.tag.tag-tree {
+  background: #dcfce7;
+  color: #166534;
+}
+
 .inline-warning {
   color: #b45309;
+  font-size: 0.73rem;
+}
+
+.tree-selected-value {
+  color: #0369a1;
   font-size: 0.73rem;
 }
 
@@ -410,4 +445,18 @@ tbody td {
   .form-sim-grid {
     grid-template-columns: 1fr;
   }
+
+  .sim-select-with-tree {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tree-dialog-body {
+  min-height: 280px;
+}
+
+:host ::ng-deep .tree-dialog-body .p-tree {
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  padding: 0.4rem;
 }

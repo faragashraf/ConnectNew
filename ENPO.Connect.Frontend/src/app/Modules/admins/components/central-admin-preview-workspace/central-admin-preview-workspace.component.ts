@@ -1,6 +1,9 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Subscription, auditTime } from 'rxjs';
-import { ComponentConfig } from 'src/app/shared/models/Component.Config.model';
+import { GenericFormsService } from 'src/app/Modules/GenericComponents/GenericForms.service';
+import { TreeNode } from 'primeng/api';
+import { AdministrativeCertificateController, DynamicFormController, PowerBiController } from 'src/app/shared/services/BackendServices';
+import { ComponentConfig, processRequestsAndPopulate } from 'src/app/shared/models/Component.Config.model';
 import { SubjectAdminPreviewWorkspaceDto } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import { ComponentConfigService } from '../../services/component-config.service';
@@ -8,6 +11,7 @@ import {
   CentralAdminPreviewFoundationService,
   PreviewIssueSeverity,
   PreviewFieldRenderModel,
+  PreviewTreeBinding,
   PreviewWorkspaceRenderModel
 } from '../../services/central-admin-preview-foundation.service';
 import { CentralAdminContextService, CentralAdminContextState } from '../../services/central-admin-context.service';
@@ -25,16 +29,28 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
   renderModel: PreviewWorkspaceRenderModel | null = null;
   matchedConfigs: ComponentConfig[] = [];
   canonicalConfig: ComponentConfig | null = null;
+  treeDialogVisible = false;
+  treeDialogNodes: TreeNode[] = [];
+  treeDialogFieldLabel = '';
+  treeDialogFieldKey = '';
+  treeDialogSelection: TreeNode | null = null;
 
   private readonly subscriptions = new Subscription();
   private requestSeq = 0;
   private lastStateKey = '';
+  private treeBindings = new Map<string, PreviewTreeBinding>();
+  private treeNodesByField = new Map<string, TreeNode[]>();
+  private selectedTreeLabelByField = new Map<string, string>();
 
   constructor(
     private readonly centralAdminContext: CentralAdminContextService,
     private readonly dynamicSubjectsController: DynamicSubjectsController,
     private readonly componentConfigService: ComponentConfigService,
-    private readonly previewFoundation: CentralAdminPreviewFoundationService
+    private readonly previewFoundation: CentralAdminPreviewFoundationService,
+    private readonly powerBiController: PowerBiController,
+    private readonly dynamicFormController: DynamicFormController,
+    private readonly administrativeCertificateController: AdministrativeCertificateController,
+    private readonly genericFormService: GenericFormsService
   ) {}
 
   ngOnInit(): void {
@@ -139,6 +155,54 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
     }));
   }
 
+  hasTreeButton(field: PreviewFieldRenderModel): boolean {
+    return Boolean(field.treeEnabled);
+  }
+
+  hasTreeNodes(field: PreviewFieldRenderModel): boolean {
+    return this.getTreeNodes(field).length > 0;
+  }
+
+  getTreeNodes(field: PreviewFieldRenderModel): TreeNode[] {
+    return this.treeNodesByField.get(this.normalizeFieldKey(field.fieldKey)) ?? [];
+  }
+
+  openTreeDialog(field: PreviewFieldRenderModel): void {
+    if (!field.treeEnabled) {
+      return;
+    }
+
+    const nodes = this.getTreeNodes(field);
+    if (nodes.length === 0) {
+      return;
+    }
+
+    this.treeDialogFieldKey = field.fieldKey;
+    this.treeDialogFieldLabel = field.label;
+    this.treeDialogNodes = nodes;
+    this.treeDialogSelection = null;
+    this.treeDialogVisible = true;
+  }
+
+  onTreeNodeSelect(event: unknown): void {
+    const node = (event as any)?.node ?? null;
+    if (!node || !this.treeDialogFieldKey) {
+      return;
+    }
+
+    const label = String(node?.label ?? node?.key ?? '').trim();
+    if (label) {
+      this.selectedTreeLabelByField.set(this.normalizeFieldKey(this.treeDialogFieldKey), label);
+    }
+
+    this.treeDialogSelection = node;
+    this.treeDialogVisible = false;
+  }
+
+  getTreeSelectedLabel(field: PreviewFieldRenderModel): string {
+    return this.selectedTreeLabelByField.get(this.normalizeFieldKey(field.fieldKey)) ?? '';
+  }
+
   private refreshForState(state: CentralAdminContextState): void {
     const categoryId = Number(state.selectedCategoryId ?? 0);
     if (categoryId <= 0) {
@@ -148,6 +212,10 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
       this.renderModel = null;
       this.matchedConfigs = [];
       this.canonicalConfig = null;
+      this.treeBindings.clear();
+      this.treeNodesByField.clear();
+      this.selectedTreeLabelByField.clear();
+      this.treeDialogVisible = false;
       this.lastStateKey = '';
       return;
     }
@@ -236,6 +304,13 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
           resolution.matched,
           categoryId
         );
+        const treeBindings = this.previewFoundation.resolveTreeBindingsFromConfigs(
+          resolution.matched,
+          categoryId
+        );
+        this.treeBindings = treeBindings;
+        this.treeNodesByField.clear();
+        this.selectedTreeLabelByField.clear();
 
         const configurationIssues = this.previewFoundation.buildConfigurationIssues(matchedConfigs, {
           routeKeyPrefix: state.routeKeyPrefix,
@@ -246,9 +321,11 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
         this.renderModel = this.previewFoundation.buildRenderModel(workspace, {
           extraIssues: configurationIssues,
           configBoundOptionFields,
+          treeBindings,
           canonicalRouteKey: resolution.canonical?.routeKey ?? null,
           matchedConfigCount: matchedConfigs.length
         });
+        this.resolveTreeDataFromConfig(resolution.matched, categoryId, requestSeq);
 
         if (resolution.canonical?.routeKey) {
           const selectedRoute = String(this.centralAdminContext.snapshot.selectedConfigRouteKey ?? '').trim().toLowerCase();
@@ -267,6 +344,9 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
 
         this.matchedConfigs = [];
         this.canonicalConfig = null;
+        this.treeBindings.clear();
+        this.treeNodesByField.clear();
+        this.selectedTreeLabelByField.clear();
         const configurationIssues = this.previewFoundation.buildConfigurationIssues([], {
           routeKeyPrefix: state.routeKeyPrefix,
           selectedConfigRouteKey: state.selectedConfigRouteKey,
@@ -275,10 +355,151 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
         this.renderModel = this.previewFoundation.buildRenderModel(workspace, {
           extraIssues: configurationIssues,
           configBoundOptionFields: new Set<string>(),
+          treeBindings: new Map<string, PreviewTreeBinding>(),
           canonicalRouteKey: null,
           matchedConfigCount: 0
         });
       }
     });
+  }
+
+  private resolveTreeDataFromConfig(matchedConfigs: ComponentConfig[], categoryId: number, requestSeq: number): void {
+    if (this.treeBindings.size === 0) {
+      this.treeNodesByField.clear();
+      return;
+    }
+
+    const treeRequests = this.previewFoundation.extractTreePopulateRequests(matchedConfigs, categoryId);
+    if (treeRequests.length === 0) {
+      this.treeNodesByField.clear();
+      return;
+    }
+
+    const context = this.buildPreviewRequestContext(treeRequests);
+    this.genericFormService.selectionArrays = [];
+    processRequestsAndPopulate(context, this.genericFormService, undefined, {
+      trigger: 'onCategoryChanged',
+      runtime: { categoryId },
+      preserveDynamicMetadata: true,
+      trace: false
+    }).subscribe({
+      next: () => {
+        if (requestSeq !== this.requestSeq) {
+          return;
+        }
+
+        this.applyTreeDataFromContext(context);
+      },
+      error: () => {
+        if (requestSeq !== this.requestSeq) {
+          return;
+        }
+
+        this.treeNodesByField.clear();
+      }
+    });
+  }
+
+  private buildPreviewRequestContext(treeRequests: unknown[]): any {
+    return {
+      config: {
+        routeKey: this.canonicalConfig?.routeKey ?? 'CentralAdminShell/PreviewWorkspace',
+        genericFormName: this.canonicalConfig?.genericFormName ?? '',
+        dynamicFormSettings: {
+          traceRequests: false
+        },
+        requestsarray: treeRequests
+      },
+      powerBiController: this.powerBiController,
+      dynamicFormController: this.dynamicFormController,
+      administrativeCertificateController: this.administrativeCertificateController,
+      genericFormService: this.genericFormService,
+      unitTree: [],
+      categoryTree: [],
+      msg: {
+        msgError: () => {}
+      },
+      spinner: {
+        show: () => {},
+        hide: () => {}
+      }
+    };
+  }
+
+  private applyTreeDataFromContext(context: any): void {
+    const mapped = new Map<string, TreeNode[]>();
+    this.treeBindings.forEach(binding => {
+      const nodes = this.coerceTreeNodes(this.resolvePath(context, binding.treePath));
+      if (nodes.length > 0) {
+        mapped.set(this.normalizeFieldKey(binding.fieldKey), nodes);
+      }
+    });
+
+    this.treeNodesByField = mapped;
+  }
+
+  private resolvePath(source: any, path: string): any {
+    const normalizedPath = String(path ?? '').trim().replace(/^this\./i, '');
+    if (!normalizedPath) {
+      return source;
+    }
+
+    const parts = normalizedPath.split('.').filter(Boolean);
+    let cursor = source;
+    for (const part of parts) {
+      if (cursor == null) {
+        return undefined;
+      }
+      cursor = cursor[part];
+    }
+
+    return cursor;
+  }
+
+  private coerceTreeNodes(value: unknown): TreeNode[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map(item => this.mapAnyToTreeNode(item))
+      .filter((node): node is TreeNode => node !== null);
+  }
+
+  private mapAnyToTreeNode(item: unknown): TreeNode | null {
+    if (item == null || typeof item !== 'object') {
+      const text = String(item ?? '').trim();
+      if (!text) {
+        return null;
+      }
+
+      return {
+        key: text,
+        label: text,
+        children: []
+      };
+    }
+
+    const source = item as Record<string, unknown>;
+    const key = String(source['key'] ?? source['id'] ?? source['value'] ?? '').trim();
+    const label = String(source['label'] ?? source['name'] ?? source['text'] ?? source['value'] ?? key).trim();
+    const children = Array.isArray(source['children'])
+      ? (source['children'] as unknown[]).map(child => this.mapAnyToTreeNode(child)).filter((node): node is TreeNode => node !== null)
+      : [];
+
+    if (!key && !label && children.length === 0) {
+      return null;
+    }
+
+    return {
+      key: key || label,
+      label: label || key,
+      selectable: true,
+      children
+    };
+  }
+
+  private normalizeFieldKey(value: unknown): string {
+    return String(value ?? '').trim().toLowerCase();
   }
 }

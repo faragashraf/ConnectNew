@@ -34,6 +34,8 @@ export interface PreviewFieldRenderModel {
   optionsCount: number;
   optionsPreview: string[];
   unresolvedOptions: boolean;
+  treeEnabled: boolean;
+  treePath?: string;
   bindingHint?: string;
 }
 
@@ -47,6 +49,13 @@ export interface PreviewConfigResolution {
   canonical: ComponentConfig | null;
   matched: ComponentConfig[];
   alternatives: ComponentConfig[];
+}
+
+export interface PreviewTreeBinding {
+  fieldKey: string;
+  treePath: string;
+  requestMethod?: string;
+  requestId?: string;
 }
 
 export interface PreviewWorkspaceRenderModel {
@@ -175,6 +184,82 @@ export class CentralAdminPreviewFoundationService {
     return merged;
   }
 
+  resolveTreeBindingsFromConfigs(configs: ComponentConfig[], categoryId: number): Map<string, PreviewTreeBinding> {
+    const bindings = new Map<string, PreviewTreeBinding>();
+
+    (configs ?? []).forEach(config => {
+      (config?.requestsarray ?? []).forEach(request => {
+        if (!this.requestMatchesCategory(request, categoryId)) {
+          return;
+        }
+
+        if (!this.isTreePopulateRequest(request)) {
+          return;
+        }
+
+        const treePath = this.extractTreePath(request);
+        if (!treePath) {
+          return;
+        }
+
+        const targetFields = this.extractRequestTargetFields(request);
+        targetFields.forEach(field => {
+          const normalizedField = this.normalizeFieldKey(field);
+          if (!normalizedField || bindings.has(normalizedField)) {
+            return;
+          }
+
+          bindings.set(normalizedField, {
+            fieldKey: normalizedField,
+            treePath,
+            requestMethod: String(request?.method ?? ''),
+            requestId: String(request?.requestId ?? '')
+          });
+        });
+      });
+    });
+
+    return bindings;
+  }
+
+  extractTreePopulateRequests(configs: ComponentConfig[], categoryId: number): RequestArrayItem[] {
+    const requests: RequestArrayItem[] = [];
+    const dedup = new Set<string>();
+
+    (configs ?? []).forEach(config => {
+      (config?.requestsarray ?? []).forEach(request => {
+        if (!this.requestMatchesCategory(request, categoryId)) {
+          return;
+        }
+
+        if (!this.isTreePopulateRequest(request)) {
+          return;
+        }
+
+        const signature = [
+          String(request?.method ?? '').trim().toLowerCase(),
+          JSON.stringify(request?.args ?? []),
+          String(request?.populateMethod ?? '').trim().toLowerCase(),
+          JSON.stringify(request?.populateArgs ?? []),
+          JSON.stringify(request?.conditions ?? {})
+        ].join('|');
+        if (dedup.has(signature)) {
+          return;
+        }
+
+        dedup.add(signature);
+        requests.push({
+          ...request,
+          args: Array.isArray(request?.args) ? [...request.args] : [],
+          requestsSelectionFields: Array.isArray(request?.requestsSelectionFields) ? [...request.requestsSelectionFields] : [],
+          populateArgs: Array.isArray(request?.populateArgs) ? [...request.populateArgs] : []
+        });
+      });
+    });
+
+    return requests;
+  }
+
   buildConfigurationIssues(
     matchedConfigs: ComponentConfig[],
     context: { routeKeyPrefix?: string | null; selectedConfigRouteKey?: string | null; canonicalRouteKey?: string | null }
@@ -237,6 +322,7 @@ export class CentralAdminPreviewFoundationService {
     options?: {
       extraIssues?: PreviewWorkspaceIssue[];
       configBoundOptionFields?: Set<string>;
+      treeBindings?: Map<string, PreviewTreeBinding>;
       canonicalRouteKey?: string | null;
       matchedConfigCount?: number;
     }
@@ -246,6 +332,7 @@ export class CentralAdminPreviewFoundationService {
     }
 
     const configBoundOptionFields = options?.configBoundOptionFields ?? new Set<string>();
+    const treeBindings = options?.treeBindings ?? new Map<string, PreviewTreeBinding>();
     const definition = workspace.formDefinition;
     const groupsMeta = new Map<number, string>();
     (definition?.groups ?? []).forEach(group => {
@@ -259,7 +346,7 @@ export class CentralAdminPreviewFoundationService {
         || Number(a.displayOrder ?? 0) - Number(b.displayOrder ?? 0)
         || Number(a.mendSql ?? 0) - Number(b.mendSql ?? 0)
       )
-      .map(field => this.mapField(field, groupsMeta, configBoundOptionFields));
+      .map(field => this.mapField(field, groupsMeta, configBoundOptionFields, treeBindings));
 
     const grouped = new Map<number, PreviewFieldRenderModel[]>();
     fields.forEach(field => {
@@ -341,12 +428,15 @@ export class CentralAdminPreviewFoundationService {
   private mapField(
     field: SubjectFieldDefinitionDto,
     groupsMeta: Map<number, string>,
-    configBoundOptionFields: Set<string>
+    configBoundOptionFields: Set<string>,
+    treeBindings: Map<string, PreviewTreeBinding>
   ): PreviewFieldRenderModel {
     const normalizedFieldKey = this.normalizeFieldKey(field.fieldKey);
+    const treeBinding = treeBindings.get(normalizedFieldKey);
+    const treeEnabled = Boolean(treeBinding);
     const hasConfigBinding = configBoundOptionFields.has(normalizedFieldKey);
     const displayBindingHint = this.extractBindingHint(field.displaySettingsJson);
-    const bindingHint = displayBindingHint || (hasConfigBinding ? 'config.requestsarray' : '');
+    const bindingHint = displayBindingHint || (treeEnabled ? `tree:${treeBinding?.treePath}` : (hasConfigBinding ? 'config.requestsarray' : ''));
     const optionsPreview = this.parseOptionsPreview(field.optionsPayload);
     const optionsCount = optionsPreview.length;
     const requiresOptions = this.requiresOptions(field.fieldType);
@@ -369,7 +459,9 @@ export class CentralAdminPreviewFoundationService {
       optionsSource,
       optionsCount,
       optionsPreview,
-      unresolvedOptions: requiresOptions && optionsSource === 'none',
+      unresolvedOptions: requiresOptions && optionsSource === 'none' && !treeEnabled,
+      treeEnabled,
+      treePath: treeBinding?.treePath,
       bindingHint: bindingHint || undefined
     };
   }
@@ -451,6 +543,65 @@ export class CentralAdminPreviewFoundationService {
     }
 
     return true;
+  }
+
+  private extractRequestTargetFields(request: RequestArrayItem | undefined): string[] {
+    if (!request || typeof request !== 'object') {
+      return [];
+    }
+
+    const fields = new Set<string>();
+    (request.requestsSelectionFields ?? []).forEach(field => {
+      const normalized = this.normalizeFieldKey(field);
+      if (normalized) {
+        fields.add(normalized);
+      }
+    });
+
+    const bindings = Array.isArray(request.bindings) ? request.bindings : [];
+    bindings.forEach(binding => {
+      const bindType = String(binding?.bindType ?? '').trim().toLowerCase();
+      if (bindType !== 'options') {
+        return;
+      }
+
+      const targetField = this.normalizeFieldKey(binding?.targetFieldKey ?? binding?.target?.fieldKey);
+      if (targetField) {
+        fields.add(targetField);
+      }
+    });
+
+    return Array.from(fields);
+  }
+
+  private isTreePopulateRequest(request: RequestArrayItem | undefined): boolean {
+    const method = String(request?.populateMethod ?? '').trim().toLowerCase();
+    if (!method) {
+      return false;
+    }
+
+    return method.includes('populatetreegeneric') || method.includes('tree');
+  }
+
+  private extractTreePath(request: RequestArrayItem | undefined): string {
+    if (!request || !Array.isArray(request.populateArgs)) {
+      return '';
+    }
+
+    const args = request.populateArgs ?? [];
+    const byIndex = this.normalizeContextPath(args[3]);
+    if (byIndex) {
+      return byIndex;
+    }
+
+    for (const arg of args) {
+      const normalized = this.normalizeContextPath(arg);
+      if (normalized.includes('tree')) {
+        return normalized;
+      }
+    }
+
+    return '';
   }
 
   private scoreConfigForPreview(cfg: ComponentConfig): number {
@@ -614,5 +765,11 @@ export class CentralAdminPreviewFoundationService {
 
   private normalizeFieldKey(value: unknown): string {
     return String(value ?? '').trim().toLowerCase();
+  }
+
+  private normalizeContextPath(value: unknown): string {
+    return String(value ?? '')
+      .trim()
+      .replace(/^this\./i, '');
   }
 }

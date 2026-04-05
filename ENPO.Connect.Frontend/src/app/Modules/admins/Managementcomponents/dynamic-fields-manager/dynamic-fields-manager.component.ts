@@ -34,7 +34,7 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
   fields: SubjectAdminFieldDto[] = [];
   searchTerm = '';
   statusFilter: 'all' | 'active' | 'inactive' = 'all';
-  appFilter = '';
+  appFilter: string | null = '';
 
   form: FormGroup;
 
@@ -96,7 +96,7 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
         }
 
         const appIdFromContext = String(state.selectedApplicationId ?? '').trim();
-        if (appIdFromContext === this.appFilter.trim()) {
+        if (appIdFromContext === this.normalizeText(this.appFilter)) {
           return;
         }
 
@@ -164,7 +164,7 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
   }
 
   get appOptions(): Array<{ label: string; value: string }> {
-    const apps = [...new Set((this.fields ?? []).map(item => String(item.applicationId ?? '').trim()).filter(item => item.length > 0))]
+    const apps = [...new Set((this.fields ?? []).map(item => this.normalizeText(item.applicationId)).filter(item => item.length > 0))]
       .sort((a, b) => a.localeCompare(b));
 
     return apps.map(app => ({ label: app, value: app }));
@@ -174,8 +174,8 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
     let rows = [...(this.fields ?? [])];
 
     const effectiveAppFilter = this.embeddedMode
-      ? (this.selectedApplicationId || '').trim()
-      : this.appFilter.trim();
+      ? this.normalizeText(this.selectedApplicationId)
+      : this.normalizeText(this.appFilter);
 
     if (effectiveAppFilter.length > 0) {
       rows = rows.filter(item => String(item.applicationId ?? '').trim().toLowerCase() === effectiveAppFilter.toLowerCase());
@@ -187,7 +187,7 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
       rows = rows.filter(item => !item.isActive);
     }
 
-    const term = this.searchTerm.trim().toLowerCase();
+    const term = this.normalizeText(this.searchTerm).toLowerCase();
     if (term.length > 0) {
       rows = rows.filter(item =>
         String(item.fieldKey ?? '').toLowerCase().includes(term)
@@ -209,8 +209,8 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
     const requestSeq = ++this.fieldsRequestSeq;
     this.loading = true;
     const appId = this.embeddedMode
-      ? (String(this.selectedApplicationId ?? '').trim() || undefined)
-      : (this.appFilter.trim() || undefined);
+      ? (this.normalizeText(this.selectedApplicationId) || undefined)
+      : (this.normalizeText(this.appFilter) || undefined);
 
     this.dynamicSubjectsController.getAdminFields(appId).subscribe({
       next: response => {
@@ -375,8 +375,10 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
   }
 
   onStandaloneAppFilterChange(): void {
+    const normalized = this.normalizeText(this.appFilter);
+    this.appFilter = normalized;
     this.centralAdminContext.patchContext({
-      selectedApplicationId: this.appFilter
+      selectedApplicationId: normalized
     });
     this.loadFields();
   }
@@ -631,5 +633,9 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
     }
 
     return JSON.stringify(normalizedRows);
+  }
+
+  private normalizeText(value: unknown): string {
+    return String(value ?? '').trim();
   }
 }

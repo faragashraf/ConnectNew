@@ -144,21 +144,37 @@
 
               <ng-container [ngSwitch]="true">
                 <textarea *ngSwitchCase="isTextareaField(field)" rows="2" [placeholder]="field.label" disabled></textarea>
-                <select *ngSwitchCase="isSelectField(field)" disabled>
-                  <option value="" selected>اختر...</option>
-                  <option *ngFor="let option of toSelectPreviewOptions(field)" [value]="option.value">{{ option.label }}</option>
-                </select>
+                <div *ngSwitchCase="isSelectField(field)" class="sim-select-with-tree">
+                  <select disabled>
+                    <option value="" selected>اختر...</option>
+                    <option *ngFor="let option of toSelectPreviewOptions(field)" [value]="option.value">{{ option.label }}</option>
+                  </select>
+                  <button
+                    *ngIf="hasTreeButton(field)"
+                    type="button"
+                    class="tree-launch-btn"
+                    [disabled]="!hasTreeNodes(field)"
+                    (click)="openTreeDialog(field)">
+                    <i class="pi pi-sitemap"></i>
+                    <span>الشجرة</span>
+                  </button>
+                </div>
                 <input *ngSwitchCase="isBooleanField(field)" type="checkbox" disabled />
                 <input *ngSwitchCase="isDateField(field)" type="date" disabled />
                 <input *ngSwitchCase="isNumberField(field)" type="number" [placeholder]="field.label" disabled />
                 <input *ngSwitchDefault type="text" [placeholder]="field.label" disabled />
               </ng-container>
 
+              <small class="tree-selected-value" *ngIf="getTreeSelectedLabel(field)">
+                الاختيار الحالي: {{ getTreeSelectedLabel(field) }}
+              </small>
+
               <div class="sim-tags">
                 <span class="tag">{{ field.typeLabel }}</span>
                 <span class="tag" [class.tag-on]="field.required">Required: {{ field.required ? 'Yes' : 'No' }}</span>
                 <span class="tag" [class.tag-on]="field.readonly">Readonly: {{ field.readonly ? 'Yes' : 'No' }}</span>
                 <span class="tag" [class.tag-on]="field.visible">Visible: {{ field.visible ? 'Yes' : 'No' }}</span>
+                <span class="tag tag-tree" *ngIf="field.treeEnabled">Tree Enabled</span>
               </div>
 
               <small class="inline-warning" *ngIf="field.unresolvedOptions">
@@ -198,6 +214,8 @@
                   <span *ngIf="field.optionsSource === 'inline'">خيارات مباشرة ({{ field.optionsCount }})</span>
                   <span *ngIf="field.optionsSource === 'binding'">Binding: {{ field.bindingHint || '-' }}</span>
                   <span *ngIf="field.optionsSource === 'none'">-</span>
+                  <br *ngIf="field.treeEnabled" />
+                  <small *ngIf="field.treeEnabled">Tree: {{ field.treePath || '-' }}</small>
                 </td>
               </tr>
             </tbody>
@@ -214,3 +232,27 @@
     </ng-template>
   </ng-container>
 </section>
+
+<p-dialog
+  [(visible)]="treeDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(860px, 92vw)' }"
+  [contentStyle]="{ 'max-height': '72vh', overflow: 'auto' }"
+  [header]="treeDialogFieldLabel ? ('شجرة الاختيار - ' + treeDialogFieldLabel) : 'شجرة الاختيار'"
+  appendTo="body"
+  styleClass="rtl-dialog">
+  <div dir="rtl" class="tree-dialog-body">
+    <p-tree
+      [value]="treeDialogNodes"
+      selectionMode="single"
+      [(selection)]="treeDialogSelection"
+      [filter]="true"
+      filterPlaceholder="ابحث داخل الشجرة"
+      [propagateSelectionDown]="false"
+      [propagateSelectionUp]="false"
+      (onNodeSelect)="onTreeNodeSelect($event)">
+    </p-tree>
+  </div>
+</p-dialog>
