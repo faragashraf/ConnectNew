@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -1535,6 +1536,300 @@ public sealed partial class DynamicSubjectsService
         }
 
         return BuildFormDefinitionAsync(categoryId, userId, appId, allowInactiveCategory: true, cancellationToken);
+    }
+
+    public async Task<CommonResponse<SubjectAdminPreviewWorkspaceDto>> GetAdminPreviewWorkspaceAsync(
+        int categoryId,
+        string userId,
+        string? appId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<SubjectAdminPreviewWorkspaceDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
+                return response;
+            }
+
+            var category = await _connectContext.Cdcategories
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
+            if (category == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "النوع غير موجود." });
+                return response;
+            }
+
+            var normalizedAppId = NormalizeNullable(appId);
+            var normalizedCategoryAppId = NormalizeNullable(category.ApplicationId);
+            if (normalizedAppId != null
+                && normalizedCategoryAppId != null
+                && !EqualsNormalized(normalizedAppId, normalizedCategoryAppId))
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "النوع خارج نطاق التطبيق المطلوب." });
+                return response;
+            }
+
+            var hasDynamicFields = await _connectContext.CdCategoryMands
+                .AsNoTracking()
+                .AnyAsync(item => item.MendCategory == categoryId && !item.MendStat, cancellationToken);
+
+            var policy = await _connectContext.SubjectReferencePolicies
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.CategoryId == categoryId, cancellationToken);
+
+            var setting = await _connectContext.SubjectTypeAdminSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.CategoryId == categoryId, cancellationToken);
+
+            var links = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
+            var definitionResponse = await BuildFormDefinitionAsync(
+                categoryId,
+                normalizedUserId,
+                appId,
+                allowInactiveCategory: true,
+                cancellationToken);
+
+            if (definitionResponse.Errors?.Count > 0)
+            {
+                foreach (var error in definitionResponse.Errors)
+                {
+                    response.Errors.Add(error);
+                }
+
+                return response;
+            }
+
+            var definition = definitionResponse.Data ?? new SubjectFormDefinitionDto
+            {
+                CategoryId = category.CatId,
+                CategoryName = category.CatName,
+                ParentCategoryId = category.CatParent,
+                ApplicationId = category.ApplicationId,
+                Groups = new List<SubjectGroupDefinitionDto>(),
+                Fields = new List<SubjectFieldDefinitionDto>()
+            };
+
+            response.Data = new SubjectAdminPreviewWorkspaceDto
+            {
+                CategoryId = category.CatId,
+                CategoryName = category.CatName,
+                ParentCategoryId = category.CatParent,
+                ApplicationId = category.ApplicationId,
+                SubjectType = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy, setting),
+                FormDefinition = definition,
+                FieldLinks = links,
+                Readiness = BuildPreviewWorkspaceReadiness(category, links, definition),
+                GeneratedAtUtc = DateTime.UtcNow
+            };
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    private static SubjectAdminPreviewReadinessDto BuildPreviewWorkspaceReadiness(
+        Cdcategory category,
+        IReadOnlyCollection<SubjectCategoryFieldLinkAdminDto> links,
+        SubjectFormDefinitionDto definition)
+    {
+        var issues = new List<SubjectAdminPreviewIssueDto>();
+        var normalizedLinks = links?.ToList() ?? new List<SubjectCategoryFieldLinkAdminDto>();
+        var activeLinks = normalizedLinks.Where(item => item.IsActive).ToList();
+        var visibleActiveLinks = activeLinks.Where(item => item.IsVisible).ToList();
+        var renderableFields = (definition?.Fields ?? new List<SubjectFieldDefinitionDto>())
+            .Where(item => item.IsVisible)
+            .ToList();
+
+        if (category.CatStatus)
+        {
+            issues.Add(new SubjectAdminPreviewIssueDto
+            {
+                Code = "CATEGORY_INACTIVE",
+                Severity = "Warning",
+                Message = "النوع الحالي غير مفعل. يمكن المعاينة إداريًا لكن لن يظهر للمستخدم النهائي حتى يتم تفعيله."
+            });
+        }
+
+        if (activeLinks.Count == 0)
+        {
+            issues.Add(new SubjectAdminPreviewIssueDto
+            {
+                Code = "NO_ACTIVE_LINKS",
+                Severity = "Error",
+                Message = "لا توجد روابط حقول فعالة لهذا النوع."
+            });
+        }
+
+        if (visibleActiveLinks.Count == 0)
+        {
+            issues.Add(new SubjectAdminPreviewIssueDto
+            {
+                Code = "NO_VISIBLE_FIELDS",
+                Severity = "Error",
+                Message = "لا توجد حقول مرئية بعد تطبيق إعدادات العرض."
+            });
+        }
+
+        if (renderableFields.Count == 0)
+        {
+            issues.Add(new SubjectAdminPreviewIssueDto
+            {
+                Code = "NO_RENDERABLE_FIELDS",
+                Severity = "Error",
+                Message = "تعريف المعاينة لا يحتوي على حقول قابلة للعرض."
+            });
+        }
+
+        var definitionByMendSql = renderableFields
+            .GroupBy(item => item.MendSql)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var missingDefinitionCount = 0;
+        var missingBindingsCount = 0;
+        var invalidDisplaySettingsCount = 0;
+
+        foreach (var link in visibleActiveLinks)
+        {
+            if (!definitionByMendSql.TryGetValue(link.MendSql, out var field))
+            {
+                missingDefinitionCount++;
+                issues.Add(new SubjectAdminPreviewIssueDto
+                {
+                    Code = "MISSING_FIELD_DEFINITION",
+                    Severity = "Error",
+                    Message = $"الحقل '{link.FieldKey}' مرتبط لكنه غير موجود في تعريف المعاينة.",
+                    FieldKey = link.FieldKey,
+                    GroupId = link.GroupId
+                });
+                continue;
+            }
+
+            if (!TryReadBindingFromDisplaySettings(field.DisplaySettingsJson, out var hasBinding, out var isDisplaySettingsJsonInvalid))
+            {
+                isDisplaySettingsJsonInvalid = true;
+                hasBinding = false;
+            }
+
+            if (isDisplaySettingsJsonInvalid)
+            {
+                invalidDisplaySettingsCount++;
+                issues.Add(new SubjectAdminPreviewIssueDto
+                {
+                    Code = "INVALID_DISPLAY_SETTINGS",
+                    Severity = "Warning",
+                    Message = $"إعدادات العرض للحقل '{field.FieldKey}' ليست JSON صالحًا.",
+                    FieldKey = field.FieldKey,
+                    GroupId = field.MendGroup
+                });
+            }
+
+            var hasInlineOptions = !string.IsNullOrWhiteSpace(field.OptionsPayload);
+            if (RequiresOptionsBinding(field.FieldType) && !hasInlineOptions && !hasBinding)
+            {
+                missingBindingsCount++;
+                issues.Add(new SubjectAdminPreviewIssueDto
+                {
+                    Code = "MISSING_OPTIONS_BINDING",
+                    Severity = "Error",
+                    Message = $"الحقل '{field.FieldKey}' يحتاج مصدر خيارات (Options/Biding) ولم يتم توفيره.",
+                    FieldKey = field.FieldKey,
+                    GroupId = field.MendGroup
+                });
+            }
+        }
+
+        var readiness = new SubjectAdminPreviewReadinessDto
+        {
+            LinkedFieldsCount = normalizedLinks.Count,
+            ActiveLinkedFieldsCount = activeLinks.Count,
+            VisibleLinkedFieldsCount = visibleActiveLinks.Count,
+            RenderableFieldsCount = renderableFields.Count,
+            MissingDefinitionCount = missingDefinitionCount,
+            MissingBindingsCount = missingBindingsCount,
+            InvalidDisplaySettingsCount = invalidDisplaySettingsCount,
+            Issues = issues
+        };
+        readiness.IsReady = !issues.Any(item => string.Equals(item.Severity, "Error", StringComparison.OrdinalIgnoreCase));
+        return readiness;
+    }
+
+    private static bool RequiresOptionsBinding(string? fieldType)
+    {
+        var normalized = (fieldType ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized.Contains("dropdown")
+            || normalized.Contains("select")
+            || normalized.Contains("combo")
+            || normalized.Contains("radio")
+            || normalized.Contains("tree");
+    }
+
+    private static bool TryReadBindingFromDisplaySettings(
+        string? displaySettingsJson,
+        out bool hasBinding,
+        out bool isInvalidJson)
+    {
+        hasBinding = false;
+        isInvalidJson = false;
+
+        var payload = (displaySettingsJson ?? string.Empty).Trim();
+        if (payload.Length == 0)
+        {
+            return true;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return true;
+            }
+
+            hasBinding = root.EnumerateObject().Any(property =>
+            {
+                var key = property.Name;
+                if (!(key.Contains("binding", StringComparison.OrdinalIgnoreCase)
+                    || key.Contains("source", StringComparison.OrdinalIgnoreCase)
+                    || key.Contains("lookup", StringComparison.OrdinalIgnoreCase)
+                    || key.Contains("request", StringComparison.OrdinalIgnoreCase)
+                    || key.Contains("endpoint", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return false;
+                }
+
+                return property.Value.ValueKind switch
+                {
+                    JsonValueKind.String => !string.IsNullOrWhiteSpace(property.Value.GetString()),
+                    JsonValueKind.Number => true,
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    JsonValueKind.Array => property.Value.GetArrayLength() > 0,
+                    JsonValueKind.Object => property.Value.EnumerateObject().Any(),
+                    _ => false
+                };
+            });
+
+            return true;
+        }
+        catch
+        {
+            isInvalidJson = true;
+            return false;
+        }
     }
 
     private SubjectAdminFieldDto MapAdminField(Cdmend field, IReadOnlyDictionary<string, int> linkedCounts)

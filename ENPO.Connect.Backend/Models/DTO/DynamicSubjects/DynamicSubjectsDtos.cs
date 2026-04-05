@@ -108,6 +108,61 @@ public sealed class SubjectFormDefinitionDto
     public List<SubjectFieldDefinitionDto> Fields { get; set; } = new();
 }
 
+public sealed class SubjectAdminPreviewIssueDto
+{
+    public string Code { get; set; } = string.Empty;
+
+    public string Severity { get; set; } = "Warning";
+
+    public string Message { get; set; } = string.Empty;
+
+    public string? FieldKey { get; set; }
+
+    public int? GroupId { get; set; }
+}
+
+public sealed class SubjectAdminPreviewReadinessDto
+{
+    public bool IsReady { get; set; }
+
+    public int LinkedFieldsCount { get; set; }
+
+    public int ActiveLinkedFieldsCount { get; set; }
+
+    public int VisibleLinkedFieldsCount { get; set; }
+
+    public int RenderableFieldsCount { get; set; }
+
+    public int MissingDefinitionCount { get; set; }
+
+    public int MissingBindingsCount { get; set; }
+
+    public int InvalidDisplaySettingsCount { get; set; }
+
+    public List<SubjectAdminPreviewIssueDto> Issues { get; set; } = new();
+}
+
+public sealed class SubjectAdminPreviewWorkspaceDto
+{
+    public int CategoryId { get; set; }
+
+    public string CategoryName { get; set; } = string.Empty;
+
+    public int ParentCategoryId { get; set; }
+
+    public string? ApplicationId { get; set; }
+
+    public SubjectTypeAdminDto? SubjectType { get; set; }
+
+    public SubjectFormDefinitionDto? FormDefinition { get; set; }
+
+    public List<SubjectCategoryFieldLinkAdminDto> FieldLinks { get; set; } = new();
+
+    public SubjectAdminPreviewReadinessDto Readiness { get; set; } = new();
+
+    public DateTime GeneratedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
 public sealed class SubjectFieldValueDto
 {
     public int? FildSql { get; set; }

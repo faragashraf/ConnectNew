@@ -71,6 +71,38 @@ export interface SubjectFormDefinitionDto {
   fields: SubjectFieldDefinitionDto[];
 }
 
+export interface SubjectAdminPreviewIssueDto {
+  code: string;
+  severity: string;
+  message: string;
+  fieldKey?: string;
+  groupId?: number;
+}
+
+export interface SubjectAdminPreviewReadinessDto {
+  isReady: boolean;
+  linkedFieldsCount: number;
+  activeLinkedFieldsCount: number;
+  visibleLinkedFieldsCount: number;
+  renderableFieldsCount: number;
+  missingDefinitionCount: number;
+  missingBindingsCount: number;
+  invalidDisplaySettingsCount: number;
+  issues: SubjectAdminPreviewIssueDto[];
+}
+
+export interface SubjectAdminPreviewWorkspaceDto {
+  categoryId: number;
+  categoryName: string;
+  parentCategoryId: number;
+  applicationId?: string;
+  subjectType?: SubjectTypeAdminDto;
+  formDefinition?: SubjectFormDefinitionDto;
+  fieldLinks: SubjectCategoryFieldLinkAdminDto[];
+  readiness: SubjectAdminPreviewReadinessDto;
+  generatedAtUtc: string;
+}
+
 export interface SubjectFieldValueDto {
   fildSql?: number;
   fieldKey: string;

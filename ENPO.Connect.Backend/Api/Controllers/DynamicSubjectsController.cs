@@ -398,6 +398,16 @@ public class DynamicSubjectsController : ControllerBase
             return _dynamicSubjectsService.GetAdminPreviewAsync(categoryId, GetCurrentUserId(), appId, cancellationToken);
         }
 
+        [Authorize(Policy = DynamicSubjectsAdminAuthorization.PolicyName)]
+        [HttpGet("Admin/CategoryTypes/{categoryId:int}/PreviewWorkspace")]
+        public Task<CommonResponse<SubjectAdminPreviewWorkspaceDto>> GetAdminCategoryPreviewWorkspace(
+            int categoryId,
+            string? appId,
+            CancellationToken cancellationToken = default)
+        {
+            return _dynamicSubjectsService.GetAdminPreviewWorkspaceAsync(categoryId, GetCurrentUserId(), appId, cancellationToken);
+        }
+
         private static SubjectUpsertRequestDto ParseUpsertRequest(SubjectUpsertFormRequestDto form)
         {
             return new SubjectUpsertRequestDto

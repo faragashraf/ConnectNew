@@ -1,0 +1,174 @@
+<section class="preview-workspace" dir="rtl">
+  <header class="preview-header">
+    <div>
+      <h3>Preview Workspace</h3>
+      <p>معاينة إدارية مبنية على بيانات حقيقية من الباك + تكامل إعدادات الـ Config داخل نفس السياق.</p>
+    </div>
+  </header>
+
+  <section class="empty-context" *ngIf="!hasCategorySelection">
+    <h4>لا يمكن توليد المعاينة</h4>
+    <p>اختر نوع موضوع أولًا من قسم "أنواع الموضوعات" داخل الـ Central Admin Shell.</p>
+  </section>
+
+  <section class="loading-box" *ngIf="hasCategorySelection && loading">
+    <p-progressSpinner></p-progressSpinner>
+  </section>
+
+  <section class="error-box" *ngIf="hasCategorySelection && !loading && loadError">
+    <strong>تعذر تحميل المعاينة</strong>
+    <p>{{ loadError }}</p>
+  </section>
+
+  <ng-container *ngIf="hasCategorySelection && !loading && !loadError && renderModel as model">
+    <section class="summary-grid">
+      <article>
+        <span>نوع الموضوع</span>
+        <strong>{{ model.categoryName }}</strong>
+      </article>
+      <article>
+        <span>Category ID</span>
+        <strong>{{ model.categoryId }}</strong>
+      </article>
+      <article>
+        <span>Application ID</span>
+        <strong>{{ model.applicationId || '-' }}</strong>
+      </article>
+      <article>
+        <span>الحالة</span>
+        <strong [class.ok]="model.isReady" [class.bad]="!model.isReady">{{ statusText }}</strong>
+      </article>
+      <article>
+        <span>RouteKey Prefix</span>
+        <strong>{{ contextState.routeKeyPrefix || '-' }}</strong>
+      </article>
+      <article>
+        <span>Config RouteKey</span>
+        <strong>{{ primaryRouteKey }}</strong>
+      </article>
+      <article>
+        <span>إجمالي الحقول المرتبطة</span>
+        <strong>{{ model.summary.linkedFieldsCount }}</strong>
+      </article>
+      <article>
+        <span>حقول قابلة للعرض</span>
+        <strong>{{ model.summary.renderableFieldsCount }}</strong>
+      </article>
+      <article>
+        <span>إعدادات Config مطابقة</span>
+        <strong>{{ matchedConfigs.length }}</strong>
+      </article>
+    </section>
+
+    <section class="readiness-panel" [class.ready]="model.isReady" [class.not-ready]="!model.isReady">
+      <header>
+        <h4>Readiness Checks</h4>
+        <span>{{ model.isReady ? 'Ready' : 'Needs Attention' }}</span>
+      </header>
+
+      <div class="readiness-kpis">
+        <div>
+          <small>حقول نشطة</small>
+          <strong>{{ model.summary.activeLinkedFieldsCount }}</strong>
+        </div>
+        <div>
+          <small>حقول مرئية</small>
+          <strong>{{ model.summary.visibleLinkedFieldsCount }}</strong>
+        </div>
+        <div>
+          <small>حقول بدون Binding</small>
+          <strong>{{ model.summary.missingBindingsCount }}</strong>
+        </div>
+        <div>
+          <small>عدد الجروبات</small>
+          <strong>{{ model.summary.groupsCount }}</strong>
+        </div>
+      </div>
+
+      <div class="issues-list" *ngIf="model.issues.length > 0; else noIssues">
+        <article
+          class="issue-item"
+          *ngFor="let issue of model.issues; trackBy: trackByIssue"
+          [ngClass]="issueSeverityClassMap[issue.severity]">
+          <div class="issue-title">
+            <strong>{{ issue.code }}</strong>
+            <span>{{ issue.severity }}</span>
+          </div>
+          <p>{{ issue.message }}</p>
+          <small *ngIf="issue.fieldKey || issue.groupId">
+            Field: {{ issue.fieldKey || '-' }} | Group: {{ issue.groupId || '-' }}
+          </small>
+        </article>
+      </div>
+      <ng-template #noIssues>
+        <p class="no-issues">لا توجد ملاحظات readiness حالية.</p>
+      </ng-template>
+    </section>
+
+    <section class="config-panel">
+      <header>
+        <h4>Config Summary</h4>
+        <p>الـ route/config المستخدم في المعاينة يعتمد على الـ context الحالي ونتيجة الفلترة الفعلية.</p>
+      </header>
+
+      <div class="route-chips" *ngIf="matchedConfigs.length > 0; else noConfigs">
+        <span class="chip" *ngFor="let cfg of matchedConfigs | slice:0:14">{{ cfg.routeKey }}</span>
+      </div>
+      <ng-template #noConfigs>
+        <p class="no-configs">لا توجد Configs مطابقة للسياق الحالي.</p>
+      </ng-template>
+    </section>
+
+    <section class="groups-panel" *ngIf="model.groups.length > 0; else noGroups">
+      <article class="group-card" *ngFor="let group of model.groups; trackBy: trackByGroup">
+        <header class="group-head">
+          <h5>{{ group.groupName }}</h5>
+          <span>{{ group.fields.length }} حقل</span>
+        </header>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>الترتيب</th>
+                <th>الحقل</th>
+                <th>النوع</th>
+                <th>Required</th>
+                <th>Readonly</th>
+                <th>Visible</th>
+                <th>Options / Binding</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let field of group.fields; trackBy: trackByField">
+                <td>{{ field.displayOrder }}</td>
+                <td>
+                  <div class="field-meta">
+                    <strong>{{ field.label }}</strong>
+                    <small>{{ field.fieldKey }}</small>
+                  </div>
+                </td>
+                <td>{{ field.typeLabel }}</td>
+                <td>{{ field.required ? 'نعم' : 'لا' }}</td>
+                <td>{{ field.readonly ? 'نعم' : 'لا' }}</td>
+                <td>{{ field.visible ? 'نعم' : 'لا' }}</td>
+                <td>
+                  <span *ngIf="field.optionsSource === 'inline'">خيارات مباشرة ({{ field.optionsCount }})</span>
+                  <span *ngIf="field.optionsSource === 'binding'">Binding: {{ field.bindingHint || '-' }}</span>
+                  <span *ngIf="field.optionsSource === 'none'">-</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <ng-template #noGroups>
+      <section class="no-groups">
+        <h4>لا توجد جروبات/حقول قابلة للعرض</h4>
+        <p>راجع روابط الحقول والجروبات وإعدادات إظهار الحقول داخل إدارة الأنواع.</p>
+      </section>
+    </ng-template>
+  </ng-container>
+</section>

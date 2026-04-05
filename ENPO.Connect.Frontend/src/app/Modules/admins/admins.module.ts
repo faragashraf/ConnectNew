@@ -25,6 +25,7 @@ import { ComponentConfigManagerComponent } from './Managementcomponents/componen
 import { ApplicationGenericManagerComponent } from './components/application-generic-manager/application-generic-manager.component';
 import { DynamicSubjectTypeAdminComponent } from './components/dynamic-subject-type-admin/dynamic-subject-type-admin.component';
 import { CentralAdminShellComponent } from './components/central-admin-shell/central-admin-shell.component';
+import { CentralAdminPreviewWorkspaceComponent } from './components/central-admin-preview-workspace/central-admin-preview-workspace.component';
 // SidebarComponent is provided by GenericModuleModule now
 
 
@@ -44,7 +45,8 @@ import { CentralAdminShellComponent } from './components/central-admin-shell/cen
     NswagEditorComponent,
     ApplicationGenericManagerComponent,
     DynamicSubjectTypeAdminComponent,
-    CentralAdminShellComponent
+    CentralAdminShellComponent,
+    CentralAdminPreviewWorkspaceComponent
   ],
   imports: [
     CommonModule,

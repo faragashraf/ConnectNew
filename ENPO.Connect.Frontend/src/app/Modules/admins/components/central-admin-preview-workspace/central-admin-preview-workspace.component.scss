@@ -1,0 +1,312 @@
+.preview-workspace {
+  direction: rtl;
+  text-align: right;
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.95rem;
+  background: #f8fbff;
+  min-height: 100%;
+}
+
+.preview-header,
+.empty-context,
+.loading-box,
+.error-box,
+.summary-grid article,
+.readiness-panel,
+.config-panel,
+.group-card,
+.no-groups {
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.preview-header {
+  padding: 0.85rem 0.95rem;
+}
+
+.preview-header h3 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.preview-header p {
+  margin: 0.4rem 0 0;
+  color: #475569;
+  font-size: 0.88rem;
+}
+
+.empty-context,
+.error-box,
+.no-groups {
+  padding: 0.85rem 0.95rem;
+}
+
+.empty-context h4,
+.no-groups h4 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.empty-context p,
+.error-box p,
+.no-groups p {
+  margin: 0.35rem 0 0;
+  color: #475569;
+}
+
+.loading-box {
+  padding: 1.2rem;
+  display: flex;
+  justify-content: center;
+}
+
+.error-box strong {
+  color: #b91c1c;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.summary-grid article {
+  padding: 0.6rem 0.7rem;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.summary-grid span {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.summary-grid strong {
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.summary-grid strong.ok {
+  color: #047857;
+}
+
+.summary-grid strong.bad {
+  color: #b91c1c;
+}
+
+.readiness-panel {
+  padding: 0.8rem 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.readiness-panel.ready {
+  border-color: #10b981;
+}
+
+.readiness-panel.not-ready {
+  border-color: #f59e0b;
+}
+
+.readiness-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.readiness-panel h4 {
+  margin: 0;
+}
+
+.readiness-panel header span {
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.readiness-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.readiness-kpis div {
+  border: 1px dashed #dbe4f0;
+  border-radius: 10px;
+  padding: 0.45rem 0.5rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.readiness-kpis small {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.readiness-kpis strong {
+  color: #0f172a;
+}
+
+.issues-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.issue-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.issue-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.issue-item p {
+  margin: 0;
+  color: #334155;
+  font-size: 0.84rem;
+}
+
+.issue-item small {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.issue-item.severity-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.issue-item.severity-warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.issue-item.severity-info {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.no-issues,
+.no-configs {
+  margin: 0;
+  color: #475569;
+}
+
+.config-panel {
+  padding: 0.75rem 0.9rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.config-panel h4 {
+  margin: 0;
+}
+
+.config-panel p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.84rem;
+}
+
+.route-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.75rem;
+}
+
+.groups-panel {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.group-card {
+  padding: 0.7rem 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.group-head h5 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.group-head span {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead th {
+  text-align: right;
+  font-size: 0.78rem;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.4rem;
+}
+
+tbody td {
+  font-size: 0.82rem;
+  color: #0f172a;
+  border-bottom: 1px solid #f1f5f9;
+  padding: 0.4rem;
+  vertical-align: top;
+}
+
+.field-meta {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.field-meta small {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+@media (max-width: 1100px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .readiness-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .summary-grid,
+  .readiness-kpis {
+    grid-template-columns: 1fr;
+  }
+}

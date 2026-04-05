@@ -4,7 +4,7 @@
       <h2>لوحة الإدارة المركزية الموحدة</h2>
       <p>
         نقطة دخول واحدة لإدارة أنواع الموضوعات، مكتبة الحقول الديناميكية، وإعدادات المكونات.
-        المرحلة الحالية تركّز على توحيد تجربة العمل وإعادة استخدام الشاشات القائمة.
+        المرحلة الحالية تضيف Preview Workspace حقيقي للتحقق من جاهزية النموذج النهائي.
       </p>
     </div>
   </header>
@@ -101,6 +101,7 @@
       <button
         pButton
         *ngFor="let section of sections"
+        [hidden]="!section.standalonePath"
         type="button"
         class="p-button-text"
         [label]="section.label"

@@ -29,6 +29,7 @@ import {
   SubjectAdminGroupUpsertRequestDto,
   SubjectCategoryFieldLinkAdminDto,
   SubjectCategoryFieldLinksUpsertRequestDto,
+  SubjectAdminPreviewWorkspaceDto,
   SubjectTypeAdminCreateRequestDto,
   SubjectTypeAdminStatusRequestDto,
   SubjectTypeAdminTreeMoveRequestDto,
@@ -251,6 +252,15 @@ export class DynamicSubjectsController {
     }
 
     return this.http.get<CommonResponse<SubjectFormDefinitionDto>>(`${this.baseUrl}/Admin/CategoryTypes/${categoryId}/Preview`, { params });
+  }
+
+  getAdminCategoryPreviewWorkspace(categoryId: number, appId?: string): Observable<CommonResponse<SubjectAdminPreviewWorkspaceDto>> {
+    let params = new HttpParams();
+    if (appId) {
+      params = params.set('appId', appId);
+    }
+
+    return this.http.get<CommonResponse<SubjectAdminPreviewWorkspaceDto>>(`${this.baseUrl}/Admin/CategoryTypes/${categoryId}/PreviewWorkspace`, { params });
   }
 
   private toSubjectFormData(request: SubjectUpsertRequest, files: FileParameter[]): FormData {

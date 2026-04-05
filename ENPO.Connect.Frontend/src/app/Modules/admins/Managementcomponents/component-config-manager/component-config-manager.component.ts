@@ -717,8 +717,17 @@ export class ComponentConfigManagerComponent implements OnInit, OnDestroy {
     }
 
     private updateFilteredConfigsSummary(): void {
+        const filtered = this.filteredConfigs;
+        const currentSelected = String(this.centralAdminContext.snapshot.selectedConfigRouteKey ?? '').trim();
+        const selectedInScope = currentSelected.length > 0
+            && filtered.some(cfg => String(cfg?.routeKey ?? '').trim().toLowerCase() === currentSelected.toLowerCase());
+        const fallbackRouteKey = filtered.length > 0
+            ? (String(filtered[0]?.routeKey ?? '').trim() || null)
+            : null;
+
         this.centralAdminContext.patchContext({
-            filteredConfigsCount: this.filteredConfigs.length
+            filteredConfigsCount: filtered.length,
+            selectedConfigRouteKey: selectedInScope ? currentSelected : fallbackRouteKey
         });
     }
 

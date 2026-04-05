@@ -4,14 +4,14 @@ import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { Subscription, auditTime, filter } from 'rxjs';
 import { CentralAdminContextService, CentralAdminContextState } from '../../services/central-admin-context.service';
 
-type ShellSectionId = 'subject-types' | 'fields-library' | 'application-configuration';
+type ShellSectionId = 'subject-types' | 'fields-library' | 'application-configuration' | 'preview-workspace';
 
 interface ShellSection {
   id: ShellSectionId;
   label: string;
   description: string;
   childPath: string;
-  standalonePath: string;
+  standalonePath?: string;
   requiresCategorySelection?: boolean;
 }
 
@@ -43,6 +43,13 @@ export class CentralAdminShellComponent implements OnInit, OnDestroy {
       description: 'إدارة component-configs ومسارات الشاشات والطلبات.',
       childPath: 'application-configuration',
       standalonePath: 'ApplicationConfiguration',
+      requiresCategorySelection: true
+    },
+    {
+      id: 'preview-workspace',
+      label: 'Preview Workspace',
+      description: 'معاينة حقيقية للنموذج النهائي + readiness checks + config summary.',
+      childPath: 'preview-workspace',
       requiresCategorySelection: true
     }
   ];
@@ -118,6 +125,10 @@ export class CentralAdminShellComponent implements OnInit, OnDestroy {
   }
 
   openStandalone(section: ShellSection): void {
+    if (!section.standalonePath) {
+      return;
+    }
+
     this.router.navigate(['/Admin', section.standalonePath], {
       queryParams: this.centralAdminContext.toQueryParams()
     });

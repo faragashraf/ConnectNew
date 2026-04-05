@@ -211,4 +211,10 @@ public interface IDynamicSubjectsService
         string userId,
         string? appId,
         CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<SubjectAdminPreviewWorkspaceDto>> GetAdminPreviewWorkspaceAsync(
+        int categoryId,
+        string userId,
+        string? appId,
+        CancellationToken cancellationToken = default);
 }

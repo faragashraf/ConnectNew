@@ -15,6 +15,7 @@ import { ModuleChartsComponent } from '../GenericComponents/ConnectComponents/mo
 import { ApplicationGenericManagerComponent } from './components/application-generic-manager/application-generic-manager.component';
 import { DynamicSubjectTypeAdminComponent } from './components/dynamic-subject-type-admin/dynamic-subject-type-admin.component';
 import { CentralAdminShellComponent } from './components/central-admin-shell/central-admin-shell.component';
+import { CentralAdminPreviewWorkspaceComponent } from './components/central-admin-preview-workspace/central-admin-preview-workspace.component';
 
 const routes: Routes =
   [
@@ -158,7 +159,8 @@ const routes: Routes =
         { path: '', redirectTo: 'subject-types', pathMatch: 'full' },
         { path: 'subject-types', component: DynamicSubjectTypeAdminComponent },
         { path: 'fields-library', component: DynamicFieldsManagerComponent },
-        { path: 'application-configuration', component: ComponentConfigManagerComponent }
+        { path: 'application-configuration', component: ComponentConfigManagerComponent },
+        { path: 'preview-workspace', component: CentralAdminPreviewWorkspaceComponent }
       ]
     },
     {
