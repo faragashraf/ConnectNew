@@ -55,6 +55,7 @@ export class GenericFormsService {
   selections: { keyProp: string, nameProp: string, items?: selection[] } = { keyProp: '', nameProp: '', items: [] };
   selectionArrays: { keyProp: string, nameProp: string, items: selection[] }[] = [];
   private staticSelectionCache: Map<string, selection[]> = new Map();
+  private treeBoundFieldKeys: Set<string> = new Set();
 
   dynamicGroups: GroupInfo[] = [];
 
@@ -124,9 +125,31 @@ export class GenericFormsService {
     this.dynamicGroups = [];
     this.formErrors = [];
     this.validationMessages = [];
+    this.treeBoundFieldKeys.clear();
     if (clearSelections) {
       this.selectionArrays = [];
     }
+  }
+
+  markTreeBoundFields(fieldKeys: string[]): void {
+    (fieldKeys ?? []).forEach(fieldKey => {
+      const normalized = this.normalizeDynamicFieldKey(fieldKey);
+      if (!normalized) {
+        return;
+      }
+
+      this.treeBoundFieldKeys.add(normalized);
+    });
+  }
+
+  isTreeBoundField(controlFullName: string): boolean {
+    const parsed = this.nameIndexes(controlFullName ?? '');
+    const normalized = this.normalizeDynamicFieldKey(parsed.name);
+    if (!normalized) {
+      return false;
+    }
+
+    return this.treeBoundFieldKeys.has(normalized);
   }
 
   /**
@@ -579,6 +602,15 @@ export class GenericFormsService {
   nameIndexes(metaFiled: string): { name: string, index: number } {
     const [name, index] = metaFiled?.split('|');
     return { name, index: parseInt(index, 10) };
+  }
+
+  private normalizeDynamicFieldKey(value: unknown): string {
+    const raw = String(value ?? '').trim().toLowerCase();
+    if (!raw) {
+      return '';
+    }
+
+    return raw.split('|')[0].split('__')[0].trim();
   }
   public updateNextControlLabel(form: FormGroup | FormArray, event: any, ctrlFullNameToMatch: string, targetControlFullName: string, labelPattern: string | null, filtered_CategoryMand: CdCategoryMandDto[]) {
     const parsed = this.nameIndexes(event.controlFullName);

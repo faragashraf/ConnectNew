@@ -50,19 +50,20 @@
             [isDivDisabled]="isDivDisabled"
             (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-radio-button>
     </div>
-    <!------------------------------------------------------------------------ Dropdown    ----------------------------------------------------------------------->
-    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='Dropdown'" style="width: 100%;">
-        <app-dropdown [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
-            [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled"
-            [isCurrentUser]="isCurrentUser"
-            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-dropdown>
-    </div>
-    <!------------------------------------------------------------------------ Dropdown Tree  ----------------------------------------------------------------------->
-    <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='DropdownTree'" style="width: 100%;">
-        <app-dropdown-tree [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
-            [tree]="tree" [showTreeButton]="showTreeButton" [cdCategoryMandDto]="filtered_CategoryMand[index]"
-            [isDivDisabled]="isDivDisabled" [isCurrentUser]="isCurrentUser"
-            (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-dropdown-tree>
+    <!------------------------------------------------------------------------ Dropdown / Dropdown Tree ----------------------------------------------------------------------->
+    <div *ngIf="isDropdownField()" style="width: 100%;">
+        <ng-container *ngIf="shouldRenderTreeDropdown(); else plainDropdownRenderer">
+            <app-dropdown-tree [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+                [tree]="tree" [showTreeButton]="shouldShowTreeButton()" [cdCategoryMandDto]="filtered_CategoryMand[index]"
+                [isDivDisabled]="isDivDisabled" [isCurrentUser]="isCurrentUser"
+                (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-dropdown-tree>
+        </ng-container>
+        <ng-template #plainDropdownRenderer>
+            <app-dropdown [parentForm]="ticketForm" [controlFullName]="controlFullName" [control]="control"
+                [cdCategoryMandDto]="filtered_CategoryMand[index]" [isDivDisabled]="isDivDisabled"
+                [isCurrentUser]="isCurrentUser"
+                (genericEvent)="onGenericElementEvent($event, controlFullName,control.value, $event.eventType)"></app-dropdown>
+        </ng-template>
     </div>
     <!------------------------------------------------------------------------ File    ----------------------------------------------------------------------->
     <div *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')=='FileUpload'"

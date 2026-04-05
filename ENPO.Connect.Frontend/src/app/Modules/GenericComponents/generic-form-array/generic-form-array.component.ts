@@ -46,4 +46,36 @@ export class GenericFormArrayComponent {
   onGenericElementEvent(event: any, controlFullName: string, control: any, eventType: string) {
     this.genericEvent.emit({ event, controlFullName, control: control, eventType });
   }
+
+  isDropdownField(): boolean {
+    const normalized = this.getControlTypeToken();
+    return normalized.includes('drop')
+      || normalized.includes('select')
+      || normalized.includes('combo')
+      || normalized.includes('tree');
+  }
+
+  shouldRenderTreeDropdown(): boolean {
+    const normalized = this.getControlTypeToken();
+    const explicitTreeType = normalized.includes('tree');
+    if (explicitTreeType) {
+      return true;
+    }
+
+    if (!normalized.includes('drop') && !normalized.includes('select') && !normalized.includes('combo')) {
+      return false;
+    }
+
+    return this.genericFormService.isTreeBoundField(this.controlFullName);
+  }
+
+  shouldShowTreeButton(): boolean {
+    return this.showTreeButton || this.genericFormService.isTreeBoundField(this.controlFullName);
+  }
+
+  private getControlTypeToken(): string {
+    return String(this.genericFormService.GetPropertyValue(this.controlFullName, 'cdmendType') ?? '')
+      .trim()
+      .toLowerCase();
+  }
 }

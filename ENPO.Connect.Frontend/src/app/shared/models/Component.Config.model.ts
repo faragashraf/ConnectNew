@@ -530,6 +530,12 @@ function applyLegacyResponseBindings(
         if (invoker) {
             try {
                 invoker(respData, reqConfig.populateArgs);
+                if (genericFormService && isTreePopulateMethod(reqConfig.populateMethod)) {
+                    const treeTargetFields = collectTreeTargetFields(reqConfig);
+                    if (treeTargetFields.length > 0) {
+                        genericFormService.markTreeBoundFields(treeTargetFields);
+                    }
+                }
             } catch (e) {
                 traceConfigRequest(context, options, 'legacy.populateMethod.failed', {
                     request: reqConfig.requestId || reqConfig.method,
@@ -752,6 +758,44 @@ function parseNumberSet(values: number[] | undefined): number[] {
         .filter(value => Number.isFinite(value));
 }
 
+function isTreePopulateMethod(method: string | null | undefined): boolean {
+    const normalized = String(method ?? '').trim().toLowerCase();
+    if (!normalized) {
+        return false;
+    }
+
+    return normalized.includes('populatetreegeneric') || normalized.includes('tree');
+}
+
+function collectTreeTargetFields(reqConfig: RequestArrayItem | undefined): string[] {
+    if (!reqConfig || typeof reqConfig !== 'object') {
+        return [];
+    }
+
+    const fields = new Set<string>();
+    (reqConfig.requestsSelectionFields ?? []).forEach(field => {
+        const normalized = normalizeDynamicFieldKey(field);
+        if (normalized) {
+            fields.add(normalized);
+        }
+    });
+
+    const bindings = Array.isArray(reqConfig.bindings) ? reqConfig.bindings : [];
+    bindings.forEach(binding => {
+        const bindType = String(binding?.bindType ?? '').trim().toLowerCase();
+        if (bindType !== 'options') {
+            return;
+        }
+
+        const targetField = normalizeDynamicFieldKey(binding?.targetFieldKey ?? binding?.target?.fieldKey);
+        if (targetField) {
+            fields.add(targetField);
+        }
+    });
+
+    return Array.from(fields);
+}
+
 function normalizeCommonResponse(resp: any): { isSuccess: boolean; data: any; errors: any[] } {
     const explicit = resp?.isSuccess ?? resp?.IsSuccess;
     const isSuccess = explicit === undefined
@@ -813,6 +857,15 @@ function buildSelectionItemsFromMapping(items: any[], map?: RequestBindingMap): 
             name: String(mappedLabel ?? mappedValue ?? '')
         };
     }).filter(option => option.key.length > 0 || option.name.length > 0);
+}
+
+function normalizeDynamicFieldKey(value: unknown): string {
+    const raw = String(value ?? '').trim().toLowerCase();
+    if (!raw) {
+        return '';
+    }
+
+    return raw.split('|')[0].split('__')[0].trim();
 }
 
 function upsertSelectionArray(

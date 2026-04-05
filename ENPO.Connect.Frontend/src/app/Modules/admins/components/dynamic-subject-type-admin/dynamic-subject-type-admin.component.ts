@@ -1809,8 +1809,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     if (normalized.includes('file')) return 'FileUpload';
     if (normalized.includes('textarea') || normalized.includes('multiline')) return 'Textarea';
     if (normalized.includes('radio')) return 'RadioButton';
-    if (normalized.includes('dropdown') || normalized.includes('select') || normalized.includes('combo')) return 'Dropdown';
     if (normalized.includes('tree')) return 'DropdownTree';
+    if (normalized.includes('dropdown') || normalized.includes('select') || normalized.includes('combo')) return 'Dropdown';
     if (normalized.includes('datetime') || (normalized.includes('date') && normalized.includes('time'))) return 'DateTime';
     if (normalized.includes('date')) return 'Date';
     if (normalized.includes('toggle') || normalized.includes('switch') || normalized.includes('check') || normalized.includes('bool')) return 'ToggleSwitch';

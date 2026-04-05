@@ -1,5 +1,5 @@
 <!-- Unified layout for Dropdown + Optional Tree Button -->
-<div [class.dropdown-with-button]="tree.length > 0" style="width: 100%;">
+<div [class.dropdown-with-button]="showTreeButton || tree.length > 0" style="width: 100%;">
     
     <!-- Wrapper for the dropdown to allow it to flex-grow properly -->
     <div style="flex: 1; min-width: 0; position: relative;">
@@ -23,8 +23,8 @@
     <button type="button" pButton icon="pi pi-sitemap" 
         class="p-button-outlined tree-button"
         (click)="op.toggle($event)" 
-        *ngIf="tree.length > 0" 
-        [disabled]="isDivDisabled"
+        *ngIf="showTreeButton || tree.length > 0" 
+        [disabled]="isDivDisabled || tree.length === 0"
         [class.open]="op.overlayVisible" 
         title="فتح الشجرة" 
         aria-label="Open tree">

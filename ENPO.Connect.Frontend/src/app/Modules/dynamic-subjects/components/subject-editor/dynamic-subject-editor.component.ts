@@ -3,6 +3,7 @@ import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, forkJoin } from 'rxjs';
 import { ComponentConfigService } from 'src/app/Modules/admins/services/component-config.service';
+import { CentralAdminPreviewFoundationService } from 'src/app/Modules/admins/services/central-admin-preview-foundation.service';
 import { GenericFormsService } from 'src/app/Modules/GenericComponents/GenericForms.service';
 import { DynamicFormController, PowerBiController } from 'src/app/shared/services/BackendServices';
 import { CdCategoryMandDto, CdmendDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
@@ -18,7 +19,7 @@ import {
   SubjectGroupDefinitionDto,
   SubjectUpsertRequest
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
-import { ComponentConfig, getConfigByRoute, processRequestsAndPopulate, routeKey } from 'src/app/shared/models/Component.Config.model';
+import { ComponentConfig, getConfigByRoute, processRequestsAndPopulate, RequestArrayItem, routeKey } from 'src/app/shared/models/Component.Config.model';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
 import { DynamicGroupRenderItem } from '../shared/models/dynamic-group-render-item.model';
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
@@ -53,6 +54,8 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   resolvedConfigRouteKey = DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
   unitTree: any[] = [];
   private allowedCategoryIds = new Set<number>();
+  private allConfigs: ComponentConfig[] = [];
+  private treeCapableFieldKeys = new Set<string>();
 
   private controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>();
   private readonly subscriptions: Subscription[] = [];
@@ -67,6 +70,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     private readonly dynamicSubjectAccess: DynamicSubjectAccessService,
     private readonly realtimeService: DynamicSubjectsRealtimeService,
     private readonly componentConfigService: ComponentConfigService,
+    private readonly previewFoundation: CentralAdminPreviewFoundationService,
     private readonly genericFormService: GenericFormsService,
     private readonly appNotification: AppNotificationService
   ) {
@@ -164,19 +168,24 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.resolvedConfigRouteKey = this.resolveConfigRouteKey();
     this.componentConfigService.getAll().subscribe({
       next: items => {
+        this.allConfigs = items || [];
         const cfg = getConfigByRoute(this.resolvedConfigRouteKey, items || []);
         if (!cfg) {
           this.config = null;
+          this.treeCapableFieldKeys.clear();
           return;
         }
 
         this.config = cfg;
+        const currentCategoryId = Number(this.editorForm.get('categoryId')?.value ?? 0);
+        this.refreshTreeRuntimeMetadata(currentCategoryId);
         this.executeConfigRequests('onInit', {
-          categoryId: Number(this.editorForm.get('categoryId')?.value ?? 0)
+          categoryId: currentCategoryId
         });
       },
       error: () => {
         this.config = null;
+        this.treeCapableFieldKeys.clear();
       }
     });
   }
@@ -208,11 +217,27 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const categoryId = Number(runtime?.['categoryId'] ?? this.editorForm.get('categoryId')?.value ?? 0);
+    this.refreshTreeRuntimeMetadata(categoryId);
+
+    const runtimeConfig = this.buildRuntimeConfigWithSupplementalTreeRequests(categoryId);
+    if (!runtimeConfig) {
+      return;
+    }
+
+    this.config = runtimeConfig;
+    if (trigger === 'onCategoryChanged') {
+      this.unitTree = [];
+    }
+
     processRequestsAndPopulate(this, this.genericFormService, undefined, {
       trigger,
-      runtime,
+      runtime: {
+        ...runtime,
+        categoryId
+      },
       preserveDynamicMetadata: true,
-      trace: Boolean(this.config.dynamicFormSettings?.traceRequests)
+      trace: Boolean(runtimeConfig.dynamicFormSettings?.traceRequests)
     }).subscribe({
       next: () => {
         this.applyPendingDynamicFieldValueBindings();
@@ -389,6 +414,8 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private loadFormDefinition(categoryId: number, detail?: SubjectDetailDto): void {
+    this.refreshTreeRuntimeMetadata(categoryId);
+
     if (!this.isEditMode && this.allowedCategoryIds.size > 0 && !this.allowedCategoryIds.has(categoryId)) {
       this.appNotification.error('غير مسموح بعرض هذا النوع.');
       this.formDefinition = null;
@@ -812,9 +839,9 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       groupFields.forEach(field => {
         const controlIndex = nextControlIndex++;
         const controlName = `${field.fieldKey}|${controlIndex}`;
-        const cdmendType = this.mapFieldTypeToGenericType(field.fieldType);
+        const cdmendType = this.mapFieldTypeToGenericType(field.fieldType, field.fieldKey);
         const cdmendDatatype = this.mapFieldDataType(field, cdmendType);
-        const usesSelectionTable = cdmendType === 'Dropdown' || cdmendType === 'RadioButton';
+        const usesSelectionTable = cdmendType === 'Dropdown' || cdmendType === 'DropdownTree' || cdmendType === 'RadioButton';
         const cdmendTbl = usesSelectionTable
           ? this.parseFieldOptionsAsSelectionJson(field.optionsPayload)
           : this.resolvePatternExpression(field.optionsPayload);
@@ -1040,9 +1067,12 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.genericFormService.cdCategoryMandDto = [];
   }
 
-  private mapFieldTypeToGenericType(fieldType?: string): string {
+  private mapFieldTypeToGenericType(fieldType?: string, fieldKey?: string): string {
     const normalized = String(fieldType ?? '').trim().toLowerCase();
 
+    if (this.isTreeCapableField(fieldKey, normalized)) {
+      return 'DropdownTree';
+    }
     if (normalized.includes('label')) {
       return 'LABLE';
     }
@@ -1051,6 +1081,9 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     }
     if (normalized.includes('radio')) {
       return 'RadioButton';
+    }
+    if (normalized.includes('tree')) {
+      return 'DropdownTree';
     }
     if (normalized.includes('select') || normalized.includes('drop') || normalized.includes('combo')) {
       return 'Dropdown';
@@ -1122,7 +1155,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
     }
 
-    if (cdmendType === 'Dropdown' || cdmendType === 'RadioButton') {
+    if (cdmendType === 'Dropdown' || cdmendType === 'DropdownTree' || cdmendType === 'RadioButton') {
       return String(value);
     }
 
@@ -1137,6 +1170,112 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     }
 
     return value;
+  }
+
+  private isTreeCapableField(fieldKey: string | undefined, normalizedFieldType: string): boolean {
+    if (String(normalizedFieldType ?? '').includes('tree')) {
+      return true;
+    }
+
+    const normalizedKey = this.normalizeDynamicFieldKey(fieldKey);
+    if (!normalizedKey) {
+      return false;
+    }
+
+    return this.treeCapableFieldKeys.has(normalizedKey);
+  }
+
+  private refreshTreeRuntimeMetadata(categoryId: number): void {
+    const normalizedCategoryId = Number(categoryId ?? 0);
+    if (!this.config || normalizedCategoryId <= 0 || this.allConfigs.length === 0) {
+      this.treeCapableFieldKeys.clear();
+      return;
+    }
+
+    const matchedConfigs = this.previewFoundation.filterConfigs(this.allConfigs, {
+      routeKeyPrefix: 'DynamicSubjects',
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      categoryId: normalizedCategoryId
+    });
+    const treeBindings = this.previewFoundation.resolveTreeBindingsFromConfigs(matchedConfigs, normalizedCategoryId);
+    this.treeCapableFieldKeys = new Set<string>(
+      Array.from(treeBindings.keys()).map(fieldKey => this.normalizeDynamicFieldKey(fieldKey)).filter(Boolean)
+    );
+  }
+
+  private buildRuntimeConfigWithSupplementalTreeRequests(categoryId: number): ComponentConfig | null {
+    if (!this.config) {
+      return null;
+    }
+
+    const normalizedCategoryId = Number(categoryId ?? 0);
+    if (normalizedCategoryId <= 0 || this.allConfigs.length === 0) {
+      return this.config;
+    }
+
+    const matchedConfigs = this.previewFoundation.filterConfigs(this.allConfigs, {
+      routeKeyPrefix: 'DynamicSubjects',
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      categoryId: normalizedCategoryId
+    });
+    const treeRequests = this.previewFoundation.extractTreePopulateRequests(matchedConfigs, normalizedCategoryId);
+    const baseRequests = Array.isArray(this.config.requestsarray) ? this.config.requestsarray : [];
+    const mergedRequests = this.mergeRequestArrays(baseRequests, treeRequests);
+    if (mergedRequests.length === baseRequests.length) {
+      return this.config;
+    }
+
+    return new ComponentConfig({
+      ...this.config,
+      requestsarray: mergedRequests
+    });
+  }
+
+  private mergeRequestArrays(primary: RequestArrayItem[], secondary: RequestArrayItem[]): RequestArrayItem[] {
+    const merged: RequestArrayItem[] = [];
+    const seen = new Set<string>();
+
+    const pushUnique = (items: RequestArrayItem[]) => {
+      (items ?? []).forEach(item => {
+        const signature = this.buildRequestSignature(item);
+        if (seen.has(signature)) {
+          return;
+        }
+
+        seen.add(signature);
+        merged.push({
+          ...item,
+          args: Array.isArray(item?.args) ? [...item.args] : [],
+          requestsSelectionFields: Array.isArray(item?.requestsSelectionFields) ? [...item.requestsSelectionFields] : [],
+          populateArgs: Array.isArray(item?.populateArgs) ? [...item.populateArgs] : []
+        });
+      });
+    };
+
+    pushUnique(primary ?? []);
+    pushUnique(secondary ?? []);
+    return merged;
+  }
+
+  private buildRequestSignature(request: RequestArrayItem | undefined): string {
+    return [
+      String(request?.method ?? '').trim().toLowerCase(),
+      JSON.stringify(request?.args ?? []),
+      String(request?.populateMethod ?? '').trim().toLowerCase(),
+      JSON.stringify(request?.populateArgs ?? []),
+      JSON.stringify(request?.conditions ?? {}),
+      JSON.stringify(request?.requestsSelectionFields ?? []),
+      JSON.stringify(request?.bindings ?? [])
+    ].join('|');
+  }
+
+  private normalizeDynamicFieldKey(value: unknown): string {
+    const raw = String(value ?? '').trim().toLowerCase();
+    if (!raw) {
+      return '';
+    }
+
+    return raw.split('|')[0].split('__')[0].trim();
   }
 
   private normalizeOutgoingDynamicValue(value: unknown): string {

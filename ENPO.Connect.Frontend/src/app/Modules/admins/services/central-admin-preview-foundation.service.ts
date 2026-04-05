@@ -764,7 +764,12 @@ export class CentralAdminPreviewFoundationService {
   }
 
   private normalizeFieldKey(value: unknown): string {
-    return String(value ?? '').trim().toLowerCase();
+    const raw = String(value ?? '').trim().toLowerCase();
+    if (!raw) {
+      return '';
+    }
+
+    return raw.split('|')[0].split('__')[0].trim();
   }
 
   private normalizeContextPath(value: unknown): string {

@@ -66,6 +66,8 @@
                   [isDivDisabled]="false"
                   [ticketForm]="dynamicControls"
                   [mandFileds]="getFormArrayInstance(group.formArrayName)!"
+                  [tree]="unitTree"
+                  [showTreeButton]="true"
                   (genericEvent)="onDynamicFieldGenericEvent($event)">
                 </app-generic-form-array>
               </div>
