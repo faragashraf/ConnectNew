@@ -159,7 +159,6 @@ export class DynamicSubjectDetailComponent implements OnInit, OnDestroy {
     this.componentConfigService.getAll().subscribe({
       next: items => {
         const cfg = getConfigByRoute(this.resolvedConfigRouteKey, items || []);
-        debugger; 
         if (!cfg) {
           return;
         }

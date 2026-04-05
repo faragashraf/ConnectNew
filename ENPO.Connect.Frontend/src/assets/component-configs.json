@@ -255,6 +255,126 @@
     "unitId": []
   },
   {
+    "showFormSignature": true,
+    "submitButtonText": "إرسال",
+    "submissionLabel": "",
+    "showViewToggle": true,
+    "formDisplayOption": "tabs",
+    "requestsarray": [
+      {
+        "requestId": "subject-doc-source-options",
+        "enabled": true,
+        "trigger": [
+          "onInit",
+          "onCategoryChanged"
+        ],
+        "conditions": {
+          "categoryIdIn": [
+            124
+          ]
+        },
+        "method": "powerBiController.getGenericDataById",
+        "args": [
+          36,
+          "0"
+        ],
+        "requestsSelectionFields": [],
+        "arrName": "",
+        "wrapBodyAsArray": false,
+        "populateMethod": null,
+        "populateArgs": [],
+        "bindings": [
+          {
+            "bindType": "options",
+            "targetFieldKey": "DOC_SOURCE",
+            "responseMap": {
+              "valuePath": "UNIT_ID",
+              "labelPath": "UNIT_NAME"
+            },
+            "clearOnEmpty": true
+          }
+        ]
+      }
+    ],
+    "attachmentConfig": {
+      "showAttachmentSection": true,
+      "AllowedExtensions": [
+        ".doc",
+        ".pdf",
+        ".docx"
+      ],
+      "maximumFileSize": 2,
+      "isMandatory": true,
+      "maxFileCount": 2,
+      "allowAdd": true,
+      "allowMultiple": true
+    },
+    "allowStatusChange": false,
+    "allowDefaultNextResponsibleSectorID": false,
+    "statusChangeOptions": [],
+    "pageSizes": [
+      5,
+      10,
+      25
+    ],
+    "tkCategoryCds": [
+      {
+        "key": 124,
+        "value": "التظلمات"
+      }
+    ],
+    "showAttachmentSection": false,
+    "AllowedExtensions": [
+      ".doc",
+      ".pdf",
+      ".docx"
+    ],
+    "maximumFileSize": 2,
+    "routeKey": "DynamicSubjects/SubjectEditor",
+    "componentTitle": "إنشاء موضوع/طلب",
+    "genericFormName": "",
+    "menuId": 0,
+    "listRequestModel": {
+      "pageNumber": 1,
+      "pageSize": 5,
+      "status": 5,
+      "categoryCd": 0,
+      "type": 4,
+      "requestedData": 0,
+      "search": {
+        "searchKind": 0,
+        "searchField": "",
+        "searchText": "",
+        "searchType": ""
+      }
+    },
+    "globalFilterFields": [],
+    "isNew": true,
+    "userConfiguration": {
+      "currentUser": "84621",
+      "currentUserName": "أشرف فرج الله عبد الباقي",
+      "userGroup": ""
+    },
+    "fieldsConfiguration": {
+      "isDivDisabled": false,
+      "useDefaultRadioView": false,
+      "isNotRequired": false,
+      "isCategoryTreeMode": false,
+      "sticky": false
+    },
+    "dynamicFormSettings": {
+      "traceRequests": true
+    },
+    "deadStatus": [
+      4
+    ],
+    "totalRecords": 0,
+    "tableColumns": [],
+    "selectedNodeKey": "",
+    "tableFields": [],
+    "unitId": []
+  },
+  {
     "showFormSignature": false,
     "submitButtonText": "تسجيل",
     "submissionLabel": "",

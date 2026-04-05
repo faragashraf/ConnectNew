@@ -2,8 +2,9 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, forkJoin } from 'rxjs';
+import { ComponentConfigService } from 'src/app/Modules/admins/services/component-config.service';
 import { GenericFormsService } from 'src/app/Modules/GenericComponents/GenericForms.service';
-import { DynamicFormController } from 'src/app/shared/services/BackendServices';
+import { DynamicFormController, PowerBiController } from 'src/app/shared/services/BackendServices';
 import { CdCategoryMandDto, CdmendDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
@@ -17,6 +18,7 @@ import {
   SubjectGroupDefinitionDto,
   SubjectUpsertRequest
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
+import { ComponentConfig, getConfigByRoute, processRequestsAndPopulate, routeKey } from 'src/app/shared/models/Component.Config.model';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
 import { DynamicGroupRenderItem } from '../shared/models/dynamic-group-render-item.model';
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
@@ -28,6 +30,8 @@ import { DynamicSubjectAccessService } from '../../services/dynamic-subject-acce
   styleUrls: ['./dynamic-subject-editor.component.scss']
 })
 export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
+  private static readonly EDITOR_ROUTE_KEY = 'DynamicSubjects/SubjectEditor';
+
   editorForm: FormGroup;
   dynamicControls: FormGroup;
   stakeholdersArray: FormArray;
@@ -45,6 +49,9 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   availableEnvelopes: EnvelopeSummaryDto[] = [];
   liveEventNotice = '';
   submitAttempted = false;
+  config: ComponentConfig | null = null;
+  resolvedConfigRouteKey = DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
+  unitTree: any[] = [];
   private allowedCategoryIds = new Set<number>();
 
   private controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>();
@@ -56,8 +63,10 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     private readonly router: Router,
     private readonly dynamicSubjectsController: DynamicSubjectsController,
     private readonly dynamicFormController: DynamicFormController,
+    private readonly powerBiController: PowerBiController,
     private readonly dynamicSubjectAccess: DynamicSubjectAccessService,
     private readonly realtimeService: DynamicSubjectsRealtimeService,
+    private readonly componentConfigService: ComponentConfigService,
     private readonly genericFormService: GenericFormsService,
     private readonly appNotification: AppNotificationService
   ) {
@@ -74,6 +83,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.initializeScreenConfig();
     this.loadCategoryOptions();
     this.loadEnvelopeOptions();
 
@@ -91,6 +101,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
           if (categoryId > 0) {
             this.editorForm.patchValue({ categoryId });
             this.loadFormDefinition(categoryId);
+            this.executeConfigRequests('onCategoryChanged', { categoryId });
           }
         })
       );
@@ -149,11 +160,75 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     // reserved for future cross-field interactions
   }
 
+  private initializeScreenConfig(): void {
+    this.resolvedConfigRouteKey = this.resolveConfigRouteKey();
+    this.componentConfigService.getAll().subscribe({
+      next: items => {
+        const cfg = getConfigByRoute(this.resolvedConfigRouteKey, items || []);
+        if (!cfg) {
+          this.config = null;
+          return;
+        }
+
+        this.config = cfg;
+        this.executeConfigRequests('onInit', {
+          categoryId: Number(this.editorForm.get('categoryId')?.value ?? 0)
+        });
+      },
+      error: () => {
+        this.config = null;
+      }
+    });
+  }
+
+  private resolveConfigRouteKey(): string {
+    const routeDataKey = String(this.route.snapshot.data?.['configRouteKey'] ?? '').trim();
+    if (routeDataKey.length > 0) {
+      return routeDataKey;
+    }
+
+    const routePath = String(this.route.snapshot.routeConfig?.path ?? '').trim().toLowerCase();
+    if (routePath === 'subjects/new' || routePath === 'subjects/:id/edit') {
+      return DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
+    }
+
+    const derivedKey = String(routeKey(this.router.url) ?? '').trim();
+    if (derivedKey.length === 0) {
+      return DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
+    }
+
+    const normalized = derivedKey
+      .replace(/^dynamicsubjects\//i, 'DynamicSubjects/')
+      .replace(/^dynamic-subjects\//i, 'DynamicSubjects/');
+    return normalized || DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
+  }
+
+  private executeConfigRequests(trigger: 'onInit' | 'onCategoryChanged', runtime: Record<string, any>): void {
+    if (!this.config) {
+      return;
+    }
+
+    processRequestsAndPopulate(this, this.genericFormService, undefined, {
+      trigger,
+      runtime,
+      preserveDynamicMetadata: true,
+      trace: Boolean(this.config.dynamicFormSettings?.traceRequests)
+    }).subscribe({
+      next: () => {
+        this.applyPendingDynamicFieldValueBindings();
+      },
+      error: () => {
+        // defensive fallback: request pipeline issues should not block editor rendering.
+      }
+    });
+  }
+
   onCategoryChanged(): void {
     const categoryId = Number(this.editorForm.get('categoryId')?.value ?? 0);
     if (categoryId > 0) {
       this.loadFormDefinition(categoryId);
       this.realtimeService.joinCategoryGroup(categoryId);
+      this.executeConfigRequests('onCategoryChanged', { categoryId });
     }
   }
 
@@ -302,6 +377,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
         }));
 
         this.loadFormDefinition(detail.categoryId, detail);
+        this.executeConfigRequests('onCategoryChanged', { categoryId: Number(detail.categoryId ?? 0) });
       },
       error: () => {
         this.appNotification.error('حدث خطأ أثناء تحميل بيانات الموضوع/الطلب.');
@@ -371,6 +447,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private applyLoadedDefinition(definition: SubjectFormDefinitionDto | null, detail?: SubjectDetailDto): void {
     this.formDefinition = definition ?? null;
     this.rebuildDynamicControls(this.formDefinition, detail?.dynamicFields ?? []);
+    this.applyPendingDynamicFieldValueBindings();
     this.populateStakeholders(detail);
     this.populateTasks(detail);
   }
@@ -815,6 +892,27 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
     this.genericFormService.cdmendDto = mappedMendDefinitions;
     this.genericFormService.cdCategoryMandDto = mappedCategoryMandDefinitions;
+  }
+
+  private applyPendingDynamicFieldValueBindings(): void {
+    const pendingMap = (this as any).__configDynamicValueBindings as Record<string, any> | undefined;
+    if (!pendingMap || typeof pendingMap !== 'object') {
+      return;
+    }
+
+    Object.keys(pendingMap).forEach(fieldKey => {
+      const value = pendingMap[fieldKey];
+      this.controlMap.forEach((meta, controlName) => {
+        if (String(meta?.fieldKey ?? '').trim().toLowerCase() !== String(fieldKey).trim().toLowerCase()) {
+          return;
+        }
+
+        const control = this.genericFormService.GetControl(this.dynamicControls, controlName);
+        if (control) {
+          control.patchValue(value, { emitEvent: false });
+        }
+      });
+    });
   }
 
   private populateStakeholders(detail?: SubjectDetailDto): void {
