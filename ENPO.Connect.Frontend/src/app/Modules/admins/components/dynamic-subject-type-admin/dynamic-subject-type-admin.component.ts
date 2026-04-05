@@ -8,7 +8,7 @@ import { ComponentConfig } from 'src/app/shared/models/Component.Config.model';
 import { MessageDto } from 'src/app/shared/services/BackendServices/AdministrativeCertificate/AdministrativeCertificate.dto';
 import { CdCategoryMandDto, CdmendDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
-import { forkJoin } from 'rxjs';
+import { forkJoin, Subscription } from 'rxjs';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import {
   SubjectAdminFieldDto,
@@ -129,6 +129,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
   private linksRequestSeq = 0;
   private previewRequestSeq = 0;
   private readonly expandedNodeKeys = new Set<string>();
+  private readonly subscriptions = new Subscription();
+  private preferredContextCategoryId: number | null = null;
 
   constructor(
     @Inject(DOCUMENT) private readonly document: Document,
@@ -218,11 +220,32 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     if (this.managementMode) {
       this.document.body.classList.add('dynamic-subject-admin-management-page');
     }
+    this.subscriptions.add(
+      this.activatedRoute.queryParamMap.subscribe(params => {
+        const contextCategoryId = this.toPositiveInt(params.get('categoryId'));
+        const hasChanged = contextCategoryId !== this.preferredContextCategoryId;
+        this.preferredContextCategoryId = contextCategoryId;
+
+        if (!hasChanged || !contextCategoryId) {
+          return;
+        }
+
+        if (this.categoryTree.length > 0) {
+          this.trySelectCategoryById(contextCategoryId);
+          return;
+        }
+
+        if (!this.loading) {
+          this.loadWorkspace(contextCategoryId);
+        }
+      })
+    );
     this.initializeTreeContextMenu();
-    this.loadWorkspace();
+    this.loadWorkspace(this.preferredContextCategoryId ?? undefined);
   }
 
   ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
     this.document.body.classList.remove('dynamic-subject-admin-page');
     this.document.body.classList.remove('dynamic-subject-admin-management-page');
   }
@@ -381,8 +404,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
           return;
         }
 
-        const targetCategoryId = Number(preferredCategoryId ?? 0) > 0
-          ? Number(preferredCategoryId)
+        const targetCategoryId = Number(preferredCategoryId ?? this.preferredContextCategoryId ?? 0) > 0
+          ? Number(preferredCategoryId ?? this.preferredContextCategoryId ?? 0)
           : retainedCategoryId;
         const targetNode = targetCategoryId > 0
           ? this.findNodeByKey(this.categoryTree, String(targetCategoryId))
@@ -2145,6 +2168,26 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     );
 
     return scrollableCandidate ?? container;
+  }
+
+  private trySelectCategoryById(categoryId: number): void {
+    if (!categoryId || categoryId <= 0) {
+      return;
+    }
+
+    const targetNode = this.findNodeByKey(this.categoryTree, String(categoryId));
+    if (targetNode) {
+      this.selectCategoryNode(targetNode);
+    }
+  }
+
+  private toPositiveInt(value: unknown): number | null {
+    const normalized = Number(value ?? 0);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      return null;
+    }
+
+    return Math.trunc(normalized);
   }
 
   private syncTreeViewport(

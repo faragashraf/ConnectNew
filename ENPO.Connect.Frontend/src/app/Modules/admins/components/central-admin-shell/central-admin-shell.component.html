@@ -1,0 +1,72 @@
+<section class="central-admin-shell" dir="rtl">
+  <header class="shell-header">
+    <div class="title-wrap">
+      <h2>لوحة الإدارة المركزية الموحدة</h2>
+      <p>
+        نقطة دخول واحدة لإدارة أنواع الموضوعات، مكتبة الحقول الديناميكية، وإعدادات المكونات.
+        المرحلة الحالية تركّز على توحيد تجربة العمل وإعادة استخدام الشاشات القائمة.
+      </p>
+    </div>
+  </header>
+
+  <section class="context-panel" [formGroup]="contextForm">
+    <div class="context-head">
+      <h3>سياق العمل الحالي</h3>
+      <span>يمكنك تمرير التطبيق/النوع/بادئة Route إلى الأدوات المختلفة.</span>
+    </div>
+
+    <div class="context-grid">
+      <label>
+        <span>Application ID</span>
+        <input type="text" pInputText formControlName="applicationId" placeholder="مثال: 60" />
+      </label>
+
+      <label>
+        <span>Category ID</span>
+        <input type="text" pInputText formControlName="categoryId" placeholder="مثال: 124" />
+      </label>
+
+      <label>
+        <span>RouteKey Prefix</span>
+        <input type="text" pInputText formControlName="routeKeyPrefix" placeholder="مثال: DynamicSubjects/" />
+      </label>
+    </div>
+
+    <div class="context-actions">
+      <button pButton type="button" label="تطبيق السياق" icon="pi pi-check" (click)="applyContext()"></button>
+      <button pButton type="button" class="p-button-outlined" label="مسح السياق" icon="pi pi-times" (click)="clearContext()"></button>
+    </div>
+  </section>
+
+  <nav class="sections-nav" aria-label="Central admin sections">
+    <button
+      *ngFor="let section of sections"
+      type="button"
+      class="section-card"
+      [class.active]="isSectionActive(section)"
+      (click)="navigateTo(section)">
+      <strong>{{ section.label }}</strong>
+      <span>{{ section.description }}</span>
+      <small>داخل الـ Workspace الموحدة</small>
+    </button>
+  </nav>
+
+  <section class="content-shell">
+    <router-outlet></router-outlet>
+  </section>
+
+  <section class="standalone-links">
+    <h4>الوصول المباشر (للتوافق)</h4>
+    <div class="links-row">
+      <button
+        pButton
+        *ngFor="let section of sections"
+        type="button"
+        class="p-button-text"
+        [label]="section.label"
+        icon="pi pi-external-link"
+        (click)="openStandalone(section)">
+      </button>
+    </div>
+  </section>
+</section>

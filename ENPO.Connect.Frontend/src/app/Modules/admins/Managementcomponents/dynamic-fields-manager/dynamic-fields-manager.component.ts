@@ -1,5 +1,6 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import {
@@ -55,6 +56,7 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
   ];
 
   constructor(
+    private readonly activatedRoute: ActivatedRoute,
     private readonly fb: FormBuilder,
     private readonly dynamicSubjectsController: DynamicSubjectsController,
     private readonly appNotification: AppNotificationService
@@ -85,6 +87,20 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
   }
 
   ngOnInit(): void {
+    if (!this.embeddedMode) {
+      this.subscriptions.add(
+        this.activatedRoute.queryParamMap.subscribe(params => {
+          const applicationId = String(params.get('applicationId') ?? '').trim();
+          if (!applicationId || applicationId === this.appFilter) {
+            return;
+          }
+
+          this.appFilter = applicationId;
+          this.loadFields();
+        })
+      );
+    }
+
     if (this.selectedApplicationId) {
       this.appFilter = this.selectedApplicationId;
     }

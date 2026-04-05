@@ -1,6 +1,7 @@
 import { Component, OnInit, Injector } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormArray, FormControl } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { ActivatedRoute } from '@angular/router';
 import { ComponentConfig, defaultGlobalFilterFields } from 'src/app/shared/models/Component.Config.model';
 
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
@@ -14,6 +15,7 @@ import { ComponentConfigService } from '../../services/component-config.service'
 })
 export class ComponentConfigManagerComponent implements OnInit {
     configs: ComponentConfig[] = [];
+    routeKeyFilter = '';
     populateMethodOptions: { label: string; value: string; defaults?: any[] }[] = [
         { label: 'populateTreeGeneric', value: 'populateTreeGeneric', defaults: ['idKey', 'parentIdKey', 'labelKey', 'treeArrayName', 'selectableParent', 'expandFirstParent'] },
         { label: 'this.genericFormService.mapDataToTable', value: 'this.genericFormService.mapDataToTable', defaults: ['this.allPublications','this.documentConfig'] },
@@ -38,10 +40,20 @@ export class ComponentConfigManagerComponent implements OnInit {
         // publicationsController will hold the array of discovered controllers
         publicationsController: any[] = [];
 
-    constructor(private svc: ComponentConfigService, private fb: FormBuilder, private msg: MsgsService,
-        private injector: Injector, private http: HttpClient) { }
+    constructor(
+        private svc: ComponentConfigService,
+        private fb: FormBuilder,
+        private msg: MsgsService,
+        private injector: Injector,
+        private http: HttpClient,
+        private activatedRoute: ActivatedRoute
+    ) { }
 
     ngOnInit(): void {
+        this.activatedRoute.queryParamMap.subscribe(params => {
+            const routeKeyPrefix = String(params.get('routeKeyPrefix') ?? '').trim();
+            this.routeKeyFilter = routeKeyPrefix;
+        });
         this.load();
         this.buildFormFromConfig();
         this.loadControllers();
@@ -633,6 +645,17 @@ export class ComponentConfigManagerComponent implements OnInit {
         this.svc.getAll().subscribe((c) => {
             this.configs = Array.isArray(c) ? c : [];
         });
+    }
+
+    get filteredConfigs(): ComponentConfig[] {
+        const filterValue = String(this.routeKeyFilter ?? '').trim().toLowerCase();
+        if (!filterValue) {
+            return this.configs;
+        }
+
+        return (this.configs ?? []).filter(cfg =>
+            String(cfg?.routeKey ?? '').trim().toLowerCase().includes(filterValue)
+        );
     }
 
     openNew() {

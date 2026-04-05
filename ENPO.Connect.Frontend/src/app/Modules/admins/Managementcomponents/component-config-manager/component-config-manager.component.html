@@ -8,6 +8,9 @@
 
     <div class="ccm-body">
         <div class="list">
+            <p class="filter-hint" *ngIf="routeKeyFilter">
+                يتم عرض العناصر المطابقة لـ RouteKey Prefix: <strong>{{ routeKeyFilter }}</strong>
+            </p>
             <table>
                 <thead>
                     <tr>
@@ -20,7 +23,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr *ngFor="let c of configs">
+                    <tr *ngFor="let c of filteredConfigs">
                         <td>{{ c.routeKey }}</td>
                         <td>{{ c.componentTitle }}</td>
                         <td>{{ c.genericFormName }}</td>

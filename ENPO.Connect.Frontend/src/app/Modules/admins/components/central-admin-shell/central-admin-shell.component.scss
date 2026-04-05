@@ -1,0 +1,150 @@
+.central-admin-shell {
+  direction: rtl;
+  text-align: right;
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+  min-height: calc(100vh - 110px);
+}
+
+.shell-header {
+  border: 1px solid #dbe4ff;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef4ff 100%);
+  padding: 1rem 1.15rem;
+}
+
+.title-wrap h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.title-wrap p {
+  margin: 0.45rem 0 0;
+  color: #475569;
+}
+
+.context-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0.95rem 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.context-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.context-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.context-head span {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.context-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.context-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.context-grid span {
+  font-size: 0.82rem;
+  color: #334155;
+}
+
+.context-actions {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.sections-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.section-card {
+  border: 1px solid #dbe3ef;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 0.85rem 0.9rem;
+  display: grid;
+  gap: 0.25rem;
+  text-align: right;
+  transition: 0.18s ease;
+  cursor: pointer;
+}
+
+.section-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.08);
+}
+
+.section-card.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.section-card strong {
+  color: #0f172a;
+  font-size: 0.94rem;
+}
+
+.section-card span {
+  color: #475569;
+  font-size: 0.82rem;
+}
+
+.section-card small {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.content-shell {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  min-height: 60vh;
+  overflow: hidden;
+}
+
+.standalone-links {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.75rem 0.9rem;
+}
+
+.standalone-links h4 {
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
+}
+
+.links-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+@media (max-width: 1024px) {
+  .context-grid,
+  .sections-nav {
+    grid-template-columns: 1fr;
+  }
+}
