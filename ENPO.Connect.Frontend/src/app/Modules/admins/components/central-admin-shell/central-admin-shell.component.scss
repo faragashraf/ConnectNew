@@ -101,6 +101,11 @@
   background: #eff6ff;
 }
 
+.section-card.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .section-card strong {
   color: #0f172a;
   font-size: 0.94rem;
@@ -124,6 +129,8 @@
   overflow: hidden;
 }
 
+.workflow-panel,
+.preview-panel,
 .standalone-links {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -131,9 +138,47 @@
   padding: 0.75rem 0.9rem;
 }
 
+.workflow-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.workflow-notice {
+  margin: 0.55rem 0 0;
+  color: #b91c1c;
+  font-size: 0.88rem;
+}
+
+.preview-panel h4,
 .standalone-links h4 {
   margin: 0 0 0.45rem;
   font-size: 0.92rem;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.preview-grid div {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.55rem 0.6rem;
+  background: #f8fafc;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.preview-grid span {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.preview-grid strong {
+  color: #0f172a;
+  font-size: 0.9rem;
 }
 
 .links-row {
@@ -144,7 +189,8 @@
 
 @media (max-width: 1024px) {
   .context-grid,
-  .sections-nav {
+  .sections-nav,
+  .preview-grid {
     grid-template-columns: 1fr;
   }
 }

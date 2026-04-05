@@ -23,6 +23,7 @@ import {
   SubjectTypeAdminUpsertRequestDto
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
+import { CentralAdminContextService } from '../../services/central-admin-context.service';
 
 interface AdminTreeNode extends TreeNode {
   key: string;
@@ -136,6 +137,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     @Inject(DOCUMENT) private readonly document: Document,
     private readonly fb: FormBuilder,
     private readonly activatedRoute: ActivatedRoute,
+    private readonly centralAdminContext: CentralAdminContextService,
     public readonly genericFormService: GenericFormsService,
     private readonly dynamicSubjectsController: DynamicSubjectsController,
     private readonly appNotification: AppNotificationService
@@ -220,13 +222,29 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     if (this.managementMode) {
       this.document.body.classList.add('dynamic-subject-admin-management-page');
     }
+
     this.subscriptions.add(
       this.activatedRoute.queryParamMap.subscribe(params => {
-        const contextCategoryId = this.toPositiveInt(params.get('categoryId'));
+        this.centralAdminContext.updateFromDeepLink({
+          categoryId: params.get('categoryId'),
+          applicationId: params.get('applicationId'),
+          routeKeyPrefix: params.get('routeKeyPrefix')
+        });
+      })
+    );
+
+    this.subscriptions.add(
+      this.centralAdminContext.state$.subscribe(state => {
+        const contextCategoryId = this.toPositiveInt(state.selectedCategoryId);
         const hasChanged = contextCategoryId !== this.preferredContextCategoryId;
         this.preferredContextCategoryId = contextCategoryId;
+        const currentSelectedCategoryId = Number(this.selectedCategory?.categoryId ?? 0);
 
         if (!hasChanged || !contextCategoryId) {
+          return;
+        }
+
+        if (currentSelectedCategoryId > 0 && currentSelectedCategoryId === contextCategoryId) {
           return;
         }
 
@@ -240,6 +258,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
         }
       })
     );
+
     this.initializeTreeContextMenu();
     this.loadWorkspace(this.preferredContextCategoryId ?? undefined);
   }
@@ -401,6 +420,11 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
           this.relationsDialogVisible = false;
           this.loadingLinks = false;
           this.loadingPreview = false;
+          this.centralAdminContext.patchContext({
+            selectedCategoryId: null,
+            selectedSubjectTypeName: null,
+            selectedFieldsCount: 0
+          });
           return;
         }
 
@@ -1385,6 +1409,14 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       sequenceName: node.data.sequenceName || 'Seq_Tickets'
     });
 
+    this.centralAdminContext.patchContext({
+      selectedCategoryId: node.data.categoryId,
+      selectedApplicationId: node.data.applicationId || null,
+      selectedSubjectTypeName: node.data.categoryName || null,
+      routeKeyPrefix: this.centralAdminContext.snapshot.routeKeyPrefix || 'DynamicSubjects/',
+      selectedFieldsCount: null
+    });
+
     this.loadLinks(node.data.categoryId);
     this.loadPreview(node.data.categoryId, node.data.applicationId || undefined);
     this.syncTreeViewport(node.key, { ensureVisible: true, behavior: 'auto' });
@@ -1515,6 +1547,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
         if (response?.errors?.length) {
           this.editableLinks = [];
           this.rebuildFinalPreviewForm();
+          this.centralAdminContext.patchContext({ selectedFieldsCount: 0 });
           this.appNotification.showApiErrors(response.errors, 'تعذر تحميل ربط الحقول بالجروبات.');
           return;
         }
@@ -1523,6 +1556,9 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
         this.normalizeLinksByGroup();
         this.applyGroupMetadataToLinks();
         this.rebuildFinalPreviewForm();
+        this.centralAdminContext.patchContext({
+          selectedFieldsCount: this.editableLinks.length
+        });
       },
       error: () => {
         const selectedCategoryId = Number(this.selectedCategory?.categoryId ?? 0);
@@ -1532,6 +1568,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
         this.editableLinks = [];
         this.rebuildFinalPreviewForm();
+        this.centralAdminContext.patchContext({ selectedFieldsCount: 0 });
         this.appNotification.error('حدث خطأ أثناء تحميل ربط الحقول.');
       },
       complete: () => {
@@ -2172,6 +2209,11 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
   private trySelectCategoryById(categoryId: number): void {
     if (!categoryId || categoryId <= 0) {
+      return;
+    }
+
+    const currentSelectedCategoryId = Number(this.selectedCategory?.categoryId ?? 0);
+    if (currentSelectedCategoryId === categoryId) {
       return;
     }
 

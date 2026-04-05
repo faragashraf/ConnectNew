@@ -8,6 +8,7 @@ import {
   SubjectAdminFieldUpsertRequestDto
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
+import { CentralAdminContextService } from '../../services/central-admin-context.service';
 
 interface FieldOptionRow {
   key: string;
@@ -59,7 +60,8 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
     private readonly activatedRoute: ActivatedRoute,
     private readonly fb: FormBuilder,
     private readonly dynamicSubjectsController: DynamicSubjectsController,
-    private readonly appNotification: AppNotificationService
+    private readonly appNotification: AppNotificationService,
+    private readonly centralAdminContext: CentralAdminContextService
   ) {
     this.form = this.fb.group({
       cdmendSql: [null],
@@ -87,16 +89,42 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
   }
 
   ngOnInit(): void {
+    this.subscriptions.add(
+      this.centralAdminContext.state$.subscribe(state => {
+        if (this.embeddedMode) {
+          return;
+        }
+
+        const appIdFromContext = String(state.selectedApplicationId ?? '').trim();
+        if (appIdFromContext === this.appFilter.trim()) {
+          return;
+        }
+
+        this.appFilter = appIdFromContext;
+        this.loadFields();
+      })
+    );
+
     if (!this.embeddedMode) {
       this.subscriptions.add(
         this.activatedRoute.queryParamMap.subscribe(params => {
           const applicationId = String(params.get('applicationId') ?? '').trim();
-          if (!applicationId || applicationId === this.appFilter) {
+          const categoryId = Number(params.get('categoryId') ?? 0);
+          const patch: { selectedApplicationId?: string; selectedCategoryId?: number } = {};
+
+          if (applicationId.length > 0) {
+            patch['selectedApplicationId'] = applicationId;
+          }
+
+          if (Number.isFinite(categoryId) && categoryId > 0) {
+            patch['selectedCategoryId'] = categoryId;
+          }
+
+          if (Object.keys(patch).length === 0) {
             return;
           }
 
-          this.appFilter = applicationId;
-          this.loadFields();
+          this.centralAdminContext.patchContext(patch);
         })
       );
     }
@@ -347,6 +375,9 @@ export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestr
   }
 
   onStandaloneAppFilterChange(): void {
+    this.centralAdminContext.patchContext({
+      selectedApplicationId: this.appFilter
+    });
     this.loadFields();
   }
 

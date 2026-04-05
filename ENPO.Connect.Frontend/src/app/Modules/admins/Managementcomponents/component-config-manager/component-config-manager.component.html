@@ -11,6 +11,12 @@
             <p class="filter-hint" *ngIf="routeKeyFilter">
                 يتم عرض العناصر المطابقة لـ RouteKey Prefix: <strong>{{ routeKeyFilter }}</strong>
             </p>
+            <p class="filter-hint" *ngIf="contextApplicationId">
+                Application Context: <strong>{{ contextApplicationId }}</strong>
+            </p>
+            <p class="filter-hint" *ngIf="contextCategoryId">
+                Category Context: <strong>{{ contextCategoryId }}</strong>
+            </p>
             <table>
                 <thead>
                     <tr>

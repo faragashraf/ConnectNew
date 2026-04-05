@@ -1,21 +1,25 @@
-import { Component, OnInit, Injector } from '@angular/core';
+import { Component, OnDestroy, OnInit, Injector } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormArray, FormControl } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ComponentConfig, defaultGlobalFilterFields } from 'src/app/shared/models/Component.Config.model';
 
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { CONTROLLER_CLASSES } from 'src/app/shared/services/BackendServices';
 import { ComponentConfigService } from '../../services/component-config.service';
+import { CentralAdminContextService } from '../../services/central-admin-context.service';
 
 @Component({
     selector: 'app-component-config-manager',
     templateUrl: './component-config-manager.component.html',
     styleUrls: ['./ccm-shared.scss']
 })
-export class ComponentConfigManagerComponent implements OnInit {
+export class ComponentConfigManagerComponent implements OnInit, OnDestroy {
     configs: ComponentConfig[] = [];
     routeKeyFilter = '';
+    contextApplicationId = '';
+    contextCategoryId: number | null = null;
     populateMethodOptions: { label: string; value: string; defaults?: any[] }[] = [
         { label: 'populateTreeGeneric', value: 'populateTreeGeneric', defaults: ['idKey', 'parentIdKey', 'labelKey', 'treeArrayName', 'selectableParent', 'expandFirstParent'] },
         { label: 'this.genericFormService.mapDataToTable', value: 'this.genericFormService.mapDataToTable', defaults: ['this.allPublications','this.documentConfig'] },
@@ -35,6 +39,7 @@ export class ComponentConfigManagerComponent implements OnInit {
     form!: FormGroup;
     expandedRows = new Set<string>();
     activeTabIndex = 0;
+    private readonly subscriptions = new Subscription();
         // dynamically discovered controller instances
         controllers: any[] = [];
         // publicationsController will hold the array of discovered controllers
@@ -46,14 +51,30 @@ export class ComponentConfigManagerComponent implements OnInit {
         private msg: MsgsService,
         private injector: Injector,
         private http: HttpClient,
-        private activatedRoute: ActivatedRoute
+        private activatedRoute: ActivatedRoute,
+        private centralAdminContext: CentralAdminContextService
     ) { }
 
     ngOnInit(): void {
-        this.activatedRoute.queryParamMap.subscribe(params => {
-            const routeKeyPrefix = String(params.get('routeKeyPrefix') ?? '').trim();
-            this.routeKeyFilter = routeKeyPrefix;
-        });
+        this.subscriptions.add(
+            this.activatedRoute.queryParamMap.subscribe(params => {
+                this.centralAdminContext.updateFromDeepLink({
+                    routeKeyPrefix: params.get('routeKeyPrefix'),
+                    applicationId: params.get('applicationId'),
+                    categoryId: params.get('categoryId')
+                });
+            })
+        );
+
+        this.subscriptions.add(
+            this.centralAdminContext.state$.subscribe(state => {
+                this.routeKeyFilter = String(state.routeKeyPrefix ?? '').trim();
+                this.contextApplicationId = String(state.selectedApplicationId ?? '').trim();
+                this.contextCategoryId = state.selectedCategoryId ?? null;
+                this.updateFilteredConfigsSummary();
+            })
+        );
+
         this.load();
         this.buildFormFromConfig();
         this.loadControllers();
@@ -127,6 +148,10 @@ export class ComponentConfigManagerComponent implements OnInit {
         };
         tryImport();
         this.loadAttachmentOptions();
+    }
+
+    ngOnDestroy(): void {
+        this.subscriptions.unsubscribe();
     }
 
     private loadAttachmentOptions() {
@@ -644,24 +669,40 @@ export class ComponentConfigManagerComponent implements OnInit {
     load() {
         this.svc.getAll().subscribe((c) => {
             this.configs = Array.isArray(c) ? c : [];
+            this.updateFilteredConfigsSummary();
         });
     }
 
     get filteredConfigs(): ComponentConfig[] {
         const filterValue = String(this.routeKeyFilter ?? '').trim().toLowerCase();
-        if (!filterValue) {
-            return this.configs;
-        }
+        const selectedApp = String(this.contextApplicationId ?? '').trim().toLowerCase();
+        const selectedCategoryId = Number(this.contextCategoryId ?? 0);
 
-        return (this.configs ?? []).filter(cfg =>
-            String(cfg?.routeKey ?? '').trim().toLowerCase().includes(filterValue)
-        );
+        return (this.configs ?? []).filter(cfg => {
+            const routeKey = String(cfg?.routeKey ?? '').trim().toLowerCase();
+            if (filterValue && !routeKey.includes(filterValue)) {
+                return false;
+            }
+
+            const configCategory = Number(cfg?.listRequestModel?.categoryCd ?? 0);
+            if (selectedCategoryId > 0 && configCategory > 0 && configCategory !== selectedCategoryId) {
+                return false;
+            }
+
+            const explicitApp = String(cfg?.dynamicFormSettings?.applicationId ?? '').trim().toLowerCase();
+            if (selectedApp && explicitApp && explicitApp !== selectedApp) {
+                return false;
+            }
+
+            return true;
+        });
     }
 
     openNew() {
         this.selected = undefined;
         this.buildFormFromConfig();
         this.showDrawer = true;
+        this.centralAdminContext.patchContext({ selectedConfigRouteKey: null });
     }
 
     edit(cfg: ComponentConfig) {
@@ -670,6 +711,15 @@ export class ComponentConfigManagerComponent implements OnInit {
         // show drawer after form built, then ensure any Publications endpoint selections are initialized
         this.showDrawer = true;
         setTimeout(() => this.initializePublicationArgsForRequests());
+        this.centralAdminContext.patchContext({
+            selectedConfigRouteKey: cfg?.routeKey ?? null
+        });
+    }
+
+    private updateFilteredConfigsSummary(): void {
+        this.centralAdminContext.patchContext({
+            filteredConfigsCount: this.filteredConfigs.length
+        });
     }
 
     // Centralized initializer for requestsarray to normalize args, subscribe populateMethod changes,

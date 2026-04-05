@@ -43,6 +43,8 @@
       *ngFor="let section of sections"
       type="button"
       class="section-card"
+      [disabled]="isSectionDisabled(section)"
+      [class.disabled]="isSectionDisabled(section)"
       [class.active]="isSectionActive(section)"
       (click)="navigateTo(section)">
       <strong>{{ section.label }}</strong>
@@ -50,6 +52,44 @@
       <small>داخل الـ Workspace الموحدة</small>
     </button>
   </nav>
+
+  <section class="workflow-panel">
+    <div class="workflow-actions">
+      <button pButton type="button" icon="pi pi-arrow-right" class="p-button-outlined" label="السابق" [disabled]="!canGoPrevious" (click)="previousSection()"></button>
+      <button pButton type="button" icon="pi pi-arrow-left" label="التالي" iconPos="right" [disabled]="!canGoNext" (click)="nextSection()"></button>
+    </div>
+    <p class="workflow-notice" *ngIf="workflowNotice">{{ workflowNotice }}</p>
+  </section>
+
+  <section class="preview-panel">
+    <h4>معاينة السياق الموحد (Foundation)</h4>
+    <div class="preview-grid">
+      <div>
+        <span>نوع الموضوع المختار</span>
+        <strong>{{ contextState.selectedSubjectTypeName || '-' }}</strong>
+      </div>
+      <div>
+        <span>Category ID</span>
+        <strong>{{ contextState.selectedCategoryId || '-' }}</strong>
+      </div>
+      <div>
+        <span>Application ID</span>
+        <strong>{{ contextState.selectedApplicationId || '-' }}</strong>
+      </div>
+      <div>
+        <span>عدد الحقول المرتبطة</span>
+        <strong>{{ workflowSummaryFieldsCount }}</strong>
+      </div>
+      <div>
+        <span>RouteKey / Config</span>
+        <strong>{{ workflowSummaryRouteKey }}</strong>
+      </div>
+      <div>
+        <span>عدد Configs المطابقة</span>
+        <strong>{{ workflowSummaryConfigsCount }}</strong>
+      </div>
+    </div>
+  </section>
 
   <section class="content-shell">
     <router-outlet></router-outlet>
