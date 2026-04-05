@@ -171,6 +171,16 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
+            if (!allowInactiveCategory)
+            {
+                var unitIds = await GetCurrentUserUnitIdsAsync(normalizedUserId, cancellationToken);
+                if (!await HasCategoryAccessAsync(category.CatId, unitIds, cancellationToken))
+                {
+                    response.Errors.Add(new Error { Code = "403", Message = "غير مصرح بعرض هذا النوع." });
+                    return response;
+                }
+            }
+
             var fieldRows = await (from link in _connectContext.CdCategoryMands.AsNoTracking()
                                    join mend in _connectContext.Cdmends.AsNoTracking()
                                         on link.MendField equals mend.CdmendTxt
@@ -276,6 +286,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             }
 
             var category = validation.Category!;
+            var messageActorId = NormalizeMessageActorId(normalizedUserId);
             var status = request.Submit
                 ? (byte)MessageStatus.Submitted
                 : (byte)MessageStatus.Draft;
@@ -283,18 +294,24 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             var fieldsMap = BuildFieldsMap(request.DynamicFields);
             var referenceNumber = await _referenceGenerator.GenerateAsync(category.CatId, messageId, fieldsMap, cancellationToken);
 
+            var subjectText = string.IsNullOrWhiteSpace(request.Subject)
+                ? category.CatName
+                : request.Subject!.Trim();
+            if (subjectText.Length > 255)
+            {
+                subjectText = subjectText[..255];
+            }
+
             var message = new Message
             {
                 MessageId = messageId,
                 CategoryCd = category.CatId,
                 Type = ResolveType(category),
-                Subject = string.IsNullOrWhiteSpace(request.Subject)
-                    ? category.CatName
-                    : request.Subject!.Trim(),
+                Subject = subjectText,
                 Description = request.Description,
-                CreatedBy = normalizedUserId,
-                AssignedSectorId = ResolvePrimaryUnitId(await GetCurrentUserUnitIdsAsync(normalizedUserId, cancellationToken)),
-                CurrentResponsibleSectorId = ResolvePrimaryUnitId(await GetCurrentUserUnitIdsAsync(normalizedUserId, cancellationToken)),
+                CreatedBy = messageActorId,
+                AssignedSectorId = ResolvePrimaryUnitId(validation.UnitIds),
+                CurrentResponsibleSectorId = ResolvePrimaryUnitId(validation.UnitIds),
                 CreatedDate = DateTime.Now,
                 LastModifiedDate = DateTime.Now,
                 Status = (MessageStatus)status,
@@ -357,9 +374,10 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 normalizedUserId,
                 cancellationToken);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            response.Errors.Add(new Error { Code = "500", Message = "حدث خطأ غير متوقع أثناء إنشاء الموضوع." });
+            var details = ex.InnerException?.Message ?? ex.Message;
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء إنشاء الموضوع. {details}" });
         }
 
         return response;
@@ -428,9 +446,13 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
-            message.Subject = string.IsNullOrWhiteSpace(request.Subject)
-                ? message.Subject
-                : request.Subject!.Trim();
+            if (!string.IsNullOrWhiteSpace(request.Subject))
+            {
+                var subjectText = request.Subject.Trim();
+                message.Subject = subjectText.Length > 255
+                    ? subjectText[..255]
+                    : subjectText;
+            }
             message.Description = request.Description;
             message.LastModifiedDate = DateTime.Now;
             message.Status = (MessageStatus)requestedStatus;
@@ -568,7 +590,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
             if (safeQuery.OnlyMyItems)
             {
-                listQuery = listQuery.Where(message => message.CreatedBy == normalizedUserId);
+                var messageActorId = NormalizeMessageActorId(normalizedUserId);
+                listQuery = listQuery.Where(message => message.CreatedBy == normalizedUserId || message.CreatedBy == messageActorId);
             }
 
             if (safeQuery.CategoryId.HasValue && safeQuery.CategoryId.Value > 0)
@@ -1009,6 +1032,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         try
         {
             var normalizedUserId = NormalizeUser(userId);
+            var auditActorId = NormalizeAuditActorId(normalizedUserId);
             if (normalizedUserId.Length == 0)
             {
                 response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
@@ -1046,9 +1070,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 AssignedUnitId = NormalizeNullable(request.AssignedUnitId),
                 Status = request.Status,
                 DueDateUtc = request.DueDateUtc,
-                CreatedBy = normalizedUserId,
+                CreatedBy = auditActorId,
                 CreatedAtUtc = now,
-                LastModifiedBy = normalizedUserId,
+                LastModifiedBy = auditActorId,
                 LastModifiedAtUtc = now
             };
 
@@ -1193,6 +1217,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         try
         {
             var normalizedUserId = NormalizeUser(userId);
+            var auditActorId = NormalizeAuditActorId(normalizedUserId);
             if (normalizedUserId.Length == 0)
             {
                 response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
@@ -1222,9 +1247,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 SourceEntity = request.SourceEntity,
                 DeliveryDelegate = request.DeliveryDelegate,
                 Notes = request.Notes,
-                CreatedBy = normalizedUserId,
+                CreatedBy = auditActorId,
                 CreatedAtUtc = DateTime.UtcNow,
-                LastModifiedBy = normalizedUserId,
+                LastModifiedBy = auditActorId,
                 LastModifiedAtUtc = DateTime.UtcNow
             };
 
@@ -1275,6 +1300,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         try
         {
             var normalizedUserId = NormalizeUser(userId);
+            var auditActorId = NormalizeAuditActorId(normalizedUserId);
             if (normalizedUserId.Length == 0)
             {
                 response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
@@ -1310,7 +1336,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             envelope.SourceEntity = request.SourceEntity;
             envelope.DeliveryDelegate = request.DeliveryDelegate;
             envelope.Notes = request.Notes;
-            envelope.LastModifiedBy = normalizedUserId;
+            envelope.LastModifiedBy = auditActorId;
             envelope.LastModifiedAtUtc = DateTime.UtcNow;
 
             var existingLinks = await _connectContext.SubjectEnvelopeLinks
@@ -1521,7 +1547,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
             if (query?.OnlyMyItems == true)
             {
-                subjectsQuery = subjectsQuery.Where(item => item.CreatedBy == normalizedUserId);
+                var messageActorId = NormalizeMessageActorId(normalizedUserId);
+                subjectsQuery = subjectsQuery.Where(item => item.CreatedBy == normalizedUserId || item.CreatedBy == messageActorId);
             }
 
             if (query?.CategoryId.HasValue == true && query.CategoryId.Value > 0)
@@ -1713,6 +1740,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         try
         {
             var normalizedUserId = NormalizeUser(userId);
+            var auditActorId = NormalizeAuditActorId(normalizedUserId);
             if (normalizedUserId.Length == 0)
             {
                 response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
@@ -1794,9 +1822,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     UseSequence = safeRequest.UseSequence,
                     SequenceName = sequenceName,
                     IsActive = safeRequest.ReferencePolicyEnabled,
-                    CreatedBy = normalizedUserId,
+                    CreatedBy = auditActorId,
                     CreatedAtUtc = DateTime.UtcNow,
-                    LastModifiedBy = normalizedUserId,
+                    LastModifiedBy = auditActorId,
                     LastModifiedAtUtc = DateTime.UtcNow
                 };
                 await _connectContext.SubjectReferencePolicies.AddAsync(policy, cancellationToken);
@@ -1810,7 +1838,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 policy.UseSequence = safeRequest.UseSequence;
                 policy.SequenceName = sequenceName;
                 policy.IsActive = safeRequest.ReferencePolicyEnabled;
-                policy.LastModifiedBy = normalizedUserId;
+                policy.LastModifiedBy = auditActorId;
                 policy.LastModifiedAtUtc = DateTime.UtcNow;
             }
 
@@ -1858,7 +1886,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         return response;
     }
 
-    private async Task<(Cdcategory? Category, List<Error> Errors)> ValidateUpsertRequestAsync(
+    private async Task<(Cdcategory? Category, List<Error> Errors, List<string> UnitIds)> ValidateUpsertRequestAsync(
         SubjectUpsertRequestDto request,
         string userId,
         CancellationToken cancellationToken)
@@ -1868,7 +1896,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         if (categoryId <= 0)
         {
             errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
-            return (null, errors);
+            return (null, errors, new List<string>());
         }
 
         var category = await _connectContext.Cdcategories
@@ -1877,13 +1905,13 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         if (category == null)
         {
             errors.Add(new Error { Code = "404", Message = "النوع غير موجود." });
-            return (null, errors);
+            return (null, errors, new List<string>());
         }
 
         if (category.CatStatus)
         {
             errors.Add(new Error { Code = "403", Message = "النوع غير مفعل." });
-            return (category, errors);
+            return (category, errors, new List<string>());
         }
 
         var unitIds = await GetCurrentUserUnitIdsAsync(userId, cancellationToken);
@@ -1892,7 +1920,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             errors.Add(new Error { Code = "403", Message = "غير مسموح بإنشاء طلبات على هذا النوع." });
         }
 
-        return (category, errors);
+        return (category, errors, unitIds);
     }
 
     private async Task<List<Cdcategory>> LoadScopedCategoriesAsync(
@@ -1915,7 +1943,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
         if (unitIds == null || unitIds.Count == 0)
         {
-            return categories;
+            return new List<Cdcategory>();
         }
 
         var unitNumbers = unitIds
@@ -1925,7 +1953,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
         if (unitNumbers.Count == 0)
         {
-            return categories;
+            return new List<Cdcategory>();
         }
 
         var byId = categories.ToDictionary(category => category.CatId);
@@ -1934,7 +1962,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         foreach (var category in categories)
         {
             var root = ResolveRootCategoryId(category.CatId, byId);
-            if (unitNumbers.Contains(root) || root == 60)
+            if (unitNumbers.Contains(root))
             {
                 includeIds.Add(category.CatId);
                 IncludeAncestors(category.CatId, byId, includeIds);
@@ -1943,7 +1971,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
         if (includeIds.Count == 0)
         {
-            return categories;
+            return new List<Cdcategory>();
         }
 
         return categories.Where(category => includeIds.Contains(category.CatId)).ToList();
@@ -2150,6 +2178,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         string userId,
         CancellationToken cancellationToken)
     {
+        var safeActorId = NormalizeAuditActorId(userId);
         foreach (var task in tasks ?? Enumerable.Empty<SubjectTaskUpsertDto>())
         {
             if (string.IsNullOrWhiteSpace(task.ActionTitle))
@@ -2166,9 +2195,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 AssignedUnitId = NormalizeNullable(task.AssignedUnitId),
                 Status = task.Status,
                 DueDateUtc = task.DueDateUtc,
-                CreatedBy = userId,
+                CreatedBy = safeActorId,
                 CreatedAtUtc = DateTime.UtcNow,
-                LastModifiedBy = userId,
+                LastModifiedBy = safeActorId,
                 LastModifiedAtUtc = DateTime.UtcNow
             }, cancellationToken);
         }
@@ -2405,13 +2434,14 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         string changedBy,
         CancellationToken cancellationToken)
     {
+        var safeActorId = NormalizeAuditActorId(changedBy);
         await _connectContext.SubjectStatusHistories.AddAsync(new SubjectStatusHistory
         {
             MessageId = messageId,
             OldStatus = oldStatus,
             NewStatus = newStatus,
             Notes = notes,
-            ChangedBy = changedBy,
+            ChangedBy = safeActorId,
             ChangedAtUtc = DateTime.UtcNow
         }, cancellationToken);
     }
@@ -2426,6 +2456,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         string createdBy,
         CancellationToken cancellationToken)
     {
+        var safeActorId = NormalizeAuditActorId(createdBy);
         var json = payload == null ? null : JsonSerializer.Serialize(payload);
         await _connectContext.SubjectTimelineEvents.AddAsync(new SubjectTimelineEvent
         {
@@ -2435,7 +2466,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             EventPayloadJson = json,
             StatusFrom = statusFrom,
             StatusTo = statusTo,
-            CreatedBy = createdBy,
+            CreatedBy = safeActorId,
             CreatedAtUtc = DateTime.UtcNow
         }, cancellationToken);
     }
@@ -2446,6 +2477,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         string linkedBy,
         CancellationToken cancellationToken)
     {
+        var safeActorId = NormalizeAuditActorId(linkedBy);
         var envelopeExists = await _connectContext.SubjectEnvelopes
             .AsNoTracking()
             .AnyAsync(item => item.EnvelopeId == envelopeId, cancellationToken);
@@ -2474,7 +2506,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         {
             EnvelopeId = envelopeId,
             MessageId = messageId,
-            LinkedBy = linkedBy,
+            LinkedBy = safeActorId,
             LinkedAtUtc = DateTime.UtcNow
         }, cancellationToken);
 
@@ -2488,7 +2520,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             },
             statusFrom: null,
             statusTo: null,
-            createdBy: linkedBy,
+            createdBy: safeActorId,
             cancellationToken: cancellationToken);
     }
 
@@ -2649,7 +2681,14 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
     private async Task<HashSet<int>> GetAccessibleMessageIdsAsync(string userId, CancellationToken cancellationToken)
     {
+        var messageActorId = NormalizeMessageActorId(userId);
         var unitIds = await GetCurrentUserUnitIdsAsync(userId, cancellationToken);
+        var accessibleCategoryIds = await GetAccessibleCategoryIdsAsync(unitIds, cancellationToken);
+        if (accessibleCategoryIds.Count == 0)
+        {
+            return new HashSet<int>();
+        }
+
         var unitNumeric = unitIds
             .Select(unit => int.TryParse(unit, out var parsed) ? parsed : 0)
             .Where(parsed => parsed > 0)
@@ -2657,7 +2696,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
         var createdIds = await _connectContext.Messages
             .AsNoTracking()
-            .Where(item => item.CreatedBy == userId)
+            .Where(item => item.CreatedBy == userId || item.CreatedBy == messageActorId)
             .Select(item => item.MessageId)
             .ToListAsync(cancellationToken);
 
@@ -2682,11 +2721,24 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             .Select(item => item.MessageId)
             .ToListAsync(cancellationToken);
 
-        return createdIds
+        var candidateMessageIds = createdIds
             .Concat(assignmentIds)
             .Concat(stakeholderIds)
             .Concat(taskIds)
             .ToHashSet();
+
+        if (candidateMessageIds.Count == 0)
+        {
+            return candidateMessageIds;
+        }
+
+        var filteredIds = await _connectContext.Messages
+            .AsNoTracking()
+            .Where(item => candidateMessageIds.Contains(item.MessageId) && accessibleCategoryIds.Contains(item.CategoryCd))
+            .Select(item => item.MessageId)
+            .ToListAsync(cancellationToken);
+
+        return filteredIds.ToHashSet();
     }
 
     private async Task<bool> CanUserAccessSubjectAsync(string userId, Message message, CancellationToken cancellationToken)
@@ -2696,12 +2748,19 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             return false;
         }
 
-        if (string.Equals(message.CreatedBy ?? string.Empty, userId, StringComparison.OrdinalIgnoreCase))
+        var unitIds = await GetCurrentUserUnitIdsAsync(userId, cancellationToken);
+        if (!await HasCategoryAccessAsync(message.CategoryCd, unitIds, cancellationToken))
+        {
+            return false;
+        }
+
+        var messageActorId = NormalizeMessageActorId(userId);
+        if (string.Equals(message.CreatedBy ?? string.Empty, userId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(message.CreatedBy ?? string.Empty, messageActorId, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        var unitIds = await GetCurrentUserUnitIdsAsync(userId, cancellationToken);
         if (unitIds.Contains(message.AssignedSectorId ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             || unitIds.Contains(message.CurrentResponsibleSectorId ?? string.Empty, StringComparer.OrdinalIgnoreCase))
         {
@@ -2753,7 +2812,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
         if (unitIds == null || unitIds.Count == 0)
         {
-            return true;
+            return false;
         }
 
         var numericUnitIds = unitIds
@@ -2763,7 +2822,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
         if (numericUnitIds.Count == 0)
         {
-            return true;
+            return false;
         }
 
         var parentMap = await _connectContext.Cdcategories
@@ -2786,7 +2845,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             cursor = parentId;
         }
 
-        return numericUnitIds.Contains(60) || numericUnitIds.Contains(cursor);
+        return numericUnitIds.Contains(cursor);
     }
 
     private async Task<List<string>> GetCurrentUserUnitIdsAsync(string userId, CancellationToken cancellationToken)
@@ -2821,6 +2880,33 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         return (userId ?? string.Empty).Trim();
     }
 
+    private static string NormalizeMessageActorId(string? userId)
+    {
+        var normalized = NormalizeUser(userId);
+        if (normalized.Length <= 20)
+        {
+            return normalized;
+        }
+
+        return normalized[..20];
+    }
+
+    private static string NormalizeAuditActorId(string? userId)
+    {
+        var normalized = NormalizeUser(userId);
+        if (normalized.Length == 0)
+        {
+            return "SYSTEM";
+        }
+
+        if (normalized.Length <= 64)
+        {
+            return normalized;
+        }
+
+        return normalized[..64];
+    }
+
     private static string? NormalizeNullable(string? value)
     {
         var normalized = (value ?? string.Empty).Trim();
@@ -2831,7 +2917,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
     {
         if (unitIds == null || unitIds.Count == 0)
         {
-            return true;
+            return false;
         }
 
         var numericUnitIds = unitIds
@@ -2841,9 +2927,17 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
         if (numericUnitIds.Count == 0)
         {
-            return true;
+            return false;
         }
 
-        return numericUnitIds.Contains(60) || numericUnitIds.Contains(categoryId);
+        return numericUnitIds.Contains(categoryId);
+    }
+
+    private async Task<HashSet<int>> GetAccessibleCategoryIdsAsync(
+        IReadOnlyCollection<string> unitIds,
+        CancellationToken cancellationToken)
+    {
+        var categories = await LoadScopedCategoriesAsync(unitIds, appId: null, cancellationToken);
+        return categories.Select(item => item.CatId).ToHashSet();
     }
 }

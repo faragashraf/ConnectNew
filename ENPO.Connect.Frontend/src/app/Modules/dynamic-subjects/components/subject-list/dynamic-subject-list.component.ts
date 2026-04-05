@@ -8,6 +8,7 @@ import {
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
+import { DynamicSubjectAccessService } from '../../services/dynamic-subject-access.service';
 
 @Component({
   selector: 'app-dynamic-subject-list',
@@ -25,17 +26,20 @@ export class DynamicSubjectListComponent implements OnInit, OnDestroy {
     pageNumber: 1,
     pageSize: 20
   };
+  private allowedCategoryIds = new Set<number>();
+  private accessReady = false;
 
   private readonly subscriptions: Subscription[] = [];
 
   constructor(
     private readonly dynamicSubjectsController: DynamicSubjectsController,
+    private readonly dynamicSubjectAccess: DynamicSubjectAccessService,
     private readonly realtimeService: DynamicSubjectsRealtimeService,
     private readonly appNotification: AppNotificationService
   ) {}
 
   ngOnInit(): void {
-    this.load();
+    this.bootstrapAccess();
     this.subscriptions.push(
       this.realtimeService.events$().subscribe(eventItem => {
         this.applyRealtime(eventItem);
@@ -48,6 +52,10 @@ export class DynamicSubjectListComponent implements OnInit, OnDestroy {
   }
 
   load(): void {
+    if (!this.accessReady) {
+      return;
+    }
+
     this.loading = true;
     this.query.status = this.statusFilter;
 
@@ -60,11 +68,16 @@ export class DynamicSubjectListComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.items = response?.data?.items ?? [];
+        const rawItems = response?.data?.items ?? [];
+        const scopedItems = rawItems
+          .filter(item => this.allowedCategoryIds.has(Number(item.categoryId ?? 0)));
+
+        this.items = scopedItems;
         this.items.forEach(item => {
           item.statusLabel = this.toArabicStatusLabel(item.status, item.statusLabel);
         });
-        this.totalCount = Number(response?.data?.totalCount ?? 0);
+        const serverTotal = Number(response?.data?.totalCount ?? 0);
+        this.totalCount = scopedItems.length === rawItems.length ? serverTotal : scopedItems.length;
       },
       error: () => {
         this.appNotification.error('حدث خطأ أثناء تحميل قائمة الموضوعات والطلبات.');
@@ -114,6 +127,13 @@ export class DynamicSubjectListComponent implements OnInit, OnDestroy {
 
   private applyRealtime(eventItem: DynamicSubjectRealtimeEventDto): void {
     if (!eventItem) {
+      return;
+    }
+
+    const eventCategoryId = Number(eventItem.categoryId ?? eventItem.data?.['categoryId'] ?? 0);
+    if (eventCategoryId > 0 && !this.allowedCategoryIds.has(eventCategoryId)) {
+      this.items = this.items.filter(item => item.messageId !== Number(eventItem.messageId ?? eventItem.entityId ?? 0));
+      this.totalCount = this.items.length;
       return;
     }
 
@@ -189,5 +209,28 @@ export class DynamicSubjectListComponent implements OnInit, OnDestroy {
     if (normalized === 'archived') return 'مؤرشف';
 
     return label || 'غير محدد';
+  }
+
+  private bootstrapAccess(): void {
+    this.dynamicSubjectsController.getCategoryTree(this.dynamicSubjectAccess.getApplicationId()).subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.allowedCategoryIds = new Set<number>();
+          this.accessReady = true;
+          this.appNotification.showApiErrors(response.errors, 'تعذر تحميل صلاحيات عرض الطلبات.');
+          return;
+        }
+
+        const scopedTree = this.dynamicSubjectAccess.filterByTopParent(response?.data ?? []);
+        this.allowedCategoryIds = this.dynamicSubjectAccess.collectCategoryIds(scopedTree);
+        this.accessReady = true;
+        this.load();
+      },
+      error: () => {
+        this.allowedCategoryIds = new Set<number>();
+        this.accessReady = true;
+        this.appNotification.error('تعذر تحميل صلاحيات عرض الطلبات.');
+      }
+    });
   }
 }

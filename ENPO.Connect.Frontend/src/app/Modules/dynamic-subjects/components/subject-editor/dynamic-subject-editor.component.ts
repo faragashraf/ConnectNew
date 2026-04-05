@@ -1,23 +1,26 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup, ValidatorFn, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Subscription, forkJoin } from 'rxjs';
+import { GenericFormsService } from 'src/app/Modules/GenericComponents/GenericForms.service';
+import { DynamicFormController } from 'src/app/shared/services/BackendServices';
+import { CdCategoryMandDto, CdmendDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import {
   EnvelopeSummaryDto,
   SubjectCategoryTreeNodeDto,
   SubjectDetailDto,
+  SubjectFieldDefinitionDto,
   SubjectFieldValueDto,
   SubjectFormDefinitionDto,
+  SubjectGroupDefinitionDto,
   SubjectUpsertRequest
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
-import {
-  DynamicFieldRenderItem,
-  DynamicGroupRenderItem
-} from '../shared/dynamic-fields-section/dynamic-fields-section.component';
+import { DynamicGroupRenderItem } from '../shared/dynamic-fields-section/dynamic-fields-section.component';
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
+import { DynamicSubjectAccessService } from '../../services/dynamic-subject-access.service';
 
 @Component({
   selector: 'app-dynamic-subject-editor',
@@ -42,6 +45,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   availableEnvelopes: EnvelopeSummaryDto[] = [];
   liveEventNotice = '';
   submitAttempted = false;
+  private allowedCategoryIds = new Set<number>();
 
   private controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>();
   private readonly subscriptions: Subscription[] = [];
@@ -51,7 +55,10 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     private readonly route: ActivatedRoute,
     private readonly router: Router,
     private readonly dynamicSubjectsController: DynamicSubjectsController,
+    private readonly dynamicFormController: DynamicFormController,
+    private readonly dynamicSubjectAccess: DynamicSubjectAccessService,
     private readonly realtimeService: DynamicSubjectsRealtimeService,
+    private readonly genericFormService: GenericFormsService,
     private readonly appNotification: AppNotificationService
   ) {
     this.editorForm = this.fb.group({
@@ -277,60 +284,342 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private loadFormDefinition(categoryId: number, detail?: SubjectDetailDto): void {
-    this.dynamicSubjectsController.getFormDefinition(categoryId).subscribe({
+    if (this.allowedCategoryIds.size > 0 && !this.allowedCategoryIds.has(categoryId)) {
+      this.appNotification.error('غير مسموح بعرض هذا النوع.');
+      this.formDefinition = null;
+      this.resetDynamicFormState();
+      return;
+    }
+
+    const appId = this.dynamicSubjectAccess.getApplicationId();
+    this.dynamicSubjectsController.getFormDefinition(categoryId, appId).subscribe({
       next: response => {
-        if (response?.errors?.length) {
-          this.appNotification.showApiErrors(response.errors, 'تعذر تحميل إعدادات الحقول الديناميكية.');
-          this.formDefinition = null;
-          this.dynamicControls = this.fb.group({});
-          this.renderGroups = [];
+        const hasErrors = Boolean(response?.errors?.length);
+        const hasAnyField = Number(response?.data?.fields?.length ?? 0) > 0;
+        const shouldRetryWithoutAppScope = hasErrors || !hasAnyField;
+
+        if (shouldRetryWithoutAppScope) {
+          this.dynamicSubjectsController.getFormDefinition(categoryId).subscribe({
+            next: fallbackResponse => {
+              if (fallbackResponse?.errors?.length) {
+                this.loadLegacyFormDefinition(categoryId, detail);
+                return;
+              }
+
+              const fallbackDefinition = fallbackResponse?.data ?? null;
+              if (!this.hasRenderableDefinition(fallbackDefinition)) {
+                this.loadLegacyFormDefinition(categoryId, detail);
+                return;
+              }
+
+              this.applyLoadedDefinition(fallbackDefinition, detail);
+            },
+            error: () => {
+              this.loadLegacyFormDefinition(categoryId, detail);
+            }
+          });
           return;
         }
 
-        this.formDefinition = response?.data ?? null;
-        this.rebuildDynamicControls(this.formDefinition, detail?.dynamicFields ?? []);
-        this.populateStakeholders(detail);
-        this.populateTasks(detail);
+        const definition = response?.data ?? null;
+        if (!this.hasRenderableDefinition(definition)) {
+          this.loadLegacyFormDefinition(categoryId, detail);
+          return;
+        }
+
+        this.applyLoadedDefinition(definition, detail);
       },
       error: () => {
-        this.appNotification.error('حدث خطأ أثناء تحميل إعدادات الحقول الديناميكية.');
+        this.loadLegacyFormDefinition(categoryId, detail);
       }
     });
   }
 
-  private rebuildDynamicControls(definition: SubjectFormDefinitionDto | null, values: SubjectFieldValueDto[]): void {
-    this.dynamicControls = this.fb.group({});
-    this.renderGroups = [];
-    this.controlMap.clear();
+  private hasRenderableDefinition(definition: SubjectFormDefinitionDto | null | undefined): boolean {
+    return Boolean(definition && Array.isArray(definition.fields) && definition.fields.length > 0);
+  }
 
-    const groupsMap = new Map<number, DynamicFieldRenderItem[]>();
-    (definition?.fields ?? []).forEach(field => {
-      const controlName = `${field.fieldKey}__${field.mendGroup}__1`;
-      const existingValue = values.find(valueItem =>
-        String(valueItem.fieldKey ?? '').toLowerCase() === String(field.fieldKey ?? '').toLowerCase()
-        && Number(valueItem.instanceGroupId ?? 1) === 1);
-      const isBoolean = String(field.fieldType ?? '').toLowerCase().includes('bool')
-        || String(field.fieldType ?? '').toLowerCase().includes('check')
-        || String(field.fieldType ?? '').toLowerCase().includes('toggle');
-      const initial = existingValue?.value ?? field.defaultValue ?? (isBoolean ? false : '');
+  private applyLoadedDefinition(definition: SubjectFormDefinitionDto | null, detail?: SubjectDetailDto): void {
+    this.formDefinition = definition ?? null;
+    this.rebuildDynamicControls(this.formDefinition, detail?.dynamicFields ?? []);
+    this.populateStakeholders(detail);
+    this.populateTasks(detail);
+  }
 
-      this.dynamicControls.addControl(controlName, this.fb.control(initial, this.buildFieldValidators(field)));
+  private loadLegacyFormDefinition(categoryId: number, detail?: SubjectDetailDto): void {
+    const tryLoad = (appScope?: string, hasRetried = false) => {
+      forkJoin({
+        linksResponse: this.dynamicFormController.getMandatoryAll(appScope),
+        mendsResponse: this.dynamicFormController.getMandatoryMetaDate(appScope)
+      }).subscribe({
+        next: ({ linksResponse, mendsResponse }) => {
+          const links = linksResponse?.data ?? [];
+          const mends = mendsResponse?.data ?? [];
+          const definition = this.buildLegacyDefinition(categoryId, links, mends);
 
-      this.controlMap.set(controlName, { fieldKey: field.fieldKey, instanceGroupId: 1 });
-      if (!groupsMap.has(field.mendGroup)) {
-        groupsMap.set(field.mendGroup, []);
+          if (!this.hasRenderableDefinition(definition)) {
+            if (!hasRetried) {
+              tryLoad(undefined, true);
+              return;
+            }
+
+            this.formDefinition = null;
+            this.resetDynamicFormState();
+            this.populateStakeholders(detail);
+            this.populateTasks(detail);
+            this.appNotification.warning('لا توجد حقول ديناميكية مهيأة لهذا النوع.');
+            return;
+          }
+
+          this.applyLoadedDefinition(definition, detail);
+        },
+        error: () => {
+          if (!hasRetried) {
+            tryLoad(undefined, true);
+            return;
+          }
+
+          this.formDefinition = null;
+          this.resetDynamicFormState();
+          this.populateStakeholders(detail);
+          this.populateTasks(detail);
+          this.appNotification.error('تعذر تحميل إعدادات الحقول الديناميكية.');
+        }
+      });
+    };
+
+    tryLoad(this.dynamicSubjectAccess.getApplicationId());
+  }
+
+  private buildLegacyDefinition(categoryId: number, links: CdCategoryMandDto[], mends: CdmendDto[]): SubjectFormDefinitionDto | null {
+    const categoryLinks = (links ?? [])
+      .filter(link => Number(link.mendCategory ?? 0) === categoryId && !Boolean(link.mendStat))
+      .sort((left, right) => {
+        const byGroup = Number(left.mendGroup ?? 0) - Number(right.mendGroup ?? 0);
+        if (byGroup !== 0) {
+          return byGroup;
+        }
+
+        return Number(left.mendSql ?? 0) - Number(right.mendSql ?? 0);
+      });
+    if (categoryLinks.length === 0) {
+      return null;
+    }
+
+    const mendMap = new Map<string, CdmendDto>();
+    (mends ?? []).forEach(mend => {
+      const key = String(mend.cdmendTxt ?? '').trim().toLowerCase();
+      if (!key || Boolean(mend.cdmendStat)) {
+        return;
       }
-
-      groupsMap.get(field.mendGroup)?.push({ controlName, definition: field });
+      mendMap.set(key, mend);
     });
 
-    this.renderGroups = (definition?.groups ?? [])
-      .map(group => ({
-        groupId: group.groupId,
-        groupName: group.groupName,
-        fields: groupsMap.get(group.groupId) ?? []
-      }))
-      .filter(group => group.fields.length > 0);
+    const groupsMap = new Map<number, SubjectGroupDefinitionDto>();
+    const fields: SubjectFieldDefinitionDto[] = [];
+
+    categoryLinks.forEach((link, index) => {
+      const fieldKey = String(link.mendField ?? '').trim();
+      if (!fieldKey) {
+        return;
+      }
+
+      const mend = mendMap.get(fieldKey.toLowerCase());
+      if (!mend) {
+        return;
+      }
+
+      const groupId = Number(link.mendGroup ?? 0);
+      if (!groupsMap.has(groupId)) {
+        groupsMap.set(groupId, {
+          groupId,
+          groupName: String(link.groupName ?? '').trim(),
+          groupDescription: '',
+          isExtendable: Boolean(link.isExtendable),
+          groupWithInRow: Number(link.groupWithInRow ?? 12)
+        });
+      }
+
+      const group = groupsMap.get(groupId)!;
+      fields.push({
+        mendSql: Number(link.mendSql ?? 0),
+        categoryId,
+        mendGroup: groupId,
+        fieldKey,
+        fieldType: String(mend.cdmendType ?? ''),
+        fieldLabel: mend.cdMendLbl ?? fieldKey,
+        placeholder: mend.placeholder ?? '',
+        defaultValue: mend.defaultValue ?? '',
+        optionsPayload: mend.cdmendTbl ?? '',
+        dataType: mend.cdmendDatatype ?? '',
+        required: Boolean(mend.required),
+        requiredTrue: Boolean(mend.requiredTrue),
+        email: Boolean(mend.email),
+        pattern: Boolean(mend.pattern),
+        minValue: mend.minValue ?? '',
+        maxValue: mend.maxValue ?? '',
+        mask: mend.cdmendmask ?? '',
+        isDisabledInit: Boolean(mend.isDisabledInit),
+        isSearchable: Boolean(mend.isSearchable),
+        width: Number(mend.width ?? 0),
+        height: Number(mend.height ?? 0),
+        applicationId: mend.applicationId ?? undefined,
+        displayOrder: index + 1,
+        isVisible: true,
+        displaySettingsJson: undefined,
+        group
+      });
+    });
+
+    if (fields.length === 0) {
+      return null;
+    }
+
+    const categoryOption = this.categoryOptions.find(option => Number(option.id) === categoryId);
+    return {
+      categoryId,
+      categoryName: categoryOption?.name ?? '',
+      parentCategoryId: 0,
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      groups: Array.from(groupsMap.values()).sort((left, right) => left.groupId - right.groupId),
+      fields
+    };
+  }
+
+  private rebuildDynamicControls(definition: SubjectFormDefinitionDto | null, values: SubjectFieldValueDto[]): void {
+    this.resetDynamicFormState();
+
+    const allFields = (definition?.fields ?? [])
+      .sort((left, right) => Number(left.displayOrder ?? 0) - Number(right.displayOrder ?? 0));
+    const visibleFields = allFields.filter(field => field.isVisible !== false);
+    const fieldsToRender = visibleFields.length > 0 ? visibleFields : allFields;
+
+    if (!definition || fieldsToRender.length === 0) {
+      return;
+    }
+
+    const fieldsByGroup = new Map<number, SubjectFieldDefinitionDto[]>();
+    fieldsToRender.forEach(field => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (!fieldsByGroup.has(groupId)) {
+        fieldsByGroup.set(groupId, []);
+      }
+
+      fieldsByGroup.get(groupId)?.push(field);
+    });
+
+    const orderedGroupIds: number[] = [];
+    const definitionGroups = definition.groups ?? [];
+    definitionGroups.forEach(group => {
+      if (fieldsByGroup.has(group.groupId)) {
+        orderedGroupIds.push(group.groupId);
+      }
+    });
+
+    Array.from(fieldsByGroup.keys())
+      .filter(groupId => !orderedGroupIds.includes(groupId))
+      .sort((left, right) => left - right)
+      .forEach(groupId => orderedGroupIds.push(groupId));
+
+    const mappedMendDefinitions: CdmendDto[] = [];
+    const mappedCategoryMandDefinitions: CdCategoryMandDto[] = [];
+    let nextControlIndex = 0;
+
+    orderedGroupIds.forEach(groupId => {
+      const groupFields = fieldsByGroup.get(groupId) ?? [];
+      if (groupFields.length === 0) {
+        return;
+      }
+
+      const groupDefinition = definitionGroups.find(group => Number(group.groupId) === groupId);
+      const groupName = String(groupDefinition?.groupName ?? groupFields[0]?.group?.groupName ?? `مجموعة ${groupId}`);
+      const formArrayName = `dynamic_subject_group_${groupId}`;
+      const formArray = this.fb.array([]);
+      const mappedGroupFields: CdCategoryMandDto[] = [];
+
+      groupFields.forEach(field => {
+        const controlIndex = nextControlIndex++;
+        const controlName = `${field.fieldKey}|${controlIndex}`;
+        const cdmendType = this.mapFieldTypeToGenericType(field.fieldType);
+        const cdmendDatatype = this.mapFieldDataType(field, cdmendType);
+        const usesSelectionTable = cdmendType === 'Dropdown' || cdmendType === 'RadioButton';
+        const cdmendTbl = usesSelectionTable
+          ? this.parseFieldOptionsAsSelectionJson(field.optionsPayload)
+          : this.resolvePatternExpression(field.optionsPayload);
+        const hasPattern = Boolean(field.pattern) && cdmendTbl.length > 0;
+
+        const mappedMendDefinition: CdmendDto = {
+          cdmendSql: Number(field.mendSql ?? 0),
+          cdmendType,
+          cdmendTxt: field.fieldKey,
+          cdMendLbl: field.fieldLabel ?? field.fieldKey,
+          placeholder: field.placeholder ?? '',
+          defaultValue: field.defaultValue ?? '',
+          cdmendTbl,
+          cdmendDatatype,
+          required: Boolean(field.required),
+          requiredTrue: Boolean(field.requiredTrue),
+          email: Boolean(field.email),
+          pattern: hasPattern,
+          min: Number.isFinite(Number(field.minValue)) ? Number(field.minValue) : undefined,
+          max: Number.isFinite(Number(field.maxValue)) ? Number(field.maxValue) : undefined,
+          minxLenght: undefined,
+          maxLenght: undefined,
+          cdmendmask: field.mask ?? '',
+          cdmendStat: true,
+          maxValue: field.maxValue ?? '',
+          minValue: field.minValue ?? '',
+          width: Number(field.width ?? 0),
+          height: Number(field.height ?? 0),
+          isDisabledInit: Boolean(field.isDisabledInit),
+          isSearchable: Boolean(field.isSearchable),
+          applicationId: field.applicationId
+        };
+
+        mappedMendDefinitions.push(mappedMendDefinition);
+
+        const mappedGroupField: CdCategoryMandDto = {
+          mendSql: Number(field.mendSql ?? 0),
+          mendCategory: Number(field.categoryId ?? definition.categoryId),
+          mendField: field.fieldKey,
+          mendStat: true,
+          mendGroup: groupId,
+          applicationId: field.applicationId ?? definition.applicationId,
+          groupName,
+          isExtendable: Boolean(groupDefinition?.isExtendable ?? field.group?.isExtendable),
+          groupWithInRow: Number(groupDefinition?.groupWithInRow ?? field.group?.groupWithInRow ?? 12)
+        };
+
+        mappedGroupFields.push(mappedGroupField);
+        mappedCategoryMandDefinitions.push(mappedGroupField);
+
+        this.genericFormService.addFormArrayWithValidators(controlName, formArray);
+
+        const matchedValue = values.find(valueItem =>
+          String(valueItem.fieldKey ?? '').toLowerCase() === String(field.fieldKey ?? '').toLowerCase()
+          && Number(valueItem.instanceGroupId ?? 1) === 1);
+        const initialValue = this.normalizeInitialDynamicValue(field, cdmendType, matchedValue?.value ?? field.defaultValue);
+        const control = this.genericFormService.GetControl(formArray, controlName);
+        control?.patchValue(initialValue, { emitEvent: false });
+
+        if (field.isDisabledInit) {
+          control?.disable({ emitEvent: false });
+        }
+
+        this.controlMap.set(controlName, { fieldKey: field.fieldKey, instanceGroupId: 1 });
+      });
+
+      this.dynamicControls.addControl(formArrayName, formArray);
+      this.renderGroups.push({
+        groupId,
+        groupName,
+        formArrayName,
+        fields: mappedGroupFields
+      });
+    });
+
+    this.genericFormService.cdmendDto = mappedMendDefinitions;
+    this.genericFormService.cdCategoryMandDto = mappedCategoryMandDefinitions;
   }
 
   private populateStakeholders(detail?: SubjectDetailDto): void {
@@ -372,7 +661,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private buildDynamicFieldValues(): SubjectFieldValueDto[] {
     return Array.from(this.controlMap.entries()).map(([controlName, key]) => ({
       fieldKey: key.fieldKey,
-      value: this.dynamicControls.get(controlName)?.value,
+      value: this.normalizeOutgoingDynamicValue(this.genericFormService.GetControl(this.dynamicControls, controlName)?.value),
       instanceGroupId: key.instanceGroupId
     }));
   }
@@ -394,7 +683,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private loadCategoryOptions(): void {
-    this.dynamicSubjectsController.getCategoryTree().subscribe({
+    this.dynamicSubjectsController.getCategoryTree(this.dynamicSubjectAccess.getApplicationId()).subscribe({
       next: response => {
         if (response?.errors?.length) {
           this.categoryOptions = [];
@@ -402,7 +691,9 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.categoryOptions = this.flattenCategoryTree(response?.data ?? []);
+        const scopedTree = this.dynamicSubjectAccess.filterByTopParent(response?.data ?? []);
+        this.allowedCategoryIds = this.dynamicSubjectAccess.collectCategoryIds(scopedTree);
+        this.categoryOptions = this.flattenCategoryTree(scopedTree);
       },
       error: () => {
         this.categoryOptions = [];
@@ -447,36 +738,186 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     return 'القيمة المدخلة غير صحيحة.';
   }
 
-  private buildFieldValidators(field: { required?: boolean; requiredTrue?: boolean; email?: boolean; pattern?: boolean; minValue?: string; maxValue?: string }): ValidatorFn[] {
-    const validators: ValidatorFn[] = [];
-    if (field.required) {
-      validators.push(Validators.required);
+  private resetDynamicFormState(): void {
+    this.dynamicControls = this.fb.group({});
+    this.renderGroups = [];
+    this.controlMap.clear();
+    this.genericFormService.resetDynamicRuntimeState();
+    this.genericFormService.cdmendDto = [];
+    this.genericFormService.cdCategoryMandDto = [];
+  }
+
+  private mapFieldTypeToGenericType(fieldType?: string): string {
+    const normalized = String(fieldType ?? '').trim().toLowerCase();
+
+    if (normalized.includes('label')) {
+      return 'LABLE';
     }
-    if (field.requiredTrue) {
-      validators.push(Validators.requiredTrue);
+    if (normalized.includes('textarea')) {
+      return 'Textarea';
     }
-    if (field.email) {
-      validators.push(Validators.email);
+    if (normalized.includes('radio')) {
+      return 'RadioButton';
     }
-    if (field.pattern && field.minValue) {
-      try {
-        validators.push(Validators.pattern(field.minValue));
-      } catch {
-        // ignore invalid pattern metadata
+    if (normalized.includes('select') || normalized.includes('drop') || normalized.includes('combo')) {
+      return 'Dropdown';
+    }
+    if (normalized.includes('toggle') || normalized.includes('bool') || normalized.includes('check') || normalized.includes('switch')) {
+      return 'ToggleSwitch';
+    }
+    if (normalized.includes('datetime') || (normalized.includes('date') && normalized.includes('time'))) {
+      return 'DateTime';
+    }
+    if (normalized.includes('date') || normalized.includes('calendar')) {
+      return 'Date';
+    }
+    if (normalized.includes('file')) {
+      return 'FileUpload';
+    }
+    if (normalized.includes('int')) {
+      return 'InputText-integeronly';
+    }
+
+    return 'InputText';
+  }
+
+  private mapFieldDataType(field: SubjectFieldDefinitionDto, cdmendType: string): string {
+    const normalizedDataType = String(field.dataType ?? '').trim().toLowerCase();
+    const normalizedFieldType = String(field.fieldType ?? '').trim().toLowerCase();
+    if (normalizedDataType.includes('date') || normalizedDataType.includes('time')) {
+      return 'date';
+    }
+    if (normalizedDataType.includes('number') || normalizedDataType.includes('int') || normalizedDataType.includes('decimal')) {
+      return 'number';
+    }
+    if (normalizedDataType.includes('bool')) {
+      return 'boolean';
+    }
+
+    if (cdmendType === 'Date' || cdmendType === 'DateTime') {
+      return 'date';
+    }
+    if (cdmendType === 'ToggleSwitch') {
+      return 'boolean';
+    }
+    if (cdmendType === 'InputText-integeronly') {
+      return 'number';
+    }
+    if (normalizedFieldType.includes('number') || normalizedFieldType.includes('int') || normalizedFieldType.includes('decimal')) {
+      return 'number';
+    }
+
+    return 'string';
+  }
+
+  private normalizeInitialDynamicValue(field: SubjectFieldDefinitionDto, cdmendType: string, value: unknown): unknown {
+    if (value === null || value === undefined || value === '') {
+      return cdmendType === 'ToggleSwitch' ? false : (cdmendType === 'Date' || cdmendType === 'DateTime' ? null : '');
+    }
+
+    if (cdmendType === 'ToggleSwitch') {
+      if (typeof value === 'boolean') {
+        return value;
+      }
+
+      const normalized = String(value).trim().toLowerCase();
+      return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+    }
+
+    if (cdmendType === 'Date' || cdmendType === 'DateTime') {
+      const parsedDate = value instanceof Date ? value : new Date(String(value));
+      return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+    }
+
+    if (cdmendType === 'Dropdown' || cdmendType === 'RadioButton') {
+      return String(value);
+    }
+
+    const looksNumeric = String(field.dataType ?? '').toLowerCase().includes('number')
+      || String(field.dataType ?? '').toLowerCase().includes('int')
+      || String(field.dataType ?? '').toLowerCase().includes('decimal');
+    if (looksNumeric) {
+      const numericValue = Number(value);
+      if (Number.isFinite(numericValue)) {
+        return numericValue;
       }
     }
 
-    const minValueAsNumber = Number(field.minValue);
-    if (Number.isFinite(minValueAsNumber)) {
-      validators.push(Validators.min(minValueAsNumber));
+    return value;
+  }
+
+  private normalizeOutgoingDynamicValue(value: unknown): string {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? '' : value.toISOString();
     }
 
-    const maxValueAsNumber = Number(field.maxValue);
-    if (Number.isFinite(maxValueAsNumber)) {
-      validators.push(Validators.max(maxValueAsNumber));
+    return String(value);
+  }
+
+  private parseFieldOptionsAsSelectionJson(optionsPayload?: string): string {
+    const options = this.parseFieldOptions(optionsPayload);
+    return JSON.stringify(options.map(option => ({
+      key: option.value,
+      name: option.label
+    })));
+  }
+
+  private parseFieldOptions(optionsPayload?: string): Array<{ label: string; value: string }> {
+    const payload = String(optionsPayload ?? '').trim();
+    if (!payload) {
+      return [];
     }
 
-    return validators;
+    try {
+      const parsed = JSON.parse(payload);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(item => this.mapOptionItem(item))
+          .filter((item): item is { label: string; value: string } => item !== null);
+      }
+    } catch {
+      // no-op and fallback to delimited parsing
+    }
+
+    return payload
+      .split(/[|,;\n]+/g)
+      .map(item => item.trim())
+      .filter(item => item.length > 0)
+      .map(item => ({ label: item, value: item }));
+  }
+
+  private mapOptionItem(item: unknown): { label: string; value: string } | null {
+    if (item === null || item === undefined) {
+      return null;
+    }
+    if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+      const value = String(item);
+      return { label: value, value };
+    }
+
+    const asObject = item as Record<string, unknown>;
+    const value = String(asObject['value'] ?? asObject['id'] ?? asObject['key'] ?? asObject['label'] ?? asObject['name'] ?? '');
+    const label = String(asObject['label'] ?? asObject['name'] ?? asObject['text'] ?? value);
+    if (!value && !label) {
+      return null;
+    }
+
+    return { label: label || value, value: value || label };
+  }
+
+  private resolvePatternExpression(optionsPayload?: string): string {
+    const payload = String(optionsPayload ?? '').trim();
+    if (!payload) {
+      return '';
+    }
+    if (payload.startsWith('[') || payload.startsWith('{')) {
+      return '';
+    }
+
+    return payload;
   }
 
   private buildStakeholdersPayload(): Array<{ stockholderId: number; partyType: string; requiredResponse: boolean; status?: number; dueDate?: string; notes?: string }> {

@@ -5,63 +5,19 @@
       <span>{{ group.fields.length }} حقل</span>
     </header>
 
-    <div class="fields-grid">
-      <div class="field-item" *ngFor="let item of group.fields; trackBy: trackByField">
-        <label [attr.for]="item.controlName">
-          {{ item.definition.fieldLabel || item.definition.fieldKey }}
-          <span *ngIf="item.definition.required">*</span>
-        </label>
-
-        <ng-container *ngIf="isSelect(item.definition); else nonSelectField">
-          <select
-            class="field-control"
-            [id]="item.controlName"
-            [formControlName]="item.controlName"
-            [disabled]="readOnly || item.definition.isDisabledInit">
-            <option value="">اختر...</option>
-            <option
-              *ngFor="let option of parseOptions(item.definition)"
-              [value]="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </ng-container>
-
-        <ng-template #nonSelectField>
-          <ng-container *ngIf="isBoolean(item.definition); else nonBooleanField">
-            <input
-              type="checkbox"
-              [id]="item.controlName"
-              [formControlName]="item.controlName"
-              [disabled]="readOnly || item.definition.isDisabledInit"/>
-          </ng-container>
-
-          <ng-template #nonBooleanField>
-            <ng-container *ngIf="isTextarea(item.definition); else inputField">
-              <textarea
-                class="field-control"
-                [id]="item.controlName"
-                [placeholder]="item.definition.placeholder || ''"
-                [attr.rows]="item.definition.height || 3"
-                [formControlName]="item.controlName"
-                [readonly]="readOnly || item.definition.isDisabledInit"></textarea>
-            </ng-container>
-
-            <ng-template #inputField>
-              <input
-                class="field-control"
-                [id]="item.controlName"
-                [type]="isDate(item.definition) ? 'date' : (isNumber(item.definition) ? 'number' : 'text')"
-                [placeholder]="item.definition.placeholder || ''"
-                [formControlName]="item.controlName"
-                [readonly]="readOnly || item.definition.isDisabledInit"/>
-            </ng-template>
-          </ng-template>
-        </ng-template>
-
-        <small class="field-error" *ngIf="isControlInvalid(item.controlName)">
-          {{ getControlErrorMessage(item) }}
-        </small>
+    <div [formArrayName]="group.formArrayName" class="form-array">
+      <div *ngFor="let mandFiled of getFormArrayControls(group.formArrayName); let i = index" [formGroupName]="i" style="display: contents;">
+        <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" style="display: contents;">
+          <app-generic-form-array
+            [controlFullName]="ctrlName"
+            [index]="i"
+            [filtered_CategoryMand]="group.fields"
+            [isDivDisabled]="readOnly"
+            [ticketForm]="form"
+            [mandFileds]="getFormArrayInstance(group.formArrayName)!"
+            (genericEvent)="onGenericEvent($event)">
+          </app-generic-form-array>
+        </div>
       </div>
     </div>
   </section>

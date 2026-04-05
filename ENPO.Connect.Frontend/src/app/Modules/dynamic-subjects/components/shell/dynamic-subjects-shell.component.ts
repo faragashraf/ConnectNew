@@ -6,6 +6,7 @@ import { DynamicSubjectsController } from 'src/app/shared/services/BackendServic
 import { SubjectCategoryTreeNodeDto } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
+import { DynamicSubjectAccessService } from '../../services/dynamic-subject-access.service';
 
 @Component({
   selector: 'app-dynamic-subjects-shell',
@@ -20,6 +21,7 @@ export class DynamicSubjectsShellComponent implements OnInit, OnDestroy {
   constructor(
     private readonly dynamicSubjectsController: DynamicSubjectsController,
     private readonly dynamicSubjectsRealtimeService: DynamicSubjectsRealtimeService,
+    private readonly dynamicSubjectAccess: DynamicSubjectAccessService,
     private readonly appNotification: AppNotificationService,
     private readonly router: Router
   ) {}
@@ -41,7 +43,7 @@ export class DynamicSubjectsShellComponent implements OnInit, OnDestroy {
 
   loadTree(): void {
     this.loadingTree = true;
-    this.dynamicSubjectsController.getCategoryTree().subscribe({
+    this.dynamicSubjectsController.getCategoryTree(this.dynamicSubjectAccess.getApplicationId()).subscribe({
       next: response => {
         if (response?.errors?.length) {
           this.appNotification.showApiErrors(response.errors, 'تعذر تحميل شجرة أنواع الموضوعات.');
@@ -49,7 +51,8 @@ export class DynamicSubjectsShellComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.treeNodes = this.mapTreeNodes(response?.data ?? []);
+        const scopedTree = this.dynamicSubjectAccess.filterByTopParent(response?.data ?? []);
+        this.treeNodes = this.mapTreeNodes(scopedTree);
       },
       error: () => {
         this.treeNodes = [];
@@ -63,6 +66,12 @@ export class DynamicSubjectsShellComponent implements OnInit, OnDestroy {
 
   onNodeSelect(event: any): void {
     const node = event?.node ?? event;
+    const canCreate = Boolean(node?.data?.canCreate);
+    if (!canCreate) {
+      this.appNotification.warning('يرجى اختيار نوع نهائي من الشجرة يحتوي على حقول ديناميكية.');
+      return;
+    }
+
     const categoryId = Number(node?.data?.categoryId ?? node?.key ?? 0);
     if (!categoryId || categoryId <= 0) {
       return;
