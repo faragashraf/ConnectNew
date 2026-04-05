@@ -674,12 +674,12 @@ export class ComponentConfigManagerComponent implements OnInit, OnDestroy {
     }
 
     get filteredConfigs(): ComponentConfig[] {
-        const filterValue = String(this.routeKeyFilter ?? '').trim().toLowerCase();
+        const filterValue = this.normalizeRouteToken(this.routeKeyFilter);
         const selectedApp = String(this.contextApplicationId ?? '').trim().toLowerCase();
         const selectedCategoryId = Number(this.contextCategoryId ?? 0);
 
         return (this.configs ?? []).filter(cfg => {
-            const routeKey = String(cfg?.routeKey ?? '').trim().toLowerCase();
+            const routeKey = this.normalizeRouteToken(cfg?.routeKey);
             if (filterValue && !routeKey.includes(filterValue)) {
                 return false;
             }
@@ -696,6 +696,15 @@ export class ComponentConfigManagerComponent implements OnInit, OnDestroy {
 
             return true;
         });
+    }
+
+    private normalizeRouteToken(value: unknown): string {
+        return String(value ?? '')
+            .trim()
+            .replace(/\\/g, '/')
+            .replace(/^\/+/, '')
+            .replace(/\/+$/, '')
+            .toLowerCase();
     }
 
     openNew() {

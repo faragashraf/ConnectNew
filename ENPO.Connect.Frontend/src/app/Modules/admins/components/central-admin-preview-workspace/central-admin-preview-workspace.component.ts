@@ -7,6 +7,7 @@ import { ComponentConfigService } from '../../services/component-config.service'
 import {
   CentralAdminPreviewFoundationService,
   PreviewIssueSeverity,
+  PreviewFieldRenderModel,
   PreviewWorkspaceRenderModel
 } from '../../services/central-admin-preview-foundation.service';
 import { CentralAdminContextService, CentralAdminContextState } from '../../services/central-admin-context.service';
@@ -23,6 +24,7 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
   workspace: SubjectAdminPreviewWorkspaceDto | null = null;
   renderModel: PreviewWorkspaceRenderModel | null = null;
   matchedConfigs: ComponentConfig[] = [];
+  canonicalConfig: ComponentConfig | null = null;
 
   private readonly subscriptions = new Subscription();
   private requestSeq = 0;
@@ -64,6 +66,11 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
   }
 
   get primaryRouteKey(): string {
+    const canonical = String(this.canonicalConfig?.routeKey ?? '').trim();
+    if (canonical) {
+      return canonical;
+    }
+
     const selected = String(this.contextState.selectedConfigRouteKey ?? '').trim();
     if (selected) {
       return selected;
@@ -97,6 +104,41 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
     return `k-${field.fieldKey}`;
   }
 
+  isTextareaField(field: PreviewFieldRenderModel): boolean {
+    return String(field.type ?? '').toLowerCase().includes('textarea');
+  }
+
+  isSelectField(field: PreviewFieldRenderModel): boolean {
+    const normalized = String(field.type ?? '').toLowerCase();
+    return normalized.includes('drop')
+      || normalized.includes('select')
+      || normalized.includes('combo')
+      || normalized.includes('radio')
+      || normalized.includes('tree');
+  }
+
+  isBooleanField(field: PreviewFieldRenderModel): boolean {
+    const normalized = String(field.type ?? '').toLowerCase();
+    return normalized.includes('bool') || normalized.includes('check') || normalized.includes('toggle');
+  }
+
+  isDateField(field: PreviewFieldRenderModel): boolean {
+    const normalized = String(field.type ?? '').toLowerCase();
+    return normalized.includes('date') || normalized.includes('calendar');
+  }
+
+  isNumberField(field: PreviewFieldRenderModel): boolean {
+    const normalized = String(field.type ?? '').toLowerCase();
+    return normalized.includes('number') || normalized.includes('decimal') || normalized.includes('int');
+  }
+
+  toSelectPreviewOptions(field: PreviewFieldRenderModel): Array<{ label: string; value: string }> {
+    return (field.optionsPreview ?? []).slice(0, 8).map((item, index) => ({
+      label: item,
+      value: `${index}`
+    }));
+  }
+
   private refreshForState(state: CentralAdminContextState): void {
     const categoryId = Number(state.selectedCategoryId ?? 0);
     if (categoryId <= 0) {
@@ -105,6 +147,7 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
       this.workspace = null;
       this.renderModel = null;
       this.matchedConfigs = [];
+      this.canonicalConfig = null;
       this.lastStateKey = '';
       return;
     }
@@ -183,13 +226,39 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
           categoryId: state.selectedCategoryId
         });
         this.matchedConfigs = matchedConfigs;
+        const resolution = this.previewFoundation.resolveCanonicalConfig(matchedConfigs, {
+          selectedConfigRouteKey: state.selectedConfigRouteKey
+        });
+        this.canonicalConfig = resolution.canonical;
+
+        const categoryId = Number(state.selectedCategoryId ?? 0);
+        const configBoundOptionFields = this.previewFoundation.resolveConfigBoundOptionFieldsFromConfigs(
+          resolution.matched,
+          categoryId
+        );
 
         const configurationIssues = this.previewFoundation.buildConfigurationIssues(matchedConfigs, {
           routeKeyPrefix: state.routeKeyPrefix,
-          selectedConfigRouteKey: state.selectedConfigRouteKey
+          selectedConfigRouteKey: state.selectedConfigRouteKey,
+          canonicalRouteKey: resolution.canonical?.routeKey ?? null
         });
 
-        this.renderModel = this.previewFoundation.buildRenderModel(workspace, configurationIssues);
+        this.renderModel = this.previewFoundation.buildRenderModel(workspace, {
+          extraIssues: configurationIssues,
+          configBoundOptionFields,
+          canonicalRouteKey: resolution.canonical?.routeKey ?? null,
+          matchedConfigCount: matchedConfigs.length
+        });
+
+        if (resolution.canonical?.routeKey) {
+          const selectedRoute = String(this.centralAdminContext.snapshot.selectedConfigRouteKey ?? '').trim().toLowerCase();
+          const canonicalRoute = String(resolution.canonical.routeKey ?? '').trim().toLowerCase();
+          if (selectedRoute !== canonicalRoute) {
+            this.centralAdminContext.patchContext({
+              selectedConfigRouteKey: resolution.canonical.routeKey
+            });
+          }
+        }
       },
       error: () => {
         if (requestSeq !== this.requestSeq) {
@@ -197,11 +266,18 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
         }
 
         this.matchedConfigs = [];
+        this.canonicalConfig = null;
         const configurationIssues = this.previewFoundation.buildConfigurationIssues([], {
           routeKeyPrefix: state.routeKeyPrefix,
-          selectedConfigRouteKey: state.selectedConfigRouteKey
+          selectedConfigRouteKey: state.selectedConfigRouteKey,
+          canonicalRouteKey: null
         });
-        this.renderModel = this.previewFoundation.buildRenderModel(workspace, configurationIssues);
+        this.renderModel = this.previewFoundation.buildRenderModel(workspace, {
+          extraIssues: configurationIssues,
+          configBoundOptionFields: new Set<string>(),
+          canonicalRouteKey: null,
+          matchedConfigCount: 0
+        });
       }
     });
   }

@@ -1646,16 +1646,47 @@ public sealed partial class DynamicSubjectsService
         SubjectFormDefinitionDto definition)
     {
         var issues = new List<SubjectAdminPreviewIssueDto>();
+        var issueDedup = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        static string BuildIssueKey(SubjectAdminPreviewIssueDto issue)
+        {
+            return string.Join("|",
+                issue.Code ?? string.Empty,
+                issue.Severity ?? string.Empty,
+                issue.FieldKey ?? string.Empty,
+                issue.GroupId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                issue.Message ?? string.Empty);
+        }
+        void AddIssue(SubjectAdminPreviewIssueDto issue)
+        {
+            var key = BuildIssueKey(issue);
+            if (issueDedup.Add(key))
+            {
+                issues.Add(issue);
+            }
+        }
+
         var normalizedLinks = links?.ToList() ?? new List<SubjectCategoryFieldLinkAdminDto>();
         var activeLinks = normalizedLinks.Where(item => item.IsActive).ToList();
         var visibleActiveLinks = activeLinks.Where(item => item.IsVisible).ToList();
+        var distinctVisibleActiveLinks = visibleActiveLinks
+            .GroupBy(item =>
+            {
+                if (item.MendSql > 0)
+                {
+                    return $"m:{item.MendSql}";
+                }
+
+                return $"f:{NormalizeFieldKey(item.FieldKey)}";
+            })
+            .Select(group => group.First())
+            .ToList();
         var renderableFields = (definition?.Fields ?? new List<SubjectFieldDefinitionDto>())
             .Where(item => item.IsVisible)
             .ToList();
 
         if (category.CatStatus)
         {
-            issues.Add(new SubjectAdminPreviewIssueDto
+            AddIssue(new SubjectAdminPreviewIssueDto
             {
                 Code = "CATEGORY_INACTIVE",
                 Severity = "Warning",
@@ -1665,7 +1696,7 @@ public sealed partial class DynamicSubjectsService
 
         if (activeLinks.Count == 0)
         {
-            issues.Add(new SubjectAdminPreviewIssueDto
+            AddIssue(new SubjectAdminPreviewIssueDto
             {
                 Code = "NO_ACTIVE_LINKS",
                 Severity = "Error",
@@ -1673,9 +1704,9 @@ public sealed partial class DynamicSubjectsService
             });
         }
 
-        if (visibleActiveLinks.Count == 0)
+        if (distinctVisibleActiveLinks.Count == 0)
         {
-            issues.Add(new SubjectAdminPreviewIssueDto
+            AddIssue(new SubjectAdminPreviewIssueDto
             {
                 Code = "NO_VISIBLE_FIELDS",
                 Severity = "Error",
@@ -1685,7 +1716,7 @@ public sealed partial class DynamicSubjectsService
 
         if (renderableFields.Count == 0)
         {
-            issues.Add(new SubjectAdminPreviewIssueDto
+            AddIssue(new SubjectAdminPreviewIssueDto
             {
                 Code = "NO_RENDERABLE_FIELDS",
                 Severity = "Error",
@@ -1701,12 +1732,12 @@ public sealed partial class DynamicSubjectsService
         var missingBindingsCount = 0;
         var invalidDisplaySettingsCount = 0;
 
-        foreach (var link in visibleActiveLinks)
+        foreach (var link in distinctVisibleActiveLinks)
         {
             if (!definitionByMendSql.TryGetValue(link.MendSql, out var field))
             {
                 missingDefinitionCount++;
-                issues.Add(new SubjectAdminPreviewIssueDto
+                AddIssue(new SubjectAdminPreviewIssueDto
                 {
                     Code = "MISSING_FIELD_DEFINITION",
                     Severity = "Error",
@@ -1726,7 +1757,7 @@ public sealed partial class DynamicSubjectsService
             if (isDisplaySettingsJsonInvalid)
             {
                 invalidDisplaySettingsCount++;
-                issues.Add(new SubjectAdminPreviewIssueDto
+                AddIssue(new SubjectAdminPreviewIssueDto
                 {
                     Code = "INVALID_DISPLAY_SETTINGS",
                     Severity = "Warning",
@@ -1740,11 +1771,11 @@ public sealed partial class DynamicSubjectsService
             if (RequiresOptionsBinding(field.FieldType) && !hasInlineOptions && !hasBinding)
             {
                 missingBindingsCount++;
-                issues.Add(new SubjectAdminPreviewIssueDto
+                AddIssue(new SubjectAdminPreviewIssueDto
                 {
                     Code = "MISSING_OPTIONS_BINDING",
                     Severity = "Error",
-                    Message = $"الحقل '{field.FieldKey}' يحتاج مصدر خيارات (Options/Biding) ولم يتم توفيره.",
+                    Message = $"الحقل '{field.FieldKey}' يحتاج مصدر خيارات (Options/Binding) ولم يتم توفيره.",
                     FieldKey = field.FieldKey,
                     GroupId = field.MendGroup
                 });
@@ -1755,7 +1786,7 @@ public sealed partial class DynamicSubjectsService
         {
             LinkedFieldsCount = normalizedLinks.Count,
             ActiveLinkedFieldsCount = activeLinks.Count,
-            VisibleLinkedFieldsCount = visibleActiveLinks.Count,
+            VisibleLinkedFieldsCount = distinctVisibleActiveLinks.Count,
             RenderableFieldsCount = renderableFields.Count,
             MissingDefinitionCount = missingDefinitionCount,
             MissingBindingsCount = missingBindingsCount,
@@ -2015,34 +2046,86 @@ public sealed partial class DynamicSubjectsService
         int categoryId,
         CancellationToken cancellationToken)
     {
-        return await (from link in _connectContext.CdCategoryMands.AsNoTracking()
-                      join field in _connectContext.Cdmends.AsNoTracking()
-                          on link.MendField equals field.CdmendTxt
-                      join mandGroup in _connectContext.MandGroups.AsNoTracking()
-                          on link.MendGroup equals mandGroup.GroupId into groupJoin
-                      from mandGroup in groupJoin.DefaultIfEmpty()
-                      join setting in _connectContext.SubjectCategoryFieldSettings.AsNoTracking()
-                          on link.MendSql equals setting.MendSql into settingJoin
-                      from setting in settingJoin.DefaultIfEmpty()
-                      where link.MendCategory == categoryId
-                      orderby link.MendGroup,
-                              setting != null ? setting.DisplayOrder : link.MendSql,
-                              link.MendSql
-                      select new SubjectCategoryFieldLinkAdminDto
-                      {
-                          MendSql = link.MendSql,
-                          CategoryId = link.MendCategory,
-                          FieldKey = link.MendField,
-                          FieldLabel = field.CDMendLbl,
-                          FieldType = field.CdmendType,
-                          GroupId = link.MendGroup,
-                          GroupName = mandGroup != null ? mandGroup.GroupName : null,
-                          IsActive = !link.MendStat,
-                          DisplayOrder = setting != null ? setting.DisplayOrder : link.MendSql,
-                          IsVisible = setting == null || setting.IsVisible,
-                          DisplaySettingsJson = setting != null ? setting.DisplaySettingsJson : null,
-                          ApplicationId = field.ApplicationId
-                      }).ToListAsync(cancellationToken);
+        var categoryAppId = NormalizeApplicationId(await _connectContext.Cdcategories
+            .AsNoTracking()
+            .Where(item => item.CatId == categoryId)
+            .Select(item => item.ApplicationId)
+            .FirstOrDefaultAsync(cancellationToken));
+
+        var linkRows = await (from link in _connectContext.CdCategoryMands.AsNoTracking()
+                              join mandGroup in _connectContext.MandGroups.AsNoTracking()
+                                  on link.MendGroup equals mandGroup.GroupId into groupJoin
+                              from mandGroup in groupJoin.DefaultIfEmpty()
+                              join setting in _connectContext.SubjectCategoryFieldSettings.AsNoTracking()
+                                  on link.MendSql equals setting.MendSql into settingJoin
+                              from setting in settingJoin.DefaultIfEmpty()
+                              where link.MendCategory == categoryId
+                              orderby link.MendGroup,
+                                      setting != null ? setting.DisplayOrder : link.MendSql,
+                                      link.MendSql
+                              select new
+                              {
+                                  link.MendSql,
+                                  link.MendCategory,
+                                  link.MendField,
+                                  link.MendGroup,
+                                  link.MendStat,
+                                  GroupName = mandGroup != null ? mandGroup.GroupName : null,
+                                  DisplayOrder = setting != null ? setting.DisplayOrder : link.MendSql,
+                                  IsVisible = setting == null || setting.IsVisible,
+                                  DisplaySettingsJson = setting != null ? setting.DisplaySettingsJson : null
+                              })
+            .ToListAsync(cancellationToken);
+
+        var fieldKeys = linkRows
+            .Select(item => item.MendField)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var fields = await _connectContext.Cdmends
+            .AsNoTracking()
+            .Where(item => fieldKeys.Contains(item.CdmendTxt))
+            .ToListAsync(cancellationToken);
+        var fieldLookup = fields
+            .GroupBy(item => NormalizeFieldKey(item.CdmendTxt))
+            .ToDictionary(group => group.Key, group => (IReadOnlyCollection<Cdmend>)group.ToList(), StringComparer.Ordinal);
+
+        var mapped = linkRows
+            .GroupBy(item => item.MendSql)
+            .Select(group => group.First())
+            .Select(row =>
+            {
+                var normalizedFieldKey = NormalizeFieldKey(row.MendField);
+                fieldLookup.TryGetValue(normalizedFieldKey, out var candidates);
+                var selectedMetadata = SelectPreferredMend(
+                    candidates ?? Array.Empty<Cdmend>(),
+                    normalizedRequestAppId: string.Empty,
+                    normalizedCategoryAppId: categoryAppId,
+                    out _);
+
+                return new SubjectCategoryFieldLinkAdminDto
+                {
+                    MendSql = row.MendSql,
+                    CategoryId = row.MendCategory,
+                    FieldKey = row.MendField,
+                    FieldLabel = selectedMetadata?.CDMendLbl ?? row.MendField,
+                    FieldType = selectedMetadata?.CdmendType,
+                    GroupId = row.MendGroup,
+                    GroupName = row.GroupName,
+                    IsActive = !row.MendStat,
+                    DisplayOrder = row.DisplayOrder,
+                    IsVisible = row.IsVisible,
+                    DisplaySettingsJson = row.DisplaySettingsJson,
+                    ApplicationId = selectedMetadata?.ApplicationId
+                };
+            })
+            .OrderBy(item => item.GroupId)
+            .ThenBy(item => item.DisplayOrder)
+            .ThenBy(item => item.MendSql)
+            .ToList();
+
+        return mapped;
     }
 
     private static bool ExceedsMaxLength(string? value, int maxLength)

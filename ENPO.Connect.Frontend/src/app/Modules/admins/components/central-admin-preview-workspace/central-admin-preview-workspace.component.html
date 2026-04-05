@@ -47,6 +47,10 @@
         <strong>{{ primaryRouteKey }}</strong>
       </article>
       <article>
+        <span>Canonical Config</span>
+        <strong>{{ model.canonicalRouteKey || '-' }}</strong>
+      </article>
+      <article>
         <span>إجمالي الحقول المرتبطة</span>
         <strong>{{ model.summary.linkedFieldsCount }}</strong>
       </article>
@@ -56,7 +60,7 @@
       </article>
       <article>
         <span>إعدادات Config مطابقة</span>
-        <strong>{{ matchedConfigs.length }}</strong>
+        <strong>{{ model.matchedConfigCount }}</strong>
       </article>
     </section>
 
@@ -110,6 +114,9 @@
         <h4>Config Summary</h4>
         <p>الـ route/config المستخدم في المعاينة يعتمد على الـ context الحالي ونتيجة الفلترة الفعلية.</p>
       </header>
+      <p class="canonical-note">
+        Canonical Route: <strong>{{ model.canonicalRouteKey || primaryRouteKey }}</strong>
+      </p>
 
       <div class="route-chips" *ngIf="matchedConfigs.length > 0; else noConfigs">
         <span class="chip" *ngFor="let cfg of matchedConfigs | slice:0:14">{{ cfg.routeKey }}</span>
@@ -125,6 +132,41 @@
           <h5>{{ group.groupName }}</h5>
           <span>{{ group.fields.length }} حقل</span>
         </header>
+
+        <div class="form-simulation">
+          <h6>محاكاة النموذج</h6>
+          <div class="form-sim-grid">
+            <article class="sim-field" *ngFor="let field of group.fields; trackBy: trackByField">
+              <label>
+                <strong>{{ field.label }}</strong>
+                <small>{{ field.fieldKey }}</small>
+              </label>
+
+              <ng-container [ngSwitch]="true">
+                <textarea *ngSwitchCase="isTextareaField(field)" rows="2" [placeholder]="field.label" disabled></textarea>
+                <select *ngSwitchCase="isSelectField(field)" disabled>
+                  <option value="" selected>اختر...</option>
+                  <option *ngFor="let option of toSelectPreviewOptions(field)" [value]="option.value">{{ option.label }}</option>
+                </select>
+                <input *ngSwitchCase="isBooleanField(field)" type="checkbox" disabled />
+                <input *ngSwitchCase="isDateField(field)" type="date" disabled />
+                <input *ngSwitchCase="isNumberField(field)" type="number" [placeholder]="field.label" disabled />
+                <input *ngSwitchDefault type="text" [placeholder]="field.label" disabled />
+              </ng-container>
+
+              <div class="sim-tags">
+                <span class="tag">{{ field.typeLabel }}</span>
+                <span class="tag" [class.tag-on]="field.required">Required: {{ field.required ? 'Yes' : 'No' }}</span>
+                <span class="tag" [class.tag-on]="field.readonly">Readonly: {{ field.readonly ? 'Yes' : 'No' }}</span>
+                <span class="tag" [class.tag-on]="field.visible">Visible: {{ field.visible ? 'Yes' : 'No' }}</span>
+              </div>
+
+              <small class="inline-warning" *ngIf="field.unresolvedOptions">
+                مصدر الخيارات غير محلول حتى الآن لهذا الحقل.
+              </small>
+            </article>
+          </div>
+        </div>
 
         <div class="table-wrap">
           <table>
