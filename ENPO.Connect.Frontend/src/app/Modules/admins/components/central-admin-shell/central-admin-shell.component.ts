@@ -25,7 +25,7 @@ export class CentralAdminShellComponent implements OnInit, OnDestroy {
     {
       id: 'subject-types',
       label: 'أنواع الموضوعات',
-      description: 'إدارة الشجرة وسياسات النوع والعلاقات والمعاينة.',
+      description: 'إدارة الشجرة + Policy Authoring Studio + العلاقات والمعاينة.',
       childPath: 'subject-types',
       standalonePath: 'DynamicSubjectTypes'
     },

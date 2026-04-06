@@ -27,6 +27,10 @@ internal sealed class ResolvedRequestWorkflowPolicy
 
     public bool AllowManualSelection { get; set; } = true;
 
+    public string? ManualTargetFieldKey { get; set; }
+
+    public bool ManualSelectionRequired { get; set; } = true;
+
     public string? DefaultTargetUnitId { get; set; }
 }
 
@@ -115,6 +119,29 @@ internal static class RequestPolicyResolver
             });
         }
 
+        if ((string.Equals(workflowMode, "manual", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(workflowMode, "hybrid", StringComparison.OrdinalIgnoreCase))
+            && policy.WorkflowPolicy.AllowManualSelection
+            && string.IsNullOrWhiteSpace(policy.WorkflowPolicy.ManualTargetFieldKey))
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "عند تفعيل التوجيه اليدوي يجب تحديد WorkflowPolicy.ManualTargetFieldKey."
+            });
+        }
+
+        if (string.Equals(workflowMode, "manual", StringComparison.OrdinalIgnoreCase)
+            && !policy.WorkflowPolicy.AllowManualSelection
+            && string.IsNullOrWhiteSpace(policy.WorkflowPolicy.DefaultTargetUnitId))
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "WorkflowPolicy.Mode = manual بدون AllowManualSelection يتطلب DefaultTargetUnitId صالح."
+            });
+        }
+
         if (string.Equals(createMode, "single", StringComparison.OrdinalIgnoreCase)
             && policy.AccessPolicy.CreateScope.UnitIds.Count > 1)
         {
@@ -148,6 +175,24 @@ internal static class RequestPolicyResolver
                         Message = $"PresentationRules[{ruleIndex}].FieldPatches[{patchIndex}] يجب أن يحتوي FieldKey صالح."
                     });
                 }
+
+                if (!HasAnyPatchOperation(patch))
+                {
+                    errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = $"PresentationRules[{ruleIndex}].FieldPatches[{patchIndex}] لا يحتوي أي تحديث فعلي للخصائص."
+                    });
+                }
+            }
+
+            if (rule.Conditions.Count == 0)
+            {
+                errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"PresentationRules[{ruleIndex}] يجب أن يحتوي شرطًا واحدًا على الأقل."
+                });
             }
 
             for (var conditionIndex = 0; conditionIndex < rule.Conditions.Count; conditionIndex++)
@@ -253,6 +298,8 @@ internal static class RequestPolicyResolver
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList(),
             AllowManualSelection = normalized.AllowManualSelection,
+            ManualTargetFieldKey = NormalizeNullable(normalized.ManualTargetFieldKey),
+            ManualSelectionRequired = normalized.ManualSelectionRequired,
             DefaultTargetUnitId = NormalizeNullable(normalized.DefaultTargetUnitId)
         };
     }
@@ -420,6 +467,8 @@ internal static class RequestPolicyResolver
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList(),
             AllowManualSelection = workflow.AllowManualSelection,
+            ManualTargetFieldKey = NormalizeNullable(workflow.ManualTargetFieldKey),
+            ManualSelectionRequired = workflow.ManualSelectionRequired,
             DefaultTargetUnitId = NormalizeNullable(workflow.DefaultTargetUnitId)
         };
     }
@@ -474,6 +523,21 @@ internal static class RequestPolicyResolver
             .Cast<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static bool HasAnyPatchOperation(RequestPolicyFieldPatchDto patch)
+    {
+        if (patch == null)
+        {
+            return false;
+        }
+
+        return NormalizeNullable(patch.Label) != null
+            || patch.Visible.HasValue
+            || patch.Required.HasValue
+            || patch.Readonly.HasValue
+            || NormalizeNullable(patch.Placeholder) != null
+            || NormalizeNullable(patch.HelpText) != null;
     }
 
     private static string NormalizeFieldKey(string? fieldKey)

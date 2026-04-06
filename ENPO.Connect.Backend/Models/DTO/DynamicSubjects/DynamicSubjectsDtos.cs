@@ -670,6 +670,10 @@ public sealed class RequestWorkflowPolicyDto
 
     public bool AllowManualSelection { get; set; } = true;
 
+    public string? ManualTargetFieldKey { get; set; }
+
+    public bool ManualSelectionRequired { get; set; } = true;
+
     public string? DefaultTargetUnitId { get; set; }
 }
 

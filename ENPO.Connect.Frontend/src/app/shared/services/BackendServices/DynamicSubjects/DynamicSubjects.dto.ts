@@ -384,6 +384,8 @@ export interface RequestWorkflowPolicyDto {
   mode?: 'static' | 'manual' | 'hybrid' | string;
   staticTargetUnitIds: string[];
   allowManualSelection?: boolean;
+  manualTargetFieldKey?: string;
+  manualSelectionRequired?: boolean;
   defaultTargetUnitId?: string;
 }
 

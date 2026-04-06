@@ -526,6 +526,21 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             var resolvedWorkflowPolicy = RequestPolicyResolver.ResolveWorkflowPolicy(requestPolicy);
             var primaryAssignedUnit = ResolvePrimaryUnitId(validation.UnitIds);
             var requestedTargetUnitId = NormalizeNullable(request.TargetUnitId);
+            var workflowMode = NormalizeNullable(resolvedWorkflowPolicy.Mode)?.ToLowerInvariant() ?? "manual";
+            var requiresManualTargetSelection = requestPolicy != null
+                && (workflowMode == "manual" || workflowMode == "hybrid")
+                && resolvedWorkflowPolicy.AllowManualSelection
+                && resolvedWorkflowPolicy.ManualSelectionRequired
+                && NormalizeNullable(resolvedWorkflowPolicy.ManualTargetFieldKey) != null;
+            if (requiresManualTargetSelection && requestedTargetUnitId == null)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "سياسة التوجيه الحالية تتطلب اختيار جهة التوجيه يدويًا قبل إنشاء الطلب."
+                });
+                return response;
+            }
             var assignedUnitId = ResolveWorkflowAssignedUnit(
                 resolvedWorkflowPolicy,
                 requestedTargetUnitId,

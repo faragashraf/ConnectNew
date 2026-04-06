@@ -270,77 +270,328 @@
                 </form>
 
                 <div class="actions-row">
-                  <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid" (click)="saveCategorySettings()"></button>
+                  <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid || policyValidationErrors.length > 0" (click)="saveCategorySettings()"></button>
                 </div>
               </section>
 
               <section class="form-section" [formGroup]="policyForm">
                 <header>
-                  <h4>Request Policy Foundation</h4>
-                  <p>تعريف سياسات العرض والصلاحيات والـ workflow كنموذج موحد وقابل للتوسع.</p>
+                  <h4>Policy Authoring Studio</h4>
+                  <p>تأليف وإدارة سياسات العرض والصلاحيات والـ Workflow من محرر إداري موحد داخل Central Admin Shell.</p>
                 </header>
 
-                <form class="form-grid">
-                  <div class="field">
-                    <label>Create Mode</label>
-                    <p-dropdown
-                      [options]="[{ label: 'single', value: 'single' }, { label: 'multi', value: 'multi' }]"
-                      optionLabel="label"
-                      optionValue="value"
-                      formControlName="createMode">
-                    </p-dropdown>
-                  </div>
+                <div class="policy-errors-box" *ngIf="policyValidationErrors.length > 0">
+                  <strong>ملاحظات التحقق قبل الحفظ:</strong>
+                  <ul>
+                    <li *ngFor="let error of policyValidationErrors">{{ error }}</li>
+                  </ul>
+                </div>
 
-                  <div class="field">
-                    <label>Create Scope Units (CSV)</label>
-                    <input pInputText type="text" formControlName="createScopeUnits" placeholder="60, 124, 200" />
-                  </div>
+                <p-tabView styleClass="policy-studio-tabs">
+                  <p-tabPanel header="Presentation Rules">
+                    <div class="policy-head-actions">
+                      <span>عدد القواعد الحالية: {{ policyRuleFormGroups.length }}</span>
+                      <button pButton type="button" icon="pi pi-plus" label="إضافة Rule" (click)="addPresentationRule()"></button>
+                    </div>
 
-                  <div class="field">
-                    <label>Read Scope Units (CSV)</label>
-                    <input pInputText type="text" formControlName="readScopeUnits" placeholder="60, 124, 200" />
-                  </div>
+                    <div class="policy-rules-list">
+                      <article class="policy-rule-card" *ngFor="let rule of policyRuleFormGroups; let ruleIndex = index" [formGroup]="rule">
+                        <header class="policy-rule-head">
+                          <h5>Rule #{{ ruleIndex + 1 }}</h5>
+                          <div class="policy-rule-actions">
+                            <label class="inline-switch">
+                              <span>Enabled</span>
+                              <p-inputSwitch formControlName="isEnabled"></p-inputSwitch>
+                            </label>
+                            <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="removePresentationRule(ruleIndex)"></button>
+                          </div>
+                        </header>
 
-                  <div class="field">
-                    <label>Work Scope Units (CSV)</label>
-                    <input pInputText type="text" formControlName="workScopeUnits" placeholder="60, 124, 200" />
-                  </div>
+                        <div class="form-grid">
+                          <div class="field">
+                            <label>Rule Id</label>
+                            <input pInputText type="text" formControlName="ruleId" placeholder="direction-incoming" />
+                          </div>
+                          <div class="field">
+                            <label>Priority</label>
+                            <input pInputText type="number" formControlName="priority" />
+                          </div>
+                        </div>
 
-                  <div class="field">
-                    <label>Workflow Mode</label>
-                    <p-dropdown
-                      [options]="[{ label: 'manual', value: 'manual' }, { label: 'static', value: 'static' }, { label: 'hybrid', value: 'hybrid' }]"
-                      optionLabel="label"
-                      optionValue="value"
-                      formControlName="workflowMode">
-                    </p-dropdown>
-                  </div>
+                        <section class="policy-subsection">
+                          <header>
+                            <h6>Condition Builder</h6>
+                            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة شرط" (click)="addRuleCondition(ruleIndex)"></button>
+                          </header>
 
-                  <div class="field">
-                    <label>Workflow Static Targets (CSV)</label>
-                    <input pInputText type="text" formControlName="workflowStaticTargets" placeholder="60, 124" />
-                  </div>
+                          <div class="condition-list">
+                            <div class="condition-row" *ngFor="let condition of getRuleConditions(ruleIndex); let conditionIndex = index" [formGroup]="condition">
+                              <div class="field">
+                                <label>Variable</label>
+                                <input pInputText type="text" formControlName="variable" placeholder="documentDirection أو أي متغير سياقي" />
+                                <div class="variable-suggestions">
+                                  <button
+                                    pButton
+                                    type="button"
+                                    class="p-button-text p-button-sm"
+                                    *ngFor="let variable of variableSuggestions"
+                                    [label]="variable"
+                                    (click)="applySuggestedVariable(ruleIndex, conditionIndex, variable)"></button>
+                                </div>
+                              </div>
 
-                  <div class="field">
-                    <label>Workflow Default Target</label>
-                    <input pInputText type="text" formControlName="workflowDefaultTargetUnitId" placeholder="اختياري" />
-                  </div>
+                              <div class="field">
+                                <label>Operator</label>
+                                <p-dropdown
+                                  [options]="conditionOperatorOptions"
+                                  optionLabel="label"
+                                  optionValue="value"
+                                  formControlName="operator">
+                                </p-dropdown>
+                              </div>
 
-                  <div class="switches">
-                    <label><span>Inherit Legacy Access</span><p-inputSwitch formControlName="inheritLegacyAccess"></p-inputSwitch></label>
-                    <label><span>Allow Manual Workflow Selection</span><p-inputSwitch formControlName="workflowAllowManualSelection"></p-inputSwitch></label>
-                  </div>
+                              <div class="field" *ngIf="!isMultiValueOperator(condition.get('operator')?.value)">
+                                <label>Value</label>
+                                <input pInputText type="text" formControlName="value" placeholder="incoming" />
+                              </div>
 
-                  <div class="field full-width">
-                    <label>Presentation Rules (JSON)</label>
-                    <textarea
-                      pInputTextarea
-                      rows="12"
-                      formControlName="presentationRulesJson"
-                      placeholder='[{"ruleId":"direction-incoming","priority":10,"conditions":[{"variable":"documentDirection","operator":"eq","value":"incoming"}],"fieldPatches":[{"fieldKey":"document_date","label":"تاريخ الوارد","required":true}]}]'>
-                    </textarea>
-                  </div>
-                </form>
+                              <div class="field" *ngIf="isMultiValueOperator(condition.get('operator')?.value)">
+                                <label>Values (CSV)</label>
+                                <input pInputText type="text" formControlName="valuesCsv" placeholder="incoming, outgoing" />
+                              </div>
+
+                              <div class="field condition-delete">
+                                <label>&nbsp;</label>
+                                <button pButton type="button" icon="pi pi-times" class="p-button-rounded p-button-text p-button-danger" (click)="removeRuleCondition(ruleIndex, conditionIndex)"></button>
+                              </div>
+                            </div>
+                          </div>
+                        </section>
+
+                        <section class="policy-subsection">
+                          <header>
+                            <h6>Field Patches</h6>
+                            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة Patch" (click)="addRuleFieldPatch(ruleIndex)"></button>
+                          </header>
+
+                          <div class="patch-list">
+                            <div class="patch-row" *ngFor="let patch of getRuleFieldPatches(ruleIndex); let patchIndex = index" [formGroup]="patch">
+                              <div class="form-grid">
+                                <div class="field">
+                                  <label>Target Field</label>
+                                  <p-dropdown
+                                    [options]="policyFieldOptions"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    formControlName="fieldKey"
+                                    placeholder="اختر الحقل المستهدف">
+                                  </p-dropdown>
+                                </div>
+                                <div class="field">
+                                  <label>Label</label>
+                                  <input pInputText type="text" formControlName="label" placeholder="تعديل عنوان الحقل" />
+                                </div>
+                                <div class="field">
+                                  <label>Placeholder</label>
+                                  <input pInputText type="text" formControlName="placeholder" />
+                                </div>
+                                <div class="field">
+                                  <label>Help Text</label>
+                                  <input pInputText type="text" formControlName="helpText" />
+                                </div>
+                                <div class="field">
+                                  <label>Visible</label>
+                                  <p-dropdown
+                                    [options]="[{ label: 'بدون تغيير', value: '' }, { label: 'إظهار', value: 'true' }, { label: 'إخفاء', value: 'false' }]"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    formControlName="visibleMode">
+                                  </p-dropdown>
+                                </div>
+                                <div class="field">
+                                  <label>Required</label>
+                                  <p-dropdown
+                                    [options]="[{ label: 'بدون تغيير', value: '' }, { label: 'إلزامي', value: 'true' }, { label: 'غير إلزامي', value: 'false' }]"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    formControlName="requiredMode">
+                                  </p-dropdown>
+                                </div>
+                                <div class="field">
+                                  <label>Readonly</label>
+                                  <p-dropdown
+                                    [options]="[{ label: 'بدون تغيير', value: '' }, { label: 'للقراءة فقط', value: 'true' }, { label: 'قابل للتعديل', value: 'false' }]"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    formControlName="readonlyMode">
+                                  </p-dropdown>
+                                </div>
+                                <div class="field condition-delete">
+                                  <label>&nbsp;</label>
+                                  <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="removeRuleFieldPatch(ruleIndex, patchIndex)"></button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </section>
+                      </article>
+                    </div>
+                  </p-tabPanel>
+
+                  <p-tabPanel header="Access Policy">
+                    <form class="form-grid">
+                      <div class="field">
+                        <label>Create Mode</label>
+                        <p-dropdown
+                          [options]="createModeOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="createMode">
+                        </p-dropdown>
+                      </div>
+
+                      <div class="field">
+                        <label>Create Scope Units (CSV)</label>
+                        <input pInputText type="text" formControlName="createScopeUnits" placeholder="60, 124, 200" />
+                      </div>
+
+                      <div class="field">
+                        <label>Read Scope Units (CSV)</label>
+                        <input pInputText type="text" formControlName="readScopeUnits" placeholder="60, 124, 200" />
+                      </div>
+
+                      <div class="field">
+                        <label>Work Scope Units (CSV)</label>
+                        <input pInputText type="text" formControlName="workScopeUnits" placeholder="60, 124, 200" />
+                      </div>
+
+                      <div class="switches">
+                        <label><span>Inherit Legacy Access</span><p-inputSwitch formControlName="inheritLegacyAccess"></p-inputSwitch></label>
+                      </div>
+                    </form>
+                  </p-tabPanel>
+
+                  <p-tabPanel header="Workflow Policy">
+                    <form class="form-grid">
+                      <div class="field">
+                        <label>Workflow Mode</label>
+                        <p-dropdown
+                          [options]="workflowModeOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="workflowMode">
+                        </p-dropdown>
+                      </div>
+
+                      <div class="field">
+                        <label>Static Target Units (CSV)</label>
+                        <input pInputText type="text" formControlName="workflowStaticTargets" placeholder="60, 124" />
+                      </div>
+
+                      <div class="field">
+                        <label>Manual Target Field Key</label>
+                        <p-dropdown
+                          [options]="policyFieldOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="workflowManualTargetFieldKey"
+                          placeholder="الحقل الذي سيختار منه المستخدم جهة التوجيه">
+                        </p-dropdown>
+                      </div>
+
+                      <div class="field">
+                        <label>Default Target Unit</label>
+                        <input pInputText type="text" formControlName="workflowDefaultTargetUnitId" placeholder="اختياري" />
+                      </div>
+
+                      <div class="switches">
+                        <label><span>Allow Manual Selection</span><p-inputSwitch formControlName="workflowAllowManualSelection"></p-inputSwitch></label>
+                        <label><span>Manual Selection Required</span><p-inputSwitch formControlName="workflowManualSelectionRequired"></p-inputSwitch></label>
+                      </div>
+                    </form>
+                  </p-tabPanel>
+
+                  <p-tabPanel header="Live Preview">
+                    <section class="policy-live-preview">
+                      <header>
+                        <h5>Runtime Context المستخدم الآن</h5>
+                        <p>المعاينة التالية تعتمد على context الحالي من Central Admin Shell.</p>
+                      </header>
+                      <div class="kv-grid preview-kv-grid">
+                        <div><span>Application</span><strong>{{ policyStudioSnapshot.runtimeContext.applicationId || '-' }}</strong></div>
+                        <div><span>Category</span><strong>{{ policyStudioSnapshot.runtimeContext.categoryId || '-' }}</strong></div>
+                        <div><span>Direction</span><strong>{{ policyStudioSnapshot.runtimeContext.documentDirection || '-' }}</strong></div>
+                        <div><span>Mode</span><strong>{{ policyStudioSnapshot.runtimeContext.requestMode || '-' }}</strong></div>
+                        <div><span>Creator Unit</span><strong>{{ policyStudioSnapshot.runtimeContext.creatorUnitId || '-' }}</strong></div>
+                        <div><span>Target Unit</span><strong>{{ policyStudioSnapshot.runtimeContext.targetUnitId || '-' }}</strong></div>
+                      </div>
+                    </section>
+
+                    <section class="policy-live-preview" *ngIf="policyStudioSnapshot.resolvedAccessPolicy as access">
+                      <header>
+                        <h5>Resolved Access Policy</h5>
+                      </header>
+                      <div class="kv-grid preview-kv-grid">
+                        <div><span>Create Mode</span><strong>{{ access.createMode }}</strong></div>
+                        <div><span>Create Units</span><strong>{{ access.createUnitIds.length }}</strong></div>
+                        <div><span>Read Units</span><strong>{{ access.readUnitIds.length }}</strong></div>
+                        <div><span>Work Units</span><strong>{{ access.workUnitIds.length }}</strong></div>
+                        <div><span>Can Create</span><strong>{{ access.canCreate ? 'نعم' : 'لا' }}</strong></div>
+                        <div><span>Can Read</span><strong>{{ access.canRead ? 'نعم' : 'لا' }}</strong></div>
+                      </div>
+                    </section>
+
+                    <section class="policy-live-preview" *ngIf="policyStudioSnapshot.resolvedWorkflowPolicy as workflow">
+                      <header>
+                        <h5>Resolved Workflow Policy</h5>
+                      </header>
+                      <div class="kv-grid preview-kv-grid">
+                        <div><span>Mode</span><strong>{{ workflow.mode }}</strong></div>
+                        <div><span>Manual Target Field</span><strong>{{ workflow.manualTargetFieldKey || '-' }}</strong></div>
+                        <div><span>Allow Manual</span><strong>{{ workflow.allowManualSelection ? 'نعم' : 'لا' }}</strong></div>
+                        <div><span>Required Manual</span><strong>{{ workflow.manualSelectionRequired ? 'نعم' : 'لا' }}</strong></div>
+                        <div><span>Resolved Target</span><strong>{{ workflow.resolvedTargetUnitId || '-' }}</strong></div>
+                        <div><span>Static Targets</span><strong>{{ workflow.staticTargetUnitIds.length }}</strong></div>
+                      </div>
+                    </section>
+
+                    <section class="policy-live-preview">
+                      <header>
+                        <h5>Field Metadata Impact</h5>
+                        <p>عدد الحقول التي تغيّر سلوكها بعد حل القواعد: {{ policyStudioSnapshot.changedFields.length }}</p>
+                      </header>
+                      <div class="table-wrap preview-audit-table-wrap" *ngIf="policyStudioSnapshot.changedFields.length > 0; else noPolicyFieldChanges">
+                        <table class="links-table preview-audit-table">
+                          <thead>
+                            <tr>
+                              <th>Field Key</th>
+                              <th>Label</th>
+                              <th>Visible</th>
+                              <th>Required</th>
+                              <th>Readonly</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr *ngFor="let item of policyStudioSnapshot.changedFields">
+                              <td>{{ item.fieldKey }}</td>
+                              <td>{{ item.beforeLabel }} → {{ item.afterLabel }}</td>
+                              <td>{{ item.beforeVisible ? 'نعم' : 'لا' }} → {{ item.afterVisible ? 'نعم' : 'لا' }}</td>
+                              <td>{{ item.beforeRequired ? 'نعم' : 'لا' }} → {{ item.afterRequired ? 'نعم' : 'لا' }}</td>
+                              <td>{{ item.beforeReadonly ? 'نعم' : 'لا' }} → {{ item.afterReadonly ? 'نعم' : 'لا' }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <ng-template #noPolicyFieldChanges>
+                        <p class="empty-state">لا توجد تغييرات Presentation Metadata ظاهرة على الحقول في سياق المعاينة الحالي.</p>
+                      </ng-template>
+                    </section>
+                  </p-tabPanel>
+                </p-tabView>
+
+                <div class="actions-row">
+                  <button pButton type="button" label="حفظ السياسات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid || policyValidationErrors.length > 0" (click)="saveCategorySettings()"></button>
+                </div>
               </section>
             </div>
           </p-tabPanel>

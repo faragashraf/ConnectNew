@@ -149,6 +149,10 @@
           <strong>{{ model.resolvedWorkflowPolicy.staticTargetUnitIds.length }}</strong>
         </div>
         <div>
+          <small>Manual Target Field</small>
+          <strong>{{ model.resolvedWorkflowPolicy.manualTargetFieldKey || '-' }}</strong>
+        </div>
+        <div>
           <small>Create Units</small>
           <strong>{{ model.resolvedAccessPolicy.createUnitIds.length }}</strong>
         </div>
@@ -158,13 +162,13 @@
         </div>
       </div>
       <p class="canonical-note" *ngIf="model.resolvedWorkflowPolicy.mode === 'manual'">
-        سيتم إظهار اختيار جهة التوجيه للمستخدم (Manual Routing).
+        سيتم إظهار اختيار جهة التوجيه للمستخدم عبر الحقل: <strong>{{ model.resolvedWorkflowPolicy.manualTargetFieldKey || '-' }}</strong>
       </p>
       <p class="canonical-note" *ngIf="model.resolvedWorkflowPolicy.mode === 'static'">
         التوجيه ثابت إلى: <strong>{{ model.resolvedWorkflowPolicy.resolvedTargetUnitId || '-' }}</strong>
       </p>
       <p class="canonical-note" *ngIf="model.resolvedWorkflowPolicy.mode === 'hybrid'">
-        التوجيه Hybrid: اختيار يدوي مع fallback ثابت.
+        التوجيه Hybrid: اختيار يدوي عبر <strong>{{ model.resolvedWorkflowPolicy.manualTargetFieldKey || '-' }}</strong> مع fallback ثابت.
       </p>
     </section>
 

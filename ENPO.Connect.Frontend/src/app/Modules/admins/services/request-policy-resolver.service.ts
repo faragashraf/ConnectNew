@@ -41,6 +41,8 @@ export interface ResolvedWorkflowPolicy {
   mode: 'static' | 'manual' | 'hybrid';
   staticTargetUnitIds: string[];
   allowManualSelection: boolean;
+  manualTargetFieldKey?: string;
+  manualSelectionRequired: boolean;
   defaultTargetUnitId?: string;
   resolvedTargetUnitId?: string;
 }
@@ -122,20 +124,25 @@ export class RequestPolicyResolverService {
     const defaultTargetUnitId = this.normalizeString(workflow?.defaultTargetUnitId);
     const requestedTarget = this.normalizeString(context.targetUnitId);
     const mode = this.normalizeWorkflowMode(workflow?.mode);
+    const allowManualSelection = workflow?.allowManualSelection !== false;
+    const manualTargetFieldKey = this.normalizeString(workflow?.manualTargetFieldKey) ?? undefined;
+    const manualSelectionRequired = workflow?.manualSelectionRequired !== false;
 
     let resolvedTargetUnitId: string | undefined;
     if (mode === 'static') {
       resolvedTargetUnitId = staticTargets[0] ?? defaultTargetUnitId ?? undefined;
     } else if (mode === 'hybrid') {
-      resolvedTargetUnitId = requestedTarget ?? staticTargets[0] ?? defaultTargetUnitId ?? undefined;
+      resolvedTargetUnitId = (allowManualSelection ? requestedTarget : undefined) ?? staticTargets[0] ?? defaultTargetUnitId ?? undefined;
     } else {
-      resolvedTargetUnitId = requestedTarget ?? defaultTargetUnitId ?? undefined;
+      resolvedTargetUnitId = (allowManualSelection ? requestedTarget : undefined) ?? defaultTargetUnitId ?? undefined;
     }
 
     return {
       mode,
       staticTargetUnitIds: staticTargets,
-      allowManualSelection: workflow?.allowManualSelection !== false,
+      allowManualSelection,
+      manualTargetFieldKey,
+      manualSelectionRequired,
       defaultTargetUnitId: defaultTargetUnitId ?? undefined,
       resolvedTargetUnitId
     };
@@ -191,6 +198,8 @@ export class RequestPolicyResolverService {
         mode: this.normalizeWorkflowMode(requestPolicy?.workflowPolicy?.mode),
         staticTargetUnitIds: this.normalizeStringArray(requestPolicy?.workflowPolicy?.staticTargetUnitIds ?? []),
         allowManualSelection: requestPolicy?.workflowPolicy?.allowManualSelection !== false,
+        manualTargetFieldKey: this.normalizeString(requestPolicy?.workflowPolicy?.manualTargetFieldKey) ?? undefined,
+        manualSelectionRequired: requestPolicy?.workflowPolicy?.manualSelectionRequired !== false,
         defaultTargetUnitId: this.normalizeString(requestPolicy?.workflowPolicy?.defaultTargetUnitId) ?? undefined
       }
     };

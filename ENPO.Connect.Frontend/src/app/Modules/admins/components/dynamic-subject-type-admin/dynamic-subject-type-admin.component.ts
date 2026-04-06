@@ -11,7 +11,9 @@ import { FileParameter } from 'src/app/shared/services/BackendServices/dto-share
 import { forkJoin, Subscription } from 'rxjs';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import {
+  RequestPolicyConditionDto,
   RequestPolicyDefinitionDto,
+  RequestPolicyFieldPatchDto,
   RequestPolicyPresentationRuleDto,
   SubjectAdminFieldDto,
   SubjectAdminGroupDto,
@@ -26,7 +28,12 @@ import {
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
 import { CentralAdminContextService } from '../../services/central-admin-context.service';
-import { RequestPolicyResolverService } from '../../services/request-policy-resolver.service';
+import {
+  RequestPolicyResolverService,
+  RequestPolicyRuntimeContext,
+  ResolvedAccessPolicy,
+  ResolvedWorkflowPolicy
+} from '../../services/request-policy-resolver.service';
 
 interface AdminTreeNode extends TreeNode {
   key: string;
@@ -65,6 +72,27 @@ interface PreviewInspectionSummary {
   includedInPreview: number;
   excludedFromPreview: number;
   items: PreviewInspectionItem[];
+}
+
+interface PolicyStudioFieldDelta {
+  fieldKey: string;
+  beforeLabel: string;
+  afterLabel: string;
+  beforeVisible: boolean;
+  afterVisible: boolean;
+  beforeRequired: boolean;
+  afterRequired: boolean;
+  beforeReadonly: boolean;
+  afterReadonly: boolean;
+}
+
+interface PolicyStudioPreviewSnapshot {
+  requestPolicy: RequestPolicyDefinitionDto | null;
+  resolvedAccessPolicy: ResolvedAccessPolicy | null;
+  resolvedWorkflowPolicy: ResolvedWorkflowPolicy | null;
+  changedFields: PolicyStudioFieldDelta[];
+  validationErrors: string[];
+  runtimeContext: RequestPolicyRuntimeContext;
 }
 
 @Component({
@@ -123,6 +151,42 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
   policyForm: FormGroup;
   groupForm: FormGroup;
   createCategoryForm: FormGroup;
+  policyStudioSnapshot: PolicyStudioPreviewSnapshot = {
+    requestPolicy: null,
+    resolvedAccessPolicy: null,
+    resolvedWorkflowPolicy: null,
+    changedFields: [],
+    validationErrors: [],
+    runtimeContext: {}
+  };
+
+  readonly conditionOperatorOptions: Array<{ label: string; value: string }> = [
+    { label: 'يساوي (eq)', value: 'eq' },
+    { label: 'لا يساوي (neq)', value: 'neq' },
+    { label: 'ضمن قائمة (in)', value: 'in' },
+    { label: 'ليس ضمن قائمة (notin)', value: 'notin' },
+    { label: 'يحتوي (contains)', value: 'contains' },
+    { label: 'موجود (exists)', value: 'exists' },
+    { label: 'فارغ (empty)', value: 'empty' }
+  ];
+  readonly workflowModeOptions: Array<{ label: string; value: 'manual' | 'static' | 'hybrid' }> = [
+    { label: 'Manual', value: 'manual' },
+    { label: 'Static', value: 'static' },
+    { label: 'Hybrid', value: 'hybrid' }
+  ];
+  readonly createModeOptions: Array<{ label: string; value: 'single' | 'multi' }> = [
+    { label: 'single', value: 'single' },
+    { label: 'multi', value: 'multi' }
+  ];
+  readonly variableSuggestions: string[] = [
+    'documentDirection',
+    'applicationId',
+    'categoryId',
+    'requestMode',
+    'creatorUnitId',
+    'targetUnitId',
+    'routeKeyPrefix'
+  ];
 
   relationsDialogVisible = false;
   groupDialogVisible = false;
@@ -190,9 +254,11 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       inheritLegacyAccess: [true],
       workflowMode: ['manual'],
       workflowStaticTargets: [''],
+      workflowManualTargetFieldKey: [''],
+      workflowManualSelectionRequired: [true],
       workflowDefaultTargetUnitId: [''],
       workflowAllowManualSelection: [true],
-      presentationRulesJson: ['[]']
+      presentationRules: this.fb.array([])
     });
 
     this.createCategoryForm = this.fb.group({
@@ -275,6 +341,12 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
           this.loadWorkspace(contextCategoryId);
         }
       })
+    );
+    this.subscriptions.add(
+      this.policyForm.valueChanges.subscribe(() => this.refreshPolicyStudioPreview())
+    );
+    this.subscriptions.add(
+      this.centralAdminContext.state$.subscribe(() => this.refreshPolicyStudioPreview())
     );
 
     this.initializeTreeContextMenu();
@@ -654,9 +726,11 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const requestPolicy = this.buildRequestPolicyFromForm();
-    if (requestPolicy == null) {
-      this.appNotification.warning('صيغة قواعد العرض الشرطي غير صحيحة. يرجى مراجعة JSON قبل الحفظ.');
+    const policyBuildResult = this.buildRequestPolicyFromForm();
+    const requestPolicy = policyBuildResult.policy;
+    if (requestPolicy == null || policyBuildResult.validationErrors.length > 0) {
+      const firstError = policyBuildResult.validationErrors[0] ?? 'تعريف السياسة غير مكتمل.';
+      this.appNotification.warning(`تعذر حفظ السياسات: ${firstError}`);
       return;
     }
 
@@ -1306,8 +1380,131 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     return title.length > 0 ? title : `مجموعة ${group.groupId}`;
   }
 
+  get policyRuleFormGroups(): FormGroup[] {
+    return this.presentationRulesArray.controls as FormGroup[];
+  }
+
+  get policyFieldOptions(): Array<{ label: string; value: string }> {
+    const merged = new Map<string, { label: string; value: string }>();
+
+    (this.previewDefinition?.fields ?? []).forEach(field => {
+      const key = String(field.fieldKey ?? '').trim();
+      if (!key) {
+        return;
+      }
+
+      const label = String(field.fieldLabel ?? field.fieldKey ?? '').trim() || key;
+      if (!merged.has(key.toLowerCase())) {
+        merged.set(key.toLowerCase(), { value: key, label: `${label} (${key})` });
+      }
+    });
+
+    (this.allFields ?? []).forEach(field => {
+      const key = String(field.fieldKey ?? '').trim();
+      if (!key) {
+        return;
+      }
+
+      const label = String(field.fieldLabel ?? field.fieldKey ?? '').trim() || key;
+      if (!merged.has(key.toLowerCase())) {
+        merged.set(key.toLowerCase(), { value: key, label: `${label} (${key})` });
+      }
+    });
+
+    return Array.from(merged.values())
+      .sort((left, right) => left.label.localeCompare(right.label));
+  }
+
+  get policyValidationErrors(): string[] {
+    return this.policyStudioSnapshot.validationErrors ?? [];
+  }
+
+  getRuleConditions(ruleIndex: number): FormGroup[] {
+    return this.resolveRuleConditionsArray(ruleIndex).controls as FormGroup[];
+  }
+
+  getRuleFieldPatches(ruleIndex: number): FormGroup[] {
+    return this.resolveRuleFieldPatchesArray(ruleIndex).controls as FormGroup[];
+  }
+
+  addPresentationRule(): void {
+    const nextPriority = this.resolveNextRulePriority();
+    this.presentationRulesArray.push(this.createPresentationRuleGroup({ priority: nextPriority }));
+    this.refreshPolicyStudioPreview();
+  }
+
+  removePresentationRule(ruleIndex: number): void {
+    if (ruleIndex < 0 || ruleIndex >= this.presentationRulesArray.length) {
+      return;
+    }
+
+    this.presentationRulesArray.removeAt(ruleIndex);
+    if (this.presentationRulesArray.length === 0) {
+      this.presentationRulesArray.push(this.createPresentationRuleGroup());
+    }
+
+    this.refreshPolicyStudioPreview();
+  }
+
+  addRuleCondition(ruleIndex: number): void {
+    this.resolveRuleConditionsArray(ruleIndex).push(this.createConditionGroup());
+    this.refreshPolicyStudioPreview();
+  }
+
+  removeRuleCondition(ruleIndex: number, conditionIndex: number): void {
+    const conditions = this.resolveRuleConditionsArray(ruleIndex);
+    if (conditionIndex < 0 || conditionIndex >= conditions.length) {
+      return;
+    }
+
+    conditions.removeAt(conditionIndex);
+    if (conditions.length === 0) {
+      conditions.push(this.createConditionGroup());
+    }
+
+    this.refreshPolicyStudioPreview();
+  }
+
+  addRuleFieldPatch(ruleIndex: number): void {
+    this.resolveRuleFieldPatchesArray(ruleIndex).push(this.createFieldPatchGroup());
+    this.refreshPolicyStudioPreview();
+  }
+
+  removeRuleFieldPatch(ruleIndex: number, patchIndex: number): void {
+    const patches = this.resolveRuleFieldPatchesArray(ruleIndex);
+    if (patchIndex < 0 || patchIndex >= patches.length) {
+      return;
+    }
+
+    patches.removeAt(patchIndex);
+    if (patches.length === 0) {
+      patches.push(this.createFieldPatchGroup());
+    }
+
+    this.refreshPolicyStudioPreview();
+  }
+
+  applySuggestedVariable(ruleIndex: number, conditionIndex: number, variable: string): void {
+    const conditions = this.resolveRuleConditionsArray(ruleIndex);
+    const condition = conditions.at(conditionIndex) as FormGroup | null;
+    if (!condition) {
+      return;
+    }
+
+    condition.patchValue({
+      variable: String(variable ?? '').trim()
+    });
+    this.refreshPolicyStudioPreview();
+  }
+
+  isMultiValueOperator(value: unknown): boolean {
+    const operator = String(value ?? '').trim().toLowerCase();
+    return operator === 'in' || operator === 'notin';
+  }
+
   private patchPolicyForm(policy: RequestPolicyDefinitionDto | null): void {
     const normalized = this.requestPolicyResolver.normalizePolicy(policy);
+    this.replacePresentationRules(normalized.presentationRules ?? []);
     this.policyForm.patchValue({
       createMode: normalized.accessPolicy.createMode ?? 'single',
       createScopeUnits: this.toCsv(normalized.accessPolicy.createScope.unitIds ?? []),
@@ -1316,28 +1513,38 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       inheritLegacyAccess: normalized.accessPolicy.inheritLegacyAccess !== false,
       workflowMode: normalized.workflowPolicy.mode ?? 'manual',
       workflowStaticTargets: this.toCsv(normalized.workflowPolicy.staticTargetUnitIds ?? []),
+      workflowManualTargetFieldKey: normalized.workflowPolicy.manualTargetFieldKey ?? '',
+      workflowManualSelectionRequired: normalized.workflowPolicy.manualSelectionRequired !== false,
       workflowDefaultTargetUnitId: normalized.workflowPolicy.defaultTargetUnitId ?? '',
-      workflowAllowManualSelection: normalized.workflowPolicy.allowManualSelection !== false,
-      presentationRulesJson: JSON.stringify(normalized.presentationRules ?? [], null, 2)
+      workflowAllowManualSelection: normalized.workflowPolicy.allowManualSelection !== false
     }, { emitEvent: false });
+
+    this.refreshPolicyStudioPreview();
   }
 
-  private buildRequestPolicyFromForm(): RequestPolicyDefinitionDto | null {
+  private buildRequestPolicyFromForm(): { policy: RequestPolicyDefinitionDto | null; validationErrors: string[] } {
     const raw = this.policyForm.value ?? {};
-    const presentationRulesJson = String(raw.presentationRulesJson ?? '').trim() || '[]';
+    const presentationRules = this.policyRuleFormGroups.map((ruleControl, ruleIndex) => {
+      const conditions = this.resolveRuleConditionsArray(ruleIndex).controls
+        .map(item => this.toConditionDto(item as FormGroup))
+        .filter((item): item is RequestPolicyConditionDto => item != null);
+      const fieldPatches = this.resolveRuleFieldPatchesArray(ruleIndex).controls
+        .map(item => this.toFieldPatchDto(item as FormGroup))
+        .filter((item): item is RequestPolicyFieldPatchDto => item != null);
+      const normalizedRuleId = String(ruleControl.get('ruleId')?.value ?? '').trim();
 
-    let presentationRules: RequestPolicyPresentationRuleDto[] = [];
-    try {
-      const parsed = JSON.parse(presentationRulesJson);
-      if (!Array.isArray(parsed)) {
-        return null;
-      }
-      presentationRules = parsed as RequestPolicyPresentationRuleDto[];
-    } catch {
-      return null;
-    }
+      return {
+        ruleId: normalizedRuleId || `rule-${ruleIndex + 1}`,
+        isEnabled: Boolean(ruleControl.get('isEnabled')?.value ?? true),
+        priority: Number.isFinite(Number(ruleControl.get('priority')?.value))
+          ? Number(ruleControl.get('priority')?.value)
+          : ((ruleIndex + 1) * 10),
+        conditions,
+        fieldPatches
+      } as RequestPolicyPresentationRuleDto;
+    });
 
-    return this.requestPolicyResolver.normalizePolicy({
+    const normalizedPolicy = this.requestPolicyResolver.normalizePolicy({
       version: 1,
       presentationRules,
       accessPolicy: {
@@ -1363,9 +1570,16 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
         mode: String(raw.workflowMode ?? 'manual').trim() || 'manual',
         staticTargetUnitIds: this.parseCsv(raw.workflowStaticTargets),
         allowManualSelection: Boolean(raw.workflowAllowManualSelection),
+        manualTargetFieldKey: String(raw.workflowManualTargetFieldKey ?? '').trim() || undefined,
+        manualSelectionRequired: Boolean(raw.workflowManualSelectionRequired),
         defaultTargetUnitId: String(raw.workflowDefaultTargetUnitId ?? '').trim() || undefined
       }
     });
+    const validationErrors = this.validatePolicyAuthoring(normalizedPolicy);
+    return {
+      policy: normalizedPolicy,
+      validationErrors
+    };
   }
 
   private parseCsv(value: unknown): string[] {
@@ -1378,6 +1592,292 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
   private toCsv(values: string[]): string {
     return (values ?? []).join(', ');
+  }
+
+  private get presentationRulesArray(): FormArray {
+    return this.policyForm.get('presentationRules') as FormArray;
+  }
+
+  private replacePresentationRules(rules: RequestPolicyPresentationRuleDto[]): void {
+    while (this.presentationRulesArray.length > 0) {
+      this.presentationRulesArray.removeAt(0);
+    }
+
+    if ((rules ?? []).length === 0) {
+      this.presentationRulesArray.push(this.createPresentationRuleGroup());
+      return;
+    }
+
+    (rules ?? []).forEach(rule => this.presentationRulesArray.push(this.createPresentationRuleGroup(rule)));
+  }
+
+  private createPresentationRuleGroup(rule?: Partial<RequestPolicyPresentationRuleDto>): FormGroup {
+    const conditions = this.fb.array((rule?.conditions ?? []).map(condition => this.createConditionGroup(condition)));
+    if (conditions.length === 0) {
+      conditions.push(this.createConditionGroup());
+    }
+
+    const fieldPatches = this.fb.array((rule?.fieldPatches ?? []).map(patch => this.createFieldPatchGroup(patch)));
+    if (fieldPatches.length === 0) {
+      fieldPatches.push(this.createFieldPatchGroup());
+    }
+
+    return this.fb.group({
+      ruleId: [String(rule?.ruleId ?? '').trim()],
+      isEnabled: [rule?.isEnabled !== false],
+      priority: [Number(rule?.priority ?? this.resolveNextRulePriority()), [Validators.min(1)]],
+      conditions,
+      fieldPatches
+    });
+  }
+
+  private createConditionGroup(condition?: Partial<RequestPolicyConditionDto>): FormGroup {
+    return this.fb.group({
+      variable: [String(condition?.variable ?? '').trim()],
+      operator: [String(condition?.operator ?? 'eq').trim() || 'eq'],
+      value: [String(condition?.value ?? '').trim()],
+      valuesCsv: [this.toCsv((condition?.values ?? []).map(item => String(item ?? '').trim()).filter(item => item.length > 0))]
+    });
+  }
+
+  private createFieldPatchGroup(patch?: Partial<RequestPolicyFieldPatchDto>): FormGroup {
+    return this.fb.group({
+      fieldKey: [String(patch?.fieldKey ?? '').trim()],
+      label: [String(patch?.label ?? '').trim()],
+      placeholder: [String(patch?.placeholder ?? '').trim()],
+      helpText: [String(patch?.helpText ?? '').trim()],
+      visibleMode: [this.toPatchMode(patch?.visible)],
+      requiredMode: [this.toPatchMode(patch?.required)],
+      readonlyMode: [this.toPatchMode(patch?.readonly)]
+    });
+  }
+
+  private resolveRuleConditionsArray(ruleIndex: number): FormArray {
+    return ((this.presentationRulesArray.at(ruleIndex) as FormGroup).get('conditions') as FormArray);
+  }
+
+  private resolveRuleFieldPatchesArray(ruleIndex: number): FormArray {
+    return ((this.presentationRulesArray.at(ruleIndex) as FormGroup).get('fieldPatches') as FormArray);
+  }
+
+  private toConditionDto(control: FormGroup): RequestPolicyConditionDto | null {
+    const operator = String(control.get('operator')?.value ?? 'eq').trim().toLowerCase() || 'eq';
+    const variable = String(control.get('variable')?.value ?? '').trim();
+    const value = String(control.get('value')?.value ?? '').trim();
+    const csvValues = this.parseCsv(control.get('valuesCsv')?.value);
+
+    return {
+      variable,
+      operator,
+      value: value || undefined,
+      values: csvValues
+    };
+  }
+
+  private toFieldPatchDto(control: FormGroup): RequestPolicyFieldPatchDto | null {
+    const fieldKey = String(control.get('fieldKey')?.value ?? '').trim();
+    const label = String(control.get('label')?.value ?? '').trim();
+    const placeholder = String(control.get('placeholder')?.value ?? '').trim();
+    const helpText = String(control.get('helpText')?.value ?? '').trim();
+    const visible = this.parsePatchMode(control.get('visibleMode')?.value);
+    const required = this.parsePatchMode(control.get('requiredMode')?.value);
+    const readonly = this.parsePatchMode(control.get('readonlyMode')?.value);
+
+    return {
+      fieldKey,
+      label: label || undefined,
+      placeholder: placeholder || undefined,
+      helpText: helpText || undefined,
+      visible,
+      required,
+      readonly
+    };
+  }
+
+  private parsePatchMode(value: unknown): boolean | undefined {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+
+    return undefined;
+  }
+
+  private toPatchMode(value: unknown): 'true' | 'false' | '' {
+    if (value === true) {
+      return 'true';
+    }
+    if (value === false) {
+      return 'false';
+    }
+
+    return '';
+  }
+
+  private resolveNextRulePriority(): number {
+    const existingPriorities = this.policyRuleFormGroups
+      .map(rule => Number(rule.get('priority')?.value ?? 0))
+      .filter(priority => Number.isFinite(priority) && priority > 0);
+    if (existingPriorities.length === 0) {
+      return 10;
+    }
+
+    return Math.max(...existingPriorities) + 10;
+  }
+
+  private validatePolicyAuthoring(policy: RequestPolicyDefinitionDto | null): string[] {
+    if (!policy) {
+      return ['تعذر بناء السياسة من المدخلات الحالية.'];
+    }
+
+    const errors: string[] = [];
+    const workflowMode = String(policy.workflowPolicy?.mode ?? 'manual').trim().toLowerCase();
+    const allowManualSelection = policy.workflowPolicy?.allowManualSelection !== false;
+    const manualTargetFieldKey = String(policy.workflowPolicy?.manualTargetFieldKey ?? '').trim();
+    const defaultTargetUnitId = String(policy.workflowPolicy?.defaultTargetUnitId ?? '').trim();
+    const staticTargets = policy.workflowPolicy?.staticTargetUnitIds ?? [];
+    const createUnits = policy.accessPolicy?.createScope?.unitIds ?? [];
+
+    if (String(policy.accessPolicy?.createMode ?? 'single').trim().toLowerCase() === 'single' && createUnits.length > 1) {
+      errors.push('Create Mode = single يجب أن يحتوي جهة إنشاء واحدة فقط.');
+    }
+
+    if (workflowMode === 'static' && staticTargets.length === 0) {
+      errors.push('عند اختيار Workflow = static يجب تحديد جهة واحدة على الأقل في Static Targets.');
+    }
+
+    if ((workflowMode === 'manual' || workflowMode === 'hybrid') && allowManualSelection && manualTargetFieldKey.length === 0) {
+      errors.push('عند التوجيه اليدوي يجب تحديد Manual Target Field Key.');
+    }
+
+    if (workflowMode === 'manual' && !allowManualSelection && defaultTargetUnitId.length === 0) {
+      errors.push('Workflow = manual بدون AllowManualSelection يتطلب Default Target Unit.');
+    }
+
+    const supportedOperators = new Set(this.conditionOperatorOptions.map(item => item.value));
+    (policy.presentationRules ?? []).forEach((rule, ruleIndex) => {
+      if ((rule.conditions ?? []).length === 0) {
+        errors.push(`القاعدة #${ruleIndex + 1} يجب أن تحتوي شرطًا واحدًا على الأقل.`);
+      }
+
+      (rule.conditions ?? []).forEach((condition, conditionIndex) => {
+        const variable = String(condition?.variable ?? '').trim();
+        const operator = String(condition?.operator ?? 'eq').trim().toLowerCase();
+        if (!variable) {
+          errors.push(`القاعدة #${ruleIndex + 1} - الشرط #${conditionIndex + 1}: المتغير مطلوب.`);
+        }
+
+        if (!supportedOperators.has(operator)) {
+          errors.push(`القاعدة #${ruleIndex + 1} - الشرط #${conditionIndex + 1}: operator غير مدعوم.`);
+        }
+      });
+
+      if ((rule.fieldPatches ?? []).length === 0) {
+        errors.push(`القاعدة #${ruleIndex + 1} يجب أن تحتوي Field Patch واحدًا على الأقل.`);
+      }
+
+      (rule.fieldPatches ?? []).forEach((patch, patchIndex) => {
+        const fieldKey = String(patch?.fieldKey ?? '').trim();
+        const hasOperation = String(patch?.label ?? '').trim().length > 0
+          || String(patch?.placeholder ?? '').trim().length > 0
+          || String(patch?.helpText ?? '').trim().length > 0
+          || patch?.visible != null
+          || patch?.required != null
+          || patch?.readonly != null;
+
+        if (!fieldKey) {
+          errors.push(`القاعدة #${ruleIndex + 1} - التعديل #${patchIndex + 1}: Field Key مطلوب.`);
+        }
+        if (!hasOperation) {
+          errors.push(`القاعدة #${ruleIndex + 1} - التعديل #${patchIndex + 1}: يجب تحديد خاصية واحدة على الأقل للتعديل.`);
+        }
+      });
+    });
+
+    return errors;
+  }
+
+  private refreshPolicyStudioPreview(): void {
+    const runtimeContext = this.buildPolicyRuntimeContext();
+    const buildResult = this.buildRequestPolicyFromForm();
+    const requestPolicy = buildResult.policy;
+    const resolvedAccessPolicy = requestPolicy
+      ? this.requestPolicyResolver.resolveAccessPolicy(requestPolicy, runtimeContext)
+      : null;
+    const resolvedWorkflowPolicy = requestPolicy
+      ? this.requestPolicyResolver.resolveWorkflowPolicy(requestPolicy, runtimeContext)
+      : null;
+
+    const changedFields: PolicyStudioFieldDelta[] = [];
+    (this.previewDefinition?.fields ?? []).forEach(field => {
+      if (!requestPolicy) {
+        return;
+      }
+
+      const beforeLabel = String(field.fieldLabel ?? field.fieldKey ?? '').trim() || String(field.fieldKey ?? '');
+      const beforeVisible = Boolean(field.isVisible);
+      const beforeRequired = Boolean(field.required);
+      const beforeReadonly = Boolean(field.isDisabledInit);
+      const resolved = this.requestPolicyResolver.resolvePresentationMetadata(field, runtimeContext, requestPolicy);
+
+      if (beforeLabel === resolved.label
+        && beforeVisible === resolved.visible
+        && beforeRequired === resolved.required
+        && beforeReadonly === resolved.readonly) {
+        return;
+      }
+
+      changedFields.push({
+        fieldKey: String(field.fieldKey ?? ''),
+        beforeLabel,
+        afterLabel: resolved.label,
+        beforeVisible,
+        afterVisible: resolved.visible,
+        beforeRequired,
+        afterRequired: resolved.required,
+        beforeReadonly,
+        afterReadonly: resolved.readonly
+      });
+    });
+
+    this.policyStudioSnapshot = {
+      requestPolicy,
+      resolvedAccessPolicy,
+      resolvedWorkflowPolicy,
+      changedFields,
+      validationErrors: buildResult.validationErrors,
+      runtimeContext
+    };
+  }
+
+  private buildPolicyRuntimeContext(): RequestPolicyRuntimeContext {
+    const state = this.centralAdminContext.snapshot;
+    let runtimeVariables: Record<string, unknown> = {};
+    const runtimeJson = String(state.runtimeContextJson ?? '').trim();
+    if (runtimeJson.length > 0) {
+      try {
+        const parsed = JSON.parse(runtimeJson);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          runtimeVariables = parsed as Record<string, unknown>;
+        }
+      } catch {
+        runtimeVariables = {};
+      }
+    }
+
+    return {
+      applicationId: state.selectedApplicationId ?? null,
+      categoryId: state.selectedCategoryId ?? null,
+      routeKeyPrefix: state.routeKeyPrefix ?? null,
+      documentDirection: state.documentDirection ?? null,
+      requestMode: state.requestMode ?? null,
+      creatorUnitId: state.creatorUnitId ?? null,
+      targetUnitId: state.targetUnitId ?? null,
+      variables: runtimeVariables
+    };
   }
 
   isInvalid(form: FormGroup, controlName: string): boolean {
@@ -1695,12 +2195,14 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
           this.previewDefinition = null;
           this.previewGroups = [];
           this.previewForm = this.fb.group({});
+          this.refreshPolicyStudioPreview();
           this.appNotification.showApiErrors(response.errors, 'تعذر تحميل المعاينة.');
           return;
         }
 
         this.previewDefinition = response?.data ?? null;
         this.rebuildPreviewForm(this.previewDefinition);
+        this.refreshPolicyStudioPreview();
       },
       error: () => {
         const selectedCategoryId = Number(this.selectedCategory?.categoryId ?? 0);
@@ -1711,6 +2213,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
         this.previewDefinition = null;
         this.previewGroups = [];
         this.previewForm = this.fb.group({});
+        this.refreshPolicyStudioPreview();
         this.appNotification.error('حدث خطأ أثناء تحميل المعاينة.');
       },
       complete: () => {
