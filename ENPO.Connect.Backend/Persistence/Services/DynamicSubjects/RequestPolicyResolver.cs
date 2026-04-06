@@ -95,7 +95,7 @@ internal static class RequestPolicyResolver
             errors.Add(new Error
             {
                 Code = "400",
-                Message = "قيمة AccessPolicy.CreateMode غير مدعومة. القيم المتاحة: single أو multi."
+                Message = "قيمة وضع الإنشاء غير مدعومة. القيم المتاحة: جهة واحدة أو متعدد الجهات."
             });
         }
 
@@ -105,7 +105,7 @@ internal static class RequestPolicyResolver
             errors.Add(new Error
             {
                 Code = "400",
-                Message = "قيمة WorkflowPolicy.Mode غير مدعومة. القيم المتاحة: static أو manual أو hybrid."
+                Message = "قيمة وضع التوجيه غير مدعومة. القيم المتاحة: ثابت أو يدوي أو هجين."
             });
         }
 
@@ -115,7 +115,7 @@ internal static class RequestPolicyResolver
             errors.Add(new Error
             {
                 Code = "400",
-                Message = "عند اختيار WorkflowPolicy.Mode = static يجب تحديد جهة واحدة على الأقل داخل StaticTargetUnitIds."
+                Message = "تم اختيار وضع التوجيه الثابت، لذلك يجب تحديد جهة واحدة على الأقل ضمن الجهات الثابتة."
             });
         }
 
@@ -127,7 +127,7 @@ internal static class RequestPolicyResolver
             errors.Add(new Error
             {
                 Code = "400",
-                Message = "عند تفعيل التوجيه اليدوي يجب تحديد WorkflowPolicy.ManualTargetFieldKey."
+                Message = "تم اختيار وضع يتضمن التوجيه اليدوي، لذلك يجب تحديد الحقل الذي سيستخدم لاختيار جهة التوجيه."
             });
         }
 
@@ -138,7 +138,7 @@ internal static class RequestPolicyResolver
             errors.Add(new Error
             {
                 Code = "400",
-                Message = "WorkflowPolicy.Mode = manual بدون AllowManualSelection يتطلب DefaultTargetUnitId صالح."
+                Message = "عند اختيار وضع \"توجيه يدوي\" مع إيقاف الاختيار اليدوي، يجب تحديد الجهة الافتراضية."
             });
         }
 
@@ -148,7 +148,7 @@ internal static class RequestPolicyResolver
             errors.Add(new Error
             {
                 Code = "400",
-                Message = "عند اختيار AccessPolicy.CreateMode = single يجب تحديد جهة واحدة فقط في CreateScope.UnitIds."
+                Message = "عند اختيار وضع إنشاء جهة واحدة، يجب تحديد جهة واحدة فقط ضمن نطاق الإنشاء."
             });
         }
 

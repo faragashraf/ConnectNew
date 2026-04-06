@@ -399,6 +399,18 @@
   }
 }
 
+.field-helper {
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.required-mark {
+  color: #b91c1c;
+  font-weight: 700;
+  margin-inline-start: 0.2rem;
+}
+
 .field.full-width {
   grid-column: 1 / -1;
 }
@@ -407,6 +419,13 @@
   color: #b91c1c;
   font-size: 0.74rem;
   font-weight: 600;
+}
+
+.policy-focus-ring {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 8px;
+  transition: outline-color 0.2s ease;
 }
 
 .switches {

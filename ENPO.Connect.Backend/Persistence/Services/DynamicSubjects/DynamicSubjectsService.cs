@@ -2044,6 +2044,24 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
+            if (normalizedRequestPolicy != null)
+            {
+                var workflowValidationErrors = await ValidateWorkflowPolicyAgainstCategoryAsync(
+                    categoryId,
+                    category.ApplicationId,
+                    normalizedRequestPolicy,
+                    cancellationToken);
+                if (workflowValidationErrors.Count > 0)
+                {
+                    foreach (var validationError in workflowValidationErrors)
+                    {
+                        response.Errors.Add(validationError);
+                    }
+
+                    return response;
+                }
+            }
+
             category.CatStatus = !safeRequest.IsActive;
 
             var policy = await _connectContext.SubjectReferencePolicies
@@ -3753,6 +3771,186 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return root.ToJsonString(SerializerOptions);
+    }
+
+    private async Task<List<Error>> ValidateWorkflowPolicyAgainstCategoryAsync(
+        int categoryId,
+        string? categoryApplicationId,
+        RequestPolicyDefinitionDto requestPolicy,
+        CancellationToken cancellationToken)
+    {
+        var errors = new List<Error>();
+        if (requestPolicy?.WorkflowPolicy == null)
+        {
+            return errors;
+        }
+
+        var mode = (NormalizeNullable(requestPolicy.WorkflowPolicy.Mode) ?? "manual").ToLowerInvariant();
+        var allowManualSelection = requestPolicy.WorkflowPolicy.AllowManualSelection;
+        var manualTargetFieldKey = NormalizeNullable(requestPolicy.WorkflowPolicy.ManualTargetFieldKey);
+        var requiresManualTargetField = (mode == "manual" || mode == "hybrid") && allowManualSelection;
+        if (!requiresManualTargetField || manualTargetFieldKey == null)
+        {
+            return errors;
+        }
+
+        var normalizedManualTargetFieldKey = NormalizeFieldKey(manualTargetFieldKey);
+        var linkedFieldRows = await _connectContext.CdCategoryMands
+            .AsNoTracking()
+            .Where(link => link.MendCategory == categoryId && !link.MendStat)
+            .Select(link => new { link.MendSql, link.MendField })
+            .ToListAsync(cancellationToken);
+        var linkedRow = linkedFieldRows
+            .FirstOrDefault(row => string.Equals(
+                NormalizeFieldKey(row.MendField),
+                normalizedManualTargetFieldKey,
+                StringComparison.Ordinal));
+        if (linkedRow == null)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = $"الحقل المحدد لاختيار جهة التوجيه ({manualTargetFieldKey}) غير مرتبط بهذا النوع."
+            });
+            return errors;
+        }
+
+        var fieldCandidates = await _connectContext.Cdmends
+            .AsNoTracking()
+            .Where(item =>
+                item.CdmendSql == linkedRow.MendSql
+                || item.CdmendTxt == linkedRow.MendField
+                || item.CdmendTxt == manualTargetFieldKey)
+            .ToListAsync(cancellationToken);
+        var normalizedCategoryAppId = NormalizeApplicationId(categoryApplicationId);
+        var selectedMetadata = SelectPreferredMend(
+            fieldCandidates,
+            normalizedCategoryAppId,
+            normalizedCategoryAppId,
+            out _);
+        var fieldMetadata = selectedMetadata
+            ?? fieldCandidates.FirstOrDefault(item =>
+                string.Equals(
+                    NormalizeFieldKey(item.CdmendTxt),
+                    normalizedManualTargetFieldKey,
+                    StringComparison.Ordinal));
+        if (fieldMetadata == null)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = $"تعذر قراءة بيانات الحقل ({manualTargetFieldKey}) للتحقق من صلاحيته للتوجيه اليدوي."
+            });
+            return errors;
+        }
+
+        if (!IsRoutingTargetFieldCandidate(
+                fieldMetadata.CdmendTxt,
+                fieldMetadata.CDMendLbl,
+                fieldMetadata.CdmendType,
+                fieldMetadata.CdmendDatatype))
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = $"الحقل المحدد ({manualTargetFieldKey}) غير مناسب للتوجيه اليدوي. استخدم حقل جهة/وحدة/مستخدم أو Lookup صالح."
+            });
+        }
+
+        return errors;
+    }
+
+    private static bool IsRoutingTargetFieldCandidate(
+        string? fieldKey,
+        string? fieldLabel,
+        string? fieldType,
+        string? dataType)
+    {
+        var normalizedKey = NormalizeWorkflowCandidateToken(fieldKey);
+        var normalizedLabel = NormalizeWorkflowCandidateToken(fieldLabel);
+        var normalizedType = NormalizeWorkflowCandidateToken(fieldType);
+        var normalizedDataType = NormalizeWorkflowCandidateToken(dataType);
+        var signatures = $"{normalizedKey} {normalizedLabel}".Trim();
+
+        var explicitKeys = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "targetunit",
+            "targetunitid",
+            "target_unit",
+            "target_unit_id",
+            "assignedunit",
+            "assignedunitid",
+            "assigned_user_id",
+            "assigneduserid",
+            "assignedtouserid",
+            "destinationunit",
+            "receiverunit",
+            "stockholderid",
+            "domainuser",
+            "unitid",
+            "userid"
+        };
+        if (explicitKeys.Contains(normalizedKey))
+        {
+            return true;
+        }
+
+        var semanticKeywords = new[]
+        {
+            "target",
+            "assign",
+            "assignee",
+            "responsible",
+            "receiver",
+            "destination",
+            "unit",
+            "sector",
+            "department",
+            "org",
+            "user",
+            "employee",
+            "جهة",
+            "وحدة",
+            "ادارة",
+            "مستخدم",
+            "موظف",
+            "مسؤول"
+        };
+        var hasSemanticKeyword = semanticKeywords.Any(keyword => signatures.Contains(keyword, StringComparison.Ordinal));
+
+        var selectionTypeIndicators = new[]
+        {
+            "dropdown",
+            "dropdowntree",
+            "radio",
+            "lookup",
+            "domainuser",
+            "tree",
+            "combo",
+            "select",
+            "list"
+        };
+        var hasSelectionType = selectionTypeIndicators.Any(indicator =>
+            normalizedType.Contains(indicator, StringComparison.Ordinal)
+            || normalizedDataType.Contains(indicator, StringComparison.Ordinal));
+        if (hasSemanticKeyword && hasSelectionType)
+        {
+            return true;
+        }
+
+        return normalizedType.Contains("domainuser", StringComparison.Ordinal)
+            || normalizedType.Contains("dropdowntree", StringComparison.Ordinal)
+            || normalizedType.Contains("lookup", StringComparison.Ordinal);
+    }
+
+    private static string NormalizeWorkflowCandidateToken(string? value)
+    {
+        return (value ?? string.Empty)
+            .Trim()
+            .ToLowerInvariant()
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal);
     }
 
     private static string? NormalizeDirectionKey(string? value)

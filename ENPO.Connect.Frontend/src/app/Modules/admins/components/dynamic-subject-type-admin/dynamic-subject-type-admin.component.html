@@ -482,39 +482,51 @@
                   <p-tabPanel header="Workflow Policy">
                     <form class="form-grid">
                       <div class="field">
-                        <label>Workflow Mode</label>
+                        <label>وضع التوجيه</label>
                         <p-dropdown
                           [options]="workflowModeOptions"
                           optionLabel="label"
                           optionValue="value"
                           formControlName="workflowMode">
                         </p-dropdown>
+                        <small class="field-helper">
+                          اختر نوع التوجيه: يدوي (اختيار من المستخدم) أو ثابت (جهة محددة مسبقًا) أو هجين.
+                        </small>
                       </div>
 
-                      <div class="field">
-                        <label>Static Target Units (CSV)</label>
+                      <div class="field" *ngIf="showWorkflowStaticTargetsField">
+                        <label>الجهات الثابتة (CSV)<span class="required-mark" *ngIf="workflowModeValue === 'static'">*</span></label>
                         <input pInputText type="text" formControlName="workflowStaticTargets" placeholder="60, 124" />
+                        <small class="field-helper">
+                          في التوجيه الثابت يتم توجيه الطلب مباشرة لهذه الجهات.
+                        </small>
                       </div>
 
-                      <div class="field">
-                        <label>Manual Target Field Key</label>
+                      <div class="field" *ngIf="showWorkflowManualTargetField">
+                        <label>حقل اختيار جهة التوجيه<span class="required-mark" *ngIf="isWorkflowManualTargetFieldRequired">*</span></label>
                         <p-dropdown
-                          [options]="policyFieldOptions"
+                          [options]="workflowManualTargetFieldOptions"
                           optionLabel="label"
                           optionValue="value"
                           formControlName="workflowManualTargetFieldKey"
+                          [disabled]="!isWorkflowManualTargetFieldRequired || workflowManualTargetFieldOptions.length === 0"
                           placeholder="الحقل الذي سيختار منه المستخدم جهة التوجيه">
                         </p-dropdown>
+                        <small class="field-helper">{{ workflowManualTargetFieldHelpText }}</small>
+                        <small class="field-error" *ngIf="workflowManualTargetFieldWarning">{{ workflowManualTargetFieldWarning }}</small>
                       </div>
 
-                      <div class="field">
-                        <label>Default Target Unit</label>
+                      <div class="field" *ngIf="showWorkflowDefaultTargetField">
+                        <label>الجهة الافتراضية<span class="required-mark" *ngIf="workflowModeValue === 'manual' && !workflowAllowManualSelectionValue">*</span></label>
                         <input pInputText type="text" formControlName="workflowDefaultTargetUnitId" placeholder="اختياري" />
+                        <small class="field-helper">
+                          تستخدم كمسار بديل عندما لا يختار المستخدم جهة التوجيه يدويًا.
+                        </small>
                       </div>
 
-                      <div class="switches">
-                        <label><span>Allow Manual Selection</span><p-inputSwitch formControlName="workflowAllowManualSelection"></p-inputSwitch></label>
-                        <label><span>Manual Selection Required</span><p-inputSwitch formControlName="workflowManualSelectionRequired"></p-inputSwitch></label>
+                      <div class="switches" *ngIf="showWorkflowManualSelectionToggles">
+                        <label><span>السماح بالاختيار اليدوي</span><p-inputSwitch formControlName="workflowAllowManualSelection"></p-inputSwitch></label>
+                        <label *ngIf="showWorkflowManualSelectionRequiredToggle"><span>الاختيار اليدوي إلزامي</span><p-inputSwitch formControlName="workflowManualSelectionRequired"></p-inputSwitch></label>
                       </div>
                     </form>
                   </p-tabPanel>
