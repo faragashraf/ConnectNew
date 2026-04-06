@@ -21,6 +21,45 @@
   </section>
 
   <ng-container *ngIf="hasCategorySelection && !loading && !loadError && renderModel as model">
+    <section class="direction-toolbar">
+      <header>
+        <h4>Direction Context</h4>
+        <span>سلوك الطلب يُقيّم حسب (Request + Direction) بدون أي duplication للنوع.</span>
+      </header>
+      <div class="direction-actions">
+        <button
+          type="button"
+          pButton
+          *ngFor="let option of directionOptions"
+          [label]="option.label"
+          class="p-button-sm"
+          [class.p-button-outlined]="!isDirectionActive(option.value)"
+          [class.p-button-secondary]="!isDirectionActive(option.value)"
+          (click)="changeDirection(option.value)">
+        </button>
+      </div>
+      <div class="direction-actions">
+        <button
+          type="button"
+          pButton
+          label="تفعيل كل الاتجاهات"
+          class="p-button-sm"
+          [loading]="publishingAll"
+          [disabled]="publishingAll || !model.allDirectionsReady"
+          (click)="publishAllDirections(true)">
+        </button>
+        <button
+          type="button"
+          pButton
+          label="إيقاف كل الاتجاهات"
+          class="p-button-sm p-button-outlined"
+          [loading]="publishingAll"
+          [disabled]="publishingAll"
+          (click)="publishAllDirections(false)">
+        </button>
+      </div>
+    </section>
+
     <section class="summary-grid">
       <article>
         <span>نوع الموضوع</span>
@@ -55,6 +94,10 @@
         <strong>{{ contextState.requestMode || '-' }}</strong>
       </article>
       <article>
+        <span>الاتجاه النشط</span>
+        <strong>{{ getDirectionLabel(activeDirection) }}</strong>
+      </article>
+      <article>
         <span>Canonical Config</span>
         <strong>{{ model.canonicalRouteKey || '-' }}</strong>
       </article>
@@ -70,12 +113,73 @@
         <span>إعدادات Config مطابقة</span>
         <strong>{{ model.matchedConfigCount }}</strong>
       </article>
+      <article>
+        <span>جاهزية كل الاتجاهات</span>
+        <strong [class.ok]="model.allDirectionsReady" [class.bad]="!model.allDirectionsReady">
+          {{ model.allDirectionsReady ? 'جاهز' : 'غير مكتمل' }}
+        </strong>
+      </article>
+    </section>
+
+    <section class="direction-readiness-grid" *ngIf="model.directionalReadiness.length > 0">
+      <article
+        class="direction-card"
+        *ngFor="let item of model.directionalReadiness; trackBy: trackByDirection"
+        [class.active]="isDirectionActive(item.direction)"
+        [class.ready]="item.readiness.isReady"
+        [class.not-ready]="!item.readiness.isReady">
+        <header>
+          <h5>{{ getDirectionLabel(item.direction) }}</h5>
+          <span>{{ item.readiness.isReady ? 'Ready' : 'Needs Attention' }}</span>
+        </header>
+        <div class="direction-kpis">
+          <div>
+            <small>Published</small>
+            <strong>{{ item.isPublished ? 'نعم' : 'لا' }}</strong>
+          </div>
+          <div>
+            <small>Visible Fields</small>
+            <strong>{{ item.readiness.visibleLinkedFieldsCount }}</strong>
+          </div>
+          <div>
+            <small>Issues</small>
+            <strong>{{ item.readiness.issues.length }}</strong>
+          </div>
+          <div>
+            <small>آخر تغيير</small>
+            <strong>{{ item.lastChangedAtUtc ? (item.lastChangedAtUtc | date:'short') : '-' }}</strong>
+          </div>
+        </div>
+        <div class="direction-actions">
+          <button
+            pButton
+            type="button"
+            class="p-button-sm"
+            label="Publish"
+            [loading]="isDirectionPublishing(item.direction)"
+            [disabled]="isDirectionPublishing(item.direction) || !item.readiness.isReady || item.isPublished"
+            (click)="publishDirection(item.direction, true)">
+          </button>
+          <button
+            pButton
+            type="button"
+            class="p-button-sm p-button-outlined"
+            label="Unpublish"
+            [loading]="isDirectionPublishing(item.direction)"
+            [disabled]="isDirectionPublishing(item.direction) || !item.isPublished"
+            (click)="publishDirection(item.direction, false)">
+          </button>
+        </div>
+      </article>
     </section>
 
     <section class="readiness-panel" [class.ready]="model.isReady" [class.not-ready]="!model.isReady">
       <header>
         <h4>Readiness Checks</h4>
-        <span>{{ model.isReady ? 'Ready' : 'Needs Attention' }}</span>
+        <span>
+          {{ getDirectionLabel(activeDirection) }} -
+          {{ model.isReady ? 'Ready' : 'Needs Attention' }}
+        </span>
       </header>
 
       <div class="readiness-kpis">

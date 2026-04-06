@@ -287,6 +287,22 @@ public class DynamicSubjectsController : ControllerBase
         }
 
         [Authorize(Policy = DynamicSubjectsAdminAuthorization.PolicyName)]
+        [HttpPatch("Admin/CategoryTypes/{categoryId:int}/Directions/{documentDirection}/Status")]
+        public Task<CommonResponse<SubjectAdminDirectionalReadinessDto>> SetAdminCategoryDirectionStatus(
+            int categoryId,
+            string documentDirection,
+            [FromBody] SubjectTypeAdminDirectionStatusRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            return _dynamicSubjectsService.SetAdminCategoryDirectionStatusAsync(
+                categoryId,
+                documentDirection,
+                request,
+                GetCurrentUserId(),
+                cancellationToken);
+        }
+
+        [Authorize(Policy = DynamicSubjectsAdminAuthorization.PolicyName)]
         [HttpPatch("Admin/CategoryTypes/{categoryId:int}/Move")]
         public Task<CommonResponse<IEnumerable<SubjectTypeAdminDto>>> MoveAdminCategory(
             int categoryId,
@@ -403,9 +419,15 @@ public class DynamicSubjectsController : ControllerBase
         public Task<CommonResponse<SubjectAdminPreviewWorkspaceDto>> GetAdminCategoryPreviewWorkspace(
             int categoryId,
             string? appId,
+            string? documentDirection,
             CancellationToken cancellationToken = default)
         {
-            return _dynamicSubjectsService.GetAdminPreviewWorkspaceAsync(categoryId, GetCurrentUserId(), appId, cancellationToken);
+            return _dynamicSubjectsService.GetAdminPreviewWorkspaceAsync(
+                categoryId,
+                GetCurrentUserId(),
+                appId,
+                documentDirection,
+                cancellationToken);
         }
 
         private static SubjectUpsertRequestDto ParseUpsertRequest(SubjectUpsertFormRequestDto form)

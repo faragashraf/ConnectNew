@@ -21,6 +21,11 @@ interface ShellSection {
   styleUrls: ['./central-admin-shell.component.scss']
 })
 export class CentralAdminShellComponent implements OnInit, OnDestroy {
+  readonly documentDirectionOptions: Array<{ label: string; value: string }> = [
+    { label: 'وارد (incoming)', value: 'incoming' },
+    { label: 'صادر (outgoing)', value: 'outgoing' }
+  ];
+
   readonly sections: ShellSection[] = [
     {
       id: 'subject-types',

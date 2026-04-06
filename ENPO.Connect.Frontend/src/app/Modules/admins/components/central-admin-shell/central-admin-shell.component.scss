@@ -72,6 +72,11 @@
   color: #334155;
 }
 
+:host ::ng-deep .context-grid .p-dropdown,
+.context-grid input {
+  width: 100%;
+}
+
 .context-actions {
   display: flex;
   gap: 0.55rem;

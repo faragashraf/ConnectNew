@@ -7,6 +7,7 @@ import { ComponentConfig, processRequestsAndPopulate } from 'src/app/shared/mode
 import { SubjectAdminPreviewWorkspaceDto } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import { ComponentConfigService } from '../../services/component-config.service';
+import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
 import {
   CentralAdminPreviewFoundationService,
   PreviewIssueSeverity,
@@ -35,6 +36,12 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
   treeDialogFieldLabel = '';
   treeDialogFieldKey = '';
   treeDialogSelection: TreeNode | null = null;
+  publishingAll = false;
+  private readonly directionPublishingMap = new Map<string, boolean>();
+  readonly directionOptions: Array<{ label: string; value: string }> = [
+    { label: 'وارد (incoming)', value: 'incoming' },
+    { label: 'صادر (outgoing)', value: 'outgoing' }
+  ];
 
   private readonly subscriptions = new Subscription();
   private requestSeq = 0;
@@ -51,7 +58,8 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
     private readonly powerBiController: PowerBiController,
     private readonly dynamicFormController: DynamicFormController,
     private readonly administrativeCertificateController: AdministrativeCertificateController,
-    private readonly genericFormService: GenericFormsService
+    private readonly genericFormService: GenericFormsService,
+    private readonly appNotification: AppNotificationService
   ) {}
 
   ngOnInit(): void {
@@ -80,6 +88,16 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
     }
 
     return this.renderModel.isReady ? 'جاهز للمعاينة' : 'غير جاهز';
+  }
+
+  get activeDirection(): string {
+    const fromContext = this.normalizeDirection(this.contextState.documentDirection);
+    if (fromContext) {
+      return fromContext;
+    }
+
+    const fromModel = this.normalizeDirection(this.renderModel?.activeDirection);
+    return fromModel ?? 'incoming';
   }
 
   get primaryRouteKey(): string {
@@ -119,6 +137,99 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
     }
 
     return `k-${field.fieldKey}`;
+  }
+
+  trackByDirection(_index: number, item: { direction: string }): string {
+    return this.normalizeDirection(item.direction) ?? String(item.direction ?? '').trim().toLowerCase();
+  }
+
+  changeDirection(direction: string): void {
+    const normalized = this.normalizeDirection(direction);
+    if (!normalized) {
+      return;
+    }
+
+    if (this.normalizeDirection(this.contextState.documentDirection) === normalized) {
+      return;
+    }
+
+    this.centralAdminContext.patchContext({
+      documentDirection: normalized
+    });
+  }
+
+  isDirectionActive(direction: string): boolean {
+    return this.activeDirection === (this.normalizeDirection(direction) ?? direction);
+  }
+
+  getDirectionLabel(direction: string): string {
+    const normalized = this.normalizeDirection(direction);
+    if (normalized === 'incoming') {
+      return 'وارد';
+    }
+    if (normalized === 'outgoing') {
+      return 'صادر';
+    }
+
+    return direction;
+  }
+
+  isDirectionPublishing(direction: string): boolean {
+    const key = this.normalizeDirection(direction) ?? String(direction ?? '').trim().toLowerCase();
+    return this.directionPublishingMap.get(key) === true;
+  }
+
+  publishDirection(direction: string, isActive: boolean): void {
+    const categoryId = Number(this.contextState.selectedCategoryId ?? 0);
+    const normalizedDirection = this.normalizeDirection(direction);
+    if (categoryId <= 0 || !normalizedDirection) {
+      return;
+    }
+
+    this.directionPublishingMap.set(normalizedDirection, true);
+    this.dynamicSubjectsController.setAdminCategoryDirectionStatus(categoryId, normalizedDirection, { isActive }).subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.appNotification.showApiErrors(response.errors, 'تعذر تحديث حالة النشر للاتجاه.');
+          return;
+        }
+
+        this.appNotification.success(`تم ${isActive ? 'تفعيل' : 'إيقاف'} اتجاه "${this.getDirectionLabel(normalizedDirection)}" بنجاح.`);
+        this.loadWorkspace(this.centralAdminContext.snapshot);
+      },
+      error: () => {
+        this.appNotification.error('حدث خطأ أثناء تحديث حالة النشر للاتجاه.');
+      },
+      complete: () => {
+        this.directionPublishingMap.set(normalizedDirection, false);
+      }
+    });
+  }
+
+  publishAllDirections(isActive: boolean): void {
+    const categoryId = Number(this.contextState.selectedCategoryId ?? 0);
+    if (categoryId <= 0 || this.publishingAll) {
+      return;
+    }
+
+    this.publishingAll = true;
+    this.dynamicSubjectsController.setAdminCategoryStatus(categoryId, { isActive }).subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.appNotification.showApiErrors(response.errors, 'تعذر تحديث حالة النشر الكلية.');
+          return;
+        }
+
+        this.appNotification.success(`تم ${isActive ? 'تفعيل' : 'إيقاف'} جميع الاتجاهات بنجاح.`);
+        this.loadWorkspace(this.centralAdminContext.snapshot);
+      },
+      error: () => {
+        this.appNotification.error('حدث خطأ أثناء تحديث حالة النشر الكلية.');
+      },
+      complete: () => {
+        this.publishingAll = false;
+      }
+    });
   }
 
   isTextareaField(field: PreviewFieldRenderModel): boolean {
@@ -249,7 +360,9 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
     this.loading = true;
     this.loadError = '';
 
-    this.dynamicSubjectsController.getAdminCategoryPreviewWorkspace(categoryId, appId).subscribe({
+    const documentDirection = this.normalizeDirection(state.documentDirection) ?? undefined;
+
+    this.dynamicSubjectsController.getAdminCategoryPreviewWorkspace(categoryId, appId, documentDirection).subscribe({
       next: previewResponse => {
         if (requestSeq !== this.requestSeq) {
           return;
@@ -544,5 +657,21 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
     }
 
     return raw.split('|')[0].split('__')[0].trim();
+  }
+
+  private normalizeDirection(value: unknown): string | null {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'incoming' || normalized === 'inbound' || normalized === 'in') {
+      return 'incoming';
+    }
+    if (normalized === 'outgoing' || normalized === 'outbound' || normalized === 'out') {
+      return 'outgoing';
+    }
+
+    return normalized;
   }
 }

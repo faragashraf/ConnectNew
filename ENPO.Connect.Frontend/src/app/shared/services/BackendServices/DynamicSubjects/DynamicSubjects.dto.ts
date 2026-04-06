@@ -91,6 +91,14 @@ export interface SubjectAdminPreviewReadinessDto {
   issues: SubjectAdminPreviewIssueDto[];
 }
 
+export interface SubjectAdminDirectionalReadinessDto {
+  direction: string;
+  isPublished: boolean;
+  lastChangedAtUtc?: string;
+  lastChangedBy?: string;
+  readiness: SubjectAdminPreviewReadinessDto;
+}
+
 export interface SubjectAdminPreviewWorkspaceDto {
   categoryId: number;
   categoryName: string;
@@ -100,6 +108,9 @@ export interface SubjectAdminPreviewWorkspaceDto {
   formDefinition?: SubjectFormDefinitionDto;
   fieldLinks: SubjectCategoryFieldLinkAdminDto[];
   readiness: SubjectAdminPreviewReadinessDto;
+  activeDirection?: string;
+  directionalReadiness: SubjectAdminDirectionalReadinessDto[];
+  allDirectionsReady: boolean;
   generatedAtUtc: string;
 }
 
@@ -443,6 +454,10 @@ export interface SubjectTypeAdminTreeMoveRequestDto {
 }
 
 export interface SubjectTypeAdminStatusRequestDto {
+  isActive: boolean;
+}
+
+export interface SubjectTypeAdminDirectionStatusRequestDto {
   isActive: boolean;
 }
 

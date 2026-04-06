@@ -33,7 +33,14 @@
 
       <label>
         <span>Document Direction</span>
-        <input type="text" pInputText formControlName="documentDirection" placeholder="incoming / outgoing" />
+        <p-dropdown
+          [options]="documentDirectionOptions"
+          optionLabel="label"
+          optionValue="value"
+          formControlName="documentDirection"
+          [showClear]="true"
+          placeholder="اختر الاتجاه">
+        </p-dropdown>
       </label>
 
       <label>

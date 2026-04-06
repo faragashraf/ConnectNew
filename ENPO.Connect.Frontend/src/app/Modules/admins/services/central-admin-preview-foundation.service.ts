@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ComponentConfig, RequestArrayItem } from 'src/app/shared/models/Component.Config.model';
 import {
+  SubjectAdminDirectionalReadinessDto,
   RequestPolicyDefinitionDto,
   SubjectAdminPreviewIssueDto,
   SubjectAdminPreviewWorkspaceDto,
@@ -71,6 +72,15 @@ export interface PreviewWorkspaceRenderModel {
   categoryId: number;
   categoryName: string;
   applicationId?: string;
+  activeDirection?: string;
+  allDirectionsReady: boolean;
+  directionalReadiness: Array<{
+    direction: string;
+    isPublished: boolean;
+    lastChangedAtUtc?: string;
+    lastChangedBy?: string;
+    readiness: SubjectAdminDirectionalReadinessDto['readiness'];
+  }>;
   canonicalRouteKey?: string;
   matchedConfigCount: number;
   groups: PreviewGroupRenderModel[];
@@ -354,6 +364,14 @@ export class CentralAdminPreviewFoundationService {
     const requestPolicy = this.requestPolicyResolver.normalizePolicy(sourceRequestPolicy);
     const resolvedAccessPolicy = this.requestPolicyResolver.resolveAccessPolicy(requestPolicy, runtimeContext);
     const resolvedWorkflowPolicy = this.requestPolicyResolver.resolveWorkflowPolicy(requestPolicy, runtimeContext);
+    const requestedDirection = this.normalizeDirection(runtimeContext.documentDirection);
+    const configuredActiveDirection = this.normalizeDirection(workspace.activeDirection);
+    const activeDirection = requestedDirection ?? configuredActiveDirection ?? undefined;
+    const directionalReadiness = this.normalizeDirectionalReadiness(workspace.directionalReadiness ?? []);
+    const activeDirectionalReadiness = activeDirection
+      ? directionalReadiness.find(item => this.normalizeDirection(item.direction) === activeDirection)
+      : undefined;
+    const effectiveReadiness = activeDirectionalReadiness?.readiness ?? workspace.readiness;
     const definition = workspace.formDefinition;
     const groupsMeta = new Map<number, string>();
     (definition?.groups ?? []).forEach(group => {
@@ -389,7 +407,7 @@ export class CentralAdminPreviewFoundationService {
       }))
       .sort((a, b) => a.groupId - b.groupId);
 
-    const backendIssues = (workspace.readiness?.issues ?? [])
+    const backendIssues = (effectiveReadiness?.issues ?? [])
       .map(issue => this.mapBackendIssue(issue))
       .filter(issue => !this.shouldSuppressIssue(issue, configBoundOptionFields));
 
@@ -432,16 +450,19 @@ export class CentralAdminPreviewFoundationService {
       categoryId: workspace.categoryId,
       categoryName: workspace.categoryName,
       applicationId: workspace.applicationId,
+      activeDirection,
+      allDirectionsReady: workspace.allDirectionsReady !== false,
+      directionalReadiness,
       canonicalRouteKey: String(options?.canonicalRouteKey ?? '').trim() || undefined,
       matchedConfigCount: Number(options?.matchedConfigCount ?? 0),
       groups,
       issues: mergedIssues,
       isReady,
       summary: {
-        linkedFieldsCount: Number(workspace.readiness?.linkedFieldsCount ?? 0),
-        activeLinkedFieldsCount: Number(workspace.readiness?.activeLinkedFieldsCount ?? 0),
-        visibleLinkedFieldsCount: Number(workspace.readiness?.visibleLinkedFieldsCount ?? 0),
-        renderableFieldsCount: Number(workspace.readiness?.renderableFieldsCount ?? visibleFields.length),
+        linkedFieldsCount: Number(effectiveReadiness?.linkedFieldsCount ?? 0),
+        activeLinkedFieldsCount: Number(effectiveReadiness?.activeLinkedFieldsCount ?? 0),
+        visibleLinkedFieldsCount: Number(effectiveReadiness?.visibleLinkedFieldsCount ?? 0),
+        renderableFieldsCount: Number(effectiveReadiness?.renderableFieldsCount ?? visibleFields.length),
         groupsCount: groups.length,
         missingBindingsCount: missingBindingFields.size
       },
@@ -783,6 +804,56 @@ export class CentralAdminPreviewFoundationService {
     }
 
     return '';
+  }
+
+  private normalizeDirectionalReadiness(
+    readinessItems: SubjectAdminDirectionalReadinessDto[]
+  ): Array<{
+    direction: string;
+    isPublished: boolean;
+    lastChangedAtUtc?: string;
+    lastChangedBy?: string;
+    readiness: SubjectAdminDirectionalReadinessDto['readiness'];
+  }> {
+    return (readinessItems ?? [])
+      .map(item => {
+        const direction = this.normalizeDirection(item?.direction) ?? String(item?.direction ?? '').trim().toLowerCase();
+        return {
+          direction,
+          isPublished: item?.isPublished === true,
+          lastChangedAtUtc: item?.lastChangedAtUtc,
+          lastChangedBy: item?.lastChangedBy,
+          readiness: item?.readiness ?? {
+            isReady: false,
+            linkedFieldsCount: 0,
+            activeLinkedFieldsCount: 0,
+            visibleLinkedFieldsCount: 0,
+            renderableFieldsCount: 0,
+            missingDefinitionCount: 0,
+            missingBindingsCount: 0,
+            invalidDisplaySettingsCount: 0,
+            issues: []
+          }
+        };
+      })
+      .filter(item => item.direction.length > 0);
+  }
+
+  private normalizeDirection(value: unknown): string | null {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'incoming' || normalized === 'inbound' || normalized === 'in') {
+      return 'incoming';
+    }
+
+    if (normalized === 'outgoing' || normalized === 'outbound' || normalized === 'out') {
+      return 'outgoing';
+    }
+
+    return normalized;
   }
 
   private normalizeRouteToken(value: unknown): string {

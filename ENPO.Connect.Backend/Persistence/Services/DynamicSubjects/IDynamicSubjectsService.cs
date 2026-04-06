@@ -148,6 +148,13 @@ public interface IDynamicSubjectsService
         string userId,
         CancellationToken cancellationToken = default);
 
+    Task<CommonResponse<SubjectAdminDirectionalReadinessDto>> SetAdminCategoryDirectionStatusAsync(
+        int categoryId,
+        string documentDirection,
+        SubjectTypeAdminDirectionStatusRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
     Task<CommonResponse<IEnumerable<SubjectTypeAdminDto>>> MoveAdminCategoryAsync(
         int categoryId,
         SubjectTypeAdminTreeMoveRequestDto request,
@@ -216,5 +223,6 @@ public interface IDynamicSubjectsService
         int categoryId,
         string userId,
         string? appId,
+        string? documentDirection,
         CancellationToken cancellationToken = default);
 }

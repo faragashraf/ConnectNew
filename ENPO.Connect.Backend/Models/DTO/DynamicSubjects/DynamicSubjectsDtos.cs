@@ -142,6 +142,19 @@ public sealed class SubjectAdminPreviewReadinessDto
     public List<SubjectAdminPreviewIssueDto> Issues { get; set; } = new();
 }
 
+public sealed class SubjectAdminDirectionalReadinessDto
+{
+    public string Direction { get; set; } = string.Empty;
+
+    public bool IsPublished { get; set; }
+
+    public DateTime? LastChangedAtUtc { get; set; }
+
+    public string? LastChangedBy { get; set; }
+
+    public SubjectAdminPreviewReadinessDto Readiness { get; set; } = new();
+}
+
 public sealed class SubjectAdminPreviewWorkspaceDto
 {
     public int CategoryId { get; set; }
@@ -159,6 +172,12 @@ public sealed class SubjectAdminPreviewWorkspaceDto
     public List<SubjectCategoryFieldLinkAdminDto> FieldLinks { get; set; } = new();
 
     public SubjectAdminPreviewReadinessDto Readiness { get; set; } = new();
+
+    public string? ActiveDirection { get; set; }
+
+    public List<SubjectAdminDirectionalReadinessDto> DirectionalReadiness { get; set; } = new();
+
+    public bool AllDirectionsReady { get; set; }
 
     public DateTime GeneratedAtUtc { get; set; } = DateTime.UtcNow;
 }
@@ -761,6 +780,11 @@ public sealed class SubjectTypeAdminTreeMoveRequestDto
 }
 
 public sealed class SubjectTypeAdminStatusRequestDto
+{
+    public bool IsActive { get; set; } = true;
+}
+
+public sealed class SubjectTypeAdminDirectionStatusRequestDto
 {
     public bool IsActive { get; set; } = true;
 }

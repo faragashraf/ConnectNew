@@ -461,9 +461,76 @@ public sealed partial class DynamicSubjectsService
                 }
             }
 
-            category.CatStatus = !safeRequest.IsActive;
-
             var setting = await EnsureCategorySettingAsync(category.CatId, category.CatParent, normalizedUserId, cancellationToken);
+            var requestPolicy = TryReadRequestPolicyFromSettingsJson(setting.SettingsJson);
+            var directionLifecycle = ResolveDirectionLifecycleFromSettingsJson(
+                setting.SettingsJson,
+                fallbackIsPublished: !category.CatStatus);
+
+            if (safeRequest.IsActive)
+            {
+                var links = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
+                var definitionResponse = await BuildFormDefinitionAsync(
+                    categoryId,
+                    normalizedUserId,
+                    category.ApplicationId,
+                    allowInactiveCategory: true,
+                    cancellationToken);
+                if (definitionResponse.Errors?.Count > 0)
+                {
+                    foreach (var error in definitionResponse.Errors)
+                    {
+                        response.Errors.Add(error);
+                    }
+
+                    return response;
+                }
+
+                var definition = definitionResponse.Data ?? new SubjectFormDefinitionDto
+                {
+                    CategoryId = category.CatId,
+                    CategoryName = category.CatName,
+                    ParentCategoryId = category.CatParent,
+                    ApplicationId = category.ApplicationId,
+                    Groups = new List<SubjectGroupDefinitionDto>(),
+                    Fields = new List<SubjectFieldDefinitionDto>()
+                };
+
+                foreach (var direction in DefaultRequestDirections)
+                {
+                    var readiness = BuildPreviewWorkspaceReadiness(
+                        category,
+                        links,
+                        definition,
+                        requestPolicy,
+                        direction);
+                    if (!readiness.IsReady)
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "400",
+                            Message = $"لا يمكن التفعيل الكامل لأن readiness غير مكتملة للاتجاه '{direction}'."
+                        });
+                        return response;
+                    }
+                }
+            }
+
+            foreach (var direction in DefaultRequestDirections)
+            {
+                if (!directionLifecycle.TryGetValue(direction, out var state) || state == null)
+                {
+                    state = new DirectionLifecycleSettingsState();
+                    directionLifecycle[direction] = state;
+                }
+
+                state.IsPublished = safeRequest.IsActive;
+                state.LastChangedAtUtc = DateTime.UtcNow;
+                state.LastChangedBy = normalizedUserId;
+            }
+
+            setting.SettingsJson = MergeDirectionLifecycleIntoSettingsJson(setting.SettingsJson, directionLifecycle);
+            category.CatStatus = !safeRequest.IsActive;
             setting.LastModifiedBy = normalizedUserId;
             setting.LastModifiedAtUtc = DateTime.UtcNow;
 
@@ -477,6 +544,147 @@ public sealed partial class DynamicSubjectsService
                 .FirstOrDefaultAsync(item => item.CategoryId == categoryId, cancellationToken);
 
             response.Data = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy, setting);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<SubjectAdminDirectionalReadinessDto>> SetAdminCategoryDirectionStatusAsync(
+        int categoryId,
+        string documentDirection,
+        SubjectTypeAdminDirectionStatusRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<SubjectAdminDirectionalReadinessDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
+                return response;
+            }
+
+            var normalizedDirection = NormalizeDirectionKey(documentDirection);
+            if (normalizedDirection == null)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "الاتجاه غير مدعوم. القيم المتاحة: incoming أو outgoing." });
+                return response;
+            }
+
+            var category = await _connectContext.Cdcategories
+                .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
+            if (category == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "النوع غير موجود." });
+                return response;
+            }
+
+            var safeRequest = request ?? new SubjectTypeAdminDirectionStatusRequestDto();
+            if (safeRequest.IsActive && category.CatParent > 0)
+            {
+                var parentCategory = await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.CatId == category.CatParent, cancellationToken);
+                if (parentCategory == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "النوع الأب غير موجود." });
+                    return response;
+                }
+
+                if (parentCategory.CatStatus)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تفعيل اتجاه داخل نوع فرعي تحت نوع أب غير مفعل." });
+                    return response;
+                }
+            }
+
+            var setting = await EnsureCategorySettingAsync(category.CatId, category.CatParent, normalizedUserId, cancellationToken);
+            var requestPolicy = TryReadRequestPolicyFromSettingsJson(setting.SettingsJson);
+            var directionLifecycle = ResolveDirectionLifecycleFromSettingsJson(
+                setting.SettingsJson,
+                fallbackIsPublished: !category.CatStatus);
+
+            var links = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
+            var definitionResponse = await BuildFormDefinitionAsync(
+                categoryId,
+                normalizedUserId,
+                category.ApplicationId,
+                allowInactiveCategory: true,
+                cancellationToken);
+            if (definitionResponse.Errors?.Count > 0)
+            {
+                foreach (var error in definitionResponse.Errors)
+                {
+                    response.Errors.Add(error);
+                }
+
+                return response;
+            }
+
+            var definition = definitionResponse.Data ?? new SubjectFormDefinitionDto
+            {
+                CategoryId = category.CatId,
+                CategoryName = category.CatName,
+                ParentCategoryId = category.CatParent,
+                ApplicationId = category.ApplicationId,
+                Groups = new List<SubjectGroupDefinitionDto>(),
+                Fields = new List<SubjectFieldDefinitionDto>()
+            };
+
+            var readiness = BuildPreviewWorkspaceReadiness(
+                category,
+                links,
+                definition,
+                requestPolicy,
+                normalizedDirection);
+            if (safeRequest.IsActive && !readiness.IsReady)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"لا يمكن تفعيل الاتجاه '{normalizedDirection}' لأن readiness غير مكتملة."
+                });
+                return response;
+            }
+
+            if (!directionLifecycle.TryGetValue(normalizedDirection, out var lifecycleState) || lifecycleState == null)
+            {
+                lifecycleState = new DirectionLifecycleSettingsState();
+                directionLifecycle[normalizedDirection] = lifecycleState;
+            }
+
+            lifecycleState.IsPublished = safeRequest.IsActive;
+            lifecycleState.LastChangedAtUtc = DateTime.UtcNow;
+            lifecycleState.LastChangedBy = normalizedUserId;
+
+            var anyPublishedDirection = directionLifecycle.Values.Any(item => item?.IsPublished == true);
+            category.CatStatus = !anyPublishedDirection;
+            setting.SettingsJson = MergeDirectionLifecycleIntoSettingsJson(setting.SettingsJson, directionLifecycle);
+            setting.LastModifiedBy = normalizedUserId;
+            setting.LastModifiedAtUtc = DateTime.UtcNow;
+
+            await _connectContext.SaveChangesAsync(cancellationToken);
+
+            response.Data = new SubjectAdminDirectionalReadinessDto
+            {
+                Direction = normalizedDirection,
+                IsPublished = lifecycleState.IsPublished,
+                LastChangedAtUtc = lifecycleState.LastChangedAtUtc,
+                LastChangedBy = lifecycleState.LastChangedBy,
+                Readiness = readiness
+            };
         }
         catch (Exception)
         {
@@ -1542,6 +1750,7 @@ public sealed partial class DynamicSubjectsService
         int categoryId,
         string userId,
         string? appId,
+        string? documentDirection,
         CancellationToken cancellationToken = default)
     {
         var response = new CommonResponse<SubjectAdminPreviewWorkspaceDto>();
@@ -1590,6 +1799,11 @@ public sealed partial class DynamicSubjectsService
             var setting = await _connectContext.SubjectTypeAdminSettings
                 .AsNoTracking()
                 .FirstOrDefaultAsync(item => item.CategoryId == categoryId, cancellationToken);
+            var requestPolicy = TryReadRequestPolicyFromSettingsJson(setting?.SettingsJson);
+            var directionLifecycle = ResolveDirectionLifecycleFromSettingsJson(
+                setting?.SettingsJson,
+                fallbackIsPublished: !category.CatStatus);
+            var requestedDirection = NormalizeDirectionKey(documentDirection);
 
             var links = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
             var definitionResponse = await BuildFormDefinitionAsync(
@@ -1619,6 +1833,36 @@ public sealed partial class DynamicSubjectsService
                 Fields = new List<SubjectFieldDefinitionDto>()
             };
 
+            var directions = new List<string>(DefaultRequestDirections);
+            if (requestedDirection != null
+                && !directions.Contains(requestedDirection, StringComparer.OrdinalIgnoreCase))
+            {
+                directions.Add(requestedDirection);
+            }
+
+            var directionalReadiness = directions
+                .Select(direction =>
+                {
+                    directionLifecycle.TryGetValue(direction, out var directionState);
+                    return new SubjectAdminDirectionalReadinessDto
+                    {
+                        Direction = direction,
+                        IsPublished = directionState?.IsPublished ?? !category.CatStatus,
+                        LastChangedAtUtc = directionState?.LastChangedAtUtc,
+                        LastChangedBy = directionState?.LastChangedBy,
+                        Readiness = BuildPreviewWorkspaceReadiness(category, links, definition, requestPolicy, direction)
+                    };
+                })
+                .ToList();
+
+            var activeDirection = requestedDirection ?? directions.FirstOrDefault();
+            var primaryReadiness = activeDirection == null
+                ? BuildPreviewWorkspaceReadiness(category, links, definition, requestPolicy, null)
+                : directionalReadiness
+                    .FirstOrDefault(item => string.Equals(item.Direction, activeDirection, StringComparison.OrdinalIgnoreCase))
+                    ?.Readiness
+                    ?? BuildPreviewWorkspaceReadiness(category, links, definition, requestPolicy, activeDirection);
+
             response.Data = new SubjectAdminPreviewWorkspaceDto
             {
                 CategoryId = category.CatId,
@@ -1628,7 +1872,10 @@ public sealed partial class DynamicSubjectsService
                 SubjectType = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy, setting),
                 FormDefinition = definition,
                 FieldLinks = links,
-                Readiness = BuildPreviewWorkspaceReadiness(category, links, definition),
+                Readiness = primaryReadiness,
+                ActiveDirection = activeDirection,
+                DirectionalReadiness = directionalReadiness,
+                AllDirectionsReady = directionalReadiness.Count == 0 || directionalReadiness.All(item => item.Readiness.IsReady),
                 GeneratedAtUtc = DateTime.UtcNow
             };
         }
@@ -1643,8 +1890,11 @@ public sealed partial class DynamicSubjectsService
     private static SubjectAdminPreviewReadinessDto BuildPreviewWorkspaceReadiness(
         Cdcategory category,
         IReadOnlyCollection<SubjectCategoryFieldLinkAdminDto> links,
-        SubjectFormDefinitionDto definition)
+        SubjectFormDefinitionDto definition,
+        RequestPolicyDefinitionDto? requestPolicy,
+        string? documentDirection)
     {
+        var policyContext = BuildPolicyContext(documentDirection);
         var issues = new List<SubjectAdminPreviewIssueDto>();
         var issueDedup = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         static string BuildIssueKey(SubjectAdminPreviewIssueDto issue)
@@ -1667,21 +1917,13 @@ public sealed partial class DynamicSubjectsService
 
         var normalizedLinks = links?.ToList() ?? new List<SubjectCategoryFieldLinkAdminDto>();
         var activeLinks = normalizedLinks.Where(item => item.IsActive).ToList();
-        var visibleActiveLinks = activeLinks.Where(item => item.IsVisible).ToList();
-        var distinctVisibleActiveLinks = visibleActiveLinks
-            .GroupBy(item =>
-            {
-                if (item.MendSql > 0)
-                {
-                    return $"m:{item.MendSql}";
-                }
+        var definitionFields = (definition?.Fields ?? new List<SubjectFieldDefinitionDto>()).ToList();
+        var definitionByMendSqlAll = definitionFields
+            .GroupBy(item => item.MendSql)
+            .ToDictionary(group => group.Key, group => group.First());
 
-                return $"f:{NormalizeFieldKey(item.FieldKey)}";
-            })
-            .Select(group => group.First())
-            .ToList();
-        var renderableFields = (definition?.Fields ?? new List<SubjectFieldDefinitionDto>())
-            .Where(item => item.IsVisible)
+        var renderableFields = definitionFields
+            .Where(item => ResolveEffectiveVisibility(item, requestPolicy, policyContext))
             .ToList();
 
         if (category.CatStatus)
@@ -1694,6 +1936,16 @@ public sealed partial class DynamicSubjectsService
             });
         }
 
+        if (!string.IsNullOrWhiteSpace(documentDirection))
+        {
+            AddIssue(new SubjectAdminPreviewIssueDto
+            {
+                Code = "DIRECTION_CONTEXT",
+                Severity = "Info",
+                Message = $"تم تقييم readiness في سياق الاتجاه: {documentDirection}."
+            });
+        }
+
         if (activeLinks.Count == 0)
         {
             AddIssue(new SubjectAdminPreviewIssueDto
@@ -1703,6 +1955,34 @@ public sealed partial class DynamicSubjectsService
                 Message = "لا توجد روابط حقول فعالة لهذا النوع."
             });
         }
+
+        var visibleActiveLinks = new List<SubjectCategoryFieldLinkAdminDto>();
+        foreach (var link in activeLinks.Where(item => item.IsVisible))
+        {
+            if (!definitionByMendSqlAll.TryGetValue(link.MendSql, out var fieldByLink))
+            {
+                visibleActiveLinks.Add(link);
+                continue;
+            }
+
+            if (ResolveEffectiveVisibility(fieldByLink, requestPolicy, policyContext))
+            {
+                visibleActiveLinks.Add(link);
+            }
+        }
+
+        var distinctVisibleActiveLinks = visibleActiveLinks
+            .GroupBy(item =>
+            {
+                if (item.MendSql > 0)
+                {
+                    return $"m:{item.MendSql}";
+                }
+
+                return $"f:{NormalizeFieldKey(item.FieldKey)}";
+            })
+            .Select(group => group.First())
+            .ToList();
 
         if (distinctVisibleActiveLinks.Count == 0)
         {
@@ -1724,17 +2004,13 @@ public sealed partial class DynamicSubjectsService
             });
         }
 
-        var definitionByMendSql = renderableFields
-            .GroupBy(item => item.MendSql)
-            .ToDictionary(group => group.Key, group => group.First());
-
         var missingDefinitionCount = 0;
         var missingBindingsCount = 0;
         var invalidDisplaySettingsCount = 0;
 
         foreach (var link in distinctVisibleActiveLinks)
         {
-            if (!definitionByMendSql.TryGetValue(link.MendSql, out var field))
+            if (!definitionByMendSqlAll.TryGetValue(link.MendSql, out var field))
             {
                 missingDefinitionCount++;
                 AddIssue(new SubjectAdminPreviewIssueDto
@@ -1745,6 +2021,11 @@ public sealed partial class DynamicSubjectsService
                     FieldKey = link.FieldKey,
                     GroupId = link.GroupId
                 });
+                continue;
+            }
+
+            if (!ResolveEffectiveVisibility(field, requestPolicy, policyContext))
+            {
                 continue;
             }
 
@@ -1782,6 +2063,12 @@ public sealed partial class DynamicSubjectsService
             }
         }
 
+        AppendWorkflowReadinessIssues(
+            AddIssue,
+            requestPolicy,
+            renderableFields,
+            documentDirection);
+
         var readiness = new SubjectAdminPreviewReadinessDto
         {
             LinkedFieldsCount = normalizedLinks.Count,
@@ -1795,6 +2082,106 @@ public sealed partial class DynamicSubjectsService
         };
         readiness.IsReady = !issues.Any(item => string.Equals(item.Severity, "Error", StringComparison.OrdinalIgnoreCase));
         return readiness;
+    }
+
+    private static IReadOnlyDictionary<string, string?> BuildPolicyContext(string? documentDirection)
+    {
+        var map = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var normalizedDirection = NormalizeDirectionKey(documentDirection);
+        if (normalizedDirection != null)
+        {
+            map["documentDirection"] = normalizedDirection;
+        }
+
+        return map;
+    }
+
+    private static bool ResolveEffectiveVisibility(
+        SubjectFieldDefinitionDto field,
+        RequestPolicyDefinitionDto? policy,
+        IReadOnlyDictionary<string, string?> context)
+    {
+        var baseVisible = field?.IsVisible ?? false;
+        if (field == null)
+        {
+            return false;
+        }
+
+        if (policy == null)
+        {
+            return baseVisible;
+        }
+
+        var resolvedPatch = RequestPolicyResolver.ResolvePresentationMetadata(field.FieldKey, policy, context);
+        return resolvedPatch?.Visible ?? baseVisible;
+    }
+
+    private static void AppendWorkflowReadinessIssues(
+        Action<SubjectAdminPreviewIssueDto> addIssue,
+        RequestPolicyDefinitionDto? requestPolicy,
+        IReadOnlyCollection<SubjectFieldDefinitionDto> renderableFields,
+        string? documentDirection)
+    {
+        if (requestPolicy == null)
+        {
+            return;
+        }
+
+        void AddWorkflowIssue(string code, string message)
+        {
+            addIssue(new SubjectAdminPreviewIssueDto
+            {
+                Code = code,
+                Severity = "Error",
+                Message = message
+            });
+        }
+
+        var resolvedWorkflow = RequestPolicyResolver.ResolveWorkflowPolicy(requestPolicy);
+        var workflowMode = (resolvedWorkflow.Mode ?? "manual").Trim().ToLowerInvariant();
+        var staticTargets = resolvedWorkflow.StaticTargetUnitIds ?? new List<string>();
+        var defaultTarget = NormalizeNullable(resolvedWorkflow.DefaultTargetUnitId);
+        var manualTargetFieldKey = NormalizeFieldKey(resolvedWorkflow.ManualTargetFieldKey);
+        var allowManual = resolvedWorkflow.AllowManualSelection;
+
+        if (workflowMode == "static" && staticTargets.Count == 0 && defaultTarget == null)
+        {
+            AddWorkflowIssue(
+                "WORKFLOW_STATIC_TARGET_MISSING",
+                "Workflow static يتطلب جهة توجيه ثابتة (StaticTargetUnitIds أو DefaultTargetUnitId).");
+        }
+
+        if (workflowMode == "manual" && !allowManual && defaultTarget == null)
+        {
+            AddWorkflowIssue(
+                "WORKFLOW_MANUAL_DEFAULT_TARGET_MISSING",
+                "Workflow manual بدون اختيار يدوي يتطلب DefaultTargetUnitId.");
+        }
+
+        if (workflowMode == "hybrid" && !allowManual && staticTargets.Count == 0 && defaultTarget == null)
+        {
+            AddWorkflowIssue(
+                "WORKFLOW_HYBRID_FALLBACK_TARGET_MISSING",
+                "Workflow hybrid بدون اختيار يدوي يتطلب جهة fallback ثابتة.");
+        }
+
+        if ((workflowMode == "manual" || workflowMode == "hybrid")
+            && allowManual
+            && manualTargetFieldKey.Length > 0)
+        {
+            var hasManualTargetField = (renderableFields ?? Array.Empty<SubjectFieldDefinitionDto>())
+                .Any(field => string.Equals(
+                    NormalizeFieldKey(field.FieldKey),
+                    manualTargetFieldKey,
+                    StringComparison.Ordinal));
+            if (!hasManualTargetField)
+            {
+                AddWorkflowIssue(
+                    "WORKFLOW_MANUAL_TARGET_FIELD_NOT_RENDERABLE",
+                    $"حقل اختيار جهة التوجيه اليدوي '{resolvedWorkflow.ManualTargetFieldKey}' غير ظاهر في المعاينة الحالية"
+                    + (string.IsNullOrWhiteSpace(documentDirection) ? "." : $" للاتجاه {documentDirection}."));
+            }
+        }
     }
 
     private static bool RequiresOptionsBinding(string? fieldType)

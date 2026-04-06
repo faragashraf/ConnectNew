@@ -21,6 +21,8 @@ namespace Persistence.Services.DynamicSubjects;
 
 public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 {
+    private static readonly string[] DefaultRequestDirections = new[] { "incoming", "outgoing" };
+
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true
@@ -2122,12 +2124,37 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 policy.LastModifiedAtUtc = DateTime.UtcNow;
             }
 
+            var directionLifecycle = ResolveDirectionLifecycleFromSettingsJson(
+                categorySetting.SettingsJson,
+                safeRequest.IsActive);
+            foreach (var direction in DefaultRequestDirections)
+            {
+                if (!directionLifecycle.TryGetValue(direction, out var state) || state == null)
+                {
+                    directionLifecycle[direction] = new DirectionLifecycleSettingsState
+                    {
+                        IsPublished = safeRequest.IsActive,
+                        LastChangedAtUtc = DateTime.UtcNow,
+                        LastChangedBy = normalizedUserId
+                    };
+                    continue;
+                }
+
+                state.IsPublished = safeRequest.IsActive;
+                state.LastChangedAtUtc = DateTime.UtcNow;
+                state.LastChangedBy = normalizedUserId;
+            }
+
             if (safeRequest.RequestPolicy != null)
             {
                 categorySetting.SettingsJson = MergeRequestPolicyIntoSettingsJson(
                     categorySetting.SettingsJson,
                     normalizedRequestPolicy);
             }
+
+            categorySetting.SettingsJson = MergeDirectionLifecycleIntoSettingsJson(
+                categorySetting.SettingsJson,
+                directionLifecycle);
             categorySetting.LastModifiedBy = normalizedUserId;
             categorySetting.LastModifiedAtUtc = DateTime.UtcNow;
 
@@ -3421,6 +3448,157 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return root.ToJsonString(SerializerOptions);
+    }
+
+    private sealed class DirectionLifecycleSettingsState
+    {
+        public bool IsPublished { get; set; }
+
+        public DateTime? LastChangedAtUtc { get; set; }
+
+        public string? LastChangedBy { get; set; }
+    }
+
+    private static Dictionary<string, DirectionLifecycleSettingsState> ResolveDirectionLifecycleFromSettingsJson(
+        string? settingsJson,
+        bool fallbackIsPublished)
+    {
+        var result = new Dictionary<string, DirectionLifecycleSettingsState>(StringComparer.OrdinalIgnoreCase);
+        var payload = (settingsJson ?? string.Empty).Trim();
+        if (payload.Length > 0)
+        {
+            try
+            {
+                var rootNode = JsonNode.Parse(payload);
+                if (rootNode is JsonObject rootObject
+                    && rootObject.TryGetPropertyValue("directionLifecycle", out var lifecycleNode)
+                    && lifecycleNode is JsonObject lifecycleObject)
+                {
+                    foreach (var entry in lifecycleObject)
+                    {
+                        var direction = NormalizeDirectionKey(entry.Key);
+                        if (direction == null)
+                        {
+                            continue;
+                        }
+
+                        var lifecycleState = entry.Value as JsonObject;
+                        var published = lifecycleState?["isPublished"]?.GetValue<bool?>()
+                            ?? lifecycleState?["isActive"]?.GetValue<bool?>()
+                            ?? fallbackIsPublished;
+                        var changedAt = lifecycleState?["lastChangedAtUtc"]?.GetValue<DateTime?>()
+                            ?? lifecycleState?["publishedAtUtc"]?.GetValue<DateTime?>();
+                        var changedBy = NormalizeNullable(
+                            lifecycleState?["lastChangedBy"]?.GetValue<string>()
+                            ?? lifecycleState?["publishedBy"]?.GetValue<string>());
+
+                        result[direction] = new DirectionLifecycleSettingsState
+                        {
+                            IsPublished = published,
+                            LastChangedAtUtc = changedAt,
+                            LastChangedBy = changedBy
+                        };
+                    }
+                }
+            }
+            catch
+            {
+                // keep defaults/fallback.
+            }
+        }
+
+        foreach (var direction in DefaultRequestDirections)
+        {
+            if (!result.ContainsKey(direction))
+            {
+                result[direction] = new DirectionLifecycleSettingsState
+                {
+                    IsPublished = fallbackIsPublished,
+                    LastChangedAtUtc = null,
+                    LastChangedBy = null
+                };
+            }
+        }
+
+        return result;
+    }
+
+    private static string? MergeDirectionLifecycleIntoSettingsJson(
+        string? existingSettingsJson,
+        IReadOnlyDictionary<string, DirectionLifecycleSettingsState> directionLifecycle)
+    {
+        JsonObject root;
+        var existingPayload = (existingSettingsJson ?? string.Empty).Trim();
+        if (existingPayload.Length == 0)
+        {
+            root = new JsonObject();
+        }
+        else
+        {
+            try
+            {
+                root = JsonNode.Parse(existingPayload) as JsonObject ?? new JsonObject();
+            }
+            catch
+            {
+                root = new JsonObject();
+            }
+        }
+
+        var lifecycleObject = new JsonObject();
+        foreach (var entry in directionLifecycle ?? new Dictionary<string, DirectionLifecycleSettingsState>(StringComparer.OrdinalIgnoreCase))
+        {
+            var direction = NormalizeDirectionKey(entry.Key);
+            if (direction == null)
+            {
+                continue;
+            }
+
+            var state = entry.Value ?? new DirectionLifecycleSettingsState();
+            lifecycleObject[direction] = new JsonObject
+            {
+                ["isPublished"] = state.IsPublished,
+                ["lastChangedAtUtc"] = state.LastChangedAtUtc,
+                ["lastChangedBy"] = state.LastChangedBy
+            };
+        }
+
+        if (lifecycleObject.Count == 0)
+        {
+            root.Remove("directionLifecycle");
+        }
+        else
+        {
+            root["directionLifecycle"] = lifecycleObject;
+        }
+
+        if (root.Count == 0)
+        {
+            return null;
+        }
+
+        return root.ToJsonString(SerializerOptions);
+    }
+
+    private static string? NormalizeDirectionKey(string? value)
+    {
+        var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+        if (normalized == "in" || normalized == "inbound")
+        {
+            return "incoming";
+        }
+
+        if (normalized == "out" || normalized == "outbound")
+        {
+            return "outgoing";
+        }
+
+        if (normalized == "incoming" || normalized == "outgoing")
+        {
+            return normalized;
+        }
+
+        return null;
     }
 
     private static string? NormalizeNullable(string? value)

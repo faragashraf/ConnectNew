@@ -29,7 +29,9 @@ import {
   SubjectAdminGroupUpsertRequestDto,
   SubjectCategoryFieldLinkAdminDto,
   SubjectCategoryFieldLinksUpsertRequestDto,
+  SubjectAdminDirectionalReadinessDto,
   SubjectAdminPreviewWorkspaceDto,
+  SubjectTypeAdminDirectionStatusRequestDto,
   SubjectTypeAdminCreateRequestDto,
   SubjectTypeAdminStatusRequestDto,
   SubjectTypeAdminTreeMoveRequestDto,
@@ -196,6 +198,18 @@ export class DynamicSubjectsController {
     return this.http.patch<CommonResponse<SubjectTypeAdminDto>>(`${this.baseUrl}/Admin/CategoryTypes/${categoryId}/Status`, request);
   }
 
+  setAdminCategoryDirectionStatus(
+    categoryId: number,
+    documentDirection: string,
+    request: SubjectTypeAdminDirectionStatusRequestDto
+  ): Observable<CommonResponse<SubjectAdminDirectionalReadinessDto>> {
+    const normalizedDirection = String(documentDirection ?? '').trim();
+    return this.http.patch<CommonResponse<SubjectAdminDirectionalReadinessDto>>(
+      `${this.baseUrl}/Admin/CategoryTypes/${categoryId}/Directions/${encodeURIComponent(normalizedDirection)}/Status`,
+      request
+    );
+  }
+
   moveAdminCategory(categoryId: number, request: SubjectTypeAdminTreeMoveRequestDto): Observable<CommonResponse<SubjectTypeAdminDto[]>> {
     return this.http.patch<CommonResponse<SubjectTypeAdminDto[]>>(`${this.baseUrl}/Admin/CategoryTypes/${categoryId}/Move`, request);
   }
@@ -254,10 +268,17 @@ export class DynamicSubjectsController {
     return this.http.get<CommonResponse<SubjectFormDefinitionDto>>(`${this.baseUrl}/Admin/CategoryTypes/${categoryId}/Preview`, { params });
   }
 
-  getAdminCategoryPreviewWorkspace(categoryId: number, appId?: string): Observable<CommonResponse<SubjectAdminPreviewWorkspaceDto>> {
+  getAdminCategoryPreviewWorkspace(
+    categoryId: number,
+    appId?: string,
+    documentDirection?: string
+  ): Observable<CommonResponse<SubjectAdminPreviewWorkspaceDto>> {
     let params = new HttpParams();
     if (appId) {
       params = params.set('appId', appId);
+    }
+    if (documentDirection) {
+      params = params.set('documentDirection', documentDirection);
     }
 
     return this.http.get<CommonResponse<SubjectAdminPreviewWorkspaceDto>>(`${this.baseUrl}/Admin/CategoryTypes/${categoryId}/PreviewWorkspace`, { params });
