@@ -22,6 +22,9 @@ namespace Persistence.Services.DynamicSubjects;
 public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 {
     private static readonly string[] DefaultRequestDirections = new[] { "incoming", "outgoing" };
+    private const string TopicDirectionFieldKey = "TOPICDIRECTION";
+    private const string TopicDirectionIncomingValue = "2";
+    private const string TopicDirectionOutgoingValue = "1";
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -522,7 +525,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 ? (byte)MessageStatus.Submitted
                 : (byte)MessageStatus.Draft;
             var messageId = _helperService.GetSequenceNextValue("Seq_Tickets");
-            var fieldsMap = BuildFieldsMap(request.DynamicFields);
+            var effectiveDynamicFields = BuildEffectiveDynamicFields(request.DynamicFields, validation.DocumentDirection);
+            var fieldsMap = BuildFieldsMap(effectiveDynamicFields);
             var referenceNumber = await _referenceGenerator.GenerateAsync(category.CatId, messageId, fieldsMap, cancellationToken);
             var requestPolicy = await LoadCategoryRequestPolicyAsync(category.CatId, cancellationToken);
             var resolvedWorkflowPolicy = RequestPolicyResolver.ResolveWorkflowPolicy(requestPolicy);
@@ -576,7 +580,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             await _connectContext.Messages.AddAsync(message, cancellationToken);
             await _connectContext.SaveChangesAsync(cancellationToken);
 
-            await UpsertDynamicFieldsInternalAsync(messageId, request.DynamicFields, cancellationToken);
+            await UpsertDynamicFieldsInternalAsync(messageId, effectiveDynamicFields, cancellationToken);
             await UpsertStakeholdersInternalAsync(messageId, request.Stakeholders, cancellationToken);
             await UpsertTasksInternalAsync(messageId, request.Tasks, normalizedUserId, cancellationToken);
             await SaveAttachmentsInternalAsync(messageId, attachments, cancellationToken);
@@ -598,7 +602,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     ["categoryId"] = category.CatId,
                     ["requestRef"] = referenceNumber,
                     ["status"] = status,
-                    ["submit"] = request.Submit
+                    ["submit"] = request.Submit,
+                    ["documentDirection"] = validation.DocumentDirection
                 },
                 statusFrom: null,
                 statusTo: status,
@@ -715,7 +720,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 message.ClosedDate = DateTime.Now;
             }
 
-            await UpsertDynamicFieldsInternalAsync(messageId, request.DynamicFields, cancellationToken);
+            var effectiveDynamicFields = BuildEffectiveDynamicFields(request.DynamicFields, validation.DocumentDirection);
+            await UpsertDynamicFieldsInternalAsync(messageId, effectiveDynamicFields, cancellationToken);
             await UpsertStakeholdersInternalAsync(messageId, request.Stakeholders, cancellationToken);
             await UpsertTasksInternalAsync(messageId, request.Tasks, normalizedUserId, cancellationToken);
             await SaveAttachmentsInternalAsync(messageId, attachments, cancellationToken);
@@ -894,6 +900,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 .ToListAsync(cancellationToken);
 
             var pageIds = pageItems.Select(item => item.MessageId).ToList();
+            var documentDirectionMap = await LoadDocumentDirectionMapAsync(pageIds, cancellationToken);
             var attachmentCounts = await _attachContext.AttchShipments
                 .AsNoTracking()
                 .Where(item => pageIds.Contains(item.AttchId) && (item.ApplicationName == "Connect" || item.ApplicationName == "Connect - Test" || item.ApplicationName == "Correspondance"))
@@ -930,6 +937,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 Items = pageItems.Select(item => new SubjectListItemDto
                 {
                     MessageId = item.MessageId,
+                    DocumentDirection = documentDirectionMap.TryGetValue(item.MessageId, out var documentDirection)
+                        ? documentDirection
+                        : null,
                     RequestRef = item.RequestRef,
                     Subject = item.Subject,
                     Description = item.Description,
@@ -1818,6 +1828,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
             var items = await subjectsQuery.ToListAsync(cancellationToken);
             var subjectIds = items.Select(item => item.MessageId).ToList();
+            var directionMap = await LoadDocumentDirectionMapAsync(subjectIds, cancellationToken);
 
             var openTasksCount = await _connectContext.SubjectTasks
                 .AsNoTracking()
@@ -1855,6 +1866,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 .Select(item => new SubjectListItemDto
                 {
                     MessageId = item.MessageId,
+                    DocumentDirection = directionMap.TryGetValue(item.MessageId, out var documentDirection)
+                        ? documentDirection
+                        : null,
                     RequestRef = item.RequestRef,
                     Subject = item.Subject,
                     Description = item.Description,
@@ -2202,7 +2216,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         return response;
     }
 
-    private async Task<(Cdcategory? Category, List<Error> Errors, List<string> UnitIds)> ValidateUpsertRequestAsync(
+    private async Task<(Cdcategory? Category, List<Error> Errors, List<string> UnitIds, string? DocumentDirection)> ValidateUpsertRequestAsync(
         SubjectUpsertRequestDto request,
         string userId,
         CancellationToken cancellationToken)
@@ -2212,7 +2226,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         if (categoryId <= 0)
         {
             errors.Add(new Error { Code = "400", Message = "النوع مطلوب." });
-            return (null, errors, new List<string>());
+            return (null, errors, new List<string>(), null);
         }
 
         var category = await _connectContext.Cdcategories
@@ -2221,13 +2235,13 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         if (category == null)
         {
             errors.Add(new Error { Code = "404", Message = "النوع غير موجود." });
-            return (null, errors, new List<string>());
+            return (null, errors, new List<string>(), null);
         }
 
         if (category.CatStatus)
         {
             errors.Add(new Error { Code = "403", Message = "النوع غير مفعل." });
-            return (category, errors, new List<string>());
+            return (category, errors, new List<string>(), null);
         }
 
         var unitIds = await GetCurrentUserUnitIdsAsync(userId, cancellationToken);
@@ -2236,7 +2250,27 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             errors.Add(new Error { Code = "403", Message = "غير مسموح بإنشاء طلبات على هذا النوع." });
         }
 
-        return (category, errors, unitIds);
+        var normalizedDirection = ResolveDocumentDirection(request?.DocumentDirection, request?.DynamicFields);
+        if (!string.IsNullOrWhiteSpace(request?.DocumentDirection) && normalizedDirection == null)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "اتجاه الطلب غير صالح. القيم المدعومة: incoming أو outgoing (أو وارد/صادر)."
+            });
+        }
+
+        var categoryHasDirectionField = await CategoryHasDirectionFieldAsync(category.CatId, cancellationToken);
+        if (categoryHasDirectionField && normalizedDirection == null)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "اتجاه الطلب مطلوب لهذا النوع. يرجى اختيار وارد أو صادر."
+            });
+        }
+
+        return (category, errors, unitIds, normalizedDirection);
     }
 
     private async Task<List<Cdcategory>> LoadScopedCategoriesAsync(
@@ -2436,6 +2470,50 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return map;
+    }
+
+    private static List<SubjectFieldValueDto> BuildEffectiveDynamicFields(
+        IEnumerable<SubjectFieldValueDto>? incomingFields,
+        string? normalizedDirection)
+    {
+        var cloned = (incomingFields ?? Enumerable.Empty<SubjectFieldValueDto>())
+            .Select(field => new SubjectFieldValueDto
+            {
+                FildSql = field.FildSql,
+                FieldKey = field.FieldKey,
+                Value = field.Value,
+                InstanceGroupId = field.InstanceGroupId
+            })
+            .ToList();
+
+        var normalized = NormalizeDirectionValue(normalizedDirection);
+        if (normalized == null)
+        {
+            return cloned;
+        }
+
+        var directionValue = normalized == "incoming"
+            ? TopicDirectionIncomingValue
+            : TopicDirectionOutgoingValue;
+        var match = cloned.FirstOrDefault(field => IsTopicDirectionField(field.FieldKey));
+        if (match == null)
+        {
+            cloned.Add(new SubjectFieldValueDto
+            {
+                FieldKey = TopicDirectionFieldKey,
+                Value = directionValue,
+                InstanceGroupId = 1
+            });
+            return cloned;
+        }
+
+        match.Value = directionValue;
+        if (!string.Equals(match.FieldKey, TopicDirectionFieldKey, StringComparison.Ordinal))
+        {
+            match.FieldKey = TopicDirectionFieldKey;
+        }
+
+        return cloned;
     }
 
     private static SubjectTypeAdminDto BuildSubjectTypeAdminDto(
@@ -2761,11 +2839,15 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 InstanceGroupId = item.InstanceGroupId
             })
             .ToListAsync(cancellationToken);
+        var documentDirection = ResolveDocumentDirection(
+            explicitDocumentDirection: null,
+            dynamicFields: dynamicFields);
 
         return new SubjectDetailDto
         {
             MessageId = message.MessageId,
             CategoryId = message.CategoryCd,
+            DocumentDirection = documentDirection,
             Subject = message.Subject,
             Description = message.Description,
             RequestRef = message.RequestRef,
@@ -2783,6 +2865,98 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             Timeline = await LoadTimelineAsync(messageId, cancellationToken),
             LinkedEnvelopes = await LoadLinkedEnvelopesAsync(messageId, cancellationToken)
         };
+    }
+
+    private async Task<Dictionary<int, string?>> LoadDocumentDirectionMapAsync(
+        IReadOnlyCollection<int> messageIds,
+        CancellationToken cancellationToken)
+    {
+        if (messageIds == null || messageIds.Count == 0)
+        {
+            return new Dictionary<int, string?>();
+        }
+
+        var rows = await _connectContext.TkmendFields
+            .AsNoTracking()
+            .Where(item => messageIds.Contains(item.FildRelted))
+            .OrderBy(item => item.FildSql)
+            .Select(item => new { item.FildRelted, item.FildKind, item.FildTxt })
+            .ToListAsync(cancellationToken);
+
+        var map = new Dictionary<int, string?>();
+        foreach (var row in rows)
+        {
+            if (map.ContainsKey(row.FildRelted) || !IsTopicDirectionField(row.FildKind))
+            {
+                continue;
+            }
+
+            map[row.FildRelted] = NormalizeDirectionValue(row.FildTxt);
+        }
+
+        return map;
+    }
+
+    private async Task<bool> CategoryHasDirectionFieldAsync(int categoryId, CancellationToken cancellationToken)
+    {
+        return await _connectContext.CdCategoryMands
+            .AsNoTracking()
+            .AnyAsync(item =>
+                item.MendCategory == categoryId
+                && !item.MendStat
+                && (item.MendField ?? string.Empty).Trim().ToUpper() == TopicDirectionFieldKey,
+                cancellationToken);
+    }
+
+    private static string? ResolveDocumentDirection(
+        string? explicitDocumentDirection,
+        IEnumerable<SubjectFieldValueDto>? dynamicFields)
+    {
+        var normalizedExplicit = NormalizeDirectionValue(explicitDocumentDirection);
+        if (normalizedExplicit != null)
+        {
+            return normalizedExplicit;
+        }
+
+        var directionFieldValue = (dynamicFields ?? Enumerable.Empty<SubjectFieldValueDto>())
+            .FirstOrDefault(field => IsTopicDirectionField(field.FieldKey))
+            ?.Value;
+        return NormalizeDirectionValue(directionFieldValue);
+    }
+
+    private static string? NormalizeDirectionValue(string? value)
+    {
+        var normalizedDirection = NormalizeDirectionKey(value);
+        if (normalizedDirection != null)
+        {
+            return normalizedDirection;
+        }
+
+        var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+        if (normalized == null)
+        {
+            return null;
+        }
+
+        if (normalized == TopicDirectionIncomingValue || normalized == "وارد")
+        {
+            return "incoming";
+        }
+
+        if (normalized == TopicDirectionOutgoingValue || normalized == "صادر")
+        {
+            return "outgoing";
+        }
+
+        return null;
+    }
+
+    private static bool IsTopicDirectionField(string? fieldKey)
+    {
+        return string.Equals(
+            NormalizeNullable(fieldKey),
+            TopicDirectionFieldKey,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<EnvelopeDetailDto?> BuildEnvelopeDetailAsync(int envelopeId, CancellationToken cancellationToken)
@@ -2947,6 +3121,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             Data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["subject"] = detail.Subject,
+                ["documentDirection"] = detail.DocumentDirection,
                 ["assignedUnitId"] = detail.AssignedUnitId,
                 ["envelopesCount"] = detail.LinkedEnvelopes.Count.ToString(CultureInfo.InvariantCulture),
                 ["attachmentsCount"] = detail.Attachments.Count.ToString(CultureInfo.InvariantCulture)

@@ -435,6 +435,7 @@ public class DynamicSubjectsController : ControllerBase
             return new SubjectUpsertRequestDto
             {
                 CategoryId = form.CategoryId,
+                DocumentDirection = form.DocumentDirection,
                 Subject = form.Subject,
                 Description = form.Description,
                 SaveAsDraft = form.SaveAsDraft,

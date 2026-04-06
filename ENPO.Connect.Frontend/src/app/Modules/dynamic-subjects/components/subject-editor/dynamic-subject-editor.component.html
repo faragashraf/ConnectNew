@@ -27,6 +27,16 @@
       </div>
 
       <div class="field">
+        <label>اتجاه الطلب</label>
+        <select formControlName="documentDirection">
+          <option value="">اختر الاتجاه</option>
+          <option *ngFor="let option of documentDirectionOptions" [value]="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </div>
+
+      <div class="field">
         <label>عنوان الموضوع/الطلب</label>
         <input type="text" formControlName="subject" />
       </div>

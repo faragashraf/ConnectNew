@@ -128,6 +128,10 @@
                       <span>آخر سياسة ترقيم</span>
                       <strong>{{ category.referencePrefix || '-' }}</strong>
                     </div>
+                    <div>
+                      <span>مصدر تحديد الاتجاه</span>
+                      <strong>{{ directionSourceSummary }}</strong>
+                    </div>
                   </div>
                 </article>
 
@@ -223,6 +227,7 @@
                 <header>
                   <h4>إعدادات النوع والسياسات</h4>
                   <p>إدارة سياسة الترقيم المرجعي وإعدادات المصدر والتسلسل.</p>
+                  <p>اتجاه الطلب يُدار صراحة عبر {{ directionSourceSummary }}.</p>
                 </header>
 
                 <form class="form-grid" [formGroup]="settingsForm">

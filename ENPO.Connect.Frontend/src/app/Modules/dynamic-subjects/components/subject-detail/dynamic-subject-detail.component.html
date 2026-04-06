@@ -5,7 +5,11 @@
     <header class="header">
       <div>
         <h2>{{ subject.subject || screenTitle }}</h2>
-        <p>{{ subject.requestRef }} | {{ toArabicStatusLabel(subject.status, subject.statusLabel) }}</p>
+        <p>
+          {{ subject.requestRef }} |
+          {{ toArabicStatusLabel(subject.status, subject.statusLabel) }} |
+          الاتجاه: {{ toArabicDirectionLabel(subject.documentDirection) }}
+        </p>
       </div>
       <div class="status-change" *ngIf="allowStatusChange">
         <select [(ngModel)]="statusToApply">
@@ -19,6 +23,7 @@
       <h3>نظرة عامة</h3>
       <div class="summary-grid">
         <div><strong>النوع</strong><span>{{ subject.categoryId }}</span></div>
+        <div><strong>الاتجاه</strong><span>{{ toArabicDirectionLabel(subject.documentDirection) }}</span></div>
         <div><strong>تم الإنشاء بواسطة</strong><span>{{ subject.createdBy }}</span></div>
         <div><strong>تاريخ الإنشاء</strong><span>{{ subject.createdDate | date:'short' }}</span></div>
         <div><strong>آخر تعديل</strong><span>{{ subject.lastModifiedDate | date:'short' }}</span></div>

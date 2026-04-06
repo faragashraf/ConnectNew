@@ -391,6 +391,29 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     return this.getUnlinkedSelectableFields();
   }
 
+  get directionSourceSummary(): string {
+    const selectedCategoryId = Number(this.selectedCategory?.categoryId ?? 0);
+    if (selectedCategoryId <= 0) {
+      return '-';
+    }
+
+    const directionLink = (this.editableLinks ?? []).find(link =>
+      this.isLinkForCategory(link, selectedCategoryId)
+      && String(link.fieldKey ?? '').trim().toUpperCase() === 'TOPICDIRECTION');
+    if (!directionLink) {
+      return 'غير مهيأ';
+    }
+
+    const directionField = (this.allFields ?? []).find(field =>
+      String(field.fieldKey ?? '').trim().toUpperCase() === 'TOPICDIRECTION');
+    const options = this.extractDirectionOptionsFromPayload(directionField?.optionsPayload);
+    if (options.length === 0) {
+      return 'TOPICDIRECTION (بدون خيارات معرفة)';
+    }
+
+    return `TOPICDIRECTION (${options.join(' / ')})`;
+  }
+
   get previewInspection(): PreviewInspectionSummary {
     const selectedCategoryId = Number(this.selectedCategory?.categoryId ?? 0);
     const links = (this.editableLinks ?? [])
@@ -2759,6 +2782,26 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
   ): SubjectCategoryFieldLinkAdminDto[] {
     return this.filterLinksByCategory(links ?? [], categoryId)
       .filter(item => Boolean(item?.isActive) && String(item?.fieldKey ?? '').trim().length > 0);
+  }
+
+  private extractDirectionOptionsFromPayload(payload?: string): string[] {
+    const raw = String(payload ?? '').trim();
+    if (raw.length === 0) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .map(item => String(item?.name ?? item?.label ?? item?.value ?? item?.key ?? '').trim())
+        .filter(item => item.length > 0);
+    } catch {
+      return [];
+    }
   }
 
   private isLinkForCategory(link: SubjectCategoryFieldLinkAdminDto, selectedCategoryId: number): boolean {

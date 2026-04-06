@@ -199,6 +199,7 @@ export interface EnvelopeDetailDto {
 
 export interface SubjectUpsertRequest {
   categoryId: number;
+  documentDirection?: string;
   subject?: string;
   description?: string;
   saveAsDraft: boolean;
@@ -237,6 +238,7 @@ export interface SubjectListQueryDto {
 
 export interface SubjectListItemDto {
   messageId: number;
+  documentDirection?: string;
   requestRef?: string;
   subject?: string;
   description?: string;
@@ -263,6 +265,7 @@ export interface PagedSubjectListDto {
 export interface SubjectDetailDto {
   messageId: number;
   categoryId: number;
+  documentDirection?: string;
   subject?: string;
   description?: string;
   requestRef?: string;

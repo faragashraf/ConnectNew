@@ -157,6 +157,7 @@ export class DynamicSubjectListComponent implements OnInit, OnDestroy {
     existing.status = eventItem.status ?? existing.status;
     existing.statusLabel = this.toArabicStatusLabel(existing.status, eventItem.statusLabel ?? existing.statusLabel);
     existing.subject = eventItem.summary ?? existing.subject;
+    existing.documentDirection = this.normalizeDocumentDirection(eventItem.data?.['documentDirection']) ?? existing.documentDirection;
     existing.lastModifiedDate = eventItem.timestampUtc || existing.lastModifiedDate;
     existing.attachmentsCount = Number(eventItem.data?.['attachmentsCount'] ?? existing.attachmentsCount);
     existing.envelopesCount = Number(eventItem.data?.['envelopesCount'] ?? existing.envelopesCount);
@@ -169,6 +170,7 @@ export class DynamicSubjectListComponent implements OnInit, OnDestroy {
       subject: eventItem.summary || eventItem.data?.['subject'] || '',
       description: '',
       categoryId: Number(eventItem.categoryId ?? 0),
+      documentDirection: this.normalizeDocumentDirection(eventItem.data?.['documentDirection']) ?? undefined,
       status: Number(eventItem.status ?? 10),
       statusLabel: this.toArabicStatusLabel(eventItem.status, eventItem.statusLabel),
       createdBy: eventItem.actorUserId,
@@ -209,6 +211,35 @@ export class DynamicSubjectListComponent implements OnInit, OnDestroy {
     if (normalized === 'archived') return 'مؤرشف';
 
     return label || 'غير محدد';
+  }
+
+  toArabicDirectionLabel(direction?: string): string {
+    const normalized = this.normalizeDocumentDirection(direction);
+    if (normalized === 'incoming') {
+      return 'وارد';
+    }
+    if (normalized === 'outgoing') {
+      return 'صادر';
+    }
+
+    return '-';
+  }
+
+  private normalizeDocumentDirection(value: unknown): string | null {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'incoming' || normalized === 'inbound' || normalized === 'in' || normalized === '2' || normalized === 'وارد') {
+      return 'incoming';
+    }
+
+    if (normalized === 'outgoing' || normalized === 'outbound' || normalized === 'out' || normalized === '1' || normalized === 'صادر') {
+      return 'outgoing';
+    }
+
+    return null;
   }
 
   private bootstrapAccess(): void {

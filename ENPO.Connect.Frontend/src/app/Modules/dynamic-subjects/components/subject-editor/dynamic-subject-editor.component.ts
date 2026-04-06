@@ -32,6 +32,11 @@ import { DynamicSubjectAccessService } from '../../services/dynamic-subject-acce
 })
 export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private static readonly EDITOR_ROUTE_KEY = 'DynamicSubjects/SubjectEditor';
+  private static readonly DIRECTION_FIELD_KEY = 'TOPICDIRECTION';
+  readonly documentDirectionOptions: Array<{ label: string; value: string }> = [
+    { label: 'وارد', value: 'incoming' },
+    { label: 'صادر', value: 'outgoing' }
+  ];
 
   editorForm: FormGroup;
   dynamicControls: FormGroup;
@@ -76,6 +81,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   ) {
     this.editorForm = this.fb.group({
       categoryId: [0, Validators.required],
+      documentDirection: [''],
       subject: [''],
       description: [''],
       envelopeId: [null]
@@ -337,14 +343,23 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const dynamicFields = this.buildDynamicFieldValues();
+    const documentDirection = this.resolveDocumentDirectionForSave(dynamicFields);
+    if (this.categoryRequiresDocumentDirection() && !documentDirection) {
+      this.editorForm.get('documentDirection')?.markAsTouched();
+      this.appNotification.warning('يرجى تحديد اتجاه الطلب (وارد/صادر).');
+      return;
+    }
+
     const request: SubjectUpsertRequest = {
       categoryId,
+      documentDirection: documentDirection ?? undefined,
       subject: this.editorForm.get('subject')?.value ?? '',
       description: this.editorForm.get('description')?.value ?? '',
       envelopeId: Number(this.editorForm.get('envelopeId')?.value ?? 0) || undefined,
       saveAsDraft: !submit,
       submit,
-      dynamicFields: this.buildDynamicFieldValues(),
+      dynamicFields,
       stakeholders: this.buildStakeholdersPayload(),
       tasks: this.buildTasksPayload()
     };
@@ -392,6 +407,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
         this.editorForm.patchValue({
           categoryId: detail.categoryId,
+          documentDirection: this.normalizeDocumentDirection(detail.documentDirection) ?? '',
           subject: detail.subject ?? '',
           description: detail.description ?? '',
           envelopeId: detail.linkedEnvelopes?.[0]?.envelopeId ?? null
@@ -984,6 +1000,40 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       value: this.normalizeOutgoingDynamicValue(this.genericFormService.GetControl(this.dynamicControls, controlName)?.value),
       instanceGroupId: key.instanceGroupId
     }));
+  }
+
+  private categoryRequiresDocumentDirection(): boolean {
+    return (this.formDefinition?.fields ?? []).some(field =>
+      String(field.fieldKey ?? '').trim().toUpperCase() === DynamicSubjectEditorComponent.DIRECTION_FIELD_KEY);
+  }
+
+  private resolveDocumentDirectionForSave(dynamicFields: SubjectFieldValueDto[]): string | null {
+    const explicitDirection = this.normalizeDocumentDirection(this.editorForm.get('documentDirection')?.value);
+    if (explicitDirection) {
+      return explicitDirection;
+    }
+
+    const directionFieldValue = (dynamicFields ?? [])
+      .find(field => String(field.fieldKey ?? '').trim().toUpperCase() === DynamicSubjectEditorComponent.DIRECTION_FIELD_KEY)
+      ?.value;
+    return this.normalizeDocumentDirection(directionFieldValue);
+  }
+
+  private normalizeDocumentDirection(value: unknown): string | null {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'incoming' || normalized === 'inbound' || normalized === 'in' || normalized === '2' || normalized === 'وارد') {
+      return 'incoming';
+    }
+
+    if (normalized === 'outgoing' || normalized === 'outbound' || normalized === 'out' || normalized === '1' || normalized === 'صادر') {
+      return 'outgoing';
+    }
+
+    return null;
   }
 
   private loadEnvelopeOptions(): void {

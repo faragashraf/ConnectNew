@@ -227,6 +227,8 @@ public sealed class SubjectUpsertRequestDto
 {
     public int CategoryId { get; set; }
 
+    public string? DocumentDirection { get; set; }
+
     public string? Subject { get; set; }
 
     public string? Description { get; set; }
@@ -249,6 +251,8 @@ public sealed class SubjectUpsertRequestDto
 public sealed class SubjectUpsertFormRequestDto
 {
     public int CategoryId { get; set; }
+
+    public string? DocumentDirection { get; set; }
 
     public string? Subject { get; set; }
 
@@ -479,6 +483,8 @@ public sealed class SubjectListItemDto
 {
     public int MessageId { get; set; }
 
+    public string? DocumentDirection { get; set; }
+
     public string? RequestRef { get; set; }
 
     public string? Subject { get; set; }
@@ -522,6 +528,8 @@ public sealed class PagedSubjectListDto
 public sealed class SubjectDetailDto
 {
     public int MessageId { get; set; }
+
+    public string? DocumentDirection { get; set; }
 
     public int CategoryId { get; set; }
 

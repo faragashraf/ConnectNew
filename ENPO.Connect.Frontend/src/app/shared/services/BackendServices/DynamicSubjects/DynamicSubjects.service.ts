@@ -287,6 +287,9 @@ export class DynamicSubjectsController {
   private toSubjectFormData(request: SubjectUpsertRequest, files: FileParameter[]): FormData {
     const formData = new FormData();
     formData.append('categoryId', String(request.categoryId));
+    if ((request.documentDirection ?? '').trim().length > 0) {
+      formData.append('documentDirection', String(request.documentDirection ?? '').trim());
+    }
     formData.append('subject', request.subject ?? '');
     formData.append('description', request.description ?? '');
     formData.append('saveAsDraft', String(Boolean(request.saveAsDraft)));

@@ -340,6 +340,18 @@ export class DynamicSubjectDetailComponent implements OnInit, OnDestroy {
     return label || 'غير محدد';
   }
 
+  toArabicDirectionLabel(direction?: string): string {
+    const normalized = this.normalizeDocumentDirection(direction);
+    if (normalized === 'incoming') {
+      return 'وارد';
+    }
+    if (normalized === 'outgoing') {
+      return 'صادر';
+    }
+
+    return '-';
+  }
+
   toArabicEventType(eventType?: string): string {
     switch (String(eventType ?? '').trim()) {
       case 'SubjectCreated': return 'إنشاء موضوع/طلب';
@@ -1037,5 +1049,22 @@ export class DynamicSubjectDetailComponent implements OnInit, OnDestroy {
     this.genericFormService.resetDynamicRuntimeState();
     this.genericFormService.cdmendDto = [];
     this.genericFormService.cdCategoryMandDto = [];
+  }
+
+  private normalizeDocumentDirection(value: unknown): string | null {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'incoming' || normalized === 'inbound' || normalized === 'in' || normalized === '2' || normalized === 'وارد') {
+      return 'incoming';
+    }
+
+    if (normalized === 'outgoing' || normalized === 'outbound' || normalized === 'out' || normalized === '1' || normalized === 'صادر') {
+      return 'outgoing';
+    }
+
+    return null;
   }
 }
