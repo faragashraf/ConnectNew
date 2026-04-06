@@ -431,7 +431,7 @@
 .switches {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 0.6rem;
 
   label {
@@ -453,7 +453,9 @@
 }
 
 .switch-field {
-  align-content: end;
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
 }
 
 .policy-errors-box {

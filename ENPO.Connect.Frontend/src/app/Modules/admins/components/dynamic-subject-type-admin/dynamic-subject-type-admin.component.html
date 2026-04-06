@@ -509,7 +509,7 @@
                           optionLabel="label"
                           optionValue="value"
                           formControlName="workflowManualTargetFieldKey"
-                          [disabled]="!isWorkflowManualTargetFieldRequired || workflowManualTargetFieldOptions.length === 0"
+                          [disabled]="workflowManualTargetFieldOptions.length === 0"
                           placeholder="الحقل الذي سيختار منه المستخدم جهة التوجيه">
                         </p-dropdown>
                         <small class="field-helper">{{ workflowManualTargetFieldHelpText }}</small>
@@ -517,7 +517,7 @@
                       </div>
 
                       <div class="field" *ngIf="showWorkflowDefaultTargetField">
-                        <label>الجهة الافتراضية<span class="required-mark" *ngIf="workflowModeValue === 'manual' && !workflowAllowManualSelectionValue">*</span></label>
+                        <label>الجهة الافتراضية<span class="required-mark" *ngIf="workflowModeValue === 'manual' && !workflowManualSelectionRequiredValue">*</span></label>
                         <input pInputText type="text" formControlName="workflowDefaultTargetUnitId" placeholder="اختياري" />
                         <small class="field-helper">
                           تستخدم كمسار بديل عندما لا يختار المستخدم جهة التوجيه يدويًا.
@@ -525,8 +525,21 @@
                       </div>
 
                       <div class="switches" *ngIf="showWorkflowManualSelectionToggles">
-                        <label><span>السماح بالاختيار اليدوي</span><p-inputSwitch formControlName="workflowAllowManualSelection"></p-inputSwitch></label>
-                        <label *ngIf="showWorkflowManualSelectionRequiredToggle"><span>الاختيار اليدوي إلزامي</span><p-inputSwitch formControlName="workflowManualSelectionRequired"></p-inputSwitch></label>
+                        <div class="switch-field" *ngIf="showWorkflowAllowManualSelectionToggle">
+                          <label>
+                            <span>السماح بالاختيار اليدوي</span>
+                            <p-inputSwitch formControlName="workflowAllowManualSelection" [disabled]="isWorkflowAllowManualSelectionLocked"></p-inputSwitch>
+                          </label>
+                          <small class="field-helper">{{ workflowAllowManualSelectionHelpText }}</small>
+                        </div>
+
+                        <div class="switch-field" *ngIf="showWorkflowManualSelectionRequiredToggle">
+                          <label>
+                            <span>الاختيار اليدوي إلزامي</span>
+                            <p-inputSwitch formControlName="workflowManualSelectionRequired"></p-inputSwitch>
+                          </label>
+                          <small class="field-helper">{{ workflowManualSelectionRequiredHelpText }}</small>
+                        </div>
                       </div>
                     </form>
                   </p-tabPanel>

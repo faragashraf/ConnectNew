@@ -3788,7 +3788,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         var mode = (NormalizeNullable(requestPolicy.WorkflowPolicy.Mode) ?? "manual").ToLowerInvariant();
         var allowManualSelection = requestPolicy.WorkflowPolicy.AllowManualSelection;
         var manualTargetFieldKey = NormalizeNullable(requestPolicy.WorkflowPolicy.ManualTargetFieldKey);
-        var requiresManualTargetField = (mode == "manual" || mode == "hybrid") && allowManualSelection;
+        var requiresManualTargetField = mode == "manual" || (mode == "hybrid" && allowManualSelection);
         if (!requiresManualTargetField || manualTargetFieldKey == null)
         {
             return errors;

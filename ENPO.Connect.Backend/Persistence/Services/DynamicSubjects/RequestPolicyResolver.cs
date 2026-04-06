@@ -119,10 +119,25 @@ internal static class RequestPolicyResolver
             });
         }
 
-        if ((string.Equals(workflowMode, "manual", StringComparison.OrdinalIgnoreCase)
-             || string.Equals(workflowMode, "hybrid", StringComparison.OrdinalIgnoreCase))
-            && policy.WorkflowPolicy.AllowManualSelection
-            && string.IsNullOrWhiteSpace(policy.WorkflowPolicy.ManualTargetFieldKey))
+        var isManualWorkflow = string.Equals(workflowMode, "manual", StringComparison.OrdinalIgnoreCase);
+        var isHybridWorkflow = string.Equals(workflowMode, "hybrid", StringComparison.OrdinalIgnoreCase);
+        var allowManualSelection = policy.WorkflowPolicy.AllowManualSelection;
+        var manualSelectionRequired = policy.WorkflowPolicy.ManualSelectionRequired;
+        var hasManualTargetField = !string.IsNullOrWhiteSpace(policy.WorkflowPolicy.ManualTargetFieldKey);
+        var hasDefaultTarget = !string.IsNullOrWhiteSpace(policy.WorkflowPolicy.DefaultTargetUnitId);
+        var hasStaticTargets = policy.WorkflowPolicy.StaticTargetUnitIds.Count > 0;
+
+        if (isManualWorkflow && !allowManualSelection)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "وضع التوجيه اليدوي يتطلب تفعيل السماح بالاختيار اليدوي. إذا لم ترغب بذلك استخدم وضع هجين أو ثابت."
+            });
+        }
+
+        if ((isManualWorkflow || (isHybridWorkflow && allowManualSelection))
+            && !hasManualTargetField)
         {
             errors.Add(new Error
             {
@@ -131,14 +146,39 @@ internal static class RequestPolicyResolver
             });
         }
 
-        if (string.Equals(workflowMode, "manual", StringComparison.OrdinalIgnoreCase)
-            && !policy.WorkflowPolicy.AllowManualSelection
-            && string.IsNullOrWhiteSpace(policy.WorkflowPolicy.DefaultTargetUnitId))
+        if (isManualWorkflow
+            && !manualSelectionRequired
+            && !hasDefaultTarget)
         {
             errors.Add(new Error
             {
                 Code = "400",
-                Message = "عند اختيار وضع \"توجيه يدوي\" مع إيقاف الاختيار اليدوي، يجب تحديد الجهة الافتراضية."
+                Message = "عند جعل الاختيار اليدوي غير إلزامي في الوضع اليدوي، يجب تحديد الجهة الافتراضية."
+            });
+        }
+
+        if (isHybridWorkflow
+            && !allowManualSelection
+            && !hasStaticTargets
+            && !hasDefaultTarget)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "في الوضع الهجين مع إيقاف الاختيار اليدوي، يجب تحديد جهة ثابتة أو جهة افتراضية."
+            });
+        }
+
+        if (isHybridWorkflow
+            && allowManualSelection
+            && !manualSelectionRequired
+            && !hasStaticTargets
+            && !hasDefaultTarget)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "في الوضع الهجين مع اختيار يدوي غير إلزامي، يجب تحديد مسار بديل (جهة ثابتة أو افتراضية)."
             });
         }
 

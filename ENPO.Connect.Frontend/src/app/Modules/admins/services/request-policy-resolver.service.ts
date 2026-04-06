@@ -149,6 +149,14 @@ export class RequestPolicyResolverService {
   }
 
   normalizePolicy(requestPolicy: RequestPolicyDefinitionDto | null | undefined): RequestPolicyDefinitionDto {
+    const normalizedWorkflowMode = this.normalizeWorkflowMode(requestPolicy?.workflowPolicy?.mode);
+    const normalizedAllowManualSelection = normalizedWorkflowMode === 'manual'
+      ? true
+      : requestPolicy?.workflowPolicy?.allowManualSelection !== false;
+    const normalizedManualSelectionRequired = normalizedWorkflowMode === 'static'
+      ? false
+      : requestPolicy?.workflowPolicy?.manualSelectionRequired !== false;
+
     return {
       version: Number(requestPolicy?.version ?? 1) > 0 ? Number(requestPolicy?.version ?? 1) : 1,
       presentationRules: (requestPolicy?.presentationRules ?? [])
@@ -195,11 +203,13 @@ export class RequestPolicyResolverService {
         inheritLegacyAccess: requestPolicy?.accessPolicy?.inheritLegacyAccess !== false
       },
       workflowPolicy: {
-        mode: this.normalizeWorkflowMode(requestPolicy?.workflowPolicy?.mode),
+        mode: normalizedWorkflowMode,
         staticTargetUnitIds: this.normalizeStringArray(requestPolicy?.workflowPolicy?.staticTargetUnitIds ?? []),
-        allowManualSelection: requestPolicy?.workflowPolicy?.allowManualSelection !== false,
-        manualTargetFieldKey: this.normalizeString(requestPolicy?.workflowPolicy?.manualTargetFieldKey) ?? undefined,
-        manualSelectionRequired: requestPolicy?.workflowPolicy?.manualSelectionRequired !== false,
+        allowManualSelection: normalizedAllowManualSelection,
+        manualTargetFieldKey: normalizedAllowManualSelection
+          ? (this.normalizeString(requestPolicy?.workflowPolicy?.manualTargetFieldKey) ?? undefined)
+          : undefined,
+        manualSelectionRequired: normalizedManualSelectionRequired,
         defaultTargetUnitId: this.normalizeString(requestPolicy?.workflowPolicy?.defaultTargetUnitId) ?? undefined
       }
     };

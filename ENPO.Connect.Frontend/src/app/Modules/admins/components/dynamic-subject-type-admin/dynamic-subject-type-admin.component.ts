@@ -1449,6 +1449,10 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     return Boolean(this.policyForm.get('workflowAllowManualSelection')?.value);
   }
 
+  get workflowManualSelectionRequiredValue(): boolean {
+    return Boolean(this.policyForm.get('workflowManualSelectionRequired')?.value);
+  }
+
   get showWorkflowStaticTargetsField(): boolean {
     return this.workflowModeValue === 'static' || this.workflowModeValue === 'hybrid';
   }
@@ -1457,22 +1461,58 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     return this.workflowModeValue === 'manual' || this.workflowModeValue === 'hybrid';
   }
 
-  get isWorkflowManualTargetFieldRequired(): boolean {
-    return this.showWorkflowManualSelectionToggles && this.workflowAllowManualSelectionValue;
-  }
-
-  get showWorkflowManualTargetField(): boolean {
+  get showWorkflowAllowManualSelectionToggle(): boolean {
     return this.showWorkflowManualSelectionToggles;
   }
 
-  get showWorkflowManualSelectionRequiredToggle(): boolean {
+  get isWorkflowAllowManualSelectionLocked(): boolean {
+    return this.workflowModeValue === 'manual';
+  }
+
+  get isWorkflowManualTargetFieldRequired(): boolean {
+    if (this.workflowModeValue === 'manual') {
+      return true;
+    }
+
+    return this.workflowModeValue === 'hybrid' && this.workflowAllowManualSelectionValue;
+  }
+
+  get showWorkflowManualTargetField(): boolean {
     return this.isWorkflowManualTargetFieldRequired;
+  }
+
+  get showWorkflowManualSelectionRequiredToggle(): boolean {
+    return this.showWorkflowManualTargetField;
   }
 
   get showWorkflowDefaultTargetField(): boolean {
     return this.workflowModeValue === 'static'
       || this.workflowModeValue === 'hybrid'
-      || (this.workflowModeValue === 'manual' && !this.workflowAllowManualSelectionValue);
+      || (this.workflowModeValue === 'manual' && !this.workflowManualSelectionRequiredValue);
+  }
+
+  get workflowAllowManualSelectionHelpText(): string {
+    if (!this.showWorkflowAllowManualSelectionToggle) {
+      return '';
+    }
+
+    if (this.workflowModeValue === 'manual') {
+      return 'في وضع التوجيه اليدوي يتم تفعيل هذا الخيار تلقائيًا ولا يمكن تعطيله.';
+    }
+
+    return 'عند إيقافه في وضع التوجيه الهجين، سيتم الاعتماد على المسار الثابت/الافتراضي.';
+  }
+
+  get workflowManualSelectionRequiredHelpText(): string {
+    if (!this.showWorkflowManualSelectionRequiredToggle) {
+      return '';
+    }
+
+    if (this.workflowModeValue === 'manual') {
+      return 'عند إيقاف الإلزام يمكن للمستخدم التخطي، لذلك يجب تحديد جهة افتراضية.';
+    }
+
+    return 'عند إيقاف الإلزام في الوضع الهجين يلزم توفير مسار بديل (جهة ثابتة أو افتراضية).';
   }
 
   get workflowManualTargetFieldOptions(): Array<{ label: string; value: string }> {
@@ -1538,11 +1578,11 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       return '';
     }
 
-    if (!this.workflowAllowManualSelectionValue) {
-      return 'تم إيقاف الاختيار اليدوي، لذلك لن يتم استخدام حقل اختيار جهة التوجيه.';
+    if (this.workflowModeValue === 'manual') {
+      return 'اختر المفتاح الخاص بحقل اختيار الجهة (DomainUser/Unit/Lookup). هذا الحقل مطلوب في الوضع اليدوي.';
     }
 
-    return 'اختر الحقل الذي سيحدد منه المستخدم جهة التوجيه عند تسجيل الطلب.';
+    return 'اختر المفتاح الخاص بحقل اختيار الجهة المستخدم في المسار اليدوي ضمن الوضع الهجين.';
   }
 
   get workflowManualTargetFieldWarning(): string | null {
@@ -1663,6 +1703,20 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
   private buildRequestPolicyFromForm(): { policy: RequestPolicyDefinitionDto | null; validationErrors: string[] } {
     const raw = this.policyForm.value ?? {};
+    const workflowModeRaw = String(raw.workflowMode ?? 'manual').trim().toLowerCase();
+    const normalizedWorkflowMode: 'manual' | 'static' | 'hybrid' = workflowModeRaw === 'static' || workflowModeRaw === 'hybrid'
+      ? workflowModeRaw
+      : 'manual';
+    const normalizedAllowManualSelection = normalizedWorkflowMode === 'manual'
+      ? true
+      : Boolean(raw.workflowAllowManualSelection);
+    const normalizedManualSelectionRequired = normalizedWorkflowMode === 'static'
+      ? false
+      : Boolean(raw.workflowManualSelectionRequired);
+    const normalizedManualTargetFieldKey = normalizedAllowManualSelection
+      ? String(raw.workflowManualTargetFieldKey ?? '').trim() || undefined
+      : undefined;
+
     const presentationRules = this.policyRuleFormGroups.map((ruleControl, ruleIndex) => {
       const conditions = this.resolveRuleConditionsArray(ruleIndex).controls
         .map(item => this.toConditionDto(item as FormGroup))
@@ -1706,11 +1760,11 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
         inheritLegacyAccess: Boolean(raw.inheritLegacyAccess)
       },
       workflowPolicy: {
-        mode: String(raw.workflowMode ?? 'manual').trim() || 'manual',
+        mode: normalizedWorkflowMode,
         staticTargetUnitIds: this.parseCsv(raw.workflowStaticTargets),
-        allowManualSelection: Boolean(raw.workflowAllowManualSelection),
-        manualTargetFieldKey: String(raw.workflowManualTargetFieldKey ?? '').trim() || undefined,
-        manualSelectionRequired: Boolean(raw.workflowManualSelectionRequired),
+        allowManualSelection: normalizedAllowManualSelection,
+        manualTargetFieldKey: normalizedManualTargetFieldKey,
+        manualSelectionRequired: normalizedManualSelectionRequired,
         defaultTargetUnitId: String(raw.workflowDefaultTargetUnitId ?? '').trim() || undefined
       }
     });
@@ -1877,11 +1931,14 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     const errors: string[] = [];
     const workflowMode = String(policy.workflowPolicy?.mode ?? 'manual').trim().toLowerCase();
     const allowManualSelection = policy.workflowPolicy?.allowManualSelection !== false;
+    const manualSelectionRequired = policy.workflowPolicy?.manualSelectionRequired !== false;
     const manualTargetFieldKey = String(policy.workflowPolicy?.manualTargetFieldKey ?? '').trim();
     const defaultTargetUnitId = String(policy.workflowPolicy?.defaultTargetUnitId ?? '').trim();
     const staticTargets = policy.workflowPolicy?.staticTargetUnitIds ?? [];
     const createUnits = policy.accessPolicy?.createScope?.unitIds ?? [];
-    const requiresManualTargetField = (workflowMode === 'manual' || workflowMode === 'hybrid') && allowManualSelection;
+    const isManualMode = workflowMode === 'manual';
+    const isHybridMode = workflowMode === 'hybrid';
+    const requiresManualTargetField = isManualMode || (isHybridMode && allowManualSelection);
     const manualTargetOptions = this.workflowManualTargetFieldOptions;
 
     if (String(policy.accessPolicy?.createMode ?? 'single').trim().toLowerCase() === 'single' && createUnits.length > 1) {
@@ -1890,6 +1947,10 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
     if (workflowMode === 'static' && staticTargets.length === 0) {
       errors.push('تم اختيار التوجيه الثابت، لذلك يجب تحديد جهة واحدة على الأقل في "الجهات الثابتة".');
+    }
+
+    if (isManualMode && !allowManualSelection) {
+      errors.push('وضع "توجيه يدوي" يتطلب تفعيل السماح بالاختيار اليدوي. إذا لم ترغب بذلك غيّر الوضع إلى "هجين" أو "ثابت".');
     }
 
     if (requiresManualTargetField && manualTargetOptions.length === 0) {
@@ -1906,8 +1967,16 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       errors.push('الحقل المحدد للتوجيه اليدوي غير صالح أو غير مرتبط بهذا النوع.');
     }
 
-    if (workflowMode === 'manual' && !allowManualSelection && defaultTargetUnitId.length === 0) {
-      errors.push('عند اختيار وضع "توجيه يدوي" مع إيقاف الاختيار اليدوي، يجب تحديد الجهة الافتراضية.');
+    if (isManualMode && !manualSelectionRequired && defaultTargetUnitId.length === 0) {
+      errors.push('عند جعل الاختيار اليدوي غير إلزامي في الوضع اليدوي، يجب تحديد الجهة الافتراضية.');
+    }
+
+    if (isHybridMode && !allowManualSelection && staticTargets.length === 0 && defaultTargetUnitId.length === 0) {
+      errors.push('في الوضع الهجين مع إيقاف الاختيار اليدوي، يجب تحديد جهة ثابتة أو جهة افتراضية.');
+    }
+
+    if (isHybridMode && allowManualSelection && !manualSelectionRequired && staticTargets.length === 0 && defaultTargetUnitId.length === 0) {
+      errors.push('في الوضع الهجين مع اختيار يدوي غير إلزامي، يجب تحديد مسار بديل (جهة ثابتة أو افتراضية).');
     }
 
     const supportedOperators = new Set(this.conditionOperatorOptions.map(item => item.value));
@@ -1980,7 +2049,9 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     }
 
     const hasDefaultTargetError = normalizedErrors.some(item =>
-      item.includes('الجهة الافتراضية') || item.includes('default target'));
+      item.includes('الجهة الافتراضية')
+      || item.includes('مسار بديل')
+      || item.includes('default target'));
     if (hasDefaultTargetError) {
       this.focusPolicyControl('workflowDefaultTargetUnitId');
       return;
@@ -2095,6 +2166,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     this.applyWorkflowPolicyFormBehavior();
     this.subscriptions.add(workflowModeControl.valueChanges.subscribe(() => this.applyWorkflowPolicyFormBehavior()));
     this.subscriptions.add(workflowAllowManualSelectionControl.valueChanges.subscribe(() => this.applyWorkflowPolicyFormBehavior()));
+    this.subscriptions.add(workflowManualSelectionRequiredControl.valueChanges.subscribe(() => this.applyWorkflowPolicyFormBehavior()));
   }
 
   private applyWorkflowPolicyFormBehavior(): void {
@@ -2112,10 +2184,20 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     }
 
     const mode = this.workflowModeValue;
-    const allowManualSelection = Boolean(workflowAllowManualSelectionControl.value);
+    if (mode === 'manual' && workflowAllowManualSelectionControl.value !== true) {
+      workflowAllowManualSelectionControl.patchValue(true, { emitEvent: false });
+    }
+    if (mode === 'static' && workflowAllowManualSelectionControl.value !== false) {
+      workflowAllowManualSelectionControl.patchValue(false, { emitEvent: false });
+    }
+
+    const allowManualSelection = mode === 'manual'
+      ? true
+      : Boolean(workflowAllowManualSelectionControl.value);
+    const manualSelectionRequired = Boolean(workflowManualSelectionRequiredControl.value);
     const requiresStaticTargets = mode === 'static';
-    const requiresManualTargetField = (mode === 'manual' || mode === 'hybrid') && allowManualSelection;
-    const requiresDefaultTargetUnit = mode === 'manual' && !allowManualSelection;
+    const requiresManualTargetField = mode === 'manual' || (mode === 'hybrid' && allowManualSelection);
+    const requiresDefaultTargetUnit = mode === 'manual' && !manualSelectionRequired;
 
     workflowStaticTargetsControl.setValidators(requiresStaticTargets ? [Validators.required] : []);
     workflowStaticTargetsControl.updateValueAndValidity({ emitEvent: false });
@@ -2127,9 +2209,6 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     workflowDefaultTargetUnitIdControl.updateValueAndValidity({ emitEvent: false });
 
     if (mode === 'static') {
-      if (workflowAllowManualSelectionControl.value !== false) {
-        workflowAllowManualSelectionControl.patchValue(false, { emitEvent: false });
-      }
       if (workflowManualSelectionRequiredControl.value !== false) {
         workflowManualSelectionRequiredControl.patchValue(false, { emitEvent: false });
       }
@@ -2138,7 +2217,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       }
     }
 
-    if ((mode === 'manual' || mode === 'hybrid') && !allowManualSelection) {
+    if (mode === 'hybrid' && !allowManualSelection) {
       if (workflowManualSelectionRequiredControl.value !== false) {
         workflowManualSelectionRequiredControl.patchValue(false, { emitEvent: false });
       }
