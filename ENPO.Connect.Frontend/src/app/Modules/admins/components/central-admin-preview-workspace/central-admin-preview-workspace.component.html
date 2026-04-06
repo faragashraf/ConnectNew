@@ -47,6 +47,14 @@
         <strong>{{ primaryRouteKey }}</strong>
       </article>
       <article>
+        <span>Document Direction</span>
+        <strong>{{ contextState.documentDirection || '-' }}</strong>
+      </article>
+      <article>
+        <span>Request Mode</span>
+        <strong>{{ contextState.requestMode || '-' }}</strong>
+      </article>
+      <article>
         <span>Canonical Config</span>
         <strong>{{ model.canonicalRouteKey || '-' }}</strong>
       </article>
@@ -126,6 +134,40 @@
       </ng-template>
     </section>
 
+    <section class="config-panel">
+      <header>
+        <h4>Request Policy Summary</h4>
+        <p>نتيجة حل Access + Workflow + Presentation داخل نفس سياق المعاينة الحالي.</p>
+      </header>
+      <div class="readiness-kpis">
+        <div>
+          <small>Workflow Mode</small>
+          <strong>{{ model.resolvedWorkflowPolicy.mode }}</strong>
+        </div>
+        <div>
+          <small>Static Targets</small>
+          <strong>{{ model.resolvedWorkflowPolicy.staticTargetUnitIds.length }}</strong>
+        </div>
+        <div>
+          <small>Create Units</small>
+          <strong>{{ model.resolvedAccessPolicy.createUnitIds.length }}</strong>
+        </div>
+        <div>
+          <small>Read Units</small>
+          <strong>{{ model.resolvedAccessPolicy.readUnitIds.length }}</strong>
+        </div>
+      </div>
+      <p class="canonical-note" *ngIf="model.resolvedWorkflowPolicy.mode === 'manual'">
+        سيتم إظهار اختيار جهة التوجيه للمستخدم (Manual Routing).
+      </p>
+      <p class="canonical-note" *ngIf="model.resolvedWorkflowPolicy.mode === 'static'">
+        التوجيه ثابت إلى: <strong>{{ model.resolvedWorkflowPolicy.resolvedTargetUnitId || '-' }}</strong>
+      </p>
+      <p class="canonical-note" *ngIf="model.resolvedWorkflowPolicy.mode === 'hybrid'">
+        التوجيه Hybrid: اختيار يدوي مع fallback ثابت.
+      </p>
+    </section>
+
     <section class="groups-panel" *ngIf="model.groups.length > 0; else noGroups">
       <article class="group-card" *ngFor="let group of model.groups; trackBy: trackByGroup">
         <header class="group-head">
@@ -143,7 +185,7 @@
               </label>
 
               <ng-container [ngSwitch]="true">
-                <textarea *ngSwitchCase="isTextareaField(field)" rows="2" [placeholder]="field.label" disabled></textarea>
+                <textarea *ngSwitchCase="isTextareaField(field)" rows="2" [placeholder]="field.placeholder || field.label" disabled></textarea>
                 <div *ngSwitchCase="isSelectField(field)" class="sim-select-with-tree">
                   <select disabled>
                     <option value="" selected>اختر...</option>
@@ -161,12 +203,15 @@
                 </div>
                 <input *ngSwitchCase="isBooleanField(field)" type="checkbox" disabled />
                 <input *ngSwitchCase="isDateField(field)" type="date" disabled />
-                <input *ngSwitchCase="isNumberField(field)" type="number" [placeholder]="field.label" disabled />
-                <input *ngSwitchDefault type="text" [placeholder]="field.label" disabled />
+                <input *ngSwitchCase="isNumberField(field)" type="number" [placeholder]="field.placeholder || field.label" disabled />
+                <input *ngSwitchDefault type="text" [placeholder]="field.placeholder || field.label" disabled />
               </ng-container>
 
               <small class="tree-selected-value" *ngIf="getTreeSelectedLabel(field)">
                 الاختيار الحالي: {{ getTreeSelectedLabel(field) }}
+              </small>
+              <small class="tree-selected-value" *ngIf="field.helpText">
+                {{ field.helpText }}
               </small>
 
               <div class="sim-tags">

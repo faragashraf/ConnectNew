@@ -193,6 +193,7 @@ export interface SubjectUpsertRequest {
   saveAsDraft: boolean;
   submit: boolean;
   envelopeId?: number;
+  targetUnitId?: string;
   dynamicFields: SubjectFieldValueDto[];
   stakeholders: SubjectStakeholderUpsertDto[];
   tasks: SubjectTaskUpsertDto[];
@@ -340,6 +341,59 @@ export interface DynamicSubjectRealtimeEventDto {
   data: Record<string, string | undefined>;
 }
 
+export interface RequestPolicyConditionDto {
+  variable: string;
+  operator?: string;
+  value?: string;
+  values?: string[];
+}
+
+export interface RequestPolicyFieldPatchDto {
+  fieldKey: string;
+  label?: string;
+  visible?: boolean;
+  required?: boolean;
+  readonly?: boolean;
+  placeholder?: string;
+  helpText?: string;
+}
+
+export interface RequestPolicyPresentationRuleDto {
+  ruleId?: string;
+  isEnabled?: boolean;
+  priority?: number;
+  conditions: RequestPolicyConditionDto[];
+  fieldPatches: RequestPolicyFieldPatchDto[];
+}
+
+export interface RequestPolicyPrincipalScopeDto {
+  unitIds: string[];
+  roleIds?: string[];
+  groupIds?: string[];
+}
+
+export interface RequestAccessPolicyDto {
+  createMode?: 'single' | 'multi' | string;
+  createScope: RequestPolicyPrincipalScopeDto;
+  readScope: RequestPolicyPrincipalScopeDto;
+  workScope: RequestPolicyPrincipalScopeDto;
+  inheritLegacyAccess?: boolean;
+}
+
+export interface RequestWorkflowPolicyDto {
+  mode?: 'static' | 'manual' | 'hybrid' | string;
+  staticTargetUnitIds: string[];
+  allowManualSelection?: boolean;
+  defaultTargetUnitId?: string;
+}
+
+export interface RequestPolicyDefinitionDto {
+  version?: number;
+  presentationRules: RequestPolicyPresentationRuleDto[];
+  accessPolicy: RequestAccessPolicyDto;
+  workflowPolicy: RequestWorkflowPolicyDto;
+}
+
 export interface SubjectTypeAdminDto {
   categoryId: number;
   parentCategoryId: number;
@@ -366,6 +420,7 @@ export interface SubjectTypeAdminDto {
   sequenceName?: string;
   lastModifiedBy?: string;
   lastModifiedAtUtc?: string;
+  requestPolicy?: RequestPolicyDefinitionDto;
 }
 
 export interface SubjectTypeAdminUpsertRequestDto {
@@ -377,6 +432,7 @@ export interface SubjectTypeAdminUpsertRequestDto {
   includeYear: boolean;
   useSequence: boolean;
   sequenceName?: string;
+  requestPolicy?: RequestPolicyDefinitionDto;
 }
 
 export interface SubjectTypeAdminTreeMoveRequestDto {

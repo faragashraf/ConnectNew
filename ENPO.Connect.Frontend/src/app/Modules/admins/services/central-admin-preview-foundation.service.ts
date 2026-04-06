@@ -1,10 +1,17 @@
 import { Injectable } from '@angular/core';
 import { ComponentConfig, RequestArrayItem } from 'src/app/shared/models/Component.Config.model';
 import {
+  RequestPolicyDefinitionDto,
   SubjectAdminPreviewIssueDto,
   SubjectAdminPreviewWorkspaceDto,
   SubjectFieldDefinitionDto
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
+import {
+  RequestPolicyResolverService,
+  RequestPolicyRuntimeContext,
+  ResolvedAccessPolicy,
+  ResolvedWorkflowPolicy
+} from './request-policy-resolver.service';
 
 export type PreviewIssueSeverity = 'Error' | 'Warning' | 'Info';
 export type PreviewIssueSource = 'backend' | 'configuration' | 'context';
@@ -22,6 +29,8 @@ export interface PreviewFieldRenderModel {
   mendSql: number;
   fieldKey: string;
   label: string;
+  helpText?: string;
+  placeholder?: string;
   type: string;
   typeLabel: string;
   groupId: number;
@@ -75,10 +84,15 @@ export interface PreviewWorkspaceRenderModel {
     groupsCount: number;
     missingBindingsCount: number;
   };
+  requestPolicy: RequestPolicyDefinitionDto | null;
+  resolvedAccessPolicy: ResolvedAccessPolicy;
+  resolvedWorkflowPolicy: ResolvedWorkflowPolicy;
 }
 
 @Injectable({ providedIn: 'root' })
 export class CentralAdminPreviewFoundationService {
+  constructor(private readonly requestPolicyResolver: RequestPolicyResolverService) {}
+
   filterConfigs(
     allConfigs: ComponentConfig[],
     context: { routeKeyPrefix?: string | null; applicationId?: string | null; categoryId?: number | null }
@@ -325,6 +339,8 @@ export class CentralAdminPreviewFoundationService {
       treeBindings?: Map<string, PreviewTreeBinding>;
       canonicalRouteKey?: string | null;
       matchedConfigCount?: number;
+      requestPolicy?: RequestPolicyDefinitionDto | null;
+      runtimeContext?: RequestPolicyRuntimeContext;
     }
   ): PreviewWorkspaceRenderModel | null {
     if (!workspace) {
@@ -333,6 +349,11 @@ export class CentralAdminPreviewFoundationService {
 
     const configBoundOptionFields = options?.configBoundOptionFields ?? new Set<string>();
     const treeBindings = options?.treeBindings ?? new Map<string, PreviewTreeBinding>();
+    const runtimeContext = options?.runtimeContext ?? {};
+    const sourceRequestPolicy = options?.requestPolicy ?? null;
+    const requestPolicy = this.requestPolicyResolver.normalizePolicy(sourceRequestPolicy);
+    const resolvedAccessPolicy = this.requestPolicyResolver.resolveAccessPolicy(requestPolicy, runtimeContext);
+    const resolvedWorkflowPolicy = this.requestPolicyResolver.resolveWorkflowPolicy(requestPolicy, runtimeContext);
     const definition = workspace.formDefinition;
     const groupsMeta = new Map<number, string>();
     (definition?.groups ?? []).forEach(group => {
@@ -346,10 +367,12 @@ export class CentralAdminPreviewFoundationService {
         || Number(a.displayOrder ?? 0) - Number(b.displayOrder ?? 0)
         || Number(a.mendSql ?? 0) - Number(b.mendSql ?? 0)
       )
-      .map(field => this.mapField(field, groupsMeta, configBoundOptionFields, treeBindings));
+      .map(field => this.mapField(field, groupsMeta, configBoundOptionFields, treeBindings, requestPolicy, runtimeContext));
+
+    const visibleFields = fields.filter(field => field.visible);
 
     const grouped = new Map<number, PreviewFieldRenderModel[]>();
-    fields.forEach(field => {
+    visibleFields.forEach(field => {
       const groupId = Number(field.groupId ?? 0);
       if (!grouped.has(groupId)) {
         grouped.set(groupId, []);
@@ -418,10 +441,13 @@ export class CentralAdminPreviewFoundationService {
         linkedFieldsCount: Number(workspace.readiness?.linkedFieldsCount ?? 0),
         activeLinkedFieldsCount: Number(workspace.readiness?.activeLinkedFieldsCount ?? 0),
         visibleLinkedFieldsCount: Number(workspace.readiness?.visibleLinkedFieldsCount ?? 0),
-        renderableFieldsCount: Number(workspace.readiness?.renderableFieldsCount ?? fields.length),
+        renderableFieldsCount: Number(workspace.readiness?.renderableFieldsCount ?? visibleFields.length),
         groupsCount: groups.length,
         missingBindingsCount: missingBindingFields.size
-      }
+      },
+      requestPolicy: sourceRequestPolicy ? requestPolicy : null,
+      resolvedAccessPolicy,
+      resolvedWorkflowPolicy
     };
   }
 
@@ -429,8 +455,11 @@ export class CentralAdminPreviewFoundationService {
     field: SubjectFieldDefinitionDto,
     groupsMeta: Map<number, string>,
     configBoundOptionFields: Set<string>,
-    treeBindings: Map<string, PreviewTreeBinding>
+    treeBindings: Map<string, PreviewTreeBinding>,
+    requestPolicy: RequestPolicyDefinitionDto,
+    runtimeContext: RequestPolicyRuntimeContext
   ): PreviewFieldRenderModel {
+    const resolvedPresentation = this.requestPolicyResolver.resolvePresentationMetadata(field, runtimeContext, requestPolicy);
     const normalizedFieldKey = this.normalizeFieldKey(field.fieldKey);
     const treeBinding = treeBindings.get(normalizedFieldKey);
     const treeEnabled = Boolean(treeBinding);
@@ -447,15 +476,17 @@ export class CentralAdminPreviewFoundationService {
     return {
       mendSql: Number(field.mendSql ?? 0),
       fieldKey: String(field.fieldKey ?? ''),
-      label: String(field.fieldLabel ?? field.fieldKey ?? '').trim() || String(field.fieldKey ?? ''),
+      label: String(resolvedPresentation.label ?? field.fieldLabel ?? field.fieldKey ?? '').trim() || String(field.fieldKey ?? ''),
+      helpText: resolvedPresentation.helpText,
+      placeholder: resolvedPresentation.placeholder,
       type: String(field.fieldType ?? ''),
       typeLabel: this.resolveTypeLabel(field.fieldType),
       groupId: Number(field.mendGroup ?? 0),
       groupName: groupsMeta.get(Number(field.mendGroup ?? 0)) || `جروب #${field.mendGroup}`,
       displayOrder: Number(field.displayOrder ?? 0),
-      required: Boolean(field.required),
-      readonly: Boolean(field.isDisabledInit),
-      visible: Boolean(field.isVisible),
+      required: Boolean(resolvedPresentation.required),
+      readonly: Boolean(resolvedPresentation.readonly),
+      visible: Boolean(resolvedPresentation.visible),
       optionsSource,
       optionsCount,
       optionsPreview,

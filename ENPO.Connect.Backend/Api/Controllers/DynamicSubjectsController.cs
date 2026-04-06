@@ -418,6 +418,7 @@ public class DynamicSubjectsController : ControllerBase
                 SaveAsDraft = form.SaveAsDraft,
                 Submit = form.Submit,
                 EnvelopeId = form.EnvelopeId,
+                TargetUnitId = form.TargetUnitId,
                 DynamicFields = DeserializeList<SubjectFieldValueDto>(form.DynamicFieldsJson),
                 Stakeholders = DeserializeList<SubjectStakeholderUpsertDto>(form.StakeholdersJson),
                 Tasks = DeserializeList<SubjectTaskUpsertDto>(form.TasksJson)

@@ -30,6 +30,31 @@
         <span>RouteKey Prefix</span>
         <input type="text" pInputText formControlName="routeKeyPrefix" placeholder="مثال: DynamicSubjects/" />
       </label>
+
+      <label>
+        <span>Document Direction</span>
+        <input type="text" pInputText formControlName="documentDirection" placeholder="incoming / outgoing" />
+      </label>
+
+      <label>
+        <span>Request Mode</span>
+        <input type="text" pInputText formControlName="requestMode" placeholder="create / edit / preview" />
+      </label>
+
+      <label>
+        <span>Creator Unit ID</span>
+        <input type="text" pInputText formControlName="creatorUnitId" placeholder="مثال: 60" />
+      </label>
+
+      <label>
+        <span>Target Unit ID</span>
+        <input type="text" pInputText formControlName="targetUnitId" placeholder="اختياري" />
+      </label>
+
+      <label class="span-3">
+        <span>Runtime Variables (JSON)</span>
+        <input type="text" pInputText formControlName="runtimeContextJson" placeholder='{"priority":"high","route":"incoming"}' />
+      </label>
     </div>
 
     <div class="context-actions">
@@ -87,6 +112,18 @@
       <div>
         <span>عدد Configs المطابقة</span>
         <strong>{{ workflowSummaryConfigsCount }}</strong>
+      </div>
+      <div>
+        <span>Document Direction</span>
+        <strong>{{ contextState.documentDirection || '-' }}</strong>
+      </div>
+      <div>
+        <span>Request Mode</span>
+        <strong>{{ contextState.requestMode || '-' }}</strong>
+      </div>
+      <div>
+        <span>Creator Unit</span>
+        <strong>{{ contextState.creatorUnitId || '-' }}</strong>
       </div>
     </div>
   </section>

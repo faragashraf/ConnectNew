@@ -273,6 +273,75 @@
                   <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid" (click)="saveCategorySettings()"></button>
                 </div>
               </section>
+
+              <section class="form-section" [formGroup]="policyForm">
+                <header>
+                  <h4>Request Policy Foundation</h4>
+                  <p>تعريف سياسات العرض والصلاحيات والـ workflow كنموذج موحد وقابل للتوسع.</p>
+                </header>
+
+                <form class="form-grid">
+                  <div class="field">
+                    <label>Create Mode</label>
+                    <p-dropdown
+                      [options]="[{ label: 'single', value: 'single' }, { label: 'multi', value: 'multi' }]"
+                      optionLabel="label"
+                      optionValue="value"
+                      formControlName="createMode">
+                    </p-dropdown>
+                  </div>
+
+                  <div class="field">
+                    <label>Create Scope Units (CSV)</label>
+                    <input pInputText type="text" formControlName="createScopeUnits" placeholder="60, 124, 200" />
+                  </div>
+
+                  <div class="field">
+                    <label>Read Scope Units (CSV)</label>
+                    <input pInputText type="text" formControlName="readScopeUnits" placeholder="60, 124, 200" />
+                  </div>
+
+                  <div class="field">
+                    <label>Work Scope Units (CSV)</label>
+                    <input pInputText type="text" formControlName="workScopeUnits" placeholder="60, 124, 200" />
+                  </div>
+
+                  <div class="field">
+                    <label>Workflow Mode</label>
+                    <p-dropdown
+                      [options]="[{ label: 'manual', value: 'manual' }, { label: 'static', value: 'static' }, { label: 'hybrid', value: 'hybrid' }]"
+                      optionLabel="label"
+                      optionValue="value"
+                      formControlName="workflowMode">
+                    </p-dropdown>
+                  </div>
+
+                  <div class="field">
+                    <label>Workflow Static Targets (CSV)</label>
+                    <input pInputText type="text" formControlName="workflowStaticTargets" placeholder="60, 124" />
+                  </div>
+
+                  <div class="field">
+                    <label>Workflow Default Target</label>
+                    <input pInputText type="text" formControlName="workflowDefaultTargetUnitId" placeholder="اختياري" />
+                  </div>
+
+                  <div class="switches">
+                    <label><span>Inherit Legacy Access</span><p-inputSwitch formControlName="inheritLegacyAccess"></p-inputSwitch></label>
+                    <label><span>Allow Manual Workflow Selection</span><p-inputSwitch formControlName="workflowAllowManualSelection"></p-inputSwitch></label>
+                  </div>
+
+                  <div class="field full-width">
+                    <label>Presentation Rules (JSON)</label>
+                    <textarea
+                      pInputTextarea
+                      rows="12"
+                      formControlName="presentationRulesJson"
+                      placeholder='[{"ruleId":"direction-incoming","priority":10,"conditions":[{"variable":"documentDirection","operator":"eq","value":"incoming"}],"fieldPatches":[{"fieldKey":"document_date","label":"تاريخ الوارد","required":true}]}]'>
+                    </textarea>
+                  </div>
+                </form>
+              </section>
             </div>
           </p-tabPanel>
 

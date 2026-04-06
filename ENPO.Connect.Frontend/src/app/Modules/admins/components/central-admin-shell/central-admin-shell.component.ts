@@ -68,7 +68,12 @@ export class CentralAdminShellComponent implements OnInit, OnDestroy {
     this.contextForm = this.fb.group({
       applicationId: [''],
       categoryId: [''],
-      routeKeyPrefix: ['']
+      routeKeyPrefix: [''],
+      documentDirection: [''],
+      requestMode: [''],
+      creatorUnitId: [''],
+      targetUnitId: [''],
+      runtimeContextJson: ['']
     });
   }
 
@@ -78,7 +83,12 @@ export class CentralAdminShellComponent implements OnInit, OnDestroy {
         this.centralAdminContext.updateFromDeepLink({
           applicationId: params.get('applicationId'),
           categoryId: params.get('categoryId'),
-          routeKeyPrefix: params.get('routeKeyPrefix')
+          routeKeyPrefix: params.get('routeKeyPrefix'),
+          documentDirection: params.get('documentDirection'),
+          requestMode: params.get('requestMode'),
+          creatorUnitId: params.get('creatorUnitId'),
+          targetUnitId: params.get('targetUnitId'),
+          runtimeContextJson: params.get('runtimeContextJson')
         });
       })
     );
@@ -88,7 +98,12 @@ export class CentralAdminShellComponent implements OnInit, OnDestroy {
         this.contextForm.patchValue({
           applicationId: state.selectedApplicationId ?? '',
           categoryId: state.selectedCategoryId != null ? String(state.selectedCategoryId) : '',
-          routeKeyPrefix: state.routeKeyPrefix ?? ''
+          routeKeyPrefix: state.routeKeyPrefix ?? '',
+          documentDirection: state.documentDirection ?? '',
+          requestMode: state.requestMode ?? '',
+          creatorUnitId: state.creatorUnitId ?? '',
+          targetUnitId: state.targetUnitId ?? '',
+          runtimeContextJson: state.runtimeContextJson ?? ''
         }, { emitEvent: false });
       })
     );
@@ -200,7 +215,12 @@ export class CentralAdminShellComponent implements OnInit, OnDestroy {
     this.centralAdminContext.patchContext({
       selectedApplicationId: raw.applicationId,
       selectedCategoryId: raw.categoryId,
-      routeKeyPrefix: raw.routeKeyPrefix
+      routeKeyPrefix: raw.routeKeyPrefix,
+      documentDirection: raw.documentDirection,
+      requestMode: raw.requestMode,
+      creatorUnitId: raw.creatorUnitId,
+      targetUnitId: raw.targetUnitId,
+      runtimeContextJson: raw.runtimeContextJson
     });
 
     if (syncQueryParams) {
@@ -222,7 +242,12 @@ export class CentralAdminShellComponent implements OnInit, OnDestroy {
     this.contextForm.reset({
       applicationId: '',
       categoryId: '',
-      routeKeyPrefix: ''
+      routeKeyPrefix: '',
+      documentDirection: '',
+      requestMode: '',
+      creatorUnitId: '',
+      targetUnitId: '',
+      runtimeContextJson: ''
     });
     this.syncQueryParamsWithContext();
   }

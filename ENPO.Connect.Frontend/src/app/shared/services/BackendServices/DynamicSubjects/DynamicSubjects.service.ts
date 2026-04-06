@@ -273,6 +273,9 @@ export class DynamicSubjectsController {
     if (request.envelopeId && request.envelopeId > 0) {
       formData.append('envelopeId', String(request.envelopeId));
     }
+    if ((request.targetUnitId ?? '').trim().length > 0) {
+      formData.append('targetUnitId', String(request.targetUnitId ?? '').trim());
+    }
 
     formData.append('dynamicFieldsJson', JSON.stringify(request.dynamicFields ?? []));
     formData.append('stakeholdersJson', JSON.stringify(request.stakeholders ?? []));

@@ -15,6 +15,7 @@ import {
   PreviewWorkspaceRenderModel
 } from '../../services/central-admin-preview-foundation.service';
 import { CentralAdminContextService, CentralAdminContextState } from '../../services/central-admin-context.service';
+import { RequestPolicyRuntimeContext } from '../../services/request-policy-resolver.service';
 
 @Component({
   selector: 'app-central-admin-preview-workspace',
@@ -224,7 +225,12 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
       categoryId,
       String(state.selectedApplicationId ?? '').trim(),
       String(state.routeKeyPrefix ?? '').trim(),
-      String(state.selectedConfigRouteKey ?? '').trim()
+      String(state.selectedConfigRouteKey ?? '').trim(),
+      String(state.documentDirection ?? '').trim(),
+      String(state.requestMode ?? '').trim(),
+      String(state.creatorUnitId ?? '').trim(),
+      String(state.targetUnitId ?? '').trim(),
+      String(state.runtimeContextJson ?? '').trim()
     ].join('|');
 
     if (stateKey === this.lastStateKey) {
@@ -317,13 +323,16 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
           selectedConfigRouteKey: state.selectedConfigRouteKey,
           canonicalRouteKey: resolution.canonical?.routeKey ?? null
         });
+        const runtimeContext = this.buildRuntimeContext(state);
 
         this.renderModel = this.previewFoundation.buildRenderModel(workspace, {
           extraIssues: configurationIssues,
           configBoundOptionFields,
           treeBindings,
           canonicalRouteKey: resolution.canonical?.routeKey ?? null,
-          matchedConfigCount: matchedConfigs.length
+          matchedConfigCount: matchedConfigs.length,
+          requestPolicy: workspace?.subjectType?.requestPolicy ?? null,
+          runtimeContext
         });
         this.resolveTreeDataFromConfig(resolution.matched, categoryId, requestSeq);
 
@@ -352,15 +361,44 @@ export class CentralAdminPreviewWorkspaceComponent implements OnInit, OnDestroy 
           selectedConfigRouteKey: state.selectedConfigRouteKey,
           canonicalRouteKey: null
         });
+        const runtimeContext = this.buildRuntimeContext(state);
         this.renderModel = this.previewFoundation.buildRenderModel(workspace, {
           extraIssues: configurationIssues,
           configBoundOptionFields: new Set<string>(),
           treeBindings: new Map<string, PreviewTreeBinding>(),
           canonicalRouteKey: null,
-          matchedConfigCount: 0
+          matchedConfigCount: 0,
+          requestPolicy: workspace?.subjectType?.requestPolicy ?? null,
+          runtimeContext
         });
       }
     });
+  }
+
+  private buildRuntimeContext(state: CentralAdminContextState): RequestPolicyRuntimeContext {
+    let runtimeVariables: Record<string, unknown> = {};
+    const runtimeJson = String(state.runtimeContextJson ?? '').trim();
+    if (runtimeJson.length > 0) {
+      try {
+        const parsed = JSON.parse(runtimeJson);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          runtimeVariables = parsed as Record<string, unknown>;
+        }
+      } catch {
+        runtimeVariables = {};
+      }
+    }
+
+    return {
+      applicationId: state.selectedApplicationId ?? null,
+      categoryId: state.selectedCategoryId ?? null,
+      routeKeyPrefix: state.routeKeyPrefix ?? null,
+      documentDirection: state.documentDirection ?? null,
+      creatorUnitId: state.creatorUnitId ?? null,
+      targetUnitId: state.targetUnitId ?? null,
+      requestMode: state.requestMode ?? null,
+      variables: runtimeVariables
+    };
   }
 
   private resolveTreeDataFromConfig(matchedConfigs: ComponentConfig[], categoryId: number, requestSeq: number): void {

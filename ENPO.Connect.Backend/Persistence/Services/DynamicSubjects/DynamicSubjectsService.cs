@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -93,6 +94,64 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                                 : int.MaxValue)
                         .ThenBy(item => item.CatName)
                         .ToList());
+            var scopedById = scopedCategories.ToDictionary(item => item.CatId, item => item);
+            var numericUserUnits = unitIds
+                .Select(unit => int.TryParse(unit, out var parsed) ? parsed : 0)
+                .Where(parsed => parsed > 0)
+                .ToHashSet();
+
+            bool HasLegacyCreateAccess(int categoryId)
+            {
+                if (numericUserUnits.Count == 0 || !scopedById.ContainsKey(categoryId))
+                {
+                    return false;
+                }
+
+                var cursor = categoryId;
+                var safety = 0;
+                while (safety++ < 150
+                    && scopedById.TryGetValue(cursor, out var current)
+                    && current.CatParent > 0
+                    && scopedById.ContainsKey(current.CatParent))
+                {
+                    cursor = current.CatParent;
+                }
+
+                return numericUserUnits.Contains(cursor);
+            }
+
+            bool CanCreateByPolicy(Cdcategory category)
+            {
+                var hasDynamicFields = categoriesWithFieldsSet.Contains(category.CatId);
+                if (!hasDynamicFields || category.CatStatus)
+                {
+                    return false;
+                }
+
+                if (!categorySettingsMap.TryGetValue(category.CatId, out var setting))
+                {
+                    return true;
+                }
+
+                var requestPolicy = TryReadRequestPolicyFromSettingsJson(setting.SettingsJson);
+                if (requestPolicy == null)
+                {
+                    return HasLegacyCreateAccess(category.CatId);
+                }
+
+                var resolvedAccess = RequestPolicyResolver.ResolveAccessPolicy(requestPolicy);
+                if (resolvedAccess.CreateUnitIds.Count > 0)
+                {
+                    return RequestPolicyResolver.IsCreateAllowedForUnits(requestPolicy, unitIds);
+                }
+
+                if (!resolvedAccess.InheritLegacyAccess)
+                {
+                    return true;
+                }
+
+                return HasLegacyCreateAccess(category.CatId);
+            }
 
             List<SubjectCategoryTreeNodeDto> BuildChildren(int parentId)
             {
@@ -109,7 +168,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     IsActive = !category.CatStatus,
                     ApplicationId = category.ApplicationId,
                     HasDynamicFields = categoriesWithFieldsSet.Contains(category.CatId),
-                    CanCreate = !category.CatStatus && categoriesWithFieldsSet.Contains(category.CatId),
+                    CanCreate = CanCreateByPolicy(category),
                     DisplayOrder = categorySettingsMap.TryGetValue(category.CatId, out var setting)
                         ? setting.DisplayOrder
                         : 0,
@@ -463,6 +522,14 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             var messageId = _helperService.GetSequenceNextValue("Seq_Tickets");
             var fieldsMap = BuildFieldsMap(request.DynamicFields);
             var referenceNumber = await _referenceGenerator.GenerateAsync(category.CatId, messageId, fieldsMap, cancellationToken);
+            var requestPolicy = await LoadCategoryRequestPolicyAsync(category.CatId, cancellationToken);
+            var resolvedWorkflowPolicy = RequestPolicyResolver.ResolveWorkflowPolicy(requestPolicy);
+            var primaryAssignedUnit = ResolvePrimaryUnitId(validation.UnitIds);
+            var requestedTargetUnitId = NormalizeNullable(request.TargetUnitId);
+            var assignedUnitId = ResolveWorkflowAssignedUnit(
+                resolvedWorkflowPolicy,
+                requestedTargetUnitId,
+                primaryAssignedUnit);
 
             var subjectText = string.IsNullOrWhiteSpace(request.Subject)
                 ? category.CatName
@@ -480,8 +547,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 Subject = subjectText,
                 Description = request.Description,
                 CreatedBy = messageActorId,
-                AssignedSectorId = ResolvePrimaryUnitId(validation.UnitIds),
-                CurrentResponsibleSectorId = ResolvePrimaryUnitId(validation.UnitIds),
+                AssignedSectorId = assignedUnitId,
+                CurrentResponsibleSectorId = assignedUnitId,
                 CreatedDate = DateTime.Now,
                 LastModifiedDate = DateTime.Now,
                 Status = (MessageStatus)status,
@@ -1924,6 +1991,20 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             }
 
             var safeRequest = request ?? new SubjectTypeAdminUpsertRequestDto();
+            var normalizedRequestPolicy = safeRequest.RequestPolicy == null
+                ? null
+                : RequestPolicyResolver.Normalize(safeRequest.RequestPolicy);
+            var policyValidationErrors = RequestPolicyResolver.Validate(normalizedRequestPolicy);
+            if (policyValidationErrors.Count > 0)
+            {
+                foreach (var validationError in policyValidationErrors)
+                {
+                    response.Errors.Add(validationError);
+                }
+
+                return response;
+            }
+
             var category = await _connectContext.Cdcategories
                 .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
             if (category == null)
@@ -1936,6 +2017,20 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
             var policy = await _connectContext.SubjectReferencePolicies
                 .FirstOrDefaultAsync(item => item.CategoryId == categoryId, cancellationToken);
+            var categorySetting = await _connectContext.SubjectTypeAdminSettings
+                .FirstOrDefaultAsync(setting => setting.CategoryId == categoryId, cancellationToken);
+            if (categorySetting == null)
+            {
+                categorySetting = new SubjectTypeAdminSetting
+                {
+                    CategoryId = categoryId,
+                    DisplayOrder = await ResolveNextCategoryDisplayOrderAsync(category.CatParent, cancellationToken),
+                    SettingsJson = null,
+                    LastModifiedBy = normalizedUserId,
+                    LastModifiedAtUtc = DateTime.UtcNow
+                };
+                await _connectContext.SubjectTypeAdminSettings.AddAsync(categorySetting, cancellationToken);
+            }
 
             var prefix = (safeRequest.ReferencePrefix ?? string.Empty).Trim();
             if (prefix.Length == 0)
@@ -2012,14 +2107,20 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 policy.LastModifiedAtUtc = DateTime.UtcNow;
             }
 
+            if (safeRequest.RequestPolicy != null)
+            {
+                categorySetting.SettingsJson = MergeRequestPolicyIntoSettingsJson(
+                    categorySetting.SettingsJson,
+                    normalizedRequestPolicy);
+            }
+            categorySetting.LastModifiedBy = normalizedUserId;
+            categorySetting.LastModifiedAtUtc = DateTime.UtcNow;
+
             await _connectContext.SaveChangesAsync(cancellationToken);
 
             var hasDynamicFields = await _connectContext.CdCategoryMands
                 .AsNoTracking()
                 .AnyAsync(link => link.MendCategory == categoryId && !link.MendStat, cancellationToken);
-            var categorySetting = await _connectContext.SubjectTypeAdminSettings
-                .AsNoTracking()
-                .FirstOrDefaultAsync(setting => setting.CategoryId == categoryId, cancellationToken);
 
             response.Data = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy, categorySetting);
 
@@ -2043,7 +2144,10 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     ["categoryName"] = category.CatName,
                     ["isActive"] = safeRequest.IsActive ? "true" : "false",
                     ["referencePolicyEnabled"] = safeRequest.ReferencePolicyEnabled ? "true" : "false",
-                    ["referencePrefix"] = policy.Prefix
+                    ["referencePrefix"] = policy.Prefix,
+                    ["requestPolicyVersion"] = normalizedRequestPolicy?.Version.ToString(CultureInfo.InvariantCulture),
+                    ["workflowMode"] = normalizedRequestPolicy?.WorkflowPolicy?.Mode,
+                    ["accessCreateMode"] = normalizedRequestPolicy?.AccessPolicy?.CreateMode
                 }
             };
             await _realtimePublisher.PublishAsync(payload, scope, cancellationToken);
@@ -2085,7 +2189,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         var unitIds = await GetCurrentUserUnitIdsAsync(userId, cancellationToken);
-        if (!await HasCategoryAccessAsync(category.CatId, unitIds, cancellationToken))
+        if (!await HasCategoryCreateAccessAsync(category.CatId, unitIds, cancellationToken))
         {
             errors.Add(new Error { Code = "403", Message = "غير مسموح بإنشاء طلبات على هذا النوع." });
         }
@@ -2136,6 +2240,47 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             {
                 includeIds.Add(category.CatId);
                 IncludeAncestors(category.CatId, byId, includeIds);
+            }
+        }
+
+        if (unitIds != null && unitIds.Count > 0)
+        {
+            var normalizedUnitSet = unitIds
+                .Select(unit => NormalizeNullable(unit))
+                .Where(unit => unit != null)
+                .Cast<string>()
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (normalizedUnitSet.Count > 0)
+            {
+                var categoryIds = categories.Select(item => item.CatId).ToHashSet();
+                var settingsRows = await _connectContext.SubjectTypeAdminSettings
+                    .AsNoTracking()
+                    .Where(item => categoryIds.Contains(item.CategoryId))
+                    .Select(item => new { item.CategoryId, item.SettingsJson })
+                    .ToListAsync(cancellationToken);
+
+                foreach (var row in settingsRows)
+                {
+                    var policy = TryReadRequestPolicyFromSettingsJson(row.SettingsJson);
+                    if (policy == null)
+                    {
+                        continue;
+                    }
+
+                    var resolvedAccess = RequestPolicyResolver.ResolveAccessPolicy(policy);
+                    var includeByPolicy =
+                        resolvedAccess.CreateUnitIds.Overlaps(normalizedUnitSet)
+                        || resolvedAccess.ReadUnitIds.Overlaps(normalizedUnitSet)
+                        || resolvedAccess.WorkUnitIds.Overlaps(normalizedUnitSet);
+                    if (!includeByPolicy)
+                    {
+                        continue;
+                    }
+
+                    includeIds.Add(row.CategoryId);
+                    IncludeAncestors(row.CategoryId, byId, includeIds);
+                }
             }
         }
 
@@ -2195,6 +2340,45 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         return unitIds.FirstOrDefault() ?? "60";
     }
 
+    private static string ResolveWorkflowAssignedUnit(
+        ResolvedRequestWorkflowPolicy workflowPolicy,
+        string? requestedTargetUnitId,
+        string fallbackUnitId)
+    {
+        var mode = (workflowPolicy?.Mode ?? "manual").Trim().ToLowerInvariant();
+        var allowManualSelection = workflowPolicy?.AllowManualSelection ?? true;
+        var staticTargets = workflowPolicy?.StaticTargetUnitIds ?? new List<string>();
+        var staticTarget = staticTargets.FirstOrDefault();
+        var normalizedRequestedTarget = NormalizeNullable(requestedTargetUnitId);
+
+        if (mode == "static")
+        {
+            return NormalizeNullable(staticTarget)
+                ?? NormalizeNullable(workflowPolicy?.DefaultTargetUnitId)
+                ?? fallbackUnitId;
+        }
+
+        if (mode == "hybrid")
+        {
+            return (allowManualSelection ? normalizedRequestedTarget : null)
+                ?? NormalizeNullable(staticTarget)
+                ?? NormalizeNullable(workflowPolicy?.DefaultTargetUnitId)
+                ?? fallbackUnitId;
+        }
+
+        if (mode == "manual")
+        {
+            return (allowManualSelection ? normalizedRequestedTarget : null)
+                ?? NormalizeNullable(workflowPolicy?.DefaultTargetUnitId)
+                ?? fallbackUnitId;
+        }
+
+        return (allowManualSelection ? normalizedRequestedTarget : null)
+            ?? NormalizeNullable(staticTarget)
+            ?? NormalizeNullable(workflowPolicy?.DefaultTargetUnitId)
+            ?? fallbackUnitId;
+    }
+
     private static Dictionary<string, string?> BuildFieldsMap(IEnumerable<SubjectFieldValueDto> fields)
     {
         var map = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
@@ -2218,6 +2402,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         SubjectReferencePolicy? policy,
         SubjectTypeAdminSetting? settings)
     {
+        var requestPolicy = TryReadRequestPolicyFromSettingsJson(settings?.SettingsJson);
         return new SubjectTypeAdminDto
         {
             CategoryId = category.CatId,
@@ -2244,7 +2429,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             UseSequence = policy?.UseSequence ?? true,
             SequenceName = policy?.SequenceName,
             LastModifiedBy = policy?.LastModifiedBy ?? policy?.CreatedBy,
-            LastModifiedAtUtc = policy?.LastModifiedAtUtc ?? policy?.CreatedAtUtc
+            LastModifiedAtUtc = policy?.LastModifiedAtUtc ?? policy?.CreatedAtUtc,
+            RequestPolicy = requestPolicy
         };
     }
 
@@ -2924,6 +3110,14 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             return false;
         }
 
+        var categoryPolicy = await LoadCategoryRequestPolicyAsync(message.CategoryCd, cancellationToken);
+        var resolvedAccessPolicy = RequestPolicyResolver.ResolveAccessPolicy(categoryPolicy);
+        if (resolvedAccessPolicy.WorkUnitIds.Count > 0
+            && RequestPolicyResolver.IsWorkAllowedForUnits(categoryPolicy, unitIds))
+        {
+            return true;
+        }
+
         var messageActorId = NormalizeMessageActorId(userId);
         if (string.Equals(message.CreatedBy ?? string.Empty, userId, StringComparison.OrdinalIgnoreCase)
             || string.Equals(message.CreatedBy ?? string.Empty, messageActorId, StringComparison.OrdinalIgnoreCase))
@@ -2970,7 +3164,64 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         return false;
     }
 
+    private async Task<RequestPolicyDefinitionDto?> LoadCategoryRequestPolicyAsync(
+        int categoryId,
+        CancellationToken cancellationToken)
+    {
+        if (categoryId <= 0)
+        {
+            return null;
+        }
+
+        var settingsJson = await _connectContext.SubjectTypeAdminSettings
+            .AsNoTracking()
+            .Where(item => item.CategoryId == categoryId)
+            .Select(item => item.SettingsJson)
+            .FirstOrDefaultAsync(cancellationToken);
+        return TryReadRequestPolicyFromSettingsJson(settingsJson);
+    }
+
     private async Task<bool> HasCategoryAccessAsync(
+        int categoryId,
+        IReadOnlyCollection<string> unitIds,
+        CancellationToken cancellationToken)
+    {
+        var requestPolicy = await LoadCategoryRequestPolicyAsync(categoryId, cancellationToken);
+        var resolvedAccess = RequestPolicyResolver.ResolveAccessPolicy(requestPolicy);
+        if (resolvedAccess.ReadUnitIds.Count > 0)
+        {
+            return RequestPolicyResolver.IsReadAllowedForUnits(requestPolicy, unitIds);
+        }
+
+        if (!resolvedAccess.InheritLegacyAccess)
+        {
+            return true;
+        }
+
+        return await HasCategoryAccessLegacyAsync(categoryId, unitIds, cancellationToken);
+    }
+
+    private async Task<bool> HasCategoryCreateAccessAsync(
+        int categoryId,
+        IReadOnlyCollection<string> unitIds,
+        CancellationToken cancellationToken)
+    {
+        var requestPolicy = await LoadCategoryRequestPolicyAsync(categoryId, cancellationToken);
+        var resolvedAccess = RequestPolicyResolver.ResolveAccessPolicy(requestPolicy);
+        if (resolvedAccess.CreateUnitIds.Count > 0)
+        {
+            return RequestPolicyResolver.IsCreateAllowedForUnits(requestPolicy, unitIds);
+        }
+
+        if (!resolvedAccess.InheritLegacyAccess)
+        {
+            return true;
+        }
+
+        return await HasCategoryAccessLegacyAsync(categoryId, unitIds, cancellationToken);
+    }
+
+    private async Task<bool> HasCategoryAccessLegacyAsync(
         int categoryId,
         IReadOnlyCollection<string> unitIds,
         CancellationToken cancellationToken)
@@ -3077,6 +3328,86 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         return normalized[..64];
     }
 
+    private static RequestPolicyDefinitionDto? TryReadRequestPolicyFromSettingsJson(string? settingsJson)
+    {
+        var payload = (settingsJson ?? string.Empty).Trim();
+        if (payload.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var rootNode = JsonNode.Parse(payload);
+            if (rootNode is JsonObject rootObject)
+            {
+                if (rootObject.TryGetPropertyValue("requestPolicy", out var policyNode) && policyNode != null)
+                {
+                    var nestedPolicy = policyNode.Deserialize<RequestPolicyDefinitionDto>(SerializerOptions);
+                    return nestedPolicy == null ? null : RequestPolicyResolver.Normalize(nestedPolicy);
+                }
+
+                var directPolicy = rootObject.Deserialize<RequestPolicyDefinitionDto>(SerializerOptions);
+                var hasPolicyShape =
+                    rootObject.TryGetPropertyValue("presentationRules", out _)
+                    || rootObject.TryGetPropertyValue("accessPolicy", out _)
+                    || rootObject.TryGetPropertyValue("workflowPolicy", out _);
+                if (directPolicy != null
+                    && hasPolicyShape)
+                {
+                    return RequestPolicyResolver.Normalize(directPolicy);
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static string? MergeRequestPolicyIntoSettingsJson(
+        string? existingSettingsJson,
+        RequestPolicyDefinitionDto? requestPolicy)
+    {
+        JsonObject root;
+        var existingPayload = (existingSettingsJson ?? string.Empty).Trim();
+        if (existingPayload.Length == 0)
+        {
+            root = new JsonObject();
+        }
+        else
+        {
+            try
+            {
+                root = JsonNode.Parse(existingPayload) as JsonObject ?? new JsonObject();
+            }
+            catch
+            {
+                root = new JsonObject();
+            }
+        }
+
+        if (requestPolicy == null)
+        {
+            root.Remove("requestPolicy");
+        }
+        else
+        {
+            root["requestPolicy"] = JsonSerializer.SerializeToNode(
+                RequestPolicyResolver.Normalize(requestPolicy),
+                SerializerOptions);
+        }
+
+        if (root.Count == 0)
+        {
+            return null;
+        }
+
+        return root.ToJsonString(SerializerOptions);
+    }
+
     private static string? NormalizeNullable(string? value)
     {
         var normalized = (value ?? string.Empty).Trim();
@@ -3107,7 +3438,20 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         IReadOnlyCollection<string> unitIds,
         CancellationToken cancellationToken)
     {
-        var categories = await LoadScopedCategoriesAsync(unitIds, appId: null, cancellationToken);
-        return categories.Select(item => item.CatId).ToHashSet();
+        var allCategoryIds = await _connectContext.Cdcategories
+            .AsNoTracking()
+            .Select(item => item.CatId)
+            .ToListAsync(cancellationToken);
+        var accessible = new HashSet<int>();
+
+        foreach (var categoryId in allCategoryIds)
+        {
+            if (await HasCategoryAccessAsync(categoryId, unitIds, cancellationToken))
+            {
+                accessible.Add(categoryId);
+            }
+        }
+
+        return accessible;
     }
 }

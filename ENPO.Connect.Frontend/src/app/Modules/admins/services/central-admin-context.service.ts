@@ -7,6 +7,11 @@ export interface CentralAdminContextState {
   selectedCategoryId: number | null;
   selectedSubjectTypeName: string | null;
   routeKeyPrefix: string | null;
+  documentDirection: string | null;
+  requestMode: string | null;
+  creatorUnitId: string | null;
+  targetUnitId: string | null;
+  runtimeContextJson: string | null;
   selectedFieldsCount: number | null;
   selectedConfigRouteKey: string | null;
   filteredConfigsCount: number | null;
@@ -17,6 +22,11 @@ const INITIAL_CONTEXT_STATE: CentralAdminContextState = {
   selectedCategoryId: null,
   selectedSubjectTypeName: null,
   routeKeyPrefix: null,
+  documentDirection: null,
+  requestMode: null,
+  creatorUnitId: null,
+  targetUnitId: null,
+  runtimeContextJson: null,
   selectedFieldsCount: null,
   selectedConfigRouteKey: null,
   filteredConfigsCount: null
@@ -59,11 +69,25 @@ export class CentralAdminContextService {
     this.stateSubject.next(next);
   }
 
-  updateFromDeepLink(input: { applicationId?: unknown; categoryId?: unknown; routeKeyPrefix?: unknown }): void {
+  updateFromDeepLink(input: {
+    applicationId?: unknown;
+    categoryId?: unknown;
+    routeKeyPrefix?: unknown;
+    documentDirection?: unknown;
+    requestMode?: unknown;
+    creatorUnitId?: unknown;
+    targetUnitId?: unknown;
+    runtimeContextJson?: unknown;
+  }): void {
     this.patchContext({
       selectedApplicationId: this.normalizeString(input.applicationId),
       selectedCategoryId: this.normalizePositiveInt(input.categoryId),
-      routeKeyPrefix: this.normalizeString(input.routeKeyPrefix)
+      routeKeyPrefix: this.normalizeString(input.routeKeyPrefix),
+      documentDirection: this.normalizeString(input.documentDirection),
+      requestMode: this.normalizeString(input.requestMode),
+      creatorUnitId: this.normalizeString(input.creatorUnitId),
+      targetUnitId: this.normalizeString(input.targetUnitId),
+      runtimeContextJson: this.normalizeString(input.runtimeContextJson)
     });
   }
 
@@ -76,7 +100,12 @@ export class CentralAdminContextService {
     return {
       applicationId: state.selectedApplicationId ?? null,
       categoryId: state.selectedCategoryId != null ? String(state.selectedCategoryId) : null,
-      routeKeyPrefix: state.routeKeyPrefix ?? null
+      routeKeyPrefix: state.routeKeyPrefix ?? null,
+      documentDirection: state.documentDirection ?? null,
+      requestMode: state.requestMode ?? null,
+      creatorUnitId: state.creatorUnitId ?? null,
+      targetUnitId: state.targetUnitId ?? null,
+      runtimeContextJson: state.runtimeContextJson ?? null
     };
   }
 
@@ -96,6 +125,21 @@ export class CentralAdminContextService {
     }
     if (hasOwn('routeKeyPrefix')) {
       normalized.routeKeyPrefix = this.normalizeString(patch.routeKeyPrefix);
+    }
+    if (hasOwn('documentDirection')) {
+      normalized.documentDirection = this.normalizeString(patch.documentDirection);
+    }
+    if (hasOwn('requestMode')) {
+      normalized.requestMode = this.normalizeString(patch.requestMode);
+    }
+    if (hasOwn('creatorUnitId')) {
+      normalized.creatorUnitId = this.normalizeString(patch.creatorUnitId);
+    }
+    if (hasOwn('targetUnitId')) {
+      normalized.targetUnitId = this.normalizeString(patch.targetUnitId);
+    }
+    if (hasOwn('runtimeContextJson')) {
+      normalized.runtimeContextJson = this.normalizeString(patch.runtimeContextJson);
     }
     if (hasOwn('selectedFieldsCount')) {
       normalized.selectedFieldsCount = this.normalizeNonNegativeInt(patch.selectedFieldsCount);
@@ -138,6 +182,11 @@ export class CentralAdminContextService {
       && left.selectedCategoryId === right.selectedCategoryId
       && left.selectedSubjectTypeName === right.selectedSubjectTypeName
       && left.routeKeyPrefix === right.routeKeyPrefix
+      && left.documentDirection === right.documentDirection
+      && left.requestMode === right.requestMode
+      && left.creatorUnitId === right.creatorUnitId
+      && left.targetUnitId === right.targetUnitId
+      && left.runtimeContextJson === right.runtimeContextJson
       && left.selectedFieldsCount === right.selectedFieldsCount
       && left.selectedConfigRouteKey === right.selectedConfigRouteKey
       && left.filteredConfigsCount === right.filteredConfigsCount;

@@ -11,6 +11,8 @@ import { FileParameter } from 'src/app/shared/services/BackendServices/dto-share
 import { forkJoin, Subscription } from 'rxjs';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import {
+  RequestPolicyDefinitionDto,
+  RequestPolicyPresentationRuleDto,
   SubjectAdminFieldDto,
   SubjectAdminGroupDto,
   SubjectCategoryFieldLinkAdminDto,
@@ -24,6 +26,7 @@ import {
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
 import { CentralAdminContextService } from '../../services/central-admin-context.service';
+import { RequestPolicyResolverService } from '../../services/request-policy-resolver.service';
 
 interface AdminTreeNode extends TreeNode {
   key: string;
@@ -117,6 +120,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
   categoryForm: FormGroup;
   settingsForm: FormGroup;
+  policyForm: FormGroup;
   groupForm: FormGroup;
   createCategoryForm: FormGroup;
 
@@ -140,7 +144,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     private readonly centralAdminContext: CentralAdminContextService,
     public readonly genericFormService: GenericFormsService,
     private readonly dynamicSubjectsController: DynamicSubjectsController,
-    private readonly appNotification: AppNotificationService
+    private readonly appNotification: AppNotificationService,
+    private readonly requestPolicyResolver: RequestPolicyResolverService
   ) {
     const routePath = String(this.activatedRoute.snapshot.routeConfig?.path ?? '').trim().toLowerCase();
     this.managementMode = routePath === 'dynamicsubjectmanagement';
@@ -175,6 +180,19 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       groupDescription: ['', Validators.maxLength(255)],
       isExtendable: [false],
       groupWithInRow: [1, [Validators.required, Validators.min(1), Validators.max(12)]]
+    });
+
+    this.policyForm = this.fb.group({
+      createMode: ['single'],
+      createScopeUnits: [''],
+      readScopeUnits: [''],
+      workScopeUnits: [''],
+      inheritLegacyAccess: [true],
+      workflowMode: ['manual'],
+      workflowStaticTargets: [''],
+      workflowDefaultTargetUnitId: [''],
+      workflowAllowManualSelection: [true],
+      presentationRulesJson: ['[]']
     });
 
     this.createCategoryForm = this.fb.group({
@@ -417,6 +435,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
           this.previewDynamicGroups = [];
           this.previewCategoryMand = [];
           this.editableLinks = [];
+          this.patchPolicyForm(null);
           this.relationsDialogVisible = false;
           this.loadingLinks = false;
           this.loadingPreview = false;
@@ -635,6 +654,12 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const requestPolicy = this.buildRequestPolicyFromForm();
+    if (requestPolicy == null) {
+      this.appNotification.warning('صيغة قواعد العرض الشرطي غير صحيحة. يرجى مراجعة JSON قبل الحفظ.');
+      return;
+    }
+
     const payload: SubjectTypeAdminUpsertRequestDto = {
       isActive: Boolean(this.categoryForm.get('isActive')?.value),
       referencePolicyEnabled,
@@ -643,7 +668,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       sourceFieldKeys: String(value.sourceFieldKeys ?? '').trim() || undefined,
       includeYear: Boolean(value.includeYear),
       useSequence,
-      sequenceName: sequenceName || undefined
+      sequenceName: sequenceName || undefined,
+      requestPolicy
     };
 
     this.savingSettings = true;
@@ -1280,6 +1306,80 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     return title.length > 0 ? title : `مجموعة ${group.groupId}`;
   }
 
+  private patchPolicyForm(policy: RequestPolicyDefinitionDto | null): void {
+    const normalized = this.requestPolicyResolver.normalizePolicy(policy);
+    this.policyForm.patchValue({
+      createMode: normalized.accessPolicy.createMode ?? 'single',
+      createScopeUnits: this.toCsv(normalized.accessPolicy.createScope.unitIds ?? []),
+      readScopeUnits: this.toCsv(normalized.accessPolicy.readScope.unitIds ?? []),
+      workScopeUnits: this.toCsv(normalized.accessPolicy.workScope.unitIds ?? []),
+      inheritLegacyAccess: normalized.accessPolicy.inheritLegacyAccess !== false,
+      workflowMode: normalized.workflowPolicy.mode ?? 'manual',
+      workflowStaticTargets: this.toCsv(normalized.workflowPolicy.staticTargetUnitIds ?? []),
+      workflowDefaultTargetUnitId: normalized.workflowPolicy.defaultTargetUnitId ?? '',
+      workflowAllowManualSelection: normalized.workflowPolicy.allowManualSelection !== false,
+      presentationRulesJson: JSON.stringify(normalized.presentationRules ?? [], null, 2)
+    }, { emitEvent: false });
+  }
+
+  private buildRequestPolicyFromForm(): RequestPolicyDefinitionDto | null {
+    const raw = this.policyForm.value ?? {};
+    const presentationRulesJson = String(raw.presentationRulesJson ?? '').trim() || '[]';
+
+    let presentationRules: RequestPolicyPresentationRuleDto[] = [];
+    try {
+      const parsed = JSON.parse(presentationRulesJson);
+      if (!Array.isArray(parsed)) {
+        return null;
+      }
+      presentationRules = parsed as RequestPolicyPresentationRuleDto[];
+    } catch {
+      return null;
+    }
+
+    return this.requestPolicyResolver.normalizePolicy({
+      version: 1,
+      presentationRules,
+      accessPolicy: {
+        createMode: String(raw.createMode ?? 'single').trim() || 'single',
+        createScope: {
+          unitIds: this.parseCsv(raw.createScopeUnits),
+          roleIds: [],
+          groupIds: []
+        },
+        readScope: {
+          unitIds: this.parseCsv(raw.readScopeUnits),
+          roleIds: [],
+          groupIds: []
+        },
+        workScope: {
+          unitIds: this.parseCsv(raw.workScopeUnits),
+          roleIds: [],
+          groupIds: []
+        },
+        inheritLegacyAccess: Boolean(raw.inheritLegacyAccess)
+      },
+      workflowPolicy: {
+        mode: String(raw.workflowMode ?? 'manual').trim() || 'manual',
+        staticTargetUnitIds: this.parseCsv(raw.workflowStaticTargets),
+        allowManualSelection: Boolean(raw.workflowAllowManualSelection),
+        defaultTargetUnitId: String(raw.workflowDefaultTargetUnitId ?? '').trim() || undefined
+      }
+    });
+  }
+
+  private parseCsv(value: unknown): string[] {
+    return String(value ?? '')
+      .split(/[\n,;]+/g)
+      .map(item => item.trim())
+      .filter(item => item.length > 0)
+      .filter((item, index, array) => array.findIndex(inner => inner.toLowerCase() === item.toLowerCase()) === index);
+  }
+
+  private toCsv(values: string[]): string {
+    return (values ?? []).join(', ');
+  }
+
   isInvalid(form: FormGroup, controlName: string): boolean {
     const control = form.get(controlName);
     return !!control && control.invalid && (control.touched || control.dirty);
@@ -1408,6 +1508,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       useSequence: node.data.useSequence,
       sequenceName: node.data.sequenceName || 'Seq_Tickets'
     });
+    this.patchPolicyForm(node.data.requestPolicy ?? null);
 
     this.centralAdminContext.patchContext({
       selectedCategoryId: node.data.categoryId,

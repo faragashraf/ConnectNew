@@ -399,6 +399,10 @@
   }
 }
 
+.field.full-width {
+  grid-column: 1 / -1;
+}
+
 .field-error {
   color: #b91c1c;
   font-size: 0.74rem;

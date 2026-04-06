@@ -218,6 +218,8 @@ public sealed class SubjectUpsertRequestDto
 
     public int? EnvelopeId { get; set; }
 
+    public string? TargetUnitId { get; set; }
+
     public List<SubjectFieldValueDto> DynamicFields { get; set; } = new();
 
     public List<SubjectStakeholderUpsertDto> Stakeholders { get; set; } = new();
@@ -238,6 +240,8 @@ public sealed class SubjectUpsertFormRequestDto
     public bool Submit { get; set; }
 
     public int? EnvelopeId { get; set; }
+
+    public string? TargetUnitId { get; set; }
 
     public string? DynamicFieldsJson { get; set; }
 
@@ -584,6 +588,91 @@ public sealed class SubjectDashboardDto
     public List<SubjectTimelineEventDto> RecentUpdates { get; set; } = new();
 }
 
+public sealed class RequestPolicyDefinitionDto
+{
+    public int Version { get; set; } = 1;
+
+    public List<RequestPolicyPresentationRuleDto> PresentationRules { get; set; } = new();
+
+    public RequestAccessPolicyDto AccessPolicy { get; set; } = new();
+
+    public RequestWorkflowPolicyDto WorkflowPolicy { get; set; } = new();
+}
+
+public sealed class RequestPolicyConditionDto
+{
+    public string Variable { get; set; } = string.Empty;
+
+    public string Operator { get; set; } = "eq";
+
+    public string? Value { get; set; }
+
+    public List<string> Values { get; set; } = new();
+}
+
+public sealed class RequestPolicyFieldPatchDto
+{
+    public string FieldKey { get; set; } = string.Empty;
+
+    public string? Label { get; set; }
+
+    public bool? Visible { get; set; }
+
+    public bool? Required { get; set; }
+
+    public bool? Readonly { get; set; }
+
+    public string? Placeholder { get; set; }
+
+    public string? HelpText { get; set; }
+}
+
+public sealed class RequestPolicyPresentationRuleDto
+{
+    public string RuleId { get; set; } = string.Empty;
+
+    public bool IsEnabled { get; set; } = true;
+
+    public int Priority { get; set; } = 100;
+
+    public List<RequestPolicyConditionDto> Conditions { get; set; } = new();
+
+    public List<RequestPolicyFieldPatchDto> FieldPatches { get; set; } = new();
+}
+
+public sealed class RequestPolicyPrincipalScopeDto
+{
+    public List<string> UnitIds { get; set; } = new();
+
+    public List<string> RoleIds { get; set; } = new();
+
+    public List<string> GroupIds { get; set; } = new();
+}
+
+public sealed class RequestAccessPolicyDto
+{
+    public string CreateMode { get; set; } = "single";
+
+    public RequestPolicyPrincipalScopeDto CreateScope { get; set; } = new();
+
+    public RequestPolicyPrincipalScopeDto ReadScope { get; set; } = new();
+
+    public RequestPolicyPrincipalScopeDto WorkScope { get; set; } = new();
+
+    public bool InheritLegacyAccess { get; set; } = true;
+}
+
+public sealed class RequestWorkflowPolicyDto
+{
+    public string Mode { get; set; } = "manual";
+
+    public List<string> StaticTargetUnitIds { get; set; } = new();
+
+    public bool AllowManualSelection { get; set; } = true;
+
+    public string? DefaultTargetUnitId { get; set; }
+}
+
 public sealed class SubjectTypeAdminDto
 {
     public int CategoryId { get; set; }
@@ -635,6 +724,8 @@ public sealed class SubjectTypeAdminDto
     public string? LastModifiedBy { get; set; }
 
     public DateTime? LastModifiedAtUtc { get; set; }
+
+    public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
 }
 
 public sealed class SubjectTypeAdminUpsertRequestDto
@@ -654,6 +745,8 @@ public sealed class SubjectTypeAdminUpsertRequestDto
     public bool UseSequence { get; set; } = true;
 
     public string? SequenceName { get; set; }
+
+    public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
 }
 
 public sealed class SubjectTypeAdminTreeMoveRequestDto
