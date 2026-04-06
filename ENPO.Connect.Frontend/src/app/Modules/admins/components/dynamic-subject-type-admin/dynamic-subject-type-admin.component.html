@@ -270,7 +270,7 @@
                 </form>
 
                 <div class="actions-row">
-                  <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid || policyValidationErrors.length > 0" (click)="saveCategorySettings()"></button>
+                  <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid" (click)="saveCategorySettings({ includePolicy: false })"></button>
                 </div>
               </section>
 
@@ -435,6 +435,9 @@
                           </div>
                         </section>
                       </article>
+                      <p class="empty-state" *ngIf="policyRuleFormGroups.length === 0">
+                        لا توجد قواعد Presentation حاليًا. أضف Rule جديدة عند الحاجة.
+                      </p>
                     </div>
                   </p-tabPanel>
 
@@ -590,7 +593,7 @@
                 </p-tabView>
 
                 <div class="actions-row">
-                  <button pButton type="button" label="حفظ السياسات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid || policyValidationErrors.length > 0" (click)="saveCategorySettings()"></button>
+                  <button pButton type="button" label="حفظ السياسات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid || policyValidationErrors.length > 0" (click)="saveCategorySettings({ includePolicy: true })"></button>
                 </div>
               </section>
             </div>

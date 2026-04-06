@@ -238,6 +238,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       useSequence: [true],
       sequenceName: ['Seq_Tickets', Validators.maxLength(80)]
     });
+    this.configureSettingsFormValidators();
 
     this.groupForm = this.fb.group({
       groupName: ['', [Validators.required, Validators.maxLength(100)]],
@@ -695,10 +696,12 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     });
   }
 
-  saveCategorySettings(): void {
+  saveCategorySettings(options?: { includePolicy?: boolean }): void {
     if (!this.selectedCategory) {
       return;
     }
+
+    const includePolicy = options?.includePolicy === true;
 
     if (this.settingsForm.invalid) {
       this.settingsForm.markAllAsTouched();
@@ -712,26 +715,15 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     const useSequence = Boolean(value.useSequence);
     const sequenceName = String(value.sequenceName ?? '').trim();
 
-    if (referencePolicyEnabled && referencePrefix.length === 0) {
-      this.settingsForm.get('referencePrefix')?.setErrors({ required: true });
-      this.settingsForm.get('referencePrefix')?.markAsTouched();
-      this.appNotification.warning('يرجى إدخال بادئة المرجع عند تفعيل سياسة الترقيم.');
-      return;
-    }
-
-    if (useSequence && sequenceName.length === 0) {
-      this.settingsForm.get('sequenceName')?.setErrors({ required: true });
-      this.settingsForm.get('sequenceName')?.markAsTouched();
-      this.appNotification.warning('يرجى إدخال اسم التسلسل عند تفعيل التسلسل الرقمي.');
-      return;
-    }
-
-    const policyBuildResult = this.buildRequestPolicyFromForm();
-    const requestPolicy = policyBuildResult.policy;
-    if (requestPolicy == null || policyBuildResult.validationErrors.length > 0) {
-      const firstError = policyBuildResult.validationErrors[0] ?? 'تعريف السياسة غير مكتمل.';
-      this.appNotification.warning(`تعذر حفظ السياسات: ${firstError}`);
-      return;
+    let requestPolicy: RequestPolicyDefinitionDto | undefined;
+    if (includePolicy) {
+      const policyBuildResult = this.buildRequestPolicyFromForm();
+      requestPolicy = policyBuildResult.policy ?? undefined;
+      if (requestPolicy == null || policyBuildResult.validationErrors.length > 0) {
+        const firstError = policyBuildResult.validationErrors[0] ?? 'تعريف السياسة غير مكتمل.';
+        this.appNotification.warning(`تعذر حفظ السياسات: ${firstError}`);
+        return;
+      }
     }
 
     const payload: SubjectTypeAdminUpsertRequestDto = {
@@ -754,7 +746,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.appNotification.success('تم حفظ إعدادات النوع بنجاح.');
+        this.appNotification.success(includePolicy ? 'تم حفظ السياسات والإعدادات بنجاح.' : 'تم حفظ إعدادات النوع بنجاح.');
         this.loadWorkspace(this.selectedCategory?.categoryId);
       },
       error: () => {
@@ -1439,10 +1431,6 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     }
 
     this.presentationRulesArray.removeAt(ruleIndex);
-    if (this.presentationRulesArray.length === 0) {
-      this.presentationRulesArray.push(this.createPresentationRuleGroup());
-    }
-
     this.refreshPolicyStudioPreview();
   }
 
@@ -1575,6 +1563,13 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
         defaultTargetUnitId: String(raw.workflowDefaultTargetUnitId ?? '').trim() || undefined
       }
     });
+    if (this.isPolicyEffectivelyEmpty(normalizedPolicy)) {
+      return {
+        policy: null,
+        validationErrors: []
+      };
+    }
+
     const validationErrors = this.validatePolicyAuthoring(normalizedPolicy);
     return {
       policy: normalizedPolicy,
@@ -1603,22 +1598,17 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       this.presentationRulesArray.removeAt(0);
     }
 
-    if ((rules ?? []).length === 0) {
-      this.presentationRulesArray.push(this.createPresentationRuleGroup());
-      return;
-    }
-
     (rules ?? []).forEach(rule => this.presentationRulesArray.push(this.createPresentationRuleGroup(rule)));
   }
 
   private createPresentationRuleGroup(rule?: Partial<RequestPolicyPresentationRuleDto>): FormGroup {
     const conditions = this.fb.array((rule?.conditions ?? []).map(condition => this.createConditionGroup(condition)));
-    if (conditions.length === 0) {
+    if ((rule?.conditions?.length ?? 0) === 0 && conditions.length === 0) {
       conditions.push(this.createConditionGroup());
     }
 
     const fieldPatches = this.fb.array((rule?.fieldPatches ?? []).map(patch => this.createFieldPatchGroup(patch)));
-    if (fieldPatches.length === 0) {
+    if ((rule?.fieldPatches?.length ?? 0) === 0 && fieldPatches.length === 0) {
       fieldPatches.push(this.createFieldPatchGroup());
     }
 
@@ -1798,6 +1788,68 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     });
 
     return errors;
+  }
+
+  private isPolicyEffectivelyEmpty(policy: RequestPolicyDefinitionDto): boolean {
+    const hasPresentationRules = (policy.presentationRules ?? []).length > 0;
+    if (hasPresentationRules) {
+      return false;
+    }
+
+    const access = policy.accessPolicy;
+    const hasAccessCustomization = (access.createScope.unitIds?.length ?? 0) > 0
+      || (access.createScope.roleIds?.length ?? 0) > 0
+      || (access.createScope.groupIds?.length ?? 0) > 0
+      || (access.readScope.unitIds?.length ?? 0) > 0
+      || (access.readScope.roleIds?.length ?? 0) > 0
+      || (access.readScope.groupIds?.length ?? 0) > 0
+      || (access.workScope.unitIds?.length ?? 0) > 0
+      || (access.workScope.roleIds?.length ?? 0) > 0
+      || (access.workScope.groupIds?.length ?? 0) > 0
+      || String(access.createMode ?? 'single').trim().toLowerCase() !== 'single'
+      || access.inheritLegacyAccess === false;
+    if (hasAccessCustomization) {
+      return false;
+    }
+
+    const workflow = policy.workflowPolicy;
+    const hasWorkflowCustomization = String(workflow.mode ?? 'manual').trim().toLowerCase() !== 'manual'
+      || (workflow.staticTargetUnitIds?.length ?? 0) > 0
+      || String(workflow.manualTargetFieldKey ?? '').trim().length > 0
+      || String(workflow.defaultTargetUnitId ?? '').trim().length > 0
+      || workflow.allowManualSelection === false
+      || workflow.manualSelectionRequired === false;
+    return !hasWorkflowCustomization;
+  }
+
+  private configureSettingsFormValidators(): void {
+    const referencePolicyEnabledControl = this.settingsForm.get('referencePolicyEnabled');
+    const referencePrefixControl = this.settingsForm.get('referencePrefix');
+    const useSequenceControl = this.settingsForm.get('useSequence');
+    const sequenceNameControl = this.settingsForm.get('sequenceName');
+    if (!referencePolicyEnabledControl || !referencePrefixControl || !useSequenceControl || !sequenceNameControl) {
+      return;
+    }
+
+    const applyValidators = (): void => {
+      const requiresReferencePrefix = Boolean(referencePolicyEnabledControl.value);
+      const referencePrefixValidators = requiresReferencePrefix
+        ? [Validators.required, Validators.maxLength(40)]
+        : [Validators.maxLength(40)];
+      referencePrefixControl.setValidators(referencePrefixValidators);
+      referencePrefixControl.updateValueAndValidity({ emitEvent: false });
+
+      const requiresSequenceName = Boolean(useSequenceControl.value);
+      const sequenceNameValidators = requiresSequenceName
+        ? [Validators.required, Validators.maxLength(80)]
+        : [Validators.maxLength(80)];
+      sequenceNameControl.setValidators(sequenceNameValidators);
+      sequenceNameControl.updateValueAndValidity({ emitEvent: false });
+    };
+
+    applyValidators();
+    this.subscriptions.add(referencePolicyEnabledControl.valueChanges.subscribe(() => applyValidators()));
+    this.subscriptions.add(useSequenceControl.valueChanges.subscribe(() => applyValidators()));
   }
 
   private refreshPolicyStudioPreview(): void {
