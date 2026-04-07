@@ -1,0 +1,211 @@
+<section class="form-composition-page" dir="rtl" *ngIf="step as currentStep">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">الخطوة 4 من 10</p>
+      <h2>Form Composition</h2>
+      <p>إدارة المجموعات/الأقسام/البطاقات وترتيب الحقول داخل Layout قبل تفعيل النموذج النهائي.</p>
+    </div>
+
+    <div class="status-card">
+      <p-tag [value]="currentStep.isCompleted ? 'جاهز' : 'غير مكتمل'" [severity]="currentStep.isCompleted ? 'success' : 'warning'"></p-tag>
+      <div class="status-row">
+        <span>اكتمال الإلزامي</span>
+        <strong>{{ requiredProgressText }}</strong>
+      </div>
+      <p-progressBar [value]="currentStep.requiredTotal > 0 ? (currentStep.requiredCompleted / currentStep.requiredTotal) * 100 : 0"></p-progressBar>
+    </div>
+  </header>
+
+  <div class="step-message" *ngIf="stepMessage.length > 0" [class.warn]="stepMessageSeverity === 'warn'">
+    {{ stepMessage }}
+  </div>
+
+  <div class="layout">
+    <main class="workspace">
+      <section class="card">
+        <header class="card-head">
+          <h3>إعدادات التكوين</h3>
+          <small>Mandatory fields لهذه الخطوة</small>
+        </header>
+
+        <form class="setup-grid" [formGroup]="setupForm" novalidate>
+          <article class="field">
+            <label for="defaultGroupLabel">Default Group Label <span>*</span></label>
+            <input pInputText id="defaultGroupLabel" formControlName="defaultGroupLabel" />
+            <small class="error" *ngIf="controlHasError('defaultGroupLabel')">{{ controlErrorMessage('defaultGroupLabel') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="layoutDirection">Layout Direction <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="layoutDirection"
+              [options]="getOptions('layoutDirection')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="layoutDirection">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('layoutDirection')">{{ controlErrorMessage('layoutDirection') }}</small>
+          </article>
+
+          <article class="field switch-field">
+            <label for="allowInlineSections">Allow Inline Sections</label>
+            <p-inputSwitch inputId="allowInlineSections" formControlName="allowInlineSections"></p-inputSwitch>
+          </article>
+
+          <article class="field field-wide">
+            <label for="compositionNotes">ملاحظات</label>
+            <textarea pInputTextarea id="compositionNotes" rows="3" formControlName="compositionNotes"></textarea>
+          </article>
+        </form>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
+          <h3>إدارة Containers</h3>
+          <button pButton type="button" label="إضافة Container" icon="pi pi-plus" class="p-button-sm" (click)="openAddContainerDialog()"></button>
+        </header>
+
+        <p-table [value]="containers" styleClass="p-datatable-sm">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Title</th>
+              <th>Type</th>
+              <th>Visible</th>
+              <th>Order</th>
+              <th>Fields</th>
+              <th>إجراءات</th>
+            </tr>
+          </ng-template>
+
+          <ng-template pTemplate="body" let-row>
+            <tr>
+              <td>{{ row.title }}</td>
+              <td>{{ row.type }}</td>
+              <td><p-tag [value]="row.visible ? 'Visible' : 'Hidden'" [severity]="row.visible ? 'success' : 'warning'"></p-tag></td>
+              <td>{{ row.displayOrder }}</td>
+              <td>{{ row.fieldKeys.length }}</td>
+              <td class="row-actions">
+                <button pButton type="button" icon="pi pi-arrow-up" class="p-button-text p-button-sm" (click)="moveContainerUp(row)"></button>
+                <button pButton type="button" icon="pi pi-arrow-down" class="p-button-text p-button-sm" (click)="moveContainerDown(row)"></button>
+                <button pButton type="button" icon="pi pi-pencil" class="p-button-text p-button-sm" (click)="openEditContainerDialog(row)"></button>
+                <button pButton type="button" icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm" (click)="deleteContainer(row)"></button>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
+          <h3>Preview</h3>
+          <small>يعرض التكوين النهائي بشكل مبسط</small>
+        </header>
+
+        <div class="preview-grid" *ngIf="visibleContainers.length > 0; else noPreview">
+          <article class="preview-card" *ngFor="let container of visibleContainers">
+            <h4>{{ container.title }}</h4>
+            <p-tag [value]="container.type" severity="info"></p-tag>
+            <ul>
+              <li *ngFor="let fieldKey of container.fieldKeys">{{ resolveFieldLabel(fieldKey) }}</li>
+            </ul>
+          </article>
+        </div>
+        <ng-template #noPreview>
+          <p class="empty">لا توجد مجموعات مرئية حتى الآن.</p>
+        </ng-template>
+      </section>
+    </main>
+
+    <aside class="summary">
+      <h3>Composition Validation</h3>
+      <div class="summary-row">
+        <span>Containers</span>
+        <strong>{{ containers.length }}</strong>
+      </div>
+      <div class="summary-row">
+        <span>Visible Containers</span>
+        <strong>{{ visibleContainers.length }}</strong>
+      </div>
+      <div class="summary-row">
+        <span>الحالة</span>
+        <strong>{{ validation.isValid ? 'صالح' : 'Blocked' }}</strong>
+      </div>
+
+      <section class="issues" *ngIf="validation.blockingIssues.length > 0; else noBlockingIssues">
+        <h4>مشكلات مانعة</h4>
+        <ul>
+          <li *ngFor="let issue of validation.blockingIssues">{{ issue }}</li>
+        </ul>
+      </section>
+      <ng-template #noBlockingIssues>
+        <p class="valid-note">لا توجد مشكلات مانعة في التكوين الحالي.</p>
+      </ng-template>
+
+      <section class="warnings" *ngIf="validation.warnings.length > 0">
+        <h4>تنبيهات</h4>
+        <ul>
+          <li *ngFor="let warning of validation.warnings">{{ warning }}</li>
+        </ul>
+      </section>
+
+      <div class="actions">
+        <button pButton type="button" class="p-button-outlined" label="حفظ" (click)="onSaveDraft()"></button>
+        <button pButton type="button" label="التالي: Workflow & Routing" icon="pi pi-arrow-left" iconPos="left" (click)="onGoNext()"></button>
+      </div>
+    </aside>
+  </div>
+
+  <p-dialog [rtl]="true"
+    [(visible)]="containerDialogVisible"
+    [modal]="true"
+    [dismissableMask]="true"
+    [style]="{ width: '38rem' }"
+    [header]="editingContainerId ? 'تعديل Container' : 'إضافة Container'">
+    <form class="dialog-form" [formGroup]="containerForm" novalidate>
+      <article class="field">
+        <label for="containerTitle">Title <span>*</span></label>
+        <input pInputText id="containerTitle" formControlName="title" />
+      </article>
+
+      <article class="field">
+        <label for="containerType">Type <span>*</span></label>
+        <p-dropdown appendTo="body"
+          inputId="containerType"
+          [options]="containerTypeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [showClear]="false"
+          formControlName="type">
+        </p-dropdown>
+      </article>
+
+      <article class="field switch-field">
+        <label for="containerVisible">Visible</label>
+        <p-inputSwitch inputId="containerVisible" formControlName="visible"></p-inputSwitch>
+      </article>
+
+      <article class="field">
+        <label for="containerOrder">Display Order</label>
+        <input pInputText type="number" id="containerOrder" formControlName="displayOrder" />
+      </article>
+
+      <article class="field field-wide">
+        <label for="containerFields">Fields <span>*</span></label>
+        <p-multiSelect
+          inputId="containerFields"
+          [options]="fieldOptions"
+          optionLabel="label"
+          optionValue="value"
+          [showToggleAll]="false"
+          formControlName="fieldKeys">
+        </p-multiSelect>
+      </article>
+    </form>
+
+    <ng-template pTemplate="footer">
+      <button pButton type="button" class="p-button-text" label="إلغاء" (click)="containerDialogVisible = false"></button>
+      <button pButton type="button" label="حفظ" (click)="saveContainerDialog()"></button>
+    </ng-template>
+  </p-dialog>
+</section>

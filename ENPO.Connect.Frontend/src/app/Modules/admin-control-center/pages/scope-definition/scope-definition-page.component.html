@@ -1,0 +1,236 @@
+<section class="scope-page" dir="rtl" *ngIf="scopeStep as step">
+  <header class="scope-header">
+    <div class="heading">
+      <p class="eyebrow">الخطوة 1 من 10</p>
+      <h2>تعريف نطاق التكوين</h2>
+      <p>
+        اضبط نطاق التطبيق والنوع والصلاحيات الأساسية لهذه السياسة قبل الانتقال لباقي الخطوات.
+      </p>
+    </div>
+
+    <div class="state-card">
+      <p-tag [value]="stepStatusLabel" [severity]="stepStatusSeverity"></p-tag>
+      <div class="progress-text">
+        <span>اكتمال الحقول الإلزامية</span>
+        <strong>{{ requiredProgressText }}</strong>
+      </div>
+      <p-progressBar
+        [value]="step.requiredTotal > 0 ? (step.requiredCompleted / step.requiredTotal) * 100 : 0">
+      </p-progressBar>
+    </div>
+  </header>
+
+  <div class="step-message" *ngIf="stepMessage.length > 0" [class.warn]="stepMessageSeverity === 'warn'">
+    {{ stepMessage }}
+  </div>
+
+  <div class="scope-layout">
+    <form class="scope-form" [formGroup]="scopeForm" novalidate>
+      <section class="form-card required-card">
+        <header>
+          <h3>البيانات الإلزامية</h3>
+          <small>يجب استكمالها قبل الانتقال للخطوة التالية</small>
+        </header>
+
+        <div class="fields-grid">
+          <article class="field">
+            <label for="applicationId">Application ID <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="applicationId"
+              [options]="getOptionList('applicationId')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              placeholder="اختر التطبيق"
+              formControlName="applicationId">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('applicationId')">{{ controlErrorMessage('applicationId') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="categoryId">Category / Subject Type <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="categoryId"
+              [options]="getOptionList('categoryId')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              placeholder="اختر الفئة"
+              formControlName="categoryId">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('categoryId')">{{ controlErrorMessage('categoryId') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="requestMode">Request Mode <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="requestMode"
+              [options]="getOptionList('requestMode')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              placeholder="اختر نمط الطلب"
+              formControlName="requestMode">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('requestMode')">{{ controlErrorMessage('requestMode') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="documentDirection">Document Direction <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="documentDirection"
+              [options]="getOptionList('documentDirection')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              placeholder="اختر الاتجاه"
+              formControlName="documentDirection">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('documentDirection')">{{ controlErrorMessage('documentDirection') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="routeKeyPrefix">Route Key Prefix <span>*</span></label>
+            <input pInputText id="routeKeyPrefix" formControlName="routeKeyPrefix" placeholder="مثال: connect.central.admin" />
+            <small class="error" *ngIf="controlHasError('routeKeyPrefix')">{{ controlErrorMessage('routeKeyPrefix') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="primaryConfigRouteKey">Primary Config Route Key <span>*</span></label>
+            <input
+              pInputText
+              id="primaryConfigRouteKey"
+              formControlName="primaryConfigRouteKey"
+              placeholder="مثال: connect.central.admin.request-124" />
+            <small class="error" *ngIf="controlHasError('primaryConfigRouteKey')">{{ controlErrorMessage('primaryConfigRouteKey') }}</small>
+          </article>
+
+          <article class="field field-wide">
+            <label for="createUnitScope">Create Unit Scope <span>*</span></label>
+            <textarea
+              pInputTextarea
+              id="createUnitScope"
+              rows="3"
+              formControlName="createUnitScope"
+              placeholder="أدخل Unit IDs مفصولة بفواصل (مثال: 60,62,78)">
+            </textarea>
+            <small class="error" *ngIf="controlHasError('createUnitScope')">{{ controlErrorMessage('createUnitScope') }}</small>
+          </article>
+
+          <article class="field field-wide">
+            <label for="readUnitScope">Read Unit Scope <span>*</span></label>
+            <textarea
+              pInputTextarea
+              id="readUnitScope"
+              rows="3"
+              formControlName="readUnitScope"
+              placeholder="أدخل Unit IDs مفصولة بفواصل (مثال: 60,61,62)">
+            </textarea>
+            <small class="error" *ngIf="controlHasError('readUnitScope')">{{ controlErrorMessage('readUnitScope') }}</small>
+          </article>
+        </div>
+      </section>
+
+      <section class="form-card optional-card">
+        <header>
+          <h3>البيانات الاختيارية</h3>
+          <small>تحسن التجهيز لكنها ليست شرطًا لتجاوز هذه الخطوة</small>
+        </header>
+
+        <div class="fields-grid">
+          <article class="field">
+            <label for="creatorUnitDefault">Creator Unit Default</label>
+            <input pInputText id="creatorUnitDefault" formControlName="creatorUnitDefault" placeholder="مثال: 60" />
+            <small class="error" *ngIf="controlHasError('creatorUnitDefault')">{{ controlErrorMessage('creatorUnitDefault') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="targetUnitDefault">Target Unit Default</label>
+            <input pInputText id="targetUnitDefault" formControlName="targetUnitDefault" placeholder="مثال: 148" />
+            <small class="error" *ngIf="controlHasError('targetUnitDefault')">{{ controlErrorMessage('targetUnitDefault') }}</small>
+          </article>
+
+          <article class="field field-wide">
+            <label for="runtimeContextJson">Runtime Context JSON</label>
+            <textarea
+              pInputTextarea
+              id="runtimeContextJson"
+              rows="4"
+              formControlName="runtimeContextJson"
+              placeholder="{&quot;requestSource&quot;:&quot;central-admin&quot;,&quot;locale&quot;:&quot;ar&quot;}">
+            </textarea>
+            <small class="error" *ngIf="controlHasError('runtimeContextJson')">{{ controlErrorMessage('runtimeContextJson') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="localizationProfile">Localization Profile</label>
+            <p-dropdown appendTo="body"
+              inputId="localizationProfile"
+              [options]="getOptionList('localizationProfile')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="true"
+              placeholder="اختياري"
+              formControlName="localizationProfile">
+            </p-dropdown>
+          </article>
+
+          <article class="field">
+            <label for="uiPreset">UI Preset</label>
+            <p-dropdown appendTo="body"
+              inputId="uiPreset"
+              [options]="getOptionList('uiPreset')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="true"
+              placeholder="اختياري"
+              formControlName="uiPreset">
+            </p-dropdown>
+          </article>
+        </div>
+      </section>
+    </form>
+
+    <aside class="summary-card">
+      <h3>ملخص الجاهزية</h3>
+
+      <div class="summary-row">
+        <span>الحالة الحالية</span>
+        <strong>{{ stepStatusLabel }}</strong>
+      </div>
+      <div class="summary-row">
+        <span>الإلزامي المكتمل</span>
+        <strong>{{ requiredProgressText }}</strong>
+      </div>
+
+      <section class="missing-list" *ngIf="mandatoryMissingLabels.length > 0; else noMissing">
+        <h4>الحقول الناقصة</h4>
+        <ul>
+          <li *ngFor="let label of mandatoryMissingLabels">{{ label }}</li>
+        </ul>
+      </section>
+
+      <ng-template #noMissing>
+        <p class="ready-note">تم استكمال كل المتطلبات الإلزامية لهذه الخطوة.</p>
+      </ng-template>
+
+      <div class="actions">
+        <button
+          pButton
+          type="button"
+          class="p-button-outlined"
+          label="حفظ النطاق"
+          (click)="onSaveDraft()">
+        </button>
+        <button
+          pButton
+          type="button"
+          label="الانتقال إلى Subject Structure"
+          icon="pi pi-arrow-left"
+          iconPos="left"
+          (click)="onGoNext()">
+        </button>
+      </div>
+    </aside>
+  </div>
+</section>

@@ -150,7 +150,7 @@ const routes: Routes =
       }
     },
     {
-      path: 'CentralAdminShell',
+      path: 'CentralAdminShellLegacy',
       component: CentralAdminShellComponent,
       canActivate: [AuthNewGuardService], data: {
         func: 'ConnectSupperAdminFunc'
@@ -161,6 +161,20 @@ const routes: Routes =
         { path: 'fields-library', component: DynamicFieldsManagerComponent },
         { path: 'application-configuration', component: ComponentConfigManagerComponent },
         { path: 'preview-workspace', component: CentralAdminPreviewWorkspaceComponent }
+      ]
+    },
+    {
+      path: 'CentralAdminShell',
+      canActivate: [AuthNewGuardService], data: {
+        func: 'ConnectSupperAdminFunc'
+      },
+      children: [
+        { path: '', redirectTo: '/Admin/ControlCenter/scope-definition', pathMatch: 'full' },
+        { path: 'subject-types', redirectTo: '/Admin/ControlCenter/scope-definition', pathMatch: 'full' },
+        { path: 'fields-library', redirectTo: '/Admin/ControlCenter/field-library-binding', pathMatch: 'full' },
+        { path: 'application-configuration', redirectTo: '/Admin/ControlCenter/workflow-routing', pathMatch: 'full' },
+        { path: 'preview-workspace', redirectTo: '/Admin/ControlCenter/preview-simulation', pathMatch: 'full' },
+        { path: '**', redirectTo: '/Admin/ControlCenter/scope-definition' }
       ]
     },
     {

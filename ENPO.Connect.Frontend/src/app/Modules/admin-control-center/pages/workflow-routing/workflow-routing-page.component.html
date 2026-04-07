@@ -1,0 +1,139 @@
+<section class="workflow-page" dir="rtl" *ngIf="step as currentStep">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">الخطوة 5 من 10</p>
+      <h2>Workflow & Routing</h2>
+      <p>تحديد وضع التوجيه وحل المسارات والاتجاه والاستراتيجية التشغيلية للـ target.</p>
+    </div>
+
+    <div class="status-card">
+      <p-tag [value]="currentStep.isCompleted ? 'جاهز' : 'غير مكتمل'" [severity]="currentStep.isCompleted ? 'success' : 'warning'"></p-tag>
+      <div class="status-row">
+        <span>اكتمال الإلزامي</span>
+        <strong>{{ requiredProgressText }}</strong>
+      </div>
+      <p-progressBar [value]="currentStep.requiredTotal > 0 ? (currentStep.requiredCompleted / currentStep.requiredTotal) * 100 : 0"></p-progressBar>
+    </div>
+  </header>
+
+  <div class="step-message" *ngIf="stepMessage.length > 0" [class.warn]="stepMessageSeverity === 'warn'">
+    {{ stepMessage }}
+  </div>
+
+  <div class="layout">
+    <main class="workspace">
+      <section class="card">
+        <header class="card-head">
+          <h3>إعدادات Workflow</h3>
+          <small>كل العناصر الأساسية في شاشة واحدة مترابطة</small>
+        </header>
+
+        <form class="grid" [formGroup]="workflowForm" novalidate>
+          <article class="field">
+            <label for="routingMode">Workflow Mode <span>*</span></label>
+            <p-dropdown appendTo="body" inputId="routingMode" [options]="getOptions('routingMode')" optionLabel="label" optionValue="value" [showClear]="false" formControlName="routingMode"></p-dropdown>
+            <small class="error" *ngIf="controlHasError('routingMode')">{{ controlErrorMessage('routingMode') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="defaultTargetUnit">Default Target Unit <span>*</span></label>
+            <input pInputText id="defaultTargetUnit" formControlName="defaultTargetUnit" />
+            <small class="error" *ngIf="controlHasError('defaultTargetUnit')">{{ controlErrorMessage('defaultTargetUnit') }}</small>
+          </article>
+
+          <article class="field switch-field">
+            <label for="allowManualSelection">Allow Manual Selection</label>
+            <p-inputSwitch inputId="allowManualSelection" formControlName="allowManualSelection"></p-inputSwitch>
+          </article>
+
+          <article class="field">
+            <label for="routeResolutionMode">Route Resolution Mode <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="routeResolutionMode"
+              [options]="getOptions('routeResolutionMode')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="routeResolutionMode">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('routeResolutionMode')">{{ controlErrorMessage('routeResolutionMode') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="targetResolutionStrategy">Target Resolution Strategy <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="targetResolutionStrategy"
+              [options]="getOptions('targetResolutionStrategy')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="targetResolutionStrategy">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('targetResolutionStrategy')">{{ controlErrorMessage('targetResolutionStrategy') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="createConfigRouteKey">Create Config Route Key <span>*</span></label>
+            <input pInputText id="createConfigRouteKey" formControlName="createConfigRouteKey" />
+            <small class="error" *ngIf="controlHasError('createConfigRouteKey')">{{ controlErrorMessage('createConfigRouteKey') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="viewConfigRouteKey">View Config Route Key <span>*</span></label>
+            <input pInputText id="viewConfigRouteKey" formControlName="viewConfigRouteKey" />
+            <small class="error" *ngIf="controlHasError('viewConfigRouteKey')">{{ controlErrorMessage('viewConfigRouteKey') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="directionAwareBehavior">Direction-aware Behavior <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="directionAwareBehavior"
+              [options]="getOptions('directionAwareBehavior')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="directionAwareBehavior">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('directionAwareBehavior')">{{ controlErrorMessage('directionAwareBehavior') }}</small>
+          </article>
+
+          <article class="field field-wide">
+            <label for="workflowNotes">Workflow Notes</label>
+            <textarea pInputTextarea id="workflowNotes" rows="4" formControlName="workflowNotes"></textarea>
+          </article>
+        </form>
+      </section>
+    </main>
+
+    <aside class="summary">
+      <h3>Routing Validation</h3>
+
+      <div class="summary-row">
+        <span>الحالة</span>
+        <strong>{{ validation.isValid ? 'صالح' : 'Blocked' }}</strong>
+      </div>
+
+      <section class="issues" *ngIf="validation.blockingIssues.length > 0; else noBlockingIssues">
+        <h4>مشكلات مانعة</h4>
+        <ul>
+          <li *ngFor="let issue of validation.blockingIssues">{{ issue }}</li>
+        </ul>
+      </section>
+      <ng-template #noBlockingIssues>
+        <p class="valid-note">الإعدادات الأساسية صالحة.</p>
+      </ng-template>
+
+      <section class="warnings" *ngIf="validation.warnings.length > 0">
+        <h4>تنبيهات</h4>
+        <ul>
+          <li *ngFor="let warning of validation.warnings">{{ warning }}</li>
+        </ul>
+      </section>
+
+      <div class="actions">
+        <button pButton type="button" class="p-button-outlined" label="حفظ" (click)="onSaveDraft()"></button>
+        <button pButton type="button" label="التالي: Access & Visibility" icon="pi pi-arrow-left" iconPos="left" (click)="onGoNext()"></button>
+      </div>
+    </aside>
+  </div>
+</section>

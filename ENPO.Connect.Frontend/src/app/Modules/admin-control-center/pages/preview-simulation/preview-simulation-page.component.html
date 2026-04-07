@@ -1,0 +1,224 @@
+<section class="preview-page" dir="rtl" *ngIf="step as currentStep; else pageUnavailable">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">الخطوة 8 من 10</p>
+      <h2>المعاينة والمحاكاة</h2>
+      <p>محاكاة سيناريوهات الإنشاء والتعديل والعرض مع دعم اتجاهي الوارد/الصادر وإظهار خريطة العرض الفعلية.</p>
+    </div>
+
+    <div class="status-card">
+      <p-tag [value]="currentStep.isCompleted ? 'جاهز' : 'غير مكتمل'" [severity]="currentStep.isCompleted ? 'success' : 'warning'"></p-tag>
+      <div class="status-row">
+        <span>اكتمال الإلزامي</span>
+        <strong>{{ requiredProgressText }}</strong>
+      </div>
+      <p-progressBar [value]="currentStep.requiredTotal > 0 ? (currentStep.requiredCompleted / currentStep.requiredTotal) * 100 : 0"></p-progressBar>
+    </div>
+  </header>
+
+  <div class="step-message" *ngIf="stepMessage.length > 0" [class.warn]="stepMessageSeverity === 'warn'">
+    {{ stepMessage }}
+  </div>
+
+  <div class="layout">
+    <main class="workspace">
+      <section class="card">
+        <header class="card-head">
+          <h3>إعدادات المحاكاة</h3>
+          <small>تؤثر مباشرة على خريطة العرض</small>
+        </header>
+
+        <form class="grid" [formGroup]="previewForm" novalidate>
+          <article class="field">
+            <label for="previewDirection">اتجاه المعاينة <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="previewDirection"
+              [options]="getOptions('previewDirection')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="previewDirection">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('previewDirection')">{{ controlErrorMessage('previewDirection') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="previewMode">وضع المعاينة <span>*</span></label>
+            <p-dropdown appendTo="body"
+              inputId="previewMode"
+              [options]="getOptions('previewMode')"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="previewMode">
+            </p-dropdown>
+            <small class="error" *ngIf="controlHasError('previewMode')">{{ controlErrorMessage('previewMode') }}</small>
+          </article>
+
+          <article class="field">
+            <label for="sampleReference">مرجع العينة</label>
+            <input pInputText id="sampleReference" formControlName="sampleReference" />
+            <small class="error" *ngIf="controlHasError('sampleReference')">{{ controlErrorMessage('sampleReference') }}</small>
+          </article>
+
+          <article class="field switch-field">
+            <label for="enableSimulationTrace">تفعيل تتبع المحاكاة</label>
+            <p-inputSwitch inputId="enableSimulationTrace" formControlName="enableSimulationTrace"></p-inputSwitch>
+          </article>
+
+          <article class="field field-wide optional">
+            <label for="previewNotes">ملاحظات المعاينة</label>
+            <textarea pInputTextarea id="previewNotes" rows="3" formControlName="previewNotes"></textarea>
+            <small class="error" *ngIf="controlHasError('previewNotes')">{{ controlErrorMessage('previewNotes') }}</small>
+          </article>
+        </form>
+      </section>
+
+      <section class="card" *ngIf="renderingMap as map; else mapLoading">
+        <header class="card-head">
+          <h3>لقطة التوجيه</h3>
+          <p-tag [value]="map.blockingIssues.length === 0 ? 'صالح' : 'متعثر'" [severity]="map.blockingIssues.length === 0 ? 'success' : 'danger'"></p-tag>
+        </header>
+
+        <div class="route-grid">
+          <article>
+            <span>المسار النهائي</span>
+            <strong><code>{{ map.routeSnapshot.resolvedRouteKey || '-' }}</code></strong>
+          </article>
+          <article>
+            <span>نمط التوجيه</span>
+            <strong>{{ map.routeSnapshot.routingMode }}</strong>
+          </article>
+          <article>
+            <span>آلية الحل</span>
+            <strong>{{ map.routeSnapshot.routeResolutionMode }}</strong>
+          </article>
+          <article>
+            <span>استراتيجية الهدف</span>
+            <strong>{{ map.routeSnapshot.targetResolutionStrategy }}</strong>
+          </article>
+          <article>
+            <span>سلوك الاتجاه</span>
+            <strong>{{ map.routeSnapshot.directionAwareBehavior }}</strong>
+          </article>
+          <article>
+            <span>مسار الإعداد الأساسي</span>
+            <strong><code>{{ map.routeSnapshot.primaryConfigRouteKey || '-' }}</code></strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="card" *ngIf="renderingMap as map">
+        <header class="card-head">
+          <h3>خريطة العرض</h3>
+          <small>{{ map.containers.length }} مجموعات مرئية</small>
+        </header>
+
+        <div class="container-grid" *ngIf="map.containers.length > 0; else noContainers">
+          <article class="container-card" *ngFor="let container of map.containers">
+            <header>
+              <h4>{{ container.title }}</h4>
+              <div class="header-tags">
+                <p-tag [value]="container.type" severity="info"></p-tag>
+                <p-tag [value]="'#' + container.displayOrder" severity="warning"></p-tag>
+              </div>
+            </header>
+
+            <p-table [value]="container.fields.slice()" styleClass="p-datatable-sm">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>الحقل</th>
+                  <th>النوع</th>
+                  <th>إلزامي</th>
+                  <th>قراءة فقط</th>
+                  <th>القيمة الافتراضية</th>
+                </tr>
+              </ng-template>
+
+              <ng-template pTemplate="body" let-row>
+                <tr>
+                  <td>{{ row.label }} <code>({{ row.fieldKey }})</code></td>
+                  <td>{{ row.type }}</td>
+                  <td>
+                    <p-tag [value]="row.required ? 'نعم' : 'لا'" [severity]="row.required ? 'danger' : 'info'"></p-tag>
+                  </td>
+                  <td>
+                    <p-tag [value]="row.readonly ? 'نعم' : 'لا'" [severity]="row.readonly ? 'warning' : 'success'"></p-tag>
+                  </td>
+                  <td><code>{{ row.defaultValue || '-' }}</code></td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </article>
+        </div>
+
+        <ng-template #noContainers>
+          <p class="empty">لا توجد مجموعات مرئية لعرض المعاينة.</p>
+        </ng-template>
+      </section>
+
+      <ng-template #mapLoading>
+        <section class="card loading-card">
+          <p-progressSpinner strokeWidth="4" [style]="{ width: '2.5rem', height: '2.5rem' }"></p-progressSpinner>
+          <p>جارٍ تجهيز خريطة المعاينة...</p>
+        </section>
+      </ng-template>
+    </main>
+
+    <aside class="summary" *ngIf="renderingMap as map; else summaryLoading">
+      <h3>ملخص المحاكاة</h3>
+
+      <div class="summary-row">
+        <span>الحالة</span>
+        <strong>{{ map.blockingIssues.length === 0 ? 'صالح' : 'متعثر' }}</strong>
+      </div>
+
+      <div class="summary-row">
+        <span>الحقول الإلزامية المخفية</span>
+        <strong>{{ map.hiddenRequiredFieldKeys.length }}</strong>
+      </div>
+
+      <div class="summary-row">
+        <span>الحقول غير الموزعة</span>
+        <strong>{{ map.unassignedFieldKeys.length }}</strong>
+      </div>
+
+      <section class="issues" *ngIf="map.blockingIssues.length > 0; else noBlockingIssues">
+        <h4>مشكلات مانعة</h4>
+        <ul>
+          <li *ngFor="let issue of map.blockingIssues">{{ issue }}</li>
+        </ul>
+      </section>
+      <ng-template #noBlockingIssues>
+        <p class="valid-note">المعاينة متسقة مع التكوين الحالي.</p>
+      </ng-template>
+
+      <section class="warnings" *ngIf="map.warnings.length > 0">
+        <h4>تحذيرات</h4>
+        <ul>
+          <li *ngFor="let warning of map.warnings">{{ warning }}</li>
+        </ul>
+      </section>
+
+      <div class="actions">
+        <button pButton type="button" class="p-button-outlined" label="حفظ المسودة" (click)="onSaveDraft()"></button>
+        <button pButton type="button" label="التالي: تدقيق الجاهزية" icon="pi pi-arrow-left" iconPos="left" (click)="onGoNext()"></button>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<ng-template #summaryLoading>
+  <aside class="summary loading-card" dir="rtl">
+    <p-progressSpinner strokeWidth="4" [style]="{ width: '2.2rem', height: '2.2rem' }"></p-progressSpinner>
+    <p>جارٍ تحميل ملخص المحاكاة...</p>
+  </aside>
+</ng-template>
+
+<ng-template #pageUnavailable>
+  <section class="preview-page-unavailable" dir="rtl">
+    <h3>تعذر تحميل خطوة المعاينة</h3>
+    <p>تحقق من استكمال الخطوات السابقة ثم أعد المحاولة.</p>
+    <button pButton type="button" label="العودة لأول خطوة متاحة" (click)="goToSafeStep()"></button>
+  </section>
+</ng-template>
