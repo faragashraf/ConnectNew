@@ -182,9 +182,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluateBindings(true);
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ ربط مكتبة الحقول في المسودة.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoNext(): void {

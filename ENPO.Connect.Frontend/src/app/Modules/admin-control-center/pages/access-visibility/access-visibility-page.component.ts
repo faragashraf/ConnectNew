@@ -128,9 +128,9 @@ export class AccessVisibilityPageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluateAccess(true);
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ إعدادات Access & Visibility.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoNext(): void {

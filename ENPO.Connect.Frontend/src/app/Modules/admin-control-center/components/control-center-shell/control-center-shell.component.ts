@@ -39,9 +39,30 @@ export class ControlCenterShellComponent implements OnInit {
   }
 
   onSaveDraft(): void {
-    this.facade.saveDraft();
-    this.actionSeverity = 'success';
-    this.actionMessage = 'تم حفظ المسودة بنجاح ويمكن استكمال العمل لاحقًا.';
+    const draftResult = this.facade.saveDraft();
+    this.actionSeverity = draftResult.success ? 'success' : 'warn';
+    this.actionMessage = draftResult.message;
+  }
+
+  onClearDraft(): void {
+    const actionResult = this.facade.clearDraft();
+    this.actionSeverity = actionResult.success ? 'success' : 'warn';
+    this.actionMessage = actionResult.message;
+    this.router.navigate(['/Admin/ControlCenter', actionResult.targetStepKey]);
+  }
+
+  onStartNewScope(): void {
+    const actionResult = this.facade.startNewScope();
+    this.actionSeverity = actionResult.success ? 'success' : 'warn';
+    this.actionMessage = actionResult.message;
+    this.router.navigate(['/Admin/ControlCenter', actionResult.targetStepKey]);
+  }
+
+  onLoadDemoScope(): void {
+    const actionResult = this.facade.loadDemoScope();
+    this.actionSeverity = actionResult.success ? 'success' : 'warn';
+    this.actionMessage = actionResult.message;
+    this.router.navigate(['/Admin/ControlCenter', actionResult.targetStepKey]);
   }
 
   onRetryInitialize(): void {

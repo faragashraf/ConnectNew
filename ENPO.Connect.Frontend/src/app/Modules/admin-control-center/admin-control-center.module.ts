@@ -29,6 +29,8 @@ import { PublishReleasePageComponent } from './pages/publish-release/publish-rel
 import { PreviewSimulationEngine } from './domain/preview-simulation/preview-simulation.engine';
 import { ReadinessAuditEngine } from './domain/readiness-audit/readiness-audit.engine';
 import { PublishReleaseEngine } from './domain/publish-release/publish-release.engine';
+import { AdminControlCenterDraftStorageService } from './services/admin-control-center-draft-storage.service';
+import { AdminControlCenterDemoScopeService } from './services/admin-control-center-demo-scope.service';
 
 @NgModule({
   declarations: [
@@ -55,6 +57,8 @@ import { PublishReleaseEngine } from './domain/publish-release/publish-release.e
   ],
   providers: [
     AdminControlCenterWorkflowEngine,
+    AdminControlCenterDraftStorageService,
+    AdminControlCenterDemoScopeService,
     AdminControlCenterStore,
     AdminControlCenterFacade,
     AdminControlCenterStepGuard,

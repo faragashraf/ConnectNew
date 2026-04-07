@@ -14,7 +14,12 @@ import {
   ControlCenterStepViewModel,
   ControlCenterViewModel
 } from '../domain/models/admin-control-center.view-models';
-import { ControlCenterPublishResult, AdminControlCenterStore } from '../store/admin-control-center.store';
+import {
+  AdminControlCenterStore,
+  ControlCenterDraftSaveResult,
+  ControlCenterPublishResult,
+  ControlCenterStateActionResult
+} from '../store/admin-control-center.store';
 export type { ControlCenterStepViewModel, ControlCenterViewModel };
 
 @Injectable()
@@ -54,8 +59,20 @@ export class AdminControlCenterFacade {
     this.store.upsertFieldValue(stepKey, fieldKey, value);
   }
 
-  saveDraft(): string {
+  saveDraft(): ControlCenterDraftSaveResult {
     return this.store.saveDraft();
+  }
+
+  clearDraft(rawStepKey?: string | null): ControlCenterStateActionResult {
+    return this.store.clearDraft(rawStepKey);
+  }
+
+  startNewScope(rawStepKey?: string | null): ControlCenterStateActionResult {
+    return this.store.startNewScope(rawStepKey);
+  }
+
+  loadDemoScope(rawStepKey?: string | null): ControlCenterStateActionResult {
+    return this.store.loadDemoScope(rawStepKey);
   }
 
   publish(): ControlCenterPublishResult {
@@ -154,6 +171,9 @@ export class AdminControlCenterFacade {
       totalStepsCount: steps.length,
       completedRequiredFields,
       totalRequiredFields,
+      hasUnsavedChanges: state.hasUnsavedChanges,
+      draftRestoredAt: state.draftRestoredAt,
+      draftErrorMessage: state.draftErrorMessage,
       lastSavedAt: state.lastSavedAt,
       lastPublishedAt: state.lastPublishedAt
     };

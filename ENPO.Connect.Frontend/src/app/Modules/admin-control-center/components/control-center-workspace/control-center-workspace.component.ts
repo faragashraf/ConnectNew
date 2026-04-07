@@ -86,9 +86,9 @@ export class ControlCenterWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   onSaveCurrentStepDraft(): void {
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ بيانات هذه الخطوة ضمن المسودة.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoPrevious(): void {

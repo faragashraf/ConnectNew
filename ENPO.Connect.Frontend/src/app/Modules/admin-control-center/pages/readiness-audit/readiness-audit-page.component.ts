@@ -147,9 +147,9 @@ export class ReadinessAuditPageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluateAudit(true);
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ تدقيق الجاهزية بنجاح.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoNext(): void {

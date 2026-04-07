@@ -159,9 +159,9 @@ export class ScopeDefinitionPageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.syncFormToStore();
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ نطاق التكوين بنجاح.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoNext(): void {

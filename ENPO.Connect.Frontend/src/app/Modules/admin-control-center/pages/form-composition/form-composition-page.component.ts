@@ -220,9 +220,9 @@ export class FormCompositionPageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluateComposition(true);
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ Form Composition بنجاح.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoNext(): void {

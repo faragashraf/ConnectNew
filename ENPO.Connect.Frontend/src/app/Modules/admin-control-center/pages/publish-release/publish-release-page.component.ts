@@ -123,9 +123,9 @@ export class PublishReleasePageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluatePublish(true);
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ إعدادات النشر والإطلاق.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onPublishNow(): void {

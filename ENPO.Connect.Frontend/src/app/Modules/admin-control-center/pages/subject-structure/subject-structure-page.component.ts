@@ -254,9 +254,9 @@ export class SubjectStructurePageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluateStructure(true);
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ هيكل الموضوع في المسودة.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoNext(): void {

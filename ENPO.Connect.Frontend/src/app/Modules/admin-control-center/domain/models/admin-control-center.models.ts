@@ -100,6 +100,9 @@ export interface ControlCenterState {
   readonly blockingIssues: ReadonlyArray<string>;
   readonly publishState: ControlCenterPublishState;
   readonly isPublished: boolean;
+  readonly hasUnsavedChanges: boolean;
+  readonly draftRestoredAt: string | null;
+  readonly draftErrorMessage: string | null;
   readonly lastSavedAt: string | null;
   readonly lastPublishedAt: string | null;
 }

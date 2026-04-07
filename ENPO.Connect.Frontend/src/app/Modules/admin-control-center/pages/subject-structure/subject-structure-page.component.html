@@ -152,8 +152,14 @@
   <p-dialog [rtl]="true"
     [(visible)]="nodeDialogVisible"
     [modal]="true"
+    appendTo="body"
     [dismissableMask]="true"
-    [style]="{ width: '34rem' }"
+    [draggable]="false"
+    [resizable]="false"
+    styleClass="acc-dialog"
+    [breakpoints]="{ '1200px': '72vw', '960px': '92vw', '640px': '97vw' }"
+    [contentStyle]="{ 'max-height': '72vh', 'overflow': 'auto' }"
+    [style]="{ width: '34rem', 'max-width': '96vw' }"
     [header]="editingNodeId ? 'تعديل عنصر' : 'إضافة عنصر'">
     <form class="dialog-form" [formGroup]="nodeForm" novalidate>
       <article class="field">

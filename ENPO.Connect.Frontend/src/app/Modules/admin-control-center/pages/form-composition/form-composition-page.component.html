@@ -159,8 +159,14 @@
   <p-dialog [rtl]="true"
     [(visible)]="containerDialogVisible"
     [modal]="true"
+    appendTo="body"
     [dismissableMask]="true"
-    [style]="{ width: '38rem' }"
+    [draggable]="false"
+    [resizable]="false"
+    styleClass="acc-dialog"
+    [breakpoints]="{ '1200px': '78vw', '960px': '92vw', '640px': '97vw' }"
+    [contentStyle]="{ 'max-height': '72vh', 'overflow': 'auto' }"
+    [style]="{ width: '38rem', 'max-width': '96vw' }"
     [header]="editingContainerId ? 'تعديل Container' : 'إضافة Container'">
     <form class="dialog-form" [formGroup]="containerForm" novalidate>
       <article class="field">
@@ -193,6 +199,7 @@
       <article class="field field-wide">
         <label for="containerFields">Fields <span>*</span></label>
         <p-multiSelect
+          appendTo="body"
           inputId="containerFields"
           [options]="fieldOptions"
           optionLabel="label"

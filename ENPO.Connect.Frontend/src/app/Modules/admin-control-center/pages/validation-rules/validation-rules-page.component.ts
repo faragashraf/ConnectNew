@@ -323,9 +323,9 @@ export class ValidationRulesPageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluateRules(true);
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ إعدادات Validation Rules.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoNext(): void {

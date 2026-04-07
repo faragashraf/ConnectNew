@@ -130,9 +130,9 @@ export class PreviewSimulationPageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluatePreview(true);
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ نتائج المعاينة والمحاكاة.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoNext(): void {

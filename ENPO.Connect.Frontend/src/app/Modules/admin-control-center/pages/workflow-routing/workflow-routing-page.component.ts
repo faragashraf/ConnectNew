@@ -125,9 +125,9 @@ export class WorkflowRoutingPageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluateWorkflow(true);
-    this.facade.saveDraft();
-    this.stepMessageSeverity = 'success';
-    this.stepMessage = 'تم حفظ إعدادات Workflow & Routing.';
+    const draftResult = this.facade.saveDraft();
+    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
+    this.stepMessage = draftResult.message;
   }
 
   onGoNext(): void {

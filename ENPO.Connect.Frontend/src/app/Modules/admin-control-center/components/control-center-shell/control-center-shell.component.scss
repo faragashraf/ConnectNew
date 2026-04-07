@@ -110,6 +110,7 @@
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .action-message {
@@ -125,6 +126,44 @@
   border-color: #f7d4d4;
   background: #fff6f6;
   color: #9b1c1c;
+}
+
+.draft-status-strip {
+  border: 1px solid #dbe7f3;
+  background: #fbfdff;
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  color: #334e68;
+  font-size: 0.82rem;
+}
+
+.draft-status-strip.unsaved {
+  border-color: #f8d3a7;
+  background: #fff9f1;
+}
+
+.status-chip {
+  border: 1px solid #b8e6c3;
+  background: #f0fff4;
+  color: #1f7a43;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-weight: 700;
+}
+
+.status-chip.dirty {
+  border-color: #f8d3a7;
+  background: #fff4df;
+  color: #9a4d00;
+}
+
+.error-note {
+  color: #9b1c1c;
+  font-weight: 700;
 }
 
 .shell-grid {

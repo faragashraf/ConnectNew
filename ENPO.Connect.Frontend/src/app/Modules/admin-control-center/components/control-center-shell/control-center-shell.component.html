@@ -16,6 +16,9 @@
         </div>
 
         <div class="header-actions">
+          <button pButton type="button" label="إنشاء نطاق تجريبي" class="p-button-sm p-button-help" (click)="onLoadDemoScope()"></button>
+          <button pButton type="button" label="بدء نطاق جديد" class="p-button-sm p-button-secondary" (click)="onStartNewScope()"></button>
+          <button pButton type="button" label="مسح المسودة" class="p-button-sm p-button-outlined p-button-danger" (click)="onClearDraft()"></button>
           <button pButton type="button" label="حفظ المسودة" class="p-button-outlined p-button-sm" (click)="onSaveDraft()"></button>
           <button
             pButton
@@ -30,6 +33,15 @@
 
       <div class="action-message" *ngIf="actionMessage.length > 0" [class.warn]="actionSeverity === 'warn'">
         {{ actionMessage }}
+      </div>
+
+      <div class="draft-status-strip" [class.unsaved]="vm.hasUnsavedChanges">
+        <span class="status-chip" [class.dirty]="vm.hasUnsavedChanges">
+          {{ vm.hasUnsavedChanges ? 'توجد تغييرات غير محفوظة' : 'المسودة متزامنة مع التخزين المحلي' }}
+        </span>
+        <span>آخر حفظ فعلي: <strong>{{ vm.lastSavedAt ? (vm.lastSavedAt | date:'short') : '-' }}</strong></span>
+        <span *ngIf="vm.draftRestoredAt">تمت استعادة المسودة في: <strong>{{ vm.draftRestoredAt | date:'short' }}</strong></span>
+        <span class="error-note" *ngIf="vm.draftErrorMessage">{{ vm.draftErrorMessage }}</span>
       </div>
 
       <section class="shell-grid">

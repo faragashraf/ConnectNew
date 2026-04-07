@@ -1,17 +1,36 @@
-import { Injectable } from '@angular/core';
+import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import {
   ControlCenterContextState,
   ControlCenterState,
   ControlCenterStepDefinition,
   ControlCenterStepKey,
-  ControlCenterStepTransitionResult
+  ControlCenterStepTransitionResult,
+  isControlCenterStepKey
 } from '../domain/models/admin-control-center.models';
 import { AdminControlCenterWorkflowEngine } from '../domain/workflow/admin-control-center-workflow.engine';
+import {
+  AdminControlCenterDraftStorageService,
+  ControlCenterDraftPersistResult,
+  PersistedControlCenterDraftState
+} from '../services/admin-control-center-draft-storage.service';
+import { AdminControlCenterDemoScopeService } from '../services/admin-control-center-demo-scope.service';
 
 export interface ControlCenterPublishResult {
   success: boolean;
   message: string;
+}
+
+export interface ControlCenterDraftSaveResult {
+  success: boolean;
+  message: string;
+  savedAt: string | null;
+}
+
+export interface ControlCenterStateActionResult {
+  success: boolean;
+  message: string;
+  targetStepKey: ControlCenterStepKey;
 }
 
 type MutableContextPatch = {
@@ -19,13 +38,25 @@ type MutableContextPatch = {
 };
 
 @Injectable()
-export class AdminControlCenterStore {
+export class AdminControlCenterStore implements OnDestroy {
   private readonly stateSubject: BehaviorSubject<ControlCenterState>;
   readonly state$: Observable<ControlCenterState>;
 
-  constructor(private readonly workflowEngine: AdminControlCenterWorkflowEngine) {
+  private readonly autoSaveDelayMs = 900;
+  private autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private didHydrateFromStorage = false;
+
+  constructor(
+    private readonly workflowEngine: AdminControlCenterWorkflowEngine,
+    private readonly draftStorage: AdminControlCenterDraftStorageService,
+    private readonly demoScopeService: AdminControlCenterDemoScopeService
+  ) {
     this.stateSubject = new BehaviorSubject<ControlCenterState>(this.workflowEngine.createInitialState());
     this.state$ = this.stateSubject.asObservable();
+  }
+
+  ngOnDestroy(): void {
+    this.clearAutoSaveTimer();
   }
 
   get snapshot(): ControlCenterState {
@@ -37,8 +68,15 @@ export class AdminControlCenterStore {
   }
 
   initialize(rawStepKey?: string | null): void {
+    if (!this.didHydrateFromStorage) {
+      this.didHydrateFromStorage = true;
+      this.stateSubject.next(this.restoreInitialState(rawStepKey));
+      return;
+    }
+
     const current = this.workflowEngine.recalculateState(this.stateSubject.value);
     const safeStepKey = this.workflowEngine.resolveSafeStepKey(current, rawStepKey ?? current.activeStepKey);
+
     this.stateSubject.next(
       this.workflowEngine.recalculateState({
         ...current,
@@ -55,11 +93,12 @@ export class AdminControlCenterStore {
       ...contextPatch
     };
 
-    this.stateSubject.next(
-      this.workflowEngine.recalculateState({
+    this.pushState(
+      {
         ...current,
         context: nextContext
-      })
+      },
+      { markUnsaved: true, scheduleAutoSave: true }
     );
   }
 
@@ -74,11 +113,12 @@ export class AdminControlCenterStore {
     }
 
     const current = this.workflowEngine.recalculateState(this.stateSubject.value);
-    this.stateSubject.next(
-      this.workflowEngine.recalculateState({
+    this.pushState(
+      {
         ...current,
         activeStepKey: transition.resolvedStepKey
-      })
+      },
+      { markUnsaved: false, scheduleAutoSave: false }
     );
 
     return true;
@@ -118,8 +158,8 @@ export class AdminControlCenterStore {
 
     const contextPatch = this.deriveContextPatchFromFieldChange(stepKey, normalizedFieldKey, sanitizedValue);
 
-    this.stateSubject.next(
-      this.workflowEngine.recalculateState({
+    this.pushState(
+      {
         ...current,
         context: {
           ...current.context,
@@ -128,24 +168,158 @@ export class AdminControlCenterStore {
         steps: nextSteps,
         isPublished: false,
         lastPublishedAt: null
-      })
+      },
+      { markUnsaved: true, scheduleAutoSave: true }
     );
   }
 
-  saveDraft(): string {
+  saveDraft(): ControlCenterDraftSaveResult {
+    this.clearAutoSaveTimer();
+
     const current = this.workflowEngine.recalculateState(this.stateSubject.value);
-    const now = new Date().toISOString();
+    const persisted = this.persistState(current, new Date().toISOString());
+    if (!persisted.success) {
+      this.stateSubject.next(
+        this.workflowEngine.recalculateState({
+          ...current,
+          hasUnsavedChanges: true,
+          draftErrorMessage: persisted.message
+        })
+      );
+
+      return {
+        success: false,
+        message: persisted.message,
+        savedAt: null
+      };
+    }
+
+    const savedAt = persisted.savedAt ?? new Date().toISOString();
     this.stateSubject.next(
       this.workflowEngine.recalculateState({
         ...current,
-        lastSavedAt: now
+        lastSavedAt: savedAt,
+        hasUnsavedChanges: false,
+        draftErrorMessage: null
       })
     );
 
-    return now;
+    return {
+      success: true,
+      message: 'تم حفظ المسودة محليًا بنجاح ويمكن استعادتها بعد تحديث الصفحة.',
+      savedAt
+    };
+  }
+
+  clearDraft(rawStepKey?: string | null): ControlCenterStateActionResult {
+    this.clearAutoSaveTimer();
+
+    const clearResult = this.draftStorage.clearDraft();
+    const safeStep = this.workflowEngine.resolveSafeStepKey(this.stateSubject.value, rawStepKey);
+
+    if (!clearResult.success) {
+      const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+      this.stateSubject.next(
+        this.workflowEngine.recalculateState({
+          ...current,
+          draftErrorMessage: clearResult.message
+        })
+      );
+
+      return {
+        success: false,
+        message: clearResult.message,
+        targetStepKey: safeStep
+      };
+    }
+
+    const fresh = this.workflowEngine.recalculateState({
+      ...this.workflowEngine.createInitialState(safeStep),
+      hasUnsavedChanges: false,
+      draftRestoredAt: null,
+      draftErrorMessage: null,
+      lastSavedAt: null
+    });
+
+    this.stateSubject.next(fresh);
+
+    return {
+      success: true,
+      message: 'تم مسح المسودة المحلية والبدء بحالة فارغة.',
+      targetStepKey: fresh.activeStepKey
+    };
+  }
+
+  startNewScope(rawStepKey?: string | null): ControlCenterStateActionResult {
+    this.clearAutoSaveTimer();
+
+    const clearResult = this.draftStorage.clearDraft();
+    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    const safeStep = this.workflowEngine.resolveSafeStepKey(current, rawStepKey);
+
+    const fresh = this.workflowEngine.recalculateState({
+      ...this.workflowEngine.createInitialState(safeStep),
+      hasUnsavedChanges: false,
+      draftRestoredAt: null,
+      draftErrorMessage: clearResult.success ? null : clearResult.message,
+      lastSavedAt: null
+    });
+
+    this.stateSubject.next(fresh);
+
+    return {
+      success: clearResult.success,
+      message: clearResult.success
+        ? 'تم إنشاء نطاق جديد فارغ بنجاح.'
+        : 'تم إنشاء نطاق جديد، لكن تعذر مسح المسودة السابقة من التخزين المحلي.',
+      targetStepKey: fresh.activeStepKey
+    };
+  }
+
+  loadDemoScope(rawStepKey?: string | null): ControlCenterStateActionResult {
+    this.clearAutoSaveTimer();
+
+    const demoDraft = this.demoScopeService.createDemoDraftState();
+    const restoredAt = new Date().toISOString();
+    const withDemo = this.buildStateFromPersistedDraft(demoDraft, rawStepKey ?? demoDraft.activeStepKey, restoredAt, null);
+
+    const persisted = this.persistState(withDemo, restoredAt);
+    if (!persisted.success) {
+      this.stateSubject.next(
+        this.workflowEngine.recalculateState({
+          ...withDemo,
+          hasUnsavedChanges: true,
+          draftErrorMessage: persisted.message
+        })
+      );
+
+      return {
+        success: false,
+        message: 'تم تحميل النطاق التجريبي داخل الجلسة، لكن تعذر حفظه محليًا.',
+        targetStepKey: withDemo.activeStepKey
+      };
+    }
+
+    const savedAt = persisted.savedAt ?? restoredAt;
+    this.stateSubject.next(
+      this.workflowEngine.recalculateState({
+        ...withDemo,
+        lastSavedAt: savedAt,
+        hasUnsavedChanges: false,
+        draftErrorMessage: null
+      })
+    );
+
+    return {
+      success: true,
+      message: 'تم إنشاء نطاق تجريبي جاهز للاختبار وحفظه محليًا.',
+      targetStepKey: withDemo.activeStepKey
+    };
   }
 
   publish(): ControlCenterPublishResult {
+    this.clearAutoSaveTimer();
+
     const current = this.workflowEngine.recalculateState(this.stateSubject.value);
     if (current.blockingIssues.length > 0) {
       return {
@@ -155,18 +329,34 @@ export class AdminControlCenterStore {
     }
 
     const now = new Date().toISOString();
-    this.stateSubject.next(
-      this.workflowEngine.recalculateState({
+    const persisted = this.persistState(
+      {
         ...current,
         isPublished: true,
         lastPublishedAt: now,
-        lastSavedAt: now
-      })
+        lastSavedAt: now,
+        hasUnsavedChanges: false,
+        draftErrorMessage: null
+      },
+      now
     );
+
+    const nextState = this.workflowEngine.recalculateState({
+      ...current,
+      isPublished: true,
+      lastPublishedAt: now,
+      lastSavedAt: persisted.success ? now : current.lastSavedAt,
+      hasUnsavedChanges: !persisted.success,
+      draftErrorMessage: persisted.success ? null : persisted.message
+    });
+
+    this.stateSubject.next(nextState);
 
     return {
       success: true,
-      message: 'تم اعتماد الإعدادات ونشر الإصدار بنجاح.'
+      message: persisted.success
+        ? 'تم اعتماد الإعدادات ونشر الإصدار بنجاح.'
+        : 'تم اعتماد الإعدادات، لكن تعذر تحديث المسودة المحلية بعد النشر.'
     };
   }
 
@@ -184,6 +374,216 @@ export class AdminControlCenterStore {
 
   getPreviousStepKey(rawStepKey: string | null | undefined): ControlCenterStepKey | null {
     return this.workflowEngine.getPreviousStepKey(rawStepKey);
+  }
+
+  private restoreInitialState(rawStepKey?: string | null): ControlCenterState {
+    const loadResult = this.draftStorage.loadDraft();
+    if (loadResult.status === 'loaded' && loadResult.state) {
+      return this.buildStateFromPersistedDraft(
+        loadResult.state,
+        rawStepKey ?? loadResult.state.activeStepKey,
+        new Date().toISOString(),
+        null
+      );
+    }
+
+    const initial = this.workflowEngine.createInitialState();
+    const safeStep = this.workflowEngine.resolveSafeStepKey(initial, rawStepKey ?? initial.activeStepKey);
+    return this.workflowEngine.recalculateState({
+      ...initial,
+      activeStepKey: safeStep,
+      hasUnsavedChanges: false,
+      draftRestoredAt: null,
+      draftErrorMessage: loadResult.status === 'invalid' ? loadResult.message : null
+    });
+  }
+
+  private buildStateFromPersistedDraft(
+    persisted: PersistedControlCenterDraftState,
+    rawStepKey: string | null | undefined,
+    restoredAt: string | null,
+    draftErrorMessage: string | null
+  ): ControlCenterState {
+    const initial = this.workflowEngine.createInitialState();
+    const persistedStepMap = new Map<ControlCenterStepKey, PersistedControlCenterDraftState['steps'][number]>(
+      persisted.steps
+        .filter(step => isControlCenterStepKey(step.key))
+        .map(step => [step.key, step] as const)
+    );
+
+    const mergedSteps = initial.steps.map(step => {
+      const persistedStep = persistedStepMap.get(step.key);
+      if (!persistedStep) {
+        return step;
+      }
+
+      const nextValues = this.normalizeValuesRecord(persistedStep.values);
+      return {
+        ...step,
+        values: nextValues,
+        isVisited: persistedStep.isVisited || this.hasAnyValue(nextValues)
+      };
+    });
+
+    const recalculated = this.workflowEngine.recalculateState({
+      ...initial,
+      context: {
+        ...initial.context,
+        ...this.normalizeContextPatch(persisted.context)
+      },
+      steps: mergedSteps,
+      activeStepKey: persisted.activeStepKey,
+      isPublished: persisted.isPublished,
+      hasUnsavedChanges: false,
+      draftRestoredAt: restoredAt,
+      draftErrorMessage,
+      lastSavedAt: this.normalizeIsoDate(persisted.lastSavedAt),
+      lastPublishedAt: this.normalizeIsoDate(persisted.lastPublishedAt)
+    });
+
+    const safeStep = this.workflowEngine.resolveSafeStepKey(recalculated, rawStepKey ?? persisted.activeStepKey);
+    if (safeStep === recalculated.activeStepKey) {
+      return recalculated;
+    }
+
+    return this.workflowEngine.recalculateState({
+      ...recalculated,
+      activeStepKey: safeStep
+    });
+  }
+
+  private pushState(
+    nextState: ControlCenterState,
+    options: { markUnsaved: boolean; scheduleAutoSave: boolean }
+  ): void {
+    const recalculated = this.workflowEngine.recalculateState(nextState);
+    const finalState = this.workflowEngine.recalculateState({
+      ...recalculated,
+      hasUnsavedChanges: options.markUnsaved ? true : recalculated.hasUnsavedChanges,
+      draftErrorMessage: options.markUnsaved ? null : recalculated.draftErrorMessage
+    });
+
+    this.stateSubject.next(finalState);
+
+    if (options.scheduleAutoSave) {
+      this.scheduleAutoSave();
+    }
+  }
+
+  private scheduleAutoSave(): void {
+    this.clearAutoSaveTimer();
+    this.autoSaveTimer = setTimeout(() => {
+      this.flushAutoSave();
+    }, this.autoSaveDelayMs);
+  }
+
+  private flushAutoSave(): void {
+    this.autoSaveTimer = null;
+
+    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    if (!current.hasUnsavedChanges) {
+      return;
+    }
+
+    const persisted = this.persistState(current, new Date().toISOString());
+    if (!persisted.success) {
+      this.stateSubject.next(
+        this.workflowEngine.recalculateState({
+          ...current,
+          draftErrorMessage: persisted.message,
+          hasUnsavedChanges: true
+        })
+      );
+      return;
+    }
+
+    const savedAt = persisted.savedAt ?? new Date().toISOString();
+    this.stateSubject.next(
+      this.workflowEngine.recalculateState({
+        ...current,
+        lastSavedAt: savedAt,
+        hasUnsavedChanges: false,
+        draftErrorMessage: null
+      })
+    );
+  }
+
+  private persistState(state: ControlCenterState, savedAt: string | null): ControlCenterDraftPersistResult {
+    return this.draftStorage.saveDraft(this.toPersistedDraftState(state), savedAt);
+  }
+
+  private toPersistedDraftState(state: ControlCenterState): PersistedControlCenterDraftState {
+    return {
+      context: {
+        ...state.context
+      },
+      steps: state.steps.map(step => ({
+        key: step.key,
+        values: this.normalizeValuesRecord(step.values),
+        isVisited: step.isVisited
+      })),
+      activeStepKey: state.activeStepKey,
+      isPublished: state.isPublished,
+      lastPublishedAt: this.normalizeIsoDate(state.lastPublishedAt),
+      lastSavedAt: this.normalizeIsoDate(state.lastSavedAt)
+    };
+  }
+
+  private clearAutoSaveTimer(): void {
+    if (!this.autoSaveTimer) {
+      return;
+    }
+
+    clearTimeout(this.autoSaveTimer);
+    this.autoSaveTimer = null;
+  }
+
+  private normalizeValuesRecord(values: Record<string, unknown> | null | undefined): Record<string, unknown> {
+    if (!values || typeof values !== 'object') {
+      return {};
+    }
+
+    return { ...values };
+  }
+
+  private hasAnyValue(values: Record<string, unknown>): boolean {
+    return Object.values(values).some(value => {
+      if (value == null) {
+        return false;
+      }
+
+      if (typeof value === 'string') {
+        return value.trim().length > 0;
+      }
+
+      if (Array.isArray(value)) {
+        return value.length > 0;
+      }
+
+      if (typeof value === 'number') {
+        return Number.isFinite(value);
+      }
+
+      if (typeof value === 'boolean') {
+        return true;
+      }
+
+      return true;
+    });
+  }
+
+  private normalizeIsoDate(value: unknown): string | null {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed.toISOString();
   }
 
   private deriveContextPatchFromFieldChange(

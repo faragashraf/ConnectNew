@@ -46,6 +46,9 @@ export interface ControlCenterViewModel {
   readonly totalStepsCount: number;
   readonly completedRequiredFields: number;
   readonly totalRequiredFields: number;
+  readonly hasUnsavedChanges: boolean;
+  readonly draftRestoredAt: string | null;
+  readonly draftErrorMessage: string | null;
   readonly lastSavedAt: string | null;
   readonly lastPublishedAt: string | null;
 }

@@ -67,6 +67,9 @@ export class AdminControlCenterWorkflowEngine {
       blockingIssues: [],
       publishState: 'draft',
       isPublished: false,
+      hasUnsavedChanges: false,
+      draftRestoredAt: null,
+      draftErrorMessage: null,
       lastSavedAt: null,
       lastPublishedAt: null
     });

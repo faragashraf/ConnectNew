@@ -29,6 +29,10 @@
       <strong>{{ vm.lastSavedAt ? (vm.lastSavedAt | date:'short') : '-' }}</strong>
     </div>
     <div>
+      <span>حالة المسودة</span>
+      <strong [class.warn]="vm.hasUnsavedChanges">{{ vm.hasUnsavedChanges ? 'غير محفوظة' : 'محفوظة' }}</strong>
+    </div>
+    <div>
       <span>آخر نشر</span>
       <strong>{{ vm.lastPublishedAt ? (vm.lastPublishedAt | date:'short') : '-' }}</strong>
     </div>
