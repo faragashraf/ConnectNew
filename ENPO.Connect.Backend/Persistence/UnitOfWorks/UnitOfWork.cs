@@ -26,6 +26,7 @@ namespace Persistence.UnitOfWorks
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly RedisConnectionManager _redisManager;
         private readonly IConnectNotificationService _connectNotificationService;
+        private readonly ISubjectNotificationService _subjectNotificationService;
         private readonly IOptionsMonitor<ResortBookingBlacklistOptions> _resortBookingBlacklistOptions;
 
         public UnitOfWork(ConnectContext connectContext,
@@ -33,7 +34,12 @@ namespace Persistence.UnitOfWorks
             Attach_HeldContext attach_HeldContext,
             IOptions<ApplicationConfig> option,
             IOptionsMonitor<ResortBookingBlacklistOptions> resortBookingBlacklistOptions,
-            helperService helperService, SignalRConnectionManager signalRConnectionManager, IHttpContextAccessor httpContextAccessor, RedisConnectionManager redisManager, IConnectNotificationService connectNotificationService)
+            helperService helperService,
+            SignalRConnectionManager signalRConnectionManager,
+            IHttpContextAccessor httpContextAccessor,
+            RedisConnectionManager redisManager,
+            IConnectNotificationService connectNotificationService,
+            ISubjectNotificationService subjectNotificationService)
         {
             _option = option; // Assign IOptions<ApplicationConfig> directly
             _resortBookingBlacklistOptions = resortBookingBlacklistOptions;
@@ -46,10 +52,40 @@ namespace Persistence.UnitOfWorks
             _httpContextAccessor = httpContextAccessor;
             _redisManager = redisManager;
             _connectNotificationService = connectNotificationService;
+            _subjectNotificationService = subjectNotificationService;
 
-            administrativeCertificateRepository = new AdministrativeCertificateRepository(_connectContext, _gPAContext, _mapper, _option, _helperService, _attach_HeldContext, _signalRConnectionManager, _httpContextAccessor, _redisManager);
-            dynamicFormRepository = new DynamicFormRepository(_connectContext, _attach_HeldContext, _gPAContext, _mapper, _option, _resortBookingBlacklistOptions, _helperService, _redisManager, _signalRConnectionManager, _connectNotificationService);
-            RepliesRepository = new RepliesRepository(_connectContext, _gPAContext, _mapper, _attach_HeldContext, _option, _helperService,_signalRConnectionManager);
+            administrativeCertificateRepository = new AdministrativeCertificateRepository(
+                _connectContext,
+                _gPAContext,
+                _mapper,
+                _option,
+                _helperService,
+                _attach_HeldContext,
+                _signalRConnectionManager,
+                _httpContextAccessor,
+                _redisManager,
+                _subjectNotificationService);
+            dynamicFormRepository = new DynamicFormRepository(
+                _connectContext,
+                _attach_HeldContext,
+                _gPAContext,
+                _mapper,
+                _option,
+                _resortBookingBlacklistOptions,
+                _helperService,
+                _redisManager,
+                _signalRConnectionManager,
+                _connectNotificationService,
+                _subjectNotificationService);
+            RepliesRepository = new RepliesRepository(
+                _connectContext,
+                _gPAContext,
+                _mapper,
+                _attach_HeldContext,
+                _option,
+                _helperService,
+                _signalRConnectionManager,
+                _subjectNotificationService);
             landTransport = new landTransportRepository(_gPAContext, _mapper, _option);
             attachMentsRepositories = new AttachMentsRepositories(_attach_HeldContext, _connectContext, _option, _mapper);
         }

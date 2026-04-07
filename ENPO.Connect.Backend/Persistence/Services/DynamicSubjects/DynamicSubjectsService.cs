@@ -8,6 +8,7 @@ using Models.DTO.DynamicSubjects;
 using Models.GPA.OrgStructure;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.Notifications;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -37,6 +38,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
     private readonly helperService _helperService;
     private readonly ISubjectReferenceGenerator _referenceGenerator;
     private readonly IDynamicSubjectsRealtimePublisher _realtimePublisher;
+    private readonly ISubjectNotificationService _subjectNotificationService;
     private readonly ILogger<DynamicSubjectsService>? _logger;
 
     public DynamicSubjectsService(
@@ -46,6 +48,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         helperService helperService,
         ISubjectReferenceGenerator referenceGenerator,
         IDynamicSubjectsRealtimePublisher realtimePublisher,
+        ISubjectNotificationService subjectNotificationService,
         ILogger<DynamicSubjectsService>? logger = null)
     {
         _connectContext = connectContext;
@@ -54,6 +57,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         _helperService = helperService;
         _referenceGenerator = referenceGenerator;
         _realtimePublisher = realtimePublisher;
+        _subjectNotificationService = subjectNotificationService;
         _logger = logger;
     }
 
@@ -640,6 +644,11 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 detail,
                 normalizedUserId,
                 cancellationToken);
+
+            await TryDispatchSubjectNotificationAsync(
+                eventType: "CREATE",
+                detail: detail,
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -783,6 +792,11 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 detail,
                 normalizedUserId,
                 cancellationToken);
+
+            await TryDispatchSubjectNotificationAsync(
+                eventType: "UPDATE",
+                detail: detail,
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -3583,6 +3597,61 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         scope.CategoryIds = scope.CategoryIds.Distinct().Where(item => item > 0).ToList();
 
         return scope;
+    }
+
+    private async Task TryDispatchSubjectNotificationAsync(
+        string eventType,
+        SubjectDetailDto? detail,
+        CancellationToken cancellationToken)
+    {
+        if (detail == null || detail.CategoryId <= 0 || detail.MessageId <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var unitName = await ResolveUnitNameByIdAsync(
+                detail.CurrentResponsibleUnitId ?? detail.AssignedUnitId,
+                cancellationToken);
+
+            await _subjectNotificationService.SendNotificationAsync(new SubjectNotificationDispatchRequestDto
+            {
+                EventType = eventType,
+                SubjectTypeId = detail.CategoryId,
+                Payload = new SubjectNotificationPayloadDto
+                {
+                    RequestId = detail.MessageId,
+                    RequestTitle = detail.Subject,
+                    CreatedBy = detail.CreatedBy,
+                    UnitName = unitName
+                }
+            }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(
+                ex,
+                "Subject notification dispatch failed. EventType={EventType}, SubjectTypeId={SubjectTypeId}, MessageId={MessageId}",
+                eventType,
+                detail.CategoryId,
+                detail.MessageId);
+        }
+    }
+
+    private async Task<string?> ResolveUnitNameByIdAsync(string? unitId, CancellationToken cancellationToken)
+    {
+        var normalizedUnitId = (unitId ?? string.Empty).Trim();
+        if (!decimal.TryParse(normalizedUnitId, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedUnitId))
+        {
+            return null;
+        }
+
+        return await _gpaContext.OrgUnits
+            .AsNoTracking()
+            .Where(unit => unit.UnitId == parsedUnitId)
+            .Select(unit => unit.UnitName)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task<HashSet<int>> GetAccessibleMessageIdsAsync(string userId, CancellationToken cancellationToken)

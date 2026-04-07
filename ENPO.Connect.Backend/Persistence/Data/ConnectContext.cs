@@ -61,6 +61,8 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<SubjectTask> SubjectTasks { get; set; }
 
+    public virtual DbSet<NotificationRule> NotificationRules { get; set; }
+
     public override int SaveChanges()
     {
         var UserId = _httpContextAccessor.HttpContext?.User?.Claims.FirstOrDefault((Claim u) => u.Type == "UserId").Value;
@@ -762,6 +764,51 @@ public partial class ConnectContext : DbContext
             entity.HasIndex(e => e.AssignedUnitId, "IX_SubjectTasks_AssignedUnitID");
             entity.HasIndex(e => e.AssignedToUserId, "IX_SubjectTasks_AssignedUserID");
             entity.HasIndex(e => e.Status, "IX_SubjectTasks_Status");
+        });
+
+        modelBuilder.Entity<NotificationRule>(entity =>
+        {
+            entity.ToTable("NotificationRules");
+
+            entity.HasKey(e => e.Id).HasName("PK_NotificationRules");
+
+            entity.Property(e => e.Id)
+                .ValueGeneratedOnAdd();
+            entity.Property(e => e.SubjectTypeId)
+                .HasColumnName("SubjectTypeID")
+                .IsRequired();
+            entity.Property(e => e.EventType)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.RecipientType)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.RecipientValue)
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(e => e.Template)
+                .HasMaxLength(2000)
+                .IsRequired();
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.CreatedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64);
+            entity.Property(e => e.LastModifiedAtUtc)
+                .HasColumnType("datetime2");
+
+            entity.HasIndex(e => new { e.SubjectTypeId, e.EventType }, "IX_NotificationRules_SubjectType_EventType");
+            entity.HasIndex(e => e.IsActive, "IX_NotificationRules_IsActive");
+            entity.HasIndex(
+                e => new { e.SubjectTypeId, e.EventType, e.RecipientType, e.RecipientValue },
+                "UX_NotificationRules_SubjectType_EventType_Recipient")
+                .IsUnique();
         });
 
         modelBuilder.HasSequence<int>("Seq_Categories").StartsAt(101L);

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
 using Persistence.Services.DynamicSubjects;
+using Persistence.Services.Notifications;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -25,10 +26,14 @@ public class DynamicSubjectsController : ControllerBase
         };
 
         private readonly IDynamicSubjectsService _dynamicSubjectsService;
+        private readonly ISubjectNotificationService _subjectNotificationService;
 
-        public DynamicSubjectsController(IDynamicSubjectsService dynamicSubjectsService)
+        public DynamicSubjectsController(
+            IDynamicSubjectsService dynamicSubjectsService,
+            ISubjectNotificationService subjectNotificationService)
         {
             _dynamicSubjectsService = dynamicSubjectsService;
+            _subjectNotificationService = subjectNotificationService;
         }
 
         [HttpGet("CategoryTree")]
@@ -427,6 +432,29 @@ public class DynamicSubjectsController : ControllerBase
                 GetCurrentUserId(),
                 appId,
                 documentDirection,
+                cancellationToken);
+        }
+
+        [Authorize(Policy = DynamicSubjectsAdminAuthorization.PolicyName)]
+        [HttpGet("Admin/CategoryTypes/{categoryId:int}/NotificationRules")]
+        public Task<CommonResponse<IEnumerable<SubjectNotificationRuleDto>>> GetAdminNotificationRules(
+            int categoryId,
+            CancellationToken cancellationToken = default)
+        {
+            return _subjectNotificationService.GetRulesAsync(categoryId, cancellationToken);
+        }
+
+        [Authorize(Policy = DynamicSubjectsAdminAuthorization.PolicyName)]
+        [HttpPut("Admin/CategoryTypes/{categoryId:int}/NotificationRules")]
+        public Task<CommonResponse<IEnumerable<SubjectNotificationRuleDto>>> UpsertAdminNotificationRules(
+            int categoryId,
+            [FromBody] SubjectNotificationRulesUpsertRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            return _subjectNotificationService.UpsertRulesAsync(
+                categoryId,
+                request ?? new SubjectNotificationRulesUpsertRequestDto(),
+                GetCurrentUserId(),
                 cancellationToken);
         }
 

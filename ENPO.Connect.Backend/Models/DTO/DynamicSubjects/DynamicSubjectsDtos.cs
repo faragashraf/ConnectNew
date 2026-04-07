@@ -1014,6 +1014,63 @@ public sealed class SubjectCategoryFieldLinksUpsertRequestDto
     public List<SubjectCategoryFieldLinkUpsertItemDto> Links { get; set; } = new();
 }
 
+public sealed class SubjectNotificationRuleDto
+{
+    public int Id { get; set; }
+
+    public int SubjectTypeId { get; set; }
+
+    public string EventType { get; set; } = string.Empty;
+
+    public string RecipientType { get; set; } = string.Empty;
+
+    public string RecipientValue { get; set; } = string.Empty;
+
+    public string Template { get; set; } = string.Empty;
+
+    public bool IsActive { get; set; } = true;
+}
+
+public sealed class SubjectNotificationRuleUpsertDto
+{
+    public int? Id { get; set; }
+
+    public string EventType { get; set; } = string.Empty;
+
+    public string RecipientType { get; set; } = string.Empty;
+
+    public string RecipientValue { get; set; } = string.Empty;
+
+    public string Template { get; set; } = string.Empty;
+
+    public bool IsActive { get; set; } = true;
+}
+
+public sealed class SubjectNotificationRulesUpsertRequestDto
+{
+    public List<SubjectNotificationRuleUpsertDto> Rules { get; set; } = new();
+}
+
+public sealed class SubjectNotificationPayloadDto
+{
+    public int RequestId { get; set; }
+
+    public string? RequestTitle { get; set; }
+
+    public string? CreatedBy { get; set; }
+
+    public string? UnitName { get; set; }
+}
+
+public sealed class SubjectNotificationDispatchRequestDto
+{
+    public string EventType { get; set; } = string.Empty;
+
+    public int SubjectTypeId { get; set; }
+
+    public SubjectNotificationPayloadDto Payload { get; set; } = new();
+}
+
 public sealed class DynamicSubjectRealtimeEventDto
 {
     public string Kind { get; set; } = "DYNAMIC_SUBJECT_EVENT";

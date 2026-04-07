@@ -15,6 +15,7 @@ import { ValidationRulesPageComponent } from './pages/validation-rules/validatio
 import { PreviewSimulationPageComponent } from './pages/preview-simulation/preview-simulation-page.component';
 import { ReadinessAuditPageComponent } from './pages/readiness-audit/readiness-audit-page.component';
 import { PublishReleasePageComponent } from './pages/publish-release/publish-release-page.component';
+import { NotificationsAlertsPageComponent } from './pages/notifications-alerts/notifications-alerts-page.component';
 
 const routes: Routes = [
   {
@@ -67,6 +68,11 @@ const routes: Routes = [
       {
         path: 'readiness-audit',
         component: ReadinessAuditPageComponent,
+        canActivate: [AdminControlCenterStepGuard]
+      },
+      {
+        path: 'notifications-alerts',
+        component: NotificationsAlertsPageComponent,
         canActivate: [AdminControlCenterStepGuard]
       },
       {

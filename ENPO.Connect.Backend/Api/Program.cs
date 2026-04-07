@@ -77,6 +77,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.AddScoped<helperService>();
 builder.Services.AddScoped<SummerWorkflowService>();
 builder.Services.AddScoped<IConnectNotificationService, ConnectNotificationService>();
+builder.Services.AddScoped<ISubjectNotificationService, SubjectNotificationService>();
 builder.Services.AddScoped<IDynamicSubjectsService, DynamicSubjectsService>();
 builder.Services.AddScoped<IDynamicSubjectsRealtimePublisher, DynamicSubjectsRealtimePublisher>();
 builder.Services.AddScoped<ISubjectReferenceGenerator, SubjectReferenceGenerator>();

@@ -1,0 +1,143 @@
+<section class="notifications-page" dir="rtl" *ngIf="step as currentStep">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">الخطوة 10 من 11</p>
+      <h2>الإشعارات والتنبيهات</h2>
+      <p>إدارة قواعد الإشعارات اللحظية عبر SignalR للأحداث الأساسية: إنشاء، تعديل، تحويل.</p>
+    </div>
+
+    <div class="status-card">
+      <p-tag [value]="currentStep.isCompleted ? 'جاهز' : 'غير مكتمل'" [severity]="currentStep.isCompleted ? 'success' : 'warning'"></p-tag>
+      <div class="status-row">
+        <span>اكتمال الإلزامي</span>
+        <strong>{{ requiredProgressText }}</strong>
+      </div>
+      <p-progressBar [value]="currentStep.requiredTotal > 0 ? (currentStep.requiredCompleted / currentStep.requiredTotal) * 100 : 100"></p-progressBar>
+    </div>
+  </header>
+
+  <div class="step-message" *ngIf="stepMessage.length > 0" [class.warn]="stepMessageSeverity === 'warn'">
+    {{ stepMessage }}
+  </div>
+
+  <section class="category-warning" *ngIf="!categoryReady">
+    <i class="pi pi-info-circle"></i>
+    <span>يجب تحديد `Category` في خطوة Scope Definition قبل تحميل قواعد الإشعارات.</span>
+  </section>
+
+  <div class="loading-wrap" *ngIf="loading">
+    <p-progressSpinner strokeWidth="4"></p-progressSpinner>
+  </div>
+
+  <form class="events-grid" [formGroup]="notificationsForm" *ngIf="!loading">
+    <article class="event-card" formGroupName="create">
+      <header>
+        <h3>عند الإنشاء (CREATE)</h3>
+      </header>
+
+      <div class="field switch-field">
+        <label>تفعيل الإشعار</label>
+        <p-inputSwitch formControlName="enabled"></p-inputSwitch>
+      </div>
+
+      <div class="field">
+        <label>Recipient Type</label>
+        <p-dropdown
+          appendTo="body"
+          [options]="recipientTypeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [showClear]="false"
+          formControlName="recipientType">
+        </p-dropdown>
+      </div>
+
+      <div class="field">
+        <label>Recipient Value</label>
+        <input pInputText formControlName="recipientValue" placeholder="مثال: 60 أو USER123 أو GROUP:OPS" />
+        <small class="error" *ngIf="controlHasError('create', 'recipientValue')">{{ controlErrorMessage('create', 'recipientValue') }}</small>
+      </div>
+
+      <div class="field field-wide">
+        <label>Template</label>
+        <textarea pInputTextarea rows="3" formControlName="template"></textarea>
+        <small class="hint">المتغيرات: <code>{{ '{requestId}' }}</code> <code>{{ '{requestTitle}' }}</code> <code>{{ '{createdBy}' }}</code> <code>{{ '{unitName}' }}</code></small>
+      </div>
+    </article>
+
+    <article class="event-card" formGroupName="update">
+      <header>
+        <h3>عند التعديل (UPDATE)</h3>
+      </header>
+
+      <div class="field switch-field">
+        <label>تفعيل الإشعار</label>
+        <p-inputSwitch formControlName="enabled"></p-inputSwitch>
+      </div>
+
+      <div class="field">
+        <label>Recipient Type</label>
+        <p-dropdown
+          appendTo="body"
+          [options]="recipientTypeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [showClear]="false"
+          formControlName="recipientType">
+        </p-dropdown>
+      </div>
+
+      <div class="field">
+        <label>Recipient Value</label>
+        <input pInputText formControlName="recipientValue" placeholder="مثال: 60 أو USER123 أو GROUP:OPS" />
+        <small class="error" *ngIf="controlHasError('update', 'recipientValue')">{{ controlErrorMessage('update', 'recipientValue') }}</small>
+      </div>
+
+      <div class="field field-wide">
+        <label>Template</label>
+        <textarea pInputTextarea rows="3" formControlName="template"></textarea>
+        <small class="hint">المتغيرات: <code>{{ '{requestId}' }}</code> <code>{{ '{requestTitle}' }}</code> <code>{{ '{createdBy}' }}</code> <code>{{ '{unitName}' }}</code></small>
+      </div>
+    </article>
+
+    <article class="event-card" formGroupName="forward">
+      <header>
+        <h3>عند التحويل (FORWARD)</h3>
+      </header>
+
+      <div class="field switch-field">
+        <label>تفعيل الإشعار</label>
+        <p-inputSwitch formControlName="enabled"></p-inputSwitch>
+      </div>
+
+      <div class="field">
+        <label>Recipient Type</label>
+        <p-dropdown
+          appendTo="body"
+          [options]="recipientTypeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [showClear]="false"
+          formControlName="recipientType">
+        </p-dropdown>
+      </div>
+
+      <div class="field">
+        <label>Recipient Value</label>
+        <input pInputText formControlName="recipientValue" placeholder="مثال: 60 أو USER123 أو GROUP:OPS" />
+        <small class="error" *ngIf="controlHasError('forward', 'recipientValue')">{{ controlErrorMessage('forward', 'recipientValue') }}</small>
+      </div>
+
+      <div class="field field-wide">
+        <label>Template</label>
+        <textarea pInputTextarea rows="3" formControlName="template"></textarea>
+        <small class="hint">المتغيرات: <code>{{ '{requestId}' }}</code> <code>{{ '{requestTitle}' }}</code> <code>{{ '{createdBy}' }}</code> <code>{{ '{unitName}' }}</code></small>
+      </div>
+    </article>
+  </form>
+
+  <footer class="actions" *ngIf="!loading">
+    <button pButton type="button" class="p-button-outlined" label="حفظ القواعد" icon="pi pi-save" [loading]="saving" [disabled]="saving || !categoryReady" (click)="onSaveRules()"></button>
+    <button pButton type="button" label="التالي: Publish & Release" icon="pi pi-arrow-left" iconPos="left" (click)="onGoNext()"></button>
+  </footer>
+</section>

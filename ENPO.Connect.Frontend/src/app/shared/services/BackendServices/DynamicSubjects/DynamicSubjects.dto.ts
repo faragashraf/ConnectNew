@@ -586,4 +586,27 @@ export interface SubjectCategoryFieldLinksUpsertRequestDto {
   links: SubjectCategoryFieldLinkUpsertItemDto[];
 }
 
+export interface SubjectNotificationRuleDto {
+  id: number;
+  subjectTypeId: number;
+  eventType: 'CREATE' | 'UPDATE' | 'FORWARD' | string;
+  recipientType: 'USER' | 'ROLE' | 'UNIT' | 'GROUP' | string;
+  recipientValue: string;
+  template: string;
+  isActive: boolean;
+}
+
+export interface SubjectNotificationRuleUpsertDto {
+  id?: number;
+  eventType: 'CREATE' | 'UPDATE' | 'FORWARD' | string;
+  recipientType: 'USER' | 'ROLE' | 'UNIT' | 'GROUP' | string;
+  recipientValue: string;
+  template: string;
+  isActive: boolean;
+}
+
+export interface SubjectNotificationRulesUpsertRequestDto {
+  rules: SubjectNotificationRuleUpsertDto[];
+}
+
 export const DYNAMIC_SUBJECT_EVENT_KIND = 'DYNAMIC_SUBJECT_EVENT';

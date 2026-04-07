@@ -15,9 +15,11 @@ using Models.DTO.Common;
 using Models.DTO.Correspondance;
 using Models.DTO.Correspondance.AdminCertificates;
 using Models.DTO.Correspondance.Enums;
+using Models.DTO.DynamicSubjects;
 using Models.GPA;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.Notifications;
 using Persistence.Services.Summer;
 using Repositories;
 using SignalR.Notification;
@@ -43,6 +45,7 @@ namespace Persistence.Repositories
         private readonly SignalRConnectionManager _signalRConnectionManager;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly RedisConnectionManager _redisManager;
+        private readonly ISubjectNotificationService _subjectNotificationService;
         public AdministrativeCertificateRepository(ConnectContext connectContext,
             GPAContext gPAContext,
             IMapper mapper, IOptions<ApplicationConfig> option,
@@ -50,7 +53,8 @@ namespace Persistence.Repositories
             Attach_HeldContext attach_HeldContext,
             SignalRConnectionManager signalRConnectionManager,
             IHttpContextAccessor httpContextAccessor,
-            RedisConnectionManager redisManager
+            RedisConnectionManager redisManager,
+            ISubjectNotificationService subjectNotificationService
             )
         {
             _option = option.Value; // Access the configured instance
@@ -62,6 +66,7 @@ namespace Persistence.Repositories
             _httpContextAccessor = httpContextAccessor;
             _logger = new ENPOCreateLogFile("C:\\Connect_Log", "AdministrativeCertificateRepository_Log" + DateTime.Today.ToString("dd-MMM-yyyy"), FileExtension.txt);
             _redisManager = redisManager;
+            _subjectNotificationService = subjectNotificationService;
             _helperService = new helperService(_gPAContext, _connectContext, _attach_HeldContext, _option, _logger, _mapper, _redisManager);
         }
         public async Task<CommonResponse<MessageDto>> UpdateStatus(int messageId, MessageStatus msgStatus, string userId, string ip)
@@ -105,6 +110,8 @@ namespace Persistence.Repositories
                     res.Errors.Add(error);
                 }
                 res.Data = singleResponse.Data;
+
+                await TrySendUpdateNotificationAsync(res.Data);
             }
             catch (Exception ex)
             {
@@ -322,6 +329,8 @@ namespace Persistence.Repositories
                     res.Errors.Add(error);
                 }
                 res.Data = singleResponse.Data;
+
+                await TrySendUpdateNotificationAsync(res.Data);
             }
             else
             {
@@ -543,6 +552,24 @@ namespace Persistence.Repositories
                 }
 
                 res.Data = updatedFields;
+                var message = await _connectContext.Messages
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.MessageId == relatedId);
+                if (message != null)
+                {
+                    await _subjectNotificationService.SendNotificationAsync(new SubjectNotificationDispatchRequestDto
+                    {
+                        EventType = "UPDATE",
+                        SubjectTypeId = message.CategoryCd,
+                        Payload = new SubjectNotificationPayloadDto
+                        {
+                            RequestId = message.MessageId,
+                            RequestTitle = message.Subject,
+                            CreatedBy = message.CreatedBy,
+                            UnitName = message.CurrentResponsibleSectorId ?? message.AssignedSectorId
+                        }
+                    });
+                }
                 _logger.AppendLine("EditFieldsAsync method completed successfully.");
             }
             catch (Exception ex)
@@ -944,6 +971,27 @@ namespace Persistence.Repositories
             }
 
             return false;
+        }
+
+        private async System.Threading.Tasks.Task TrySendUpdateNotificationAsync(MessageDto? message)
+        {
+            if (message == null || message.MessageId <= 0 || message.CategoryCd <= 0)
+            {
+                return;
+            }
+
+            await _subjectNotificationService.SendNotificationAsync(new SubjectNotificationDispatchRequestDto
+            {
+                EventType = "UPDATE",
+                SubjectTypeId = message.CategoryCd,
+                Payload = new SubjectNotificationPayloadDto
+                {
+                    RequestId = message.MessageId,
+                    RequestTitle = message.Subject,
+                    CreatedBy = message.CreatedBy,
+                    UnitName = message.CurrentResponsibleSectorId ?? message.AssignedSectorId
+                }
+            });
         }
 
         ///////////////////////////////////       Private Methods        ///////////////////////////////////////////////

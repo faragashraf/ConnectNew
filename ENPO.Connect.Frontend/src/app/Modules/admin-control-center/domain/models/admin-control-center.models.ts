@@ -8,6 +8,7 @@ export type ControlCenterStepKey =
   | 'validation-rules'
   | 'preview-simulation'
   | 'readiness-audit'
+  | 'notifications-alerts'
   | 'publish-release';
 
 export type ControlCenterFieldType = 'text' | 'textarea' | 'select' | 'switch';
@@ -117,6 +118,7 @@ export const ADMIN_CONTROL_CENTER_STEP_ORDER: ReadonlyArray<ControlCenterStepKey
   'validation-rules',
   'preview-simulation',
   'readiness-audit',
+  'notifications-alerts',
   'publish-release'
 ] as const;
 
@@ -770,8 +772,31 @@ export const ADMIN_CONTROL_CENTER_STEP_DEFINITIONS: ReadonlyArray<ControlCenterS
     ]
   },
   {
-    key: 'publish-release',
+    key: 'notifications-alerts',
     order: 10,
+    title: 'الإشعارات والتنبيهات',
+    shortTitle: 'الإشعارات',
+    description: 'إدارة قواعد الإشعارات اللحظية (SignalR) لكل من الإنشاء والتعديل والتحويل.',
+    fields: [
+      {
+        key: 'notificationsRulesPayload',
+        label: 'بيانات قواعد الإشعارات',
+        required: false,
+        type: 'textarea',
+        placeholder: 'يتم توليدها تلقائيًا من شاشة الإشعارات والتنبيهات'
+      },
+      {
+        key: 'notificationsSyncToken',
+        label: 'حالة مزامنة الإشعارات',
+        required: false,
+        type: 'text',
+        placeholder: 'synced'
+      }
+    ]
+  },
+  {
+    key: 'publish-release',
+    order: 11,
     title: 'مركز النشر والإطلاق',
     shortTitle: 'النشر',
     description: 'تحديد بيانات الإطلاق الرسمي والانتقال إلى الحالة المنشورة.',

@@ -29,6 +29,8 @@ import {
   SubjectAdminGroupUpsertRequestDto,
   SubjectCategoryFieldLinkAdminDto,
   SubjectCategoryFieldLinksUpsertRequestDto,
+  SubjectNotificationRuleDto,
+  SubjectNotificationRulesUpsertRequestDto,
   SubjectAdminDirectionalReadinessDto,
   SubjectAdminPreviewWorkspaceDto,
   SubjectTypeAdminDirectionStatusRequestDto,
@@ -282,6 +284,22 @@ export class DynamicSubjectsController {
     }
 
     return this.http.get<CommonResponse<SubjectAdminPreviewWorkspaceDto>>(`${this.baseUrl}/Admin/CategoryTypes/${categoryId}/PreviewWorkspace`, { params });
+  }
+
+  getAdminNotificationRules(categoryId: number): Observable<CommonResponse<SubjectNotificationRuleDto[]>> {
+    return this.http.get<CommonResponse<SubjectNotificationRuleDto[]>>(
+      `${this.baseUrl}/Admin/CategoryTypes/${categoryId}/NotificationRules`
+    );
+  }
+
+  upsertAdminNotificationRules(
+    categoryId: number,
+    request: SubjectNotificationRulesUpsertRequestDto
+  ): Observable<CommonResponse<SubjectNotificationRuleDto[]>> {
+    return this.http.put<CommonResponse<SubjectNotificationRuleDto[]>>(
+      `${this.baseUrl}/Admin/CategoryTypes/${categoryId}/NotificationRules`,
+      request
+    );
   }
 
   private toSubjectFormData(request: SubjectUpsertRequest, files: FileParameter[]): FormData {

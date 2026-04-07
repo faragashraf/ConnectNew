@@ -1,0 +1,156 @@
+:host {
+  display: block;
+}
+
+.notifications-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+
+  .eyebrow {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.78rem;
+  }
+
+  h2 {
+    margin: 0.25rem 0;
+    color: #0f172a;
+  }
+
+  p {
+    margin: 0;
+    color: #475569;
+  }
+}
+
+.status-card {
+  min-width: 17rem;
+  border: 1px solid #dbe4ee;
+  border-radius: 12px;
+  padding: 0.85rem;
+  background: #ffffff;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.step-message {
+  border: 1px solid #dbe4ee;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  background: #ecfeff;
+  color: #0f172a;
+
+  &.warn {
+    background: #fff7ed;
+    border-color: #fdba74;
+    color: #9a3412;
+  }
+}
+
+.category-warning {
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  background: #eff6ff;
+  color: #1e3a8a;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.loading-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.events-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.event-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: #ffffff;
+  display: grid;
+  gap: 0.7rem;
+
+  h3 {
+    margin: 0;
+    font-size: 0.98rem;
+    color: #0f172a;
+  }
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.switch-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hint {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.error {
+  color: #b91c1c;
+  font-size: 0.76rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+@media (max-width: 1200px) {
+  .events-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .page-header {
+    flex-direction: column;
+  }
+
+  .status-card {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .events-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    justify-content: stretch;
+    flex-direction: column;
+  }
+}

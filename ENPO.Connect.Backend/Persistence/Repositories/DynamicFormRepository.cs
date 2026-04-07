@@ -10,6 +10,7 @@ using Models.Correspondance;
 using Models.DTO.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.Correspondance.AdminCertificates;
+using Models.DTO.DynamicSubjects;
 using Persistence.Data;
 using Persistence.HelperServices;
 using Persistence.Services.Notifications;
@@ -36,6 +37,7 @@ namespace Persistence.Repositories
         private readonly SignalRConnectionManager _signalRConnectionManager;
         private readonly MessageRequestService _messageRequestService;
         private readonly IConnectNotificationService _notificationService;
+        private readonly ISubjectNotificationService _subjectNotificationService;
         private readonly SummerPricingService _summerPricingService;
         private readonly SummerBookingBlacklistService _summerBookingBlacklistService;
         private readonly SummerUnitFreezeService _summerUnitFreezeService;
@@ -50,10 +52,12 @@ namespace Persistence.Repositories
             helperService helperService,
             RedisConnectionManager redisManager,
             SignalRConnectionManager signalRConnectionManager,
-            IConnectNotificationService notificationService)
+            IConnectNotificationService notificationService,
+            ISubjectNotificationService subjectNotificationService)
         {
             _signalRConnectionManager = signalRConnectionManager;
             _notificationService = notificationService;
+            _subjectNotificationService = subjectNotificationService;
             _option = options.Value;
             _connectContext = connectContext;
             _attach_HeldContext = attach_HeldContext;
@@ -182,6 +186,7 @@ namespace Persistence.Repositories
             if (isSummerCategory)
             {
                 await categoryHandler.SummerRequests(messageRequest, categoryInfo, response, userId);
+                await TrySendCreateNotificationAsync(response?.Data);
                 _logger.AppendLine("CreateRequest: Handled by SummerRequests path.");
                 return response;
             }
@@ -189,6 +194,7 @@ namespace Persistence.Repositories
             {
                 var managementService = new HandleManagementService(_connectContext, _attach_HeldContext, _gPAContext, _helperService, _mapper, _logger, _messageRequestService, _signalRConnectionManager);
                 await managementService.SupportiveActivitySector(messageRequest, categoryInfo, userId, UserEmail, ip, response);
+                await TrySendCreateNotificationAsync(response?.Data);
                 _logger.AppendLine("CreateRequest: Handled by SupportiveActivitySector path.");
                 return response;
             }
@@ -317,6 +323,27 @@ namespace Persistence.Repositories
                 .Where(unitId => unitId.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        private async Task TrySendCreateNotificationAsync(MessageDto? message)
+        {
+            if (message == null || message.MessageId <= 0 || message.CategoryCd <= 0)
+            {
+                return;
+            }
+
+            await _subjectNotificationService.SendNotificationAsync(new SubjectNotificationDispatchRequestDto
+            {
+                EventType = "CREATE",
+                SubjectTypeId = message.CategoryCd,
+                Payload = new SubjectNotificationPayloadDto
+                {
+                    RequestId = message.MessageId,
+                    RequestTitle = message.Subject,
+                    CreatedBy = message.CreatedBy,
+                    UnitName = message.AssignedSectorId
+                }
+            });
         }
     }
 }

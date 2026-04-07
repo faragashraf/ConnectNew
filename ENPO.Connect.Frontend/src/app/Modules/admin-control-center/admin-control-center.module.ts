@@ -26,6 +26,7 @@ import { ValidationRulesEngine } from './domain/validation-rules/validation-rule
 import { PreviewSimulationPageComponent } from './pages/preview-simulation/preview-simulation-page.component';
 import { ReadinessAuditPageComponent } from './pages/readiness-audit/readiness-audit-page.component';
 import { PublishReleasePageComponent } from './pages/publish-release/publish-release-page.component';
+import { NotificationsAlertsPageComponent } from './pages/notifications-alerts/notifications-alerts-page.component';
 import { PreviewSimulationEngine } from './domain/preview-simulation/preview-simulation.engine';
 import { PreviewSimulationArtifactEngine } from './domain/preview-simulation/preview-simulation-artifact.engine';
 import { ReadinessAuditEngine } from './domain/readiness-audit/readiness-audit.engine';
@@ -49,6 +50,7 @@ import { AdminControlCenterLegacyMetadataPersistenceService } from './services/a
     ValidationRulesPageComponent,
     PreviewSimulationPageComponent,
     ReadinessAuditPageComponent,
+    NotificationsAlertsPageComponent,
     PublishReleasePageComponent
   ],
   imports: [
