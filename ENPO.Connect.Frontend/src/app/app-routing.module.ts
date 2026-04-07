@@ -34,10 +34,6 @@ const routes: Routes = [
   { path: 'admin/resorts/unit-freeze', redirectTo: '/Admin/resorts/unit-freeze', pathMatch: 'full' },
   { path: 'admin/resorts/unit-freeze/create', redirectTo: '/Admin/resorts/unit-freeze/create', pathMatch: 'full' },
   { path: 'admin/resorts/unit-freeze/:id', redirectTo: '/Admin/resorts/unit-freeze/:id', pathMatch: 'full' },
-  {
-    path: 'Admin/ControlCenter',
-    loadChildren: () => import('./Modules/admin-control-center/admin-control-center.module').then(m => m.AdminControlCenterModule)
-  },
   { path: 'Admin', loadChildren: () => import('./Modules/admins/admins.module').then(m => m.AdminsModule) },
   { path: 'Docs', loadChildren: () => import('./Modules/docs/docs.module').then(m => m.DocsModule) },
   { path: 'AdminCer', loadChildren: () => import('./Modules/AdminCertificates/AdminCer.module').then(m => m.AdminCerModule) },
