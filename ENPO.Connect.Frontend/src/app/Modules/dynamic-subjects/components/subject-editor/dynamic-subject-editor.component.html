@@ -3,6 +3,7 @@
     <div>
       <h2>{{ isEditMode ? 'تعديل موضوع/طلب' : 'إنشاء موضوع/طلب' }}</h2>
       <p>يمكنك الحفظ كمسودة أو الإرسال الآن مع متابعة التحديثات المباشرة.</p>
+      <p class="direction-chip">اتجاه الطلب الحالي: <strong>{{ currentDocumentDirectionLabel }}</strong></p>
     </div>
     <div class="actions">
       <button type="button" class="secondary" (click)="saveDraft()" [disabled]="saving || loading">حفظ كمسودة</button>
@@ -26,7 +27,7 @@
         <small class="error" *ngIf="shouldShowEditorError('categoryId')">{{ getEditorErrorMessage('categoryId') }}</small>
       </div>
 
-      <div class="field">
+      <div class="field" *ngIf="showDocumentDirectionSelector">
         <label>اتجاه الطلب</label>
         <select formControlName="documentDirection">
           <option value="">اختر الاتجاه</option>
@@ -34,6 +35,14 @@
             {{ option.label }}
           </option>
         </select>
+        <small class="hint">يمكنك اختيار الاتجاه لأن هذا النوع مضبوط على اتجاه مرن.</small>
+        <small class="error" *ngIf="shouldShowEditorError('documentDirection')">{{ getEditorErrorMessage('documentDirection') }}</small>
+      </div>
+
+      <div class="field" *ngIf="showDocumentDirectionReadonly">
+        <label>اتجاه الطلب</label>
+        <div class="readonly-value">{{ directionReadOnlyValue }}</div>
+        <small class="hint">هذا النوع مضبوط على اتجاه ثابت ولا يمكن تغييره أثناء التسجيل.</small>
       </div>
 
       <div class="field">

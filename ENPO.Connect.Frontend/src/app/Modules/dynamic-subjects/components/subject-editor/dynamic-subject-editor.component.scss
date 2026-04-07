@@ -21,6 +21,19 @@
   color: #64748b;
 }
 
+.direction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  font-size: 0.82rem;
+}
+
 .actions {
   display: flex;
   gap: 0.5rem;
@@ -80,12 +93,28 @@
   font-size: 0.76rem;
 }
 
+.field .hint {
+  color: #475569;
+  font-size: 0.75rem;
+}
+
 .field input,
 .field select,
 .field textarea {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 0.45rem 0.6rem;
+}
+
+.readonly-value {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  background: #f8fafc;
+  color: #0f172a;
+  min-height: 2.1rem;
+  display: flex;
+  align-items: center;
 }
 
 .panel {

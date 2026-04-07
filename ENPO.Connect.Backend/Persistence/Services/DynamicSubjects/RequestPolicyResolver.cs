@@ -23,6 +23,10 @@ internal sealed class ResolvedRequestWorkflowPolicy
 {
     public string Mode { get; set; } = "manual";
 
+    public string DirectionMode { get; set; } = "selectable";
+
+    public string? FixedDirection { get; set; }
+
     public List<string> StaticTargetUnitIds { get; set; } = new();
 
     public bool AllowManualSelection { get; set; } = true;
@@ -49,6 +53,11 @@ internal static class RequestPolicyResolver
     private static readonly string[] SupportedCreateModes = new[]
     {
         "single", "multi"
+    };
+
+    private static readonly string[] SupportedDirectionModes = new[]
+    {
+        "selectable", "fixed"
     };
 
     public static RequestPolicyDefinitionDto Normalize(RequestPolicyDefinitionDto? input)
@@ -106,6 +115,28 @@ internal static class RequestPolicyResolver
             {
                 Code = "400",
                 Message = "قيمة وضع التوجيه غير مدعومة. القيم المتاحة: ثابت أو يدوي أو هجين."
+            });
+        }
+
+        var directionMode = NormalizeNullable(policy.WorkflowPolicy.DirectionMode) ?? "selectable";
+        if (!SupportedDirectionModes.Contains(directionMode, StringComparer.OrdinalIgnoreCase))
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "قيمة وضع اتجاه الطلب غير مدعومة. القيم المتاحة: ثابت أو قابل للاختيار."
+            });
+        }
+
+        var normalizedDirectionMode = NormalizeDirectionMode(directionMode);
+        var fixedDirection = NormalizeDirectionValue(policy.WorkflowPolicy.FixedDirection);
+        if (string.Equals(normalizedDirectionMode, "fixed", StringComparison.OrdinalIgnoreCase)
+            && fixedDirection == null)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "عند اختيار اتجاه ثابت للطلب يجب تحديد قيمة الاتجاه (وارد أو صادر)."
             });
         }
 
@@ -328,9 +359,16 @@ internal static class RequestPolicyResolver
             mode = "manual";
         }
 
+        var directionMode = NormalizeDirectionMode(normalized.DirectionMode);
+        var fixedDirection = string.Equals(directionMode, "fixed", StringComparison.OrdinalIgnoreCase)
+            ? NormalizeDirectionValue(normalized.FixedDirection)
+            : null;
+
         return new ResolvedRequestWorkflowPolicy
         {
             Mode = mode,
+            DirectionMode = directionMode,
+            FixedDirection = fixedDirection,
             StaticTargetUnitIds = normalized.StaticTargetUnitIds
                 .Select(NormalizeNullable)
                 .Where(item => item != null)
@@ -500,6 +538,8 @@ internal static class RequestPolicyResolver
         return new RequestWorkflowPolicyDto
         {
             Mode = NormalizeNullable(workflow.Mode) ?? "manual",
+            DirectionMode = NormalizeNullable(workflow.DirectionMode) ?? "selectable",
+            FixedDirection = NormalizeDirectionValue(workflow.FixedDirection),
             StaticTargetUnitIds = (workflow.StaticTargetUnitIds ?? new List<string>())
                 .Select(NormalizeNullable)
                 .Where(item => item != null)
@@ -605,5 +645,40 @@ internal static class RequestPolicyResolver
     {
         var normalized = (value ?? string.Empty).Trim();
         return normalized.Length == 0 ? null : normalized;
+    }
+
+    private static string NormalizeDirectionMode(string? value)
+    {
+        var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+        return normalized == "fixed" ? "fixed" : "selectable";
+    }
+
+    private static string? NormalizeDirectionValue(string? value)
+    {
+        var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+        if (normalized == null)
+        {
+            return null;
+        }
+
+        if (normalized == "incoming"
+            || normalized == "inbound"
+            || normalized == "in"
+            || normalized == "2"
+            || normalized == "وارد")
+        {
+            return "incoming";
+        }
+
+        if (normalized == "outgoing"
+            || normalized == "outbound"
+            || normalized == "out"
+            || normalized == "1"
+            || normalized == "صادر")
+        {
+            return "outgoing";
+        }
+
+        return null;
     }
 }

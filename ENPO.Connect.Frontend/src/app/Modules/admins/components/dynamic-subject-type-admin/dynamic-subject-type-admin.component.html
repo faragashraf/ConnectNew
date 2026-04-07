@@ -494,6 +494,33 @@
                         </small>
                       </div>
 
+                      <div class="field">
+                        <label>وضع اتجاه الطلب</label>
+                        <p-dropdown
+                          [options]="directionModeOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="workflowDirectionMode">
+                        </p-dropdown>
+                        <small class="field-helper">
+                          حدد هل الاتجاه ثابت (وارد أو صادر) أم مرن ويمكن للمستخدم اختياره أثناء التسجيل.
+                        </small>
+                      </div>
+
+                      <div class="field" *ngIf="showWorkflowFixedDirectionField">
+                        <label>الاتجاه الثابت<span class="required-mark">*</span></label>
+                        <p-dropdown
+                          [options]="directionValueOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="workflowFixedDirection"
+                          placeholder="اختر الاتجاه الثابت">
+                        </p-dropdown>
+                        <small class="field-helper">
+                          عند اختيار وضع ثابت سيتم فرض هذا الاتجاه runtime ولن يتمكن المستخدم من تغييره.
+                        </small>
+                      </div>
+
                       <div class="field" *ngIf="showWorkflowStaticTargetsField">
                         <label>الجهات الثابتة (CSV)<span class="required-mark" *ngIf="workflowModeValue === 'static'">*</span></label>
                         <input pInputText type="text" formControlName="workflowStaticTargets" placeholder="60, 124" />
@@ -580,6 +607,8 @@
                       </header>
                       <div class="kv-grid preview-kv-grid">
                         <div><span>Mode</span><strong>{{ workflow.mode }}</strong></div>
+                        <div><span>Direction Mode</span><strong>{{ workflow.directionMode === 'fixed' ? 'ثابت' : 'مرن' }}</strong></div>
+                        <div><span>Fixed Direction</span><strong>{{ workflow.fixedDirection || '-' }}</strong></div>
                         <div><span>Manual Target Field</span><strong>{{ workflow.manualTargetFieldKey || '-' }}</strong></div>
                         <div><span>Allow Manual</span><strong>{{ workflow.allowManualSelection ? 'نعم' : 'لا' }}</strong></div>
                         <div><span>Required Manual</span><strong>{{ workflow.manualSelectionRequired ? 'نعم' : 'لا' }}</strong></div>

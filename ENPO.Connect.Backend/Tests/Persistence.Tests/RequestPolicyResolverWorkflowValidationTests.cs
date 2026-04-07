@@ -105,6 +105,55 @@ public class RequestPolicyResolverWorkflowValidationTests
         Assert.DoesNotContain(errors, error => (error.Message ?? string.Empty).Contains("يتطلب تفعيل السماح بالاختيار اليدوي"));
     }
 
+    [Fact]
+    public void FixedDirectionMode_Rejects_WhenDirectionIsMissing()
+    {
+        var policy = BuildPolicy(workflow =>
+        {
+            workflow.DirectionMode = "fixed";
+            workflow.FixedDirection = null;
+            workflow.Mode = "manual";
+            workflow.ManualTargetFieldKey = "StockholderID";
+        });
+
+        var errors = RequestPolicyResolver.Validate(policy);
+
+        Assert.Contains(errors, error => (error.Message ?? string.Empty).Contains("اتجاه ثابت للطلب"));
+    }
+
+    [Fact]
+    public void FixedDirectionMode_Passes_WhenDirectionProvided()
+    {
+        var policy = BuildPolicy(workflow =>
+        {
+            workflow.DirectionMode = "fixed";
+            workflow.FixedDirection = "incoming";
+            workflow.Mode = "manual";
+            workflow.ManualTargetFieldKey = "StockholderID";
+        });
+
+        var errors = RequestPolicyResolver.Validate(policy);
+
+        Assert.DoesNotContain(errors, error => (error.Message ?? string.Empty).Contains("اتجاه ثابت للطلب"));
+    }
+
+    [Fact]
+    public void ResolveWorkflowPolicy_KeepsFixedMode_WhenDirectionIsMissing()
+    {
+        var policy = BuildPolicy(workflow =>
+        {
+            workflow.DirectionMode = "fixed";
+            workflow.FixedDirection = null;
+            workflow.Mode = "manual";
+            workflow.ManualTargetFieldKey = "StockholderID";
+        });
+
+        var resolved = RequestPolicyResolver.ResolveWorkflowPolicy(policy);
+
+        Assert.Equal("fixed", resolved.DirectionMode);
+        Assert.Null(resolved.FixedDirection);
+    }
+
     private static RequestPolicyDefinitionDto BuildPolicy(System.Action<RequestWorkflowPolicyDto> configureWorkflow)
     {
         var workflow = new RequestWorkflowPolicyDto();

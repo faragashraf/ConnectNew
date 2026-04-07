@@ -69,6 +69,7 @@ export interface SubjectFormDefinitionDto {
   applicationId?: string;
   groups: SubjectGroupDefinitionDto[];
   fields: SubjectFieldDefinitionDto[];
+  requestPolicy?: RequestPolicyDefinitionDto;
 }
 
 export interface SubjectAdminPreviewIssueDto {
@@ -396,6 +397,8 @@ export interface RequestAccessPolicyDto {
 
 export interface RequestWorkflowPolicyDto {
   mode?: 'static' | 'manual' | 'hybrid' | string;
+  directionMode?: 'fixed' | 'selectable' | string;
+  fixedDirection?: string;
   staticTargetUnitIds: string[];
   allowManualSelection?: boolean;
   manualTargetFieldKey?: string;

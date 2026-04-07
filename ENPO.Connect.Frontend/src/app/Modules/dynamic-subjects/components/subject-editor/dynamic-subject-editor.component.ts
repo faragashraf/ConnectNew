@@ -11,6 +11,7 @@ import { FileParameter } from 'src/app/shared/services/BackendServices/dto-share
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import {
   EnvelopeSummaryDto,
+  RequestPolicyDefinitionDto,
   SubjectCategoryTreeNodeDto,
   SubjectDetailDto,
   SubjectFieldDefinitionDto,
@@ -24,6 +25,10 @@ import { AppNotificationService } from 'src/app/shared/services/notifications/ap
 import { DynamicGroupRenderItem } from '../shared/models/dynamic-group-render-item.model';
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
 import { DynamicSubjectAccessService } from '../../services/dynamic-subject-access.service';
+import {
+  RequestPolicyResolverService,
+  RequestPolicyRuntimeContext
+} from 'src/app/Modules/admins/services/request-policy-resolver.service';
 
 @Component({
   selector: 'app-dynamic-subject-editor',
@@ -47,6 +52,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   saving = false;
   isEditMode = false;
   messageId = 0;
+  private rawFormDefinition: SubjectFormDefinitionDto | null = null;
   formDefinition: SubjectFormDefinitionDto | null = null;
   renderGroups: DynamicGroupRenderItem[] = [];
   categoryOptions: Array<{ id: number; name: string }> = [];
@@ -61,6 +67,11 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private allowedCategoryIds = new Set<number>();
   private allConfigs: ComponentConfig[] = [];
   private treeCapableFieldKeys = new Set<string>();
+  private activeRequestPolicy: RequestPolicyDefinitionDto | null = null;
+  private directionSelectionMode: 'fixed' | 'selectable' = 'selectable';
+  private fixedDocumentDirection: string | null = null;
+  private suppressDirectionRebuild = false;
+  private lastResolvedDirectionKey: string | null = null;
 
   private controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>();
   private readonly subscriptions: Subscription[] = [];
@@ -77,7 +88,8 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     private readonly componentConfigService: ComponentConfigService,
     private readonly previewFoundation: CentralAdminPreviewFoundationService,
     private readonly genericFormService: GenericFormsService,
-    private readonly appNotification: AppNotificationService
+    private readonly appNotification: AppNotificationService,
+    private readonly requestPolicyResolver: RequestPolicyResolverService
   ) {
     this.editorForm = this.fb.group({
       categoryId: [0, Validators.required],
@@ -96,6 +108,15 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.initializeScreenConfig();
     this.loadCategoryOptions();
     this.loadEnvelopeOptions();
+    this.subscriptions.push(
+      this.editorForm.get('documentDirection')!.valueChanges.subscribe(() => {
+        if (this.suppressDirectionRebuild || this.directionSelectionMode !== 'selectable') {
+          return;
+        }
+
+        this.rebuildResolvedDynamicDefinitionPreservingValues();
+      })
+    );
 
     const routeId = Number(this.route.snapshot.paramMap.get('id') ?? 0);
     this.isEditMode = routeId > 0;
@@ -139,6 +160,30 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
   get tasksControls(): FormGroup[] {
     return this.tasksArray.controls as FormGroup[];
+  }
+
+  get showDocumentDirectionSelector(): boolean {
+    return this.hasDirectionCapability && this.directionSelectionMode === 'selectable';
+  }
+
+  get showDocumentDirectionReadonly(): boolean {
+    return this.hasDirectionCapability && this.directionSelectionMode === 'fixed';
+  }
+
+  get currentDocumentDirectionLabel(): string {
+    const value = this.resolveDocumentDirectionForForm();
+    if (value === 'incoming') {
+      return 'وارد';
+    }
+    if (value === 'outgoing') {
+      return 'صادر';
+    }
+
+    return 'غير محدد';
+  }
+
+  get directionReadOnlyValue(): string {
+    return this.currentDocumentDirectionLabel;
   }
 
   trackByGroup = (_index: number, group: DynamicGroupRenderItem): number => group.groupId;
@@ -339,6 +384,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
     if (this.dynamicControls.invalid) {
       this.dynamicControls.markAllAsTouched();
+      this.focusFirstInvalidDynamicControl();
       this.appNotification.warning('يرجى استكمال الحقول الديناميكية المطلوبة.');
       return;
     }
@@ -434,8 +480,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
     if (!this.isEditMode && this.allowedCategoryIds.size > 0 && !this.allowedCategoryIds.has(categoryId)) {
       this.appNotification.error('غير مسموح بعرض هذا النوع.');
-      this.formDefinition = null;
-      this.resetDynamicFormState();
+      this.clearLoadedDefinitionState();
       return;
     }
 
@@ -488,11 +533,152 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private applyLoadedDefinition(definition: SubjectFormDefinitionDto | null, detail?: SubjectDetailDto): void {
-    this.formDefinition = definition ?? null;
-    this.rebuildDynamicControls(this.formDefinition, detail?.dynamicFields ?? []);
+    this.rawFormDefinition = definition ?? null;
+    this.activeRequestPolicy = this.rawFormDefinition?.requestPolicy ?? null;
+    this.applyDirectionPolicyFromDefinition(this.resolveInitialDirectionCandidate(detail));
+    this.rebuildResolvedDynamicDefinition(detail?.dynamicFields ?? [], false);
     this.applyPendingDynamicFieldValueBindings();
     this.populateStakeholders(detail);
     this.populateTasks(detail);
+  }
+
+  private get hasDirectionCapability(): boolean {
+    const hasDirectionField = (this.rawFormDefinition?.fields ?? []).some(field =>
+      String(field.fieldKey ?? '').trim().toUpperCase() === DynamicSubjectEditorComponent.DIRECTION_FIELD_KEY);
+    return hasDirectionField || this.fixedDocumentDirection != null;
+  }
+
+  private resolveInitialDirectionCandidate(detail?: SubjectDetailDto): string | null {
+    const detailDirection = this.normalizeDocumentDirection(detail?.documentDirection);
+    if (detailDirection) {
+      return detailDirection;
+    }
+
+    const directionFieldValue = (detail?.dynamicFields ?? [])
+      .find(field => String(field.fieldKey ?? '').trim().toUpperCase() === DynamicSubjectEditorComponent.DIRECTION_FIELD_KEY)
+      ?.value;
+    const fromDynamicField = this.normalizeDocumentDirection(directionFieldValue);
+    if (fromDynamicField) {
+      return fromDynamicField;
+    }
+
+    return this.normalizeDocumentDirection(this.editorForm.get('documentDirection')?.value);
+  }
+
+  private applyDirectionPolicyFromDefinition(initialDirection: string | null): void {
+    const normalizedPolicy = this.requestPolicyResolver.normalizePolicy(this.activeRequestPolicy);
+    const workflow = normalizedPolicy.workflowPolicy;
+    const directionMode = String(workflow?.directionMode ?? 'selectable').trim().toLowerCase() === 'fixed'
+      ? 'fixed'
+      : 'selectable';
+    const fixedDirection = directionMode === 'fixed'
+      ? this.normalizeDocumentDirection(workflow?.fixedDirection)
+      : null;
+
+    this.directionSelectionMode = directionMode === 'fixed' && fixedDirection
+      ? 'fixed'
+      : 'selectable';
+    this.fixedDocumentDirection = fixedDirection;
+
+    const directionControl = this.editorForm.get('documentDirection');
+    if (!directionControl) {
+      return;
+    }
+
+    const preferredDirection = this.fixedDocumentDirection
+      ?? initialDirection
+      ?? this.normalizeDocumentDirection(directionControl.value)
+      ?? null;
+
+    this.suppressDirectionRebuild = true;
+    directionControl.patchValue(preferredDirection ?? '', { emitEvent: false });
+    if (this.directionSelectionMode === 'fixed') {
+      directionControl.disable({ emitEvent: false });
+    } else {
+      directionControl.enable({ emitEvent: false });
+    }
+    const requiresDirectionSelection = this.hasDirectionCapability && this.directionSelectionMode === 'selectable';
+    directionControl.setValidators(requiresDirectionSelection ? [Validators.required] : []);
+    directionControl.updateValueAndValidity({ emitEvent: false });
+    this.suppressDirectionRebuild = false;
+    this.lastResolvedDirectionKey = preferredDirection;
+  }
+
+  private rebuildResolvedDynamicDefinitionPreservingValues(): void {
+    this.rebuildResolvedDynamicDefinition([], true);
+  }
+
+  private rebuildResolvedDynamicDefinition(
+    initialValues: SubjectFieldValueDto[],
+    preserveCurrentValues: boolean
+  ): void {
+    if (!this.rawFormDefinition) {
+      this.clearLoadedDefinitionState();
+      return;
+    }
+
+    const direction = this.resolveDocumentDirectionForForm();
+    if (preserveCurrentValues && this.lastResolvedDirectionKey === direction) {
+      return;
+    }
+
+    const values = preserveCurrentValues
+      ? this.buildDynamicFieldValues()
+      : (initialValues ?? []);
+    const resolvedDefinition = this.resolveDefinitionByPolicy(this.rawFormDefinition, direction);
+    this.formDefinition = resolvedDefinition;
+    this.rebuildDynamicControls(resolvedDefinition, values);
+    this.applyPendingDynamicFieldValueBindings();
+    this.lastResolvedDirectionKey = direction;
+  }
+
+  private resolveDefinitionByPolicy(
+    source: SubjectFormDefinitionDto,
+    documentDirection: string | null
+  ): SubjectFormDefinitionDto {
+    const context = this.buildRuntimePolicyContext(documentDirection);
+    const policy = this.activeRequestPolicy;
+
+    const fields = (source.fields ?? []).map(field => {
+      const resolved = this.requestPolicyResolver.resolvePresentationMetadata(field, context, policy);
+      return {
+        ...field,
+        fieldLabel: resolved.label,
+        placeholder: resolved.placeholder ?? field.placeholder,
+        required: Boolean(resolved.required),
+        isDisabledInit: Boolean(resolved.readonly),
+        isVisible: Boolean(resolved.visible),
+        group: field.group ? { ...field.group } : undefined
+      } as SubjectFieldDefinitionDto;
+    });
+
+    return {
+      ...source,
+      groups: (source.groups ?? []).map(group => ({ ...group })),
+      fields,
+      requestPolicy: this.activeRequestPolicy ?? source.requestPolicy
+    };
+  }
+
+  private buildRuntimePolicyContext(documentDirection: string | null): RequestPolicyRuntimeContext {
+    return {
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      categoryId: Number(this.editorForm.get('categoryId')?.value ?? 0) || null,
+      routeKeyPrefix: 'DynamicSubjects',
+      documentDirection,
+      requestMode: this.isEditMode ? 'edit' : 'create',
+      creatorUnitId: null,
+      targetUnitId: null,
+      variables: {}
+    };
+  }
+
+  private resolveDocumentDirectionForForm(): string | null {
+    if (this.directionSelectionMode === 'fixed' && this.fixedDocumentDirection) {
+      return this.fixedDocumentDirection;
+    }
+
+    return this.normalizeDocumentDirection(this.editorForm.get('documentDirection')?.value);
   }
 
   private loadLegacyFormDefinition(categoryId: number, detail?: SubjectDetailDto): void {
@@ -516,8 +702,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
               return;
             }
 
-            this.formDefinition = null;
-            this.resetDynamicFormState();
+            this.clearLoadedDefinitionState();
             this.populateStakeholders(detail);
             this.populateTasks(detail);
             this.appNotification.warning('لا توجد حقول ديناميكية مهيأة لهذا النوع.');
@@ -536,8 +721,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
             return;
           }
 
-          this.formDefinition = null;
-          this.resetDynamicFormState();
+          this.clearLoadedDefinitionState();
           this.populateStakeholders(detail);
           this.populateTasks(detail);
           this.appNotification.error('تعذر تحميل إعدادات الحقول الديناميكية.');
@@ -1003,12 +1187,18 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private categoryRequiresDocumentDirection(): boolean {
-    return (this.formDefinition?.fields ?? []).some(field =>
-      String(field.fieldKey ?? '').trim().toUpperCase() === DynamicSubjectEditorComponent.DIRECTION_FIELD_KEY);
+    return this.hasDirectionCapability;
   }
 
   private resolveDocumentDirectionForSave(dynamicFields: SubjectFieldValueDto[]): string | null {
-    const explicitDirection = this.normalizeDocumentDirection(this.editorForm.get('documentDirection')?.value);
+    const fixedDirection = this.directionSelectionMode === 'fixed'
+      ? this.normalizeDocumentDirection(this.fixedDocumentDirection)
+      : null;
+    if (fixedDirection) {
+      return fixedDirection;
+    }
+
+    const explicitDirection = this.resolveDocumentDirectionForForm();
     if (explicitDirection) {
       return explicitDirection;
     }
@@ -1106,6 +1296,50 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     }
 
     return 'القيمة المدخلة غير صحيحة.';
+  }
+
+  private clearLoadedDefinitionState(): void {
+    this.rawFormDefinition = null;
+    this.formDefinition = null;
+    this.activeRequestPolicy = null;
+    this.directionSelectionMode = 'selectable';
+    this.fixedDocumentDirection = null;
+    this.lastResolvedDirectionKey = null;
+
+    const directionControl = this.editorForm.get('documentDirection');
+    this.suppressDirectionRebuild = true;
+    directionControl?.enable({ emitEvent: false });
+    directionControl?.setValidators([]);
+    directionControl?.updateValueAndValidity({ emitEvent: false });
+    directionControl?.patchValue('', { emitEvent: false });
+    this.suppressDirectionRebuild = false;
+    this.resetDynamicFormState();
+  }
+
+  private focusFirstInvalidDynamicControl(): void {
+    const host = this.findFirstInvalidDynamicControlElement();
+    if (!host) {
+      return;
+    }
+
+    host.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    host.focus?.();
+  }
+
+  private findFirstInvalidDynamicControlElement(): HTMLElement | null {
+    const candidates = [
+      '.groups-wrap [formcontrolname].ng-invalid',
+      '.groups-wrap .ng-invalid [formcontrolname]',
+      '.groups-wrap .ng-invalid'
+    ];
+    for (const selector of candidates) {
+      const element = document.querySelector(selector) as HTMLElement | null;
+      if (element) {
+        return element;
+      }
+    }
+
+    return null;
   }
 
   private resetDynamicFormState(): void {

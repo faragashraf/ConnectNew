@@ -174,6 +174,14 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     { label: 'توجيه ثابت', value: 'static' },
     { label: 'توجيه هجين', value: 'hybrid' }
   ];
+  readonly directionModeOptions: Array<{ label: string; value: 'selectable' | 'fixed' }> = [
+    { label: 'مرن (قابل للاختيار)', value: 'selectable' },
+    { label: 'ثابت', value: 'fixed' }
+  ];
+  readonly directionValueOptions: Array<{ label: string; value: 'incoming' | 'outgoing' }> = [
+    { label: 'وارد', value: 'incoming' },
+    { label: 'صادر', value: 'outgoing' }
+  ];
   readonly createModeOptions: Array<{ label: string; value: 'single' | 'multi' }> = [
     { label: 'جهة واحدة', value: 'single' },
     { label: 'أكثر من جهة', value: 'multi' }
@@ -254,6 +262,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       workScopeUnits: [''],
       inheritLegacyAccess: [true],
       workflowMode: ['manual'],
+      workflowDirectionMode: ['selectable'],
+      workflowFixedDirection: [''],
       workflowStaticTargets: [''],
       workflowManualTargetFieldKey: [''],
       workflowManualSelectionRequired: [true],
@@ -1445,6 +1455,15 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     return 'manual';
   }
 
+  get workflowDirectionModeValue(): 'fixed' | 'selectable' {
+    const rawMode = String(this.policyForm.get('workflowDirectionMode')?.value ?? 'selectable').trim().toLowerCase();
+    return rawMode === 'fixed' ? 'fixed' : 'selectable';
+  }
+
+  get showWorkflowFixedDirectionField(): boolean {
+    return this.workflowDirectionModeValue === 'fixed';
+  }
+
   get workflowAllowManualSelectionValue(): boolean {
     return Boolean(this.policyForm.get('workflowAllowManualSelection')?.value);
   }
@@ -1690,6 +1709,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       workScopeUnits: this.toCsv(normalized.accessPolicy.workScope.unitIds ?? []),
       inheritLegacyAccess: normalized.accessPolicy.inheritLegacyAccess !== false,
       workflowMode: normalized.workflowPolicy.mode ?? 'manual',
+      workflowDirectionMode: normalized.workflowPolicy.directionMode ?? 'selectable',
+      workflowFixedDirection: normalized.workflowPolicy.fixedDirection ?? '',
       workflowStaticTargets: this.toCsv(normalized.workflowPolicy.staticTargetUnitIds ?? []),
       workflowManualTargetFieldKey: normalized.workflowPolicy.manualTargetFieldKey ?? '',
       workflowManualSelectionRequired: normalized.workflowPolicy.manualSelectionRequired !== false,
@@ -1707,6 +1728,13 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     const normalizedWorkflowMode: 'manual' | 'static' | 'hybrid' = workflowModeRaw === 'static' || workflowModeRaw === 'hybrid'
       ? workflowModeRaw
       : 'manual';
+    const workflowDirectionModeRaw = String(raw.workflowDirectionMode ?? 'selectable').trim().toLowerCase();
+    const normalizedWorkflowDirectionMode: 'fixed' | 'selectable' = workflowDirectionModeRaw === 'fixed'
+      ? 'fixed'
+      : 'selectable';
+    const normalizedWorkflowFixedDirection = normalizedWorkflowDirectionMode === 'fixed'
+      ? this.normalizeDirectionValue(raw.workflowFixedDirection) ?? undefined
+      : undefined;
     const normalizedAllowManualSelection = normalizedWorkflowMode === 'manual'
       ? true
       : Boolean(raw.workflowAllowManualSelection);
@@ -1761,6 +1789,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       },
       workflowPolicy: {
         mode: normalizedWorkflowMode,
+        directionMode: normalizedWorkflowDirectionMode,
+        fixedDirection: normalizedWorkflowFixedDirection,
         staticTargetUnitIds: this.parseCsv(raw.workflowStaticTargets),
         allowManualSelection: normalizedAllowManualSelection,
         manualTargetFieldKey: normalizedManualTargetFieldKey,
@@ -1788,6 +1818,22 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       .map(item => item.trim())
       .filter(item => item.length > 0)
       .filter((item, index, array) => array.findIndex(inner => inner.toLowerCase() === item.toLowerCase()) === index);
+  }
+
+  private normalizeDirectionValue(value: unknown): 'incoming' | 'outgoing' | null {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'incoming' || normalized === 'inbound' || normalized === 'in' || normalized === '2' || normalized === 'وارد') {
+      return 'incoming';
+    }
+    if (normalized === 'outgoing' || normalized === 'outbound' || normalized === 'out' || normalized === '1' || normalized === 'صادر') {
+      return 'outgoing';
+    }
+
+    return null;
   }
 
   private toCsv(values: string[]): string {
@@ -1934,6 +1980,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     const manualSelectionRequired = policy.workflowPolicy?.manualSelectionRequired !== false;
     const manualTargetFieldKey = String(policy.workflowPolicy?.manualTargetFieldKey ?? '').trim();
     const defaultTargetUnitId = String(policy.workflowPolicy?.defaultTargetUnitId ?? '').trim();
+    const directionMode = String(policy.workflowPolicy?.directionMode ?? 'selectable').trim().toLowerCase();
+    const fixedDirection = this.normalizeDirectionValue(policy.workflowPolicy?.fixedDirection);
     const staticTargets = policy.workflowPolicy?.staticTargetUnitIds ?? [];
     const createUnits = policy.accessPolicy?.createScope?.unitIds ?? [];
     const isManualMode = workflowMode === 'manual';
@@ -1947,6 +1995,10 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
     if (workflowMode === 'static' && staticTargets.length === 0) {
       errors.push('تم اختيار التوجيه الثابت، لذلك يجب تحديد جهة واحدة على الأقل في "الجهات الثابتة".');
+    }
+
+    if (directionMode === 'fixed' && fixedDirection == null) {
+      errors.push('عند اختيار اتجاه ثابت للطلب يجب تحديد القيمة (وارد أو صادر).');
     }
 
     if (isManualMode && !allowManualSelection) {
@@ -2030,6 +2082,17 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const hasDirectionError = normalizedErrors.some(item =>
+      item.includes('اتجاه ثابت')
+      || item.includes('وارد')
+      || item.includes('صادر')
+      || item.includes('fixeddirection')
+      || item.includes('fixed direction'));
+    if (hasDirectionError) {
+      this.focusPolicyControl('workflowFixedDirection');
+      return;
+    }
+
     const hasManualTargetError = normalizedErrors.some(item =>
       item.includes('التوجيه اليدوي')
       || item.includes('الحقل المستخدم')
@@ -2109,6 +2172,8 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
     const workflow = policy.workflowPolicy;
     const hasWorkflowCustomization = String(workflow.mode ?? 'manual').trim().toLowerCase() !== 'manual'
+      || String(workflow.directionMode ?? 'selectable').trim().toLowerCase() !== 'selectable'
+      || String(workflow.fixedDirection ?? '').trim().length > 0
       || (workflow.staticTargetUnitIds?.length ?? 0) > 0
       || String(workflow.manualTargetFieldKey ?? '').trim().length > 0
       || String(workflow.defaultTargetUnitId ?? '').trim().length > 0
@@ -2149,12 +2214,16 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
   private configureWorkflowPolicyFormBehavior(): void {
     const workflowModeControl = this.policyForm.get('workflowMode');
+    const workflowDirectionModeControl = this.policyForm.get('workflowDirectionMode');
+    const workflowFixedDirectionControl = this.policyForm.get('workflowFixedDirection');
     const workflowStaticTargetsControl = this.policyForm.get('workflowStaticTargets');
     const workflowManualTargetFieldKeyControl = this.policyForm.get('workflowManualTargetFieldKey');
     const workflowManualSelectionRequiredControl = this.policyForm.get('workflowManualSelectionRequired');
     const workflowAllowManualSelectionControl = this.policyForm.get('workflowAllowManualSelection');
     const workflowDefaultTargetUnitIdControl = this.policyForm.get('workflowDefaultTargetUnitId');
     if (!workflowModeControl
+      || !workflowDirectionModeControl
+      || !workflowFixedDirectionControl
       || !workflowStaticTargetsControl
       || !workflowManualTargetFieldKeyControl
       || !workflowManualSelectionRequiredControl
@@ -2165,17 +2234,20 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
 
     this.applyWorkflowPolicyFormBehavior();
     this.subscriptions.add(workflowModeControl.valueChanges.subscribe(() => this.applyWorkflowPolicyFormBehavior()));
+    this.subscriptions.add(workflowDirectionModeControl.valueChanges.subscribe(() => this.applyWorkflowPolicyFormBehavior()));
     this.subscriptions.add(workflowAllowManualSelectionControl.valueChanges.subscribe(() => this.applyWorkflowPolicyFormBehavior()));
     this.subscriptions.add(workflowManualSelectionRequiredControl.valueChanges.subscribe(() => this.applyWorkflowPolicyFormBehavior()));
   }
 
   private applyWorkflowPolicyFormBehavior(): void {
+    const workflowFixedDirectionControl = this.policyForm.get('workflowFixedDirection');
     const workflowStaticTargetsControl = this.policyForm.get('workflowStaticTargets');
     const workflowManualTargetFieldKeyControl = this.policyForm.get('workflowManualTargetFieldKey');
     const workflowManualSelectionRequiredControl = this.policyForm.get('workflowManualSelectionRequired');
     const workflowAllowManualSelectionControl = this.policyForm.get('workflowAllowManualSelection');
     const workflowDefaultTargetUnitIdControl = this.policyForm.get('workflowDefaultTargetUnitId');
-    if (!workflowStaticTargetsControl
+    if (!workflowFixedDirectionControl
+      || !workflowStaticTargetsControl
       || !workflowManualTargetFieldKeyControl
       || !workflowManualSelectionRequiredControl
       || !workflowAllowManualSelectionControl
@@ -2184,6 +2256,7 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     }
 
     const mode = this.workflowModeValue;
+    const directionMode = this.workflowDirectionModeValue;
     if (mode === 'manual' && workflowAllowManualSelectionControl.value !== true) {
       workflowAllowManualSelectionControl.patchValue(true, { emitEvent: false });
     }
@@ -2198,6 +2271,10 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
     const requiresStaticTargets = mode === 'static';
     const requiresManualTargetField = mode === 'manual' || (mode === 'hybrid' && allowManualSelection);
     const requiresDefaultTargetUnit = mode === 'manual' && !manualSelectionRequired;
+    const requiresFixedDirection = directionMode === 'fixed';
+
+    workflowFixedDirectionControl.setValidators(requiresFixedDirection ? [Validators.required] : []);
+    workflowFixedDirectionControl.updateValueAndValidity({ emitEvent: false });
 
     workflowStaticTargetsControl.setValidators(requiresStaticTargets ? [Validators.required] : []);
     workflowStaticTargetsControl.updateValueAndValidity({ emitEvent: false });
@@ -2224,6 +2301,10 @@ export class DynamicSubjectTypeAdminComponent implements OnInit, OnDestroy {
       if (String(workflowManualTargetFieldKeyControl.value ?? '').trim().length > 0) {
         workflowManualTargetFieldKeyControl.patchValue('', { emitEvent: false });
       }
+    }
+
+    if (directionMode !== 'fixed' && String(workflowFixedDirectionControl.value ?? '').trim().length > 0) {
+      workflowFixedDirectionControl.patchValue('', { emitEvent: false });
     }
   }
 

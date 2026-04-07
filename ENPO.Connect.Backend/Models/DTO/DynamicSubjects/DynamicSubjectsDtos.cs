@@ -106,6 +106,8 @@ public sealed class SubjectFormDefinitionDto
     public List<SubjectGroupDefinitionDto> Groups { get; set; } = new();
 
     public List<SubjectFieldDefinitionDto> Fields { get; set; } = new();
+
+    public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
 }
 
 public sealed class SubjectAdminPreviewIssueDto
@@ -692,6 +694,10 @@ public sealed class RequestAccessPolicyDto
 public sealed class RequestWorkflowPolicyDto
 {
     public string Mode { get; set; } = "manual";
+
+    public string DirectionMode { get; set; } = "selectable";
+
+    public string? FixedDirection { get; set; }
 
     public List<string> StaticTargetUnitIds { get; set; } = new();
 

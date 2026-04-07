@@ -39,6 +39,8 @@ export interface ResolvedAccessPolicy {
 
 export interface ResolvedWorkflowPolicy {
   mode: 'static' | 'manual' | 'hybrid';
+  directionMode: 'fixed' | 'selectable';
+  fixedDirection?: 'incoming' | 'outgoing';
   staticTargetUnitIds: string[];
   allowManualSelection: boolean;
   manualTargetFieldKey?: string;
@@ -124,6 +126,10 @@ export class RequestPolicyResolverService {
     const defaultTargetUnitId = this.normalizeString(workflow?.defaultTargetUnitId);
     const requestedTarget = this.normalizeString(context.targetUnitId);
     const mode = this.normalizeWorkflowMode(workflow?.mode);
+    const directionMode = this.normalizeDirectionMode(workflow?.directionMode);
+    const fixedDirection = directionMode === 'fixed'
+      ? this.normalizeDirectionValue(workflow?.fixedDirection) ?? undefined
+      : undefined;
     const allowManualSelection = workflow?.allowManualSelection !== false;
     const manualTargetFieldKey = this.normalizeString(workflow?.manualTargetFieldKey) ?? undefined;
     const manualSelectionRequired = workflow?.manualSelectionRequired !== false;
@@ -139,6 +145,8 @@ export class RequestPolicyResolverService {
 
     return {
       mode,
+      directionMode,
+      fixedDirection,
       staticTargetUnitIds: staticTargets,
       allowManualSelection,
       manualTargetFieldKey,
@@ -150,6 +158,10 @@ export class RequestPolicyResolverService {
 
   normalizePolicy(requestPolicy: RequestPolicyDefinitionDto | null | undefined): RequestPolicyDefinitionDto {
     const normalizedWorkflowMode = this.normalizeWorkflowMode(requestPolicy?.workflowPolicy?.mode);
+    const normalizedDirectionMode = this.normalizeDirectionMode(requestPolicy?.workflowPolicy?.directionMode);
+    const normalizedFixedDirection = normalizedDirectionMode === 'fixed'
+      ? this.normalizeDirectionValue(requestPolicy?.workflowPolicy?.fixedDirection) ?? undefined
+      : undefined;
     const normalizedAllowManualSelection = normalizedWorkflowMode === 'manual'
       ? true
       : requestPolicy?.workflowPolicy?.allowManualSelection !== false;
@@ -204,6 +216,8 @@ export class RequestPolicyResolverService {
       },
       workflowPolicy: {
         mode: normalizedWorkflowMode,
+        directionMode: normalizedDirectionMode,
+        fixedDirection: normalizedFixedDirection,
         staticTargetUnitIds: this.normalizeStringArray(requestPolicy?.workflowPolicy?.staticTargetUnitIds ?? []),
         allowManualSelection: normalizedAllowManualSelection,
         manualTargetFieldKey: normalizedAllowManualSelection
@@ -316,6 +330,27 @@ export class RequestPolicyResolverService {
   private normalizeCreateMode(mode: unknown): 'single' | 'multi' {
     const normalized = (this.normalizeString(mode) ?? 'single').toLowerCase();
     return normalized === 'multi' ? 'multi' : 'single';
+  }
+
+  private normalizeDirectionMode(mode: unknown): 'fixed' | 'selectable' {
+    const normalized = (this.normalizeString(mode) ?? 'selectable').toLowerCase();
+    return normalized === 'fixed' ? 'fixed' : 'selectable';
+  }
+
+  private normalizeDirectionValue(value: unknown): 'incoming' | 'outgoing' | null {
+    const normalized = (this.normalizeString(value) ?? '').toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'incoming' || normalized === 'inbound' || normalized === 'in' || normalized === '2' || normalized === 'وارد') {
+      return 'incoming';
+    }
+    if (normalized === 'outgoing' || normalized === 'outbound' || normalized === 'out' || normalized === '1' || normalized === 'صادر') {
+      return 'outgoing';
+    }
+
+    return null;
   }
 
   private normalizeFieldKey(value: unknown): string {

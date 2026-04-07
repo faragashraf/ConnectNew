@@ -249,6 +249,13 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 }
             }
 
+            var settingsJson = await _connectContext.SubjectTypeAdminSettings
+                .AsNoTracking()
+                .Where(item => item.CategoryId == category.CatId)
+                .Select(item => item.SettingsJson)
+                .FirstOrDefaultAsync(cancellationToken);
+            var requestPolicy = TryReadRequestPolicyFromSettingsJson(settingsJson);
+
             var linkRows = await (from link in _connectContext.CdCategoryMands.AsNoTracking()
                                   join mandGroup in _connectContext.MandGroups.AsNoTracking()
                                        on link.MendGroup equals mandGroup.GroupId into groupJoin
@@ -383,6 +390,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 CategoryName = category.CatName,
                 ParentCategoryId = category.CatParent,
                 ApplicationId = category.ApplicationId,
+                RequestPolicy = requestPolicy,
                 Groups = fieldRows
                     .Select(field => field.Group)
                     .Where(group => group != null)
@@ -2268,6 +2276,13 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             errors.Add(new Error { Code = "403", Message = "غير مسموح بإنشاء طلبات على هذا النوع." });
         }
 
+        var requestPolicy = await LoadCategoryRequestPolicyAsync(category.CatId, cancellationToken);
+        var resolvedWorkflowPolicy = RequestPolicyResolver.ResolveWorkflowPolicy(requestPolicy);
+        if (requestPolicy != null && HasWorkflowPolicyCustomization(requestPolicy))
+        {
+            errors.AddRange(ValidateRuntimeWorkflowPolicyConsistency(resolvedWorkflowPolicy));
+        }
+
         var normalizedDirection = ResolveDocumentDirection(request?.DocumentDirection, request?.DynamicFields);
         if (!string.IsNullOrWhiteSpace(request?.DocumentDirection) && normalizedDirection == null)
         {
@@ -2276,6 +2291,37 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 Code = "400",
                 Message = "اتجاه الطلب غير صالح. القيم المدعومة: incoming أو outgoing (أو وارد/صادر)."
             });
+        }
+
+        var directionMode = NormalizeDirectionSelectionMode(resolvedWorkflowPolicy.DirectionMode);
+        var fixedDirection = NormalizeDirectionValue(resolvedWorkflowPolicy.FixedDirection);
+        if (directionMode == "fixed")
+        {
+            if (fixedDirection == null)
+            {
+                errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "سياسة اتجاه الطلب غير مكتملة: تم اختيار اتجاه ثابت بدون تحديد وارد/صادر."
+                });
+            }
+            else
+            {
+                if (normalizedDirection != null
+                    && !string.Equals(normalizedDirection, fixedDirection, StringComparison.OrdinalIgnoreCase))
+                {
+                    var fixedDirectionLabel = string.Equals(fixedDirection, "incoming", StringComparison.OrdinalIgnoreCase)
+                        ? "وارد"
+                        : "صادر";
+                    errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = $"هذا النوع مضبوط على اتجاه ثابت ({fixedDirectionLabel}) ولا يمكن تغييره أثناء التسجيل."
+                    });
+                }
+
+                normalizedDirection = fixedDirection;
+            }
         }
 
         var categoryHasDirectionField = await CategoryHasDirectionFieldAsync(category.CatId, cancellationToken);
@@ -2288,7 +2334,276 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             });
         }
 
+        if (errors.Count == 0)
+        {
+            var requiredFieldErrors = await ValidateRequiredDynamicFieldsAsync(
+                category.CatId,
+                category.ApplicationId,
+                userId,
+                normalizedDirection,
+                request?.DynamicFields,
+                requestPolicy,
+                cancellationToken);
+            errors.AddRange(requiredFieldErrors);
+        }
+
         return (category, errors, unitIds, normalizedDirection);
+    }
+
+    private async Task<List<Error>> ValidateRequiredDynamicFieldsAsync(
+        int categoryId,
+        string? categoryApplicationId,
+        string userId,
+        string? documentDirection,
+        IReadOnlyCollection<SubjectFieldValueDto>? dynamicFields,
+        RequestPolicyDefinitionDto? requestPolicy,
+        CancellationToken cancellationToken)
+    {
+        var errors = new List<Error>();
+        var definitionResponse = await BuildFormDefinitionAsync(
+            categoryId,
+            userId,
+            categoryApplicationId,
+            allowInactiveCategory: true,
+            cancellationToken);
+        if (definitionResponse.Errors?.Count > 0 || definitionResponse.Data == null)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "تعذر التحقق من الحقول الإلزامية لهذا النوع. يرجى مراجعة إعدادات النموذج."
+            });
+            return errors;
+        }
+
+        var fieldsMap = (dynamicFields ?? Array.Empty<SubjectFieldValueDto>())
+            .Where(item => item != null)
+            .GroupBy(item => NormalizeFieldKey(item.FieldKey))
+            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(item => NormalizeNullable(item.Value)).ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var context = BuildValidationPolicyContext(documentDirection);
+        var seenFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in definitionResponse.Data.Fields ?? new List<SubjectFieldDefinitionDto>())
+        {
+            var normalizedFieldKey = NormalizeFieldKey(field.FieldKey);
+            if (normalizedFieldKey.Length == 0 || !seenFields.Add(normalizedFieldKey))
+            {
+                continue;
+            }
+
+            var resolvedPatch = RequestPolicyResolver.ResolvePresentationMetadata(
+                field.FieldKey,
+                requestPolicy,
+                context);
+            var isVisible = resolvedPatch?.Visible ?? field.IsVisible;
+            if (!isVisible)
+            {
+                continue;
+            }
+
+            var isRequired = resolvedPatch?.Required ?? field.Required;
+            var isRequiredTrue = field.RequiredTrue;
+            if (!isRequired && !isRequiredTrue)
+            {
+                continue;
+            }
+
+            var values = fieldsMap.TryGetValue(normalizedFieldKey, out var foundValues)
+                ? foundValues
+                : new List<string?>();
+            if (IsTopicDirectionField(field.FieldKey) && NormalizeNullable(documentDirection) != null)
+            {
+                values = values.Concat(new[] { documentDirection }).ToList();
+            }
+
+            var label = NormalizeNullable(resolvedPatch?.Label)
+                ?? NormalizeNullable(field.FieldLabel)
+                ?? field.FieldKey;
+            if (isRequired && !HasAnyNonEmptyFieldValue(values))
+            {
+                errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"الحقل '{label}' مطلوب ولا يمكن إرسال الطلب بدونه."
+                });
+                continue;
+            }
+
+            if (isRequiredTrue && !HasAnyTruthyFieldValue(values))
+            {
+                errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"الحقل '{label}' يتطلب قيمة تفعيل صحيحة قبل الإرسال."
+                });
+            }
+        }
+
+        return errors;
+    }
+
+    private static bool HasWorkflowPolicyCustomization(RequestPolicyDefinitionDto requestPolicy)
+    {
+        var workflow = requestPolicy?.WorkflowPolicy;
+        if (workflow == null)
+        {
+            return false;
+        }
+
+        var mode = NormalizeNullable(workflow.Mode)?.ToLowerInvariant() ?? "manual";
+        var directionMode = NormalizeDirectionSelectionMode(workflow.DirectionMode);
+        var fixedDirection = NormalizeDirectionValue(workflow.FixedDirection);
+        var staticTargetsCount = (workflow.StaticTargetUnitIds ?? new List<string>())
+            .Select(NormalizeNullable)
+            .Count(item => item != null);
+
+        return mode != "manual"
+            || directionMode != "selectable"
+            || fixedDirection != null
+            || staticTargetsCount > 0
+            || NormalizeNullable(workflow.ManualTargetFieldKey) != null
+            || NormalizeNullable(workflow.DefaultTargetUnitId) != null
+            || workflow.AllowManualSelection == false
+            || workflow.ManualSelectionRequired == false;
+    }
+
+    private static List<Error> ValidateRuntimeWorkflowPolicyConsistency(ResolvedRequestWorkflowPolicy workflowPolicy)
+    {
+        var errors = new List<Error>();
+        var workflowMode = NormalizeNullable(workflowPolicy?.Mode)?.ToLowerInvariant() ?? "manual";
+        var directionMode = NormalizeDirectionSelectionMode(workflowPolicy?.DirectionMode);
+        var fixedDirection = NormalizeDirectionValue(workflowPolicy?.FixedDirection);
+        var allowManualSelection = workflowPolicy?.AllowManualSelection ?? true;
+        var manualSelectionRequired = workflowPolicy?.ManualSelectionRequired ?? true;
+        var hasManualTargetField = NormalizeNullable(workflowPolicy?.ManualTargetFieldKey) != null;
+        var hasDefaultTarget = NormalizeNullable(workflowPolicy?.DefaultTargetUnitId) != null;
+        var hasStaticTargets = (workflowPolicy?.StaticTargetUnitIds ?? new List<string>())
+            .Select(NormalizeNullable)
+            .Any(item => item != null);
+
+        if (directionMode == "fixed" && fixedDirection == null)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "سياسة اتجاه الطلب غير مكتملة: تم اختيار اتجاه ثابت بدون تحديد وارد/صادر."
+            });
+        }
+
+        var isManualWorkflow = workflowMode == "manual";
+        var isHybridWorkflow = workflowMode == "hybrid";
+
+        if (isManualWorkflow && !allowManualSelection)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "وضع التوجيه اليدوي يتطلب تفعيل السماح بالاختيار اليدوي. إذا لم ترغب بذلك استخدم وضع هجين أو ثابت."
+            });
+        }
+
+        if ((isManualWorkflow || (isHybridWorkflow && allowManualSelection))
+            && !hasManualTargetField)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "تم اختيار وضع يتضمن التوجيه اليدوي، لذلك يجب تحديد الحقل الذي سيستخدم لاختيار جهة التوجيه."
+            });
+        }
+
+        if (isManualWorkflow
+            && !manualSelectionRequired
+            && !hasDefaultTarget)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "عند جعل الاختيار اليدوي غير إلزامي في الوضع اليدوي، يجب تحديد الجهة الافتراضية."
+            });
+        }
+
+        if (isHybridWorkflow
+            && !allowManualSelection
+            && !hasStaticTargets
+            && !hasDefaultTarget)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "في الوضع الهجين مع إيقاف الاختيار اليدوي، يجب تحديد جهة ثابتة أو جهة افتراضية."
+            });
+        }
+
+        if (isHybridWorkflow
+            && allowManualSelection
+            && !manualSelectionRequired
+            && !hasStaticTargets
+            && !hasDefaultTarget)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "في الوضع الهجين مع اختيار يدوي غير إلزامي، يجب تحديد مسار بديل (جهة ثابتة أو افتراضية)."
+            });
+        }
+
+        return errors;
+    }
+
+    private static IReadOnlyDictionary<string, string?> BuildValidationPolicyContext(string? documentDirection)
+    {
+        var map = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var normalizedDirection = NormalizeDirectionValue(documentDirection);
+        if (normalizedDirection != null)
+        {
+            map["documentDirection"] = normalizedDirection;
+        }
+
+        return map;
+    }
+
+    private static bool HasAnyNonEmptyFieldValue(IEnumerable<string?> values)
+    {
+        foreach (var value in values ?? Array.Empty<string?>())
+        {
+            if (NormalizeNullable(value) != null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasAnyTruthyFieldValue(IEnumerable<string?> values)
+    {
+        foreach (var value in values ?? Array.Empty<string?>())
+        {
+            var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+            if (normalized == "true"
+                || normalized == "1"
+                || normalized == "yes"
+                || normalized == "on"
+                || normalized == "checked"
+                || normalized == "نعم")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeDirectionSelectionMode(string? value)
+    {
+        return string.Equals(NormalizeNullable(value), "fixed", StringComparison.OrdinalIgnoreCase)
+            ? "fixed"
+            : "selectable";
     }
 
     private async Task<List<Cdcategory>> LoadScopedCategoriesAsync(
