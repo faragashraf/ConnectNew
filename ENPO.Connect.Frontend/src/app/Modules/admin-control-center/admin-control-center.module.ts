@@ -33,6 +33,7 @@ import { RuntimeRequestIntegrationEngine } from './domain/runtime-request/runtim
 import { PublishReleaseEngine } from './domain/publish-release/publish-release.engine';
 import { AdminControlCenterDraftStorageService } from './services/admin-control-center-draft-storage.service';
 import { AdminControlCenterDemoScopeService } from './services/admin-control-center-demo-scope.service';
+import { AdminControlCenterLegacyMetadataPersistenceService } from './services/admin-control-center-legacy-metadata-persistence.service';
 
 @NgModule({
   declarations: [
@@ -74,7 +75,8 @@ import { AdminControlCenterDemoScopeService } from './services/admin-control-cen
     PreviewSimulationArtifactEngine,
     ReadinessAuditEngine,
     RuntimeRequestIntegrationEngine,
-    PublishReleaseEngine
+    PublishReleaseEngine,
+    AdminControlCenterLegacyMetadataPersistenceService
   ]
 })
 export class AdminControlCenterModule {}

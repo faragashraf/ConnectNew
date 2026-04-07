@@ -79,7 +79,7 @@ export class AdminControlCenterFacade {
     return this.store.loadDemoScope(rawStepKey);
   }
 
-  publish(): ControlCenterPublishResult {
+  publish(): Promise<ControlCenterPublishResult> {
     return this.store.publish();
   }
 

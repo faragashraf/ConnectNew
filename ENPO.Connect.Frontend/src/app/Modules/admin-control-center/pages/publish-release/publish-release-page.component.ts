@@ -132,7 +132,7 @@ export class PublishReleasePageComponent implements OnInit, OnDestroy {
     this.stepMessage = draftResult.message;
   }
 
-  onPublishNow(): void {
+  async onPublishNow(): Promise<void> {
     this.publishForm.markAllAsTouched();
     this.evaluatePublish(true);
 
@@ -142,9 +142,10 @@ export class PublishReleasePageComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const result = this.facade.publish();
+    const result = await this.facade.publish();
     this.stepMessageSeverity = result.success ? 'success' : 'warn';
-    this.stepMessage = result.message;
+    const firstWarning = result.warnings?.[0];
+    this.stepMessage = firstWarning ? `${result.message} - ملاحظة: ${firstWarning}` : result.message;
     this.evaluatePublish(false);
   }
 

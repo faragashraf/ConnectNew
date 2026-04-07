@@ -77,7 +77,7 @@ export class ControlCenterShellComponent implements OnInit {
     this.router.navigate(['/Admin/ControlCenter', safeStep]);
   }
 
-  onPublish(): void {
+  async onPublish(): Promise<void> {
     const currentVm = this.facade.getCurrentViewModel();
     if (!this.canPublish(currentVm)) {
       this.actionSeverity = 'warn';
@@ -85,9 +85,10 @@ export class ControlCenterShellComponent implements OnInit {
       return;
     }
 
-    const result = this.facade.publish();
+    const result = await this.facade.publish();
     this.actionSeverity = result.success ? 'success' : 'warn';
-    this.actionMessage = result.message;
+    const firstWarning = result.warnings?.[0];
+    this.actionMessage = firstWarning ? `${result.message} - ملاحظة: ${firstWarning}` : result.message;
   }
 
   canPublish(vm: ControlCenterViewModel): boolean {

@@ -92,102 +92,35 @@ export class AdminControlCenterRuntimeBridgeService {
       return null;
     }
 
-    const draftState = this.loadDraftState();
-    if (!draftState) {
-      return {
-        source: 'admin-control-center',
-        applicationId: this.normalizeNullable(params.get('scopeApplicationId')),
-        categoryId: this.normalizePositiveInt(params.get('categoryId')) ?? 0,
-        documentDirection: this.normalizeDirection(params.get('documentDirection')),
-        submitBehavior: null,
-        routeKeyPrefix: null,
-        createConfigRouteKey: null,
-        fields: [],
-        containers: [],
-        requiredFieldKeys: [],
-        conditionalRules: [],
-        blockingRules: [],
-        issues: ['تعذر تحميل مسودة Admin Control Center من التخزين المحلي.'],
-        warnings: []
-      };
-    }
-
-    const stepsRaw = Array.isArray(draftState['steps'])
-      ? (draftState['steps'] as ReadonlyArray<unknown>)
-      : [];
-    const stepMap = new Map<string, Record<string, unknown>>(
-      stepsRaw
-        .map(item => {
-          const asRecord = this.normalizeObject(item);
-          const key = String(asRecord['key'] ?? '').trim();
-          const values = this.normalizeObject(asRecord['values']);
-          return [key, values] as const;
-        })
-        .filter(([key]) => key.length > 0)
-    );
-
-    const context = this.normalizeObject(draftState['context']);
-    const scopeApplicationId = this.normalizeNullable(context['applicationId'])
-      ?? this.normalizeNullable(params.get('scopeApplicationId'));
-    const queryCategoryId = this.normalizePositiveInt(params.get('categoryId'));
-    const scopeCategoryId = this.normalizePositiveInt(context['categoryId']) ?? queryCategoryId ?? 0;
-
-    const bindingStep = stepMap.get('field-library-binding') ?? {};
-    const compositionStep = stepMap.get('form-composition') ?? {};
-    const validationStep = stepMap.get('validation-rules') ?? {};
-    const workflowStep = stepMap.get('workflow-routing') ?? {};
-
-    const fields = this.parseBindings(bindingStep['bindingPayload']);
-    const containers = this.parseContainers(compositionStep['compositionLayoutPayload']);
-    const conditionalBundle = this.parseConditionalBundle(validationStep['conditionalRulesPayload']);
-    const blockingRules = this.parseBlockingRules(validationStep['submissionBlockingPayload']);
-
-    const requiredFieldKeys = conditionalBundle.requiredRules
-      .filter(item => item.isRequired)
-      .map(item => item.fieldKey);
+    const applicationId = this.normalizeNullable(params.get('scopeApplicationId'));
+    const scopeCategoryId = this.normalizePositiveInt(params.get('scopeCategoryId'))
+      ?? this.normalizePositiveInt(params.get('categoryId'))
+      ?? 0;
+    const routeKeyPrefix = this.normalizeNullable(params.get('scopeRouteKeyPrefix'));
+    const createConfigRouteKey = this.normalizeNullable(params.get('scopeCreateRouteKey'));
 
     const issues: string[] = [];
     const warnings: string[] = [];
 
     if (scopeCategoryId <= 0) {
-      issues.push('Category Id غير متوفر داخل النطاق التجريبي.');
+      issues.push('Category Id غير متوفر داخل نطاق التشغيل.');
     }
 
-    if (!scopeApplicationId) {
-      warnings.push('Application Id غير متوفر داخل النطاق التجريبي. سيتم استخدام تطبيق Dynamic Subjects الافتراضي.');
-    }
-
-    if (!String(workflowStep['createConfigRouteKey'] ?? '').trim()) {
-      issues.push('Create Config Route Key غير متوفر داخل إعدادات Workflow للنطاق التجريبي.');
-    }
-
-    if (fields.length === 0) {
-      issues.push('Field bindings الخاصة بالنطاق التجريبي غير متوفرة.');
-    }
-
-    if (containers.filter(item => item.visible).length === 0) {
-      warnings.push('Form composition لا يحتوي مجموعات مرئية؛ سيتم استخدام fallback groups من تعريف النموذج الحالي.');
-    }
-
-    const queryScopeCategoryId = this.normalizePositiveInt(params.get('scopeCategoryId'));
-    if (queryScopeCategoryId && scopeCategoryId > 0 && queryScopeCategoryId !== scopeCategoryId) {
-      warnings.push('Category Id في الرابط لا يطابق category الخاصة بالمسودة. سيتم اعتماد category المسودة.');
-    }
+    warnings.push('تم اعتماد وضع التشغيل المباشر من metadata القديمة. تم تعطيل أي override محلي من Admin Control Center.');
 
     return {
       source: 'admin-control-center',
-      applicationId: scopeApplicationId,
+      applicationId,
       categoryId: scopeCategoryId,
-      documentDirection: this.normalizeDirection(params.get('documentDirection'))
-        ?? this.normalizeDirection(context['documentDirection']),
-      submitBehavior: this.normalizeSubmitBehavior(validationStep['submitBehavior']),
-      routeKeyPrefix: this.normalizeNullable(context['routeKeyPrefix']),
-      createConfigRouteKey: this.normalizeNullable(workflowStep['createConfigRouteKey']),
-      fields,
-      containers,
-      requiredFieldKeys: this.uniqueNormalizedKeys(requiredFieldKeys),
-      conditionalRules: conditionalBundle.conditionalRules,
-      blockingRules,
+      documentDirection: this.normalizeDirection(params.get('documentDirection')),
+      submitBehavior: null,
+      routeKeyPrefix,
+      createConfigRouteKey,
+      fields: [],
+      containers: [],
+      requiredFieldKeys: [],
+      conditionalRules: [],
+      blockingRules: [],
       issues,
       warnings
     };
@@ -264,243 +197,18 @@ export class AdminControlCenterRuntimeBridgeService {
 
   applyDefinitionOverrides(
     definition: SubjectFormDefinitionDto,
-    bridge: AdminControlCenterRuntimeBridgeContext | null
+    _bridge: AdminControlCenterRuntimeBridgeContext | null
   ): SubjectFormDefinitionDto {
-    if (!bridge || bridge.issues.length > 0) {
-      return definition;
-    }
-
-    if (Number(definition.categoryId ?? 0) !== Number(bridge.categoryId ?? 0)) {
-      return definition;
-    }
-
-    const bindingMap = new Map<string, BridgeBoundField>(
-      bridge.fields.map(item => [this.normalizeFieldKey(item.fieldKey), item] as const)
-    );
-    if (bindingMap.size === 0) {
-      return definition;
-    }
-
-    const containerOrder = [...bridge.containers]
-      .sort((left, right) => left.displayOrder - right.displayOrder)
-      .filter(item => item.visible);
-
-    const displayOrderByField = new Map<string, number>();
-    const containerByField = new Map<string, BridgeContainer>();
-    let runningOrder = 1;
-    for (const container of containerOrder) {
-      for (const fieldKeyRaw of container.fieldKeys) {
-        const fieldKey = this.normalizeFieldKey(fieldKeyRaw);
-        if (!fieldKey || displayOrderByField.has(fieldKey)) {
-          continue;
-        }
-
-        displayOrderByField.set(fieldKey, runningOrder++);
-        containerByField.set(fieldKey, container);
-      }
-    }
-
-    const sortedBindings = [...bridge.fields].sort((left, right) => left.displayOrder - right.displayOrder);
-    for (const binding of sortedBindings) {
-      const fieldKey = this.normalizeFieldKey(binding.fieldKey);
-      if (!fieldKey || displayOrderByField.has(fieldKey)) {
-        continue;
-      }
-
-      displayOrderByField.set(fieldKey, runningOrder++);
-    }
-
-    const groups: SubjectGroupDefinitionDto[] = [];
-    const groupByContainerId = new Map<string, SubjectGroupDefinitionDto>();
-    let nextGroupId = 2000;
-
-    for (const container of containerOrder) {
-      const group: SubjectGroupDefinitionDto = {
-        groupId: nextGroupId++,
-        groupName: container.title || `مجموعة ${container.id}`,
-        groupDescription: '',
-        isExtendable: false,
-        groupWithInRow: 12
-      };
-      groups.push(group);
-      groupByContainerId.set(container.id, group);
-    }
-
-    let fallbackGroup: SubjectGroupDefinitionDto | null = null;
-    const ensureFallbackGroup = (): SubjectGroupDefinitionDto => {
-      if (fallbackGroup) {
-        return fallbackGroup;
-      }
-
-      fallbackGroup = {
-        groupId: nextGroupId++,
-        groupName: 'حقول إضافية',
-        groupDescription: 'حقول غير موزعة في Form Composition وتم إظهارها بنهاية النموذج.',
-        isExtendable: false,
-        groupWithInRow: 12
-      };
-      groups.push(fallbackGroup);
-      return fallbackGroup;
-    };
-
-    const requiredSet = new Set<string>(bridge.requiredFieldKeys.map(item => this.normalizeFieldKey(item)));
-    const processed = new Set<string>();
-    const maxMendSql = Math.max(0, ...definition.fields.map(item => Number(item.mendSql ?? 0)));
-    let syntheticMendSql = maxMendSql + 1;
-
-    const overriddenFields: SubjectFieldDefinitionDto[] = [];
-    for (const sourceField of definition.fields) {
-      const fieldKey = this.normalizeFieldKey(sourceField.fieldKey);
-      const binding = bindingMap.get(fieldKey);
-      if (!binding) {
-        overriddenFields.push({
-          ...sourceField,
-          isVisible: false,
-          required: false,
-          requiredTrue: false
-        });
-        continue;
-      }
-
-      processed.add(fieldKey);
-      const group = this.resolveGroupForField(fieldKey, containerByField, groupByContainerId, ensureFallbackGroup);
-      const required = requiredSet.has(fieldKey) || binding.required;
-
-      overriddenFields.push({
-        ...sourceField,
-        fieldLabel: binding.label,
-        fieldType: this.mapBindingTypeToFieldType(binding.type, sourceField.fieldType),
-        defaultValue: binding.defaultValue,
-        required,
-        requiredTrue: required,
-        isDisabledInit: binding.readonly,
-        isVisible: binding.visible,
-        displayOrder: displayOrderByField.get(fieldKey) ?? binding.displayOrder ?? sourceField.displayOrder,
-        mendGroup: group.groupId,
-        group: { ...group }
-      });
-    }
-
-    for (const binding of sortedBindings) {
-      const fieldKey = this.normalizeFieldKey(binding.fieldKey);
-      if (!fieldKey || processed.has(fieldKey)) {
-        continue;
-      }
-
-      const group = this.resolveGroupForField(fieldKey, containerByField, groupByContainerId, ensureFallbackGroup);
-      const required = requiredSet.has(fieldKey) || binding.required;
-      const syntheticType = this.mapBindingTypeToFieldType(binding.type, binding.type);
-
-      overriddenFields.push({
-        mendSql: syntheticMendSql++,
-        categoryId: definition.categoryId,
-        mendGroup: group.groupId,
-        fieldKey: binding.fieldKey,
-        fieldType: syntheticType,
-        fieldLabel: binding.label,
-        placeholder: '',
-        defaultValue: binding.defaultValue,
-        optionsPayload: this.buildSyntheticOptionsPayload(binding),
-        dataType: this.mapBindingTypeToDataType(binding.type),
-        required,
-        requiredTrue: required,
-        email: false,
-        pattern: false,
-        minValue: '',
-        maxValue: '',
-        mask: '',
-        isDisabledInit: binding.readonly,
-        isSearchable: false,
-        width: 0,
-        height: 0,
-        applicationId: definition.applicationId,
-        displayOrder: displayOrderByField.get(fieldKey) ?? binding.displayOrder,
-        isVisible: binding.visible,
-        displaySettingsJson: undefined,
-        group: { ...group }
-      });
-    }
-
-    const usedGroupIds = new Set<number>();
-    overriddenFields
-      .filter(item => item.isVisible !== false)
-      .forEach(item => usedGroupIds.add(Number(item.mendGroup ?? 0)));
-
-    const normalizedGroups = groups
-      .filter(group => usedGroupIds.has(group.groupId))
-      .sort((left, right) => left.groupId - right.groupId);
-
-    return {
-      ...definition,
-      groups: normalizedGroups.length > 0 ? normalizedGroups : definition.groups,
-      fields: overriddenFields
-        .sort((left, right) =>
-          Number(left.displayOrder ?? 0) - Number(right.displayOrder ?? 0)
-          || String(left.fieldKey ?? '').localeCompare(String(right.fieldKey ?? ''))
-        )
-    };
+    return definition;
   }
 
   evaluateSubmission(
-    bridge: AdminControlCenterRuntimeBridgeContext | null,
-    dynamicFields: ReadonlyArray<SubjectFieldValueDto>
+    _bridge: AdminControlCenterRuntimeBridgeContext | null,
+    _dynamicFields: ReadonlyArray<SubjectFieldValueDto>
   ): RuntimeBridgeSubmissionEvaluation {
-    if (!bridge || bridge.issues.length > 0) {
-      return { blockingIssues: [], warnings: [] };
-    }
-
-    const valueByField = new Map<string, string>(
-      (dynamicFields ?? []).map(item => [
-        this.normalizeFieldKey(item.fieldKey),
-        String(item.value ?? '').trim()
-      ] as const)
-    );
-
-    const labelByField = new Map<string, string>(
-      bridge.fields.map(item => [this.normalizeFieldKey(item.fieldKey), item.label] as const)
-    );
-
-    const blockingIssues: string[] = [];
-    const warnings: string[] = [];
-
-    for (const requiredFieldKeyRaw of bridge.requiredFieldKeys) {
-      const requiredFieldKey = this.normalizeFieldKey(requiredFieldKeyRaw);
-      if (!requiredFieldKey) {
-        continue;
-      }
-
-      const value = valueByField.get(requiredFieldKey) ?? '';
-      if (!this.hasValue(value)) {
-        blockingIssues.push(`الحقل الإلزامي "${labelByField.get(requiredFieldKey) ?? requiredFieldKey}" مطلوب قبل الإرسال.`);
-      }
-    }
-
-    for (const rule of bridge.blockingRules) {
-      if (!this.evaluateBlockingExpression(rule.conditionExpression, valueByField)) {
-        continue;
-      }
-
-      blockingIssues.push(rule.message || `قاعدة منع الإرسال "${rule.name}" تحققت.`);
-    }
-
-    for (const rule of bridge.conditionalRules) {
-      if (rule.effect !== 'block-submit') {
-        continue;
-      }
-
-      const leftValue = valueByField.get(this.normalizeFieldKey(rule.leftFieldKey)) ?? '';
-      if (this.evaluateConditionalRule(leftValue, rule.operator, rule.rightValue)) {
-        blockingIssues.push(`قاعدة شرطية مانعة تحققت على الحقل "${rule.leftFieldKey}".`);
-      }
-    }
-
-    if (bridge.submitBehavior === 'confirm' && blockingIssues.length > 0) {
-      warnings.push('إعداد Validation يسمح بـ Confirm قبل الإرسال، لكن التطبيق الحالي يعامل المشكلات الحرجة كمنع كامل.');
-    }
-
     return {
-      blockingIssues,
-      warnings
+      blockingIssues: [],
+      warnings: []
     };
   }
 

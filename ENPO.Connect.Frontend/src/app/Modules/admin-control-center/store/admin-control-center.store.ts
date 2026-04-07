@@ -16,10 +16,12 @@ import {
 } from '../services/admin-control-center-draft-storage.service';
 import { AdminControlCenterDemoScopeService } from '../services/admin-control-center-demo-scope.service';
 import { PreviewSimulationArtifactEngine } from '../domain/preview-simulation/preview-simulation-artifact.engine';
+import { AdminControlCenterLegacyMetadataPersistenceService } from '../services/admin-control-center-legacy-metadata-persistence.service';
 
 export interface ControlCenterPublishResult {
   success: boolean;
   message: string;
+  warnings?: ReadonlyArray<string>;
 }
 
 export interface ControlCenterDraftSaveResult {
@@ -51,7 +53,8 @@ export class AdminControlCenterStore implements OnDestroy {
     private readonly workflowEngine: AdminControlCenterWorkflowEngine,
     private readonly draftStorage: AdminControlCenterDraftStorageService,
     private readonly demoScopeService: AdminControlCenterDemoScopeService,
-    private readonly previewArtifactEngine: PreviewSimulationArtifactEngine
+    private readonly previewArtifactEngine: PreviewSimulationArtifactEngine,
+    private readonly legacyPersistence: AdminControlCenterLegacyMetadataPersistenceService
   ) {
     this.stateSubject = new BehaviorSubject<ControlCenterState>(
       this.recalculateState(this.workflowEngine.createInitialState())
@@ -321,7 +324,7 @@ export class AdminControlCenterStore implements OnDestroy {
     };
   }
 
-  publish(): ControlCenterPublishResult {
+  async publish(): Promise<ControlCenterPublishResult> {
     this.clearAutoSaveTimer();
 
     const current = this.recalculateState(this.stateSubject.value);
@@ -329,6 +332,22 @@ export class AdminControlCenterStore implements OnDestroy {
       return {
         success: false,
         message: 'تعذر النشر. توجد متطلبات إلزامية غير مكتملة في خطوات الإعداد.'
+      };
+    }
+
+    const persistedToLegacy = await this.legacyPersistence.publish(current);
+    if (!persistedToLegacy.success) {
+      const failedState = this.recalculateState({
+        ...current,
+        draftErrorMessage: persistedToLegacy.message,
+        hasUnsavedChanges: true
+      });
+      this.stateSubject.next(failedState);
+
+      return {
+        success: false,
+        message: persistedToLegacy.message,
+        warnings: persistedToLegacy.warnings
       };
     }
 
@@ -357,10 +376,11 @@ export class AdminControlCenterStore implements OnDestroy {
     this.stateSubject.next(nextState);
 
     return {
-      success: true,
+      success: persistedToLegacy.success,
       message: persisted.success
-        ? 'تم اعتماد الإعدادات ونشر الإصدار بنجاح.'
-        : 'تم اعتماد الإعدادات، لكن تعذر تحديث المسودة المحلية بعد النشر.'
+        ? persistedToLegacy.message
+        : `${persistedToLegacy.message} (مع تعذر تحديث المسودة المحلية بعد النشر).`,
+      warnings: persistedToLegacy.warnings
     };
   }
 
