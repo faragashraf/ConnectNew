@@ -5,8 +5,45 @@
       <button type="button" (click)="loadTree()">تحديث</button>
     </div>
 
+    <section class="runtime-link" *ngIf="runtimeBridgeContext as runtimeBridge">
+      <header>
+        <h3>نطاق قادم من Control Center</h3>
+        <span [class.blocked]="runtimeCanonicalLink && runtimeCanonicalLink.issues.length > 0">
+          {{ runtimeCanonicalLink && runtimeCanonicalLink.issues.length > 0 ? 'يتطلب معالجة' : 'مرتبط بالشجرة' }}
+        </span>
+      </header>
+      <div class="runtime-link-grid">
+        <article>
+          <span>Category Id</span>
+          <strong>{{ runtimeBridge.categoryId || '-' }}</strong>
+        </article>
+        <article>
+          <span>Application Id</span>
+          <strong>{{ runtimeBridge.applicationId || '-' }}</strong>
+        </article>
+        <article>
+          <span>Parent Tree Path</span>
+          <strong>{{ runtimeCanonicalLink?.categoryPathLabel || '-' }}</strong>
+        </article>
+      </div>
+      <ul class="runtime-link-issues" *ngIf="runtimeCanonicalLink && runtimeCanonicalLink.issues.length > 0">
+        <li *ngFor="let issue of runtimeCanonicalLink.issues">{{ issue }}</li>
+      </ul>
+      <ul class="runtime-link-warnings" *ngIf="runtimeCanonicalLink && runtimeCanonicalLink.warnings.length > 0">
+        <li *ngFor="let warning of runtimeCanonicalLink.warnings">{{ warning }}</li>
+      </ul>
+      <button
+        type="button"
+        class="runtime-open"
+        (click)="openRuntimeFromScopeLink()"
+        [disabled]="runtimeCanonicalLink && runtimeCanonicalLink.issues.length > 0">
+        فتح نموذج تسجيل الطلب لهذا النطاق
+      </button>
+    </section>
+
     <app-tree-sidebar
       [tree]="treeNodes"
+      [selectedNode]="selectedTreeNode"
       [showTreeContextMenu]="false"
       [allExpanded]="true"
       [expandedWidth]="100"

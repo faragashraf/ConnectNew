@@ -8,6 +8,11 @@ import {
   ControlCenterViewModel
 } from '../../domain/models/admin-control-center.view-models';
 import { AdminControlCenterFacade } from '../../facades/admin-control-center.facade';
+import {
+  DynamicSubjectCategoryCatalogEntry,
+  DynamicSubjectCategoryCatalogService
+} from 'src/app/Modules/dynamic-subjects/services/dynamic-subject-category-catalog.service';
+import { DynamicSubjectAccessService } from 'src/app/Modules/dynamic-subjects/services/dynamic-subject-access.service';
 
 interface SelectOption {
   readonly label: string;
@@ -41,16 +46,24 @@ export class ScopeDefinitionPageComponent implements OnInit, OnDestroy {
 
   vm: ControlCenterViewModel | null = null;
   scopeStep: ControlCenterStepViewModel | null = null;
+  categoryOptionsFromTree: SelectOption[] = [];
+  selectedCategoryReference: DynamicSubjectCategoryCatalogEntry | null = null;
+  categoryOptionsLoading = false;
+  categoryOptionsError = '';
   stepMessage = '';
   stepMessageSeverity: 'success' | 'warn' = 'warn';
 
   private readonly subscriptions = new Subscription();
   private syncingFromStore = false;
+  private lastLoadedApplicationId: string | null = null;
+  private categoryEntriesById = new Map<number, DynamicSubjectCategoryCatalogEntry>();
 
   constructor(
     private readonly fb: FormBuilder,
     private readonly facade: AdminControlCenterFacade,
-    private readonly router: Router
+    private readonly router: Router,
+    private readonly categoryCatalogService: DynamicSubjectCategoryCatalogService,
+    private readonly dynamicSubjectAccess: DynamicSubjectAccessService
   ) {}
 
   ngOnInit(): void {
@@ -66,6 +79,10 @@ export class ScopeDefinitionPageComponent implements OnInit, OnDestroy {
         }
 
         this.patchFormFromStore(scopeStep.values);
+        const appId = this.normalizeScalar(this.scopeForm.get('applicationId')?.value)
+          ?? this.dynamicSubjectAccess.getApplicationId();
+        this.ensureCategoryOptionsLoaded(appId);
+        this.refreshSelectedCategoryReference();
       })
     );
 
@@ -78,6 +95,27 @@ export class ScopeDefinitionPageComponent implements OnInit, OnDestroy {
           }
 
           this.syncFormToStore();
+        })
+    );
+
+    this.subscriptions.add(
+      this.scopeForm.get('applicationId')!.valueChanges
+        .pipe(auditTime(80))
+        .subscribe(value => {
+          if (this.syncingFromStore) {
+            return;
+          }
+
+          const appId = this.normalizeScalar(value) ?? this.dynamicSubjectAccess.getApplicationId();
+          this.ensureCategoryOptionsLoaded(appId);
+        })
+    );
+
+    this.subscriptions.add(
+      this.scopeForm.get('categoryId')!.valueChanges
+        .pipe(auditTime(40))
+        .subscribe(() => {
+          this.refreshSelectedCategoryReference();
         })
     );
   }
@@ -115,6 +153,10 @@ export class ScopeDefinitionPageComponent implements OnInit, OnDestroy {
   }
 
   getOptionList(fieldKey: string): SelectOption[] {
+    if (fieldKey === 'categoryId' && this.categoryOptionsFromTree.length > 0) {
+      return [...this.categoryOptionsFromTree];
+    }
+
     const matchingField = this.scopeStep?.fields.find(field => field.key === fieldKey);
     return [...(matchingField?.options ?? [])];
   }
@@ -212,6 +254,74 @@ export class ScopeDefinitionPageComponent implements OnInit, OnDestroy {
     for (const [fieldKey, value] of Object.entries(raw)) {
       this.facade.updateFieldValue(this.stepKey, fieldKey, value);
     }
+  }
+
+  private ensureCategoryOptionsLoaded(applicationId: string): void {
+    const normalizedAppId = this.normalizeScalar(applicationId) ?? this.dynamicSubjectAccess.getApplicationId();
+    if (this.lastLoadedApplicationId === normalizedAppId && this.categoryOptionsFromTree.length > 0) {
+      this.refreshSelectedCategoryReference();
+      return;
+    }
+
+    this.lastLoadedApplicationId = normalizedAppId;
+    this.categoryOptionsLoading = true;
+    this.categoryOptionsError = '';
+
+    this.categoryCatalogService.listCreatableCategories(normalizedAppId).subscribe({
+      next: entries => {
+        this.categoryEntriesById = new Map(entries.map(item => [item.categoryId, item] as const));
+        this.categoryOptionsFromTree = entries.map(item => ({
+          label: `${item.pathLabel} (${item.categoryId})`,
+          value: String(item.categoryId)
+        }));
+        this.categoryOptionsLoading = false;
+        this.reconcileSelectedCategoryAgainstParentTree();
+        this.refreshSelectedCategoryReference();
+      },
+      error: () => {
+        this.categoryEntriesById = new Map<number, DynamicSubjectCategoryCatalogEntry>();
+        this.categoryOptionsFromTree = [];
+        this.selectedCategoryReference = null;
+        this.categoryOptionsLoading = false;
+        this.categoryOptionsError = 'تعذر تحميل فئات الشجرة الأم لهذا التطبيق.';
+      }
+    });
+  }
+
+  private reconcileSelectedCategoryAgainstParentTree(): void {
+    const rawCategoryValue = this.scopeForm.get('categoryId')?.value;
+    const normalizedCategoryValue = this.normalizeScalar(rawCategoryValue);
+    if (!normalizedCategoryValue) {
+      return;
+    }
+
+    const categoryId = Number(normalizedCategoryValue);
+    if (!Number.isFinite(categoryId) || categoryId <= 0) {
+      return;
+    }
+
+    if (this.categoryEntriesById.has(Math.trunc(categoryId))) {
+      return;
+    }
+
+    this.stepMessageSeverity = 'warn';
+    this.stepMessage = 'الفئة الحالية لا تظهر ضمن الشجرة الأم للتطبيق الحالي. يرجى اختيار فئة مرجعية صالحة قبل النشر.';
+  }
+
+  private refreshSelectedCategoryReference(): void {
+    const normalizedCategoryValue = this.normalizeScalar(this.scopeForm.get('categoryId')?.value);
+    if (!normalizedCategoryValue) {
+      this.selectedCategoryReference = null;
+      return;
+    }
+
+    const categoryId = Number(normalizedCategoryValue);
+    if (!Number.isFinite(categoryId) || categoryId <= 0) {
+      this.selectedCategoryReference = null;
+      return;
+    }
+
+    this.selectedCategoryReference = this.categoryEntriesById.get(Math.trunc(categoryId)) ?? null;
   }
 
   private markRequiredControlsAsTouched(): void {

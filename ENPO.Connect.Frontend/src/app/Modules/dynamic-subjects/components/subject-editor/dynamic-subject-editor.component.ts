@@ -30,6 +30,7 @@ import {
   RequestPolicyRuntimeContext
 } from 'src/app/Modules/admins/services/request-policy-resolver.service';
 import {
+  AdminControlCenterCanonicalCategoryLink,
   AdminControlCenterRuntimeBridgeContext,
   AdminControlCenterRuntimeBridgeService
 } from '../../services/admin-control-center-runtime-bridge.service';
@@ -77,6 +78,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private suppressDirectionRebuild = false;
   private lastResolvedDirectionKey: string | null = null;
   runtimeBridgeContext: AdminControlCenterRuntimeBridgeContext | null = null;
+  runtimeCanonicalCategoryLink: AdminControlCenterCanonicalCategoryLink | null = null;
   private runtimeBridgeNoticeShown = false;
 
   private controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>();
@@ -136,6 +138,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       this.subscriptions.push(
         this.route.queryParamMap.subscribe(params => {
           this.runtimeBridgeContext = this.runtimeBridgeService.resolveFromQueryParams(params);
+          this.resolveRuntimeCanonicalCategoryLink();
 
           const categoryIdFromQuery = Number(params.get('categoryId') ?? 0);
           const categoryId = this.runtimeBridgeContext?.categoryId ?? categoryIdFromQuery;
@@ -417,6 +420,11 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
     const dynamicFields = this.buildDynamicFieldValues();
     const documentDirection = this.resolveDocumentDirectionForSave(dynamicFields);
+    if (this.runtimeCanonicalCategoryLink?.issues.length) {
+      this.appNotification.warning(this.runtimeCanonicalCategoryLink.issues[0]);
+      return;
+    }
+
     const runtimeValidation = this.runtimeBridgeService.evaluateSubmission(this.runtimeBridgeContext, dynamicFields);
     if (runtimeValidation.blockingIssues.length > 0) {
       this.appNotification.warning(runtimeValidation.blockingIssues[0]);
@@ -1352,6 +1360,35 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     directionControl?.patchValue('', { emitEvent: false });
     this.suppressDirectionRebuild = false;
     this.resetDynamicFormState();
+  }
+
+  private resolveRuntimeCanonicalCategoryLink(): void {
+    if (!this.runtimeBridgeContext) {
+      this.runtimeCanonicalCategoryLink = null;
+      return;
+    }
+
+    const fallbackApplicationId = this.dynamicSubjectAccess.getApplicationId();
+    this.subscriptions.push(
+      this.runtimeBridgeService.resolveCanonicalCategoryLink(this.runtimeBridgeContext, fallbackApplicationId).subscribe({
+        next: link => {
+          this.runtimeCanonicalCategoryLink = link;
+        },
+        error: () => {
+          this.runtimeCanonicalCategoryLink = {
+            applicationId: fallbackApplicationId,
+            categoryId: Number(this.runtimeBridgeContext?.categoryId ?? 0),
+            categoryName: null,
+            parentCategoryId: null,
+            categoryPathLabel: null,
+            canCreate: false,
+            isFoundInParentTree: false,
+            issues: ['تعذر التحقق من ربط النطاق الحالي بالشجرة الأم.'],
+            warnings: []
+          };
+        }
+      })
+    );
   }
 
   private focusFirstInvalidDynamicControl(): void {

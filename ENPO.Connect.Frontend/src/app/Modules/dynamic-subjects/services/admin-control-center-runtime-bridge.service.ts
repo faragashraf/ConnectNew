@@ -1,11 +1,16 @@
 import { Injectable } from '@angular/core';
 import { ParamMap } from '@angular/router';
+import { Observable, of } from 'rxjs';
+import { map } from 'rxjs/operators';
 import {
   SubjectFieldDefinitionDto,
   SubjectFieldValueDto,
   SubjectFormDefinitionDto,
   SubjectGroupDefinitionDto
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
+import {
+  DynamicSubjectCategoryCatalogService
+} from './dynamic-subject-category-catalog.service';
 
 const ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY = 'enpo.admin-control-center.draft.v1';
 
@@ -43,6 +48,7 @@ interface BridgeBlockingRule {
 
 export interface AdminControlCenterRuntimeBridgeContext {
   readonly source: 'admin-control-center';
+  readonly applicationId: string | null;
   readonly categoryId: number;
   readonly documentDirection: 'incoming' | 'outgoing' | null;
   readonly submitBehavior: 'block' | 'confirm' | null;
@@ -62,8 +68,24 @@ export interface RuntimeBridgeSubmissionEvaluation {
   readonly warnings: ReadonlyArray<string>;
 }
 
+export interface AdminControlCenterCanonicalCategoryLink {
+  readonly applicationId: string | null;
+  readonly categoryId: number;
+  readonly categoryName: string | null;
+  readonly parentCategoryId: number | null;
+  readonly categoryPathLabel: string | null;
+  readonly canCreate: boolean;
+  readonly isFoundInParentTree: boolean;
+  readonly issues: ReadonlyArray<string>;
+  readonly warnings: ReadonlyArray<string>;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminControlCenterRuntimeBridgeService {
+  constructor(
+    private readonly categoryCatalogService: DynamicSubjectCategoryCatalogService
+  ) {}
+
   resolveFromQueryParams(params: ParamMap): AdminControlCenterRuntimeBridgeContext | null {
     const source = String(params.get('source') ?? '').trim().toLowerCase();
     if (source !== 'admin-control-center') {
@@ -74,6 +96,7 @@ export class AdminControlCenterRuntimeBridgeService {
     if (!draftState) {
       return {
         source: 'admin-control-center',
+        applicationId: this.normalizeNullable(params.get('scopeApplicationId')),
         categoryId: this.normalizePositiveInt(params.get('categoryId')) ?? 0,
         documentDirection: this.normalizeDirection(params.get('documentDirection')),
         submitBehavior: null,
@@ -104,6 +127,8 @@ export class AdminControlCenterRuntimeBridgeService {
     );
 
     const context = this.normalizeObject(draftState['context']);
+    const scopeApplicationId = this.normalizeNullable(context['applicationId'])
+      ?? this.normalizeNullable(params.get('scopeApplicationId'));
     const queryCategoryId = this.normalizePositiveInt(params.get('categoryId'));
     const scopeCategoryId = this.normalizePositiveInt(context['categoryId']) ?? queryCategoryId ?? 0;
 
@@ -128,6 +153,10 @@ export class AdminControlCenterRuntimeBridgeService {
       issues.push('Category Id غير متوفر داخل النطاق التجريبي.');
     }
 
+    if (!scopeApplicationId) {
+      warnings.push('Application Id غير متوفر داخل النطاق التجريبي. سيتم استخدام تطبيق Dynamic Subjects الافتراضي.');
+    }
+
     if (!String(workflowStep['createConfigRouteKey'] ?? '').trim()) {
       issues.push('Create Config Route Key غير متوفر داخل إعدادات Workflow للنطاق التجريبي.');
     }
@@ -147,6 +176,7 @@ export class AdminControlCenterRuntimeBridgeService {
 
     return {
       source: 'admin-control-center',
+      applicationId: scopeApplicationId,
       categoryId: scopeCategoryId,
       documentDirection: this.normalizeDirection(params.get('documentDirection'))
         ?? this.normalizeDirection(context['documentDirection']),
@@ -161,6 +191,75 @@ export class AdminControlCenterRuntimeBridgeService {
       issues,
       warnings
     };
+  }
+
+  resolveCanonicalCategoryLink(
+    bridge: AdminControlCenterRuntimeBridgeContext | null,
+    fallbackApplicationId: string | null
+  ): Observable<AdminControlCenterCanonicalCategoryLink | null> {
+    if (!bridge || bridge.categoryId <= 0) {
+      return of(null);
+    }
+
+    const applicationId = this.normalizeNullable(bridge.applicationId)
+      ?? this.normalizeNullable(fallbackApplicationId);
+    if (!applicationId) {
+      return of({
+        applicationId: null,
+        categoryId: bridge.categoryId,
+        categoryName: null,
+        parentCategoryId: null,
+        categoryPathLabel: null,
+        canCreate: false,
+        isFoundInParentTree: false,
+        issues: ['Application Id غير متوفر. تعذر التحقق من ربط النطاق بالشجرة الأم.'],
+        warnings: []
+      });
+    }
+
+    return this.categoryCatalogService.resolveCategory(bridge.categoryId, applicationId).pipe(
+      map(entry => {
+        if (!entry) {
+          return {
+            applicationId,
+            categoryId: bridge.categoryId,
+            categoryName: null,
+            parentCategoryId: null,
+            categoryPathLabel: null,
+            canCreate: false,
+            isFoundInParentTree: false,
+            issues: ['النطاق غير مرتبط بعقدة موجودة في الشجرة الأم الحالية.'],
+            warnings: [
+              'تأكد أن Category Id في Admin Control Center يشير لعقدة فعلية ضمن شجرة Dynamic Subjects.'
+            ]
+          } as AdminControlCenterCanonicalCategoryLink;
+        }
+
+        const issues: string[] = [];
+        const warnings: string[] = [];
+        if (!entry.canCreate) {
+          issues.push('العقدة المرجعية في الشجرة الأم غير قابلة للإنشاء المباشر.');
+        }
+        if (!entry.hasDynamicFields) {
+          warnings.push('العقدة المرجعية لا تحتوي حقولًا ديناميكية حسب تعريف الشجرة الحالية.');
+        }
+        if (bridge.issues.length > 0) {
+          warnings.push(...bridge.issues);
+        }
+
+        return {
+          applicationId,
+          categoryId: entry.categoryId,
+          categoryName: entry.categoryName,
+          parentCategoryId: entry.parentCategoryId,
+          categoryPathLabel: entry.pathLabel,
+          canCreate: entry.canCreate,
+          isFoundInParentTree: true,
+          issues,
+          warnings
+        } as AdminControlCenterCanonicalCategoryLink;
+      })
+    );
   }
 
   applyDefinitionOverrides(

@@ -59,6 +59,17 @@
               formControlName="categoryId">
             </p-dropdown>
             <small class="error" *ngIf="controlHasError('categoryId')">{{ controlErrorMessage('categoryId') }}</small>
+            <small class="hint" *ngIf="categoryOptionsLoading">جارٍ تحميل الفئات من الشجرة الأم...</small>
+            <small class="hint success" *ngIf="selectedCategoryReference as selectedRef">
+              المسار المرجعي: {{ selectedRef.pathLabel }} | Parent: {{ selectedRef.parentCategoryId || '-' }}
+            </small>
+            <small class="error" *ngIf="!categoryOptionsLoading && categoryOptionsError.length > 0">
+              {{ categoryOptionsError }}
+            </small>
+            <small class="error"
+              *ngIf="!categoryOptionsLoading && categoryOptionsError.length === 0 && scopeForm.get('categoryId')?.value && !selectedCategoryReference">
+              الفئة المحددة لا تظهر ضمن الشجرة الأم الحالية لهذا التطبيق.
+            </small>
           </article>
 
           <article class="field">
@@ -202,6 +213,19 @@
         <span>الإلزامي المكتمل</span>
         <strong>{{ requiredProgressText }}</strong>
       </div>
+
+      <section class="canonical-ref">
+        <h4>المرجع في الشجرة الأم</h4>
+        <ng-container *ngIf="selectedCategoryReference as selectedRef; else noCanonicalRef">
+          <p><span>المسار:</span> <strong>{{ selectedRef.pathLabel }}</strong></p>
+          <p><span>Category Id:</span> <strong>{{ selectedRef.categoryId }}</strong></p>
+          <p><span>Parent Category Id:</span> <strong>{{ selectedRef.parentCategoryId || '-' }}</strong></p>
+        </ng-container>
+      </section>
+
+      <ng-template #noCanonicalRef>
+        <p class="canonical-ref-empty">اختر فئة صالحة من الشجرة الأم لتثبيت الهوية المرجعية للنطاق.</p>
+      </ng-template>
 
       <section class="missing-list" *ngIf="mandatoryMissingLabels.length > 0; else noMissing">
         <h4>الحقول الناقصة</h4>

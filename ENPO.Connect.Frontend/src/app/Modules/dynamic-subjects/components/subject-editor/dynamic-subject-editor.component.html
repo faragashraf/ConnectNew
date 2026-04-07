@@ -35,6 +35,14 @@
         <span>Route Prefix</span>
         <strong>{{ runtimeBridge.routeKeyPrefix || '-' }}</strong>
       </article>
+      <article>
+        <span>Parent Tree Path</span>
+        <strong>{{ runtimeCanonicalCategoryLink?.categoryPathLabel || '-' }}</strong>
+      </article>
+      <article>
+        <span>Parent Category Id</span>
+        <strong>{{ runtimeCanonicalCategoryLink?.parentCategoryId || '-' }}</strong>
+      </article>
     </div>
 
     <ul class="runtime-issues" *ngIf="runtimeBridge.issues.length > 0">
@@ -43,6 +51,14 @@
 
     <ul class="runtime-warnings" *ngIf="runtimeBridge.warnings.length > 0">
       <li *ngFor="let warning of runtimeBridge.warnings">{{ warning }}</li>
+    </ul>
+
+    <ul class="runtime-issues" *ngIf="runtimeCanonicalCategoryLink && runtimeCanonicalCategoryLink.issues.length > 0">
+      <li *ngFor="let issue of runtimeCanonicalCategoryLink.issues">{{ issue }}</li>
+    </ul>
+
+    <ul class="runtime-warnings" *ngIf="runtimeCanonicalCategoryLink && runtimeCanonicalCategoryLink.warnings.length > 0">
+      <li *ngFor="let warning of runtimeCanonicalCategoryLink.warnings">{{ warning }}</li>
     </ul>
   </section>
 

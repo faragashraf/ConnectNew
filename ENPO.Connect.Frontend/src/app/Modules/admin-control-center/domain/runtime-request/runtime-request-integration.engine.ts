@@ -47,6 +47,10 @@ export class RuntimeRequestIntegrationEngine {
       scopeCreateRouteKey: createConfigRouteKey || 'n/a'
     };
 
+    if (vm.context.applicationId) {
+      queryParams['scopeApplicationId'] = vm.context.applicationId;
+    }
+
     if (categoryId > 0) {
       queryParams['categoryId'] = categoryId;
       queryParams['scopeCategoryId'] = categoryId;
