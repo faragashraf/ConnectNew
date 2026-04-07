@@ -29,6 +29,10 @@ import {
   RequestPolicyResolverService,
   RequestPolicyRuntimeContext
 } from 'src/app/Modules/admins/services/request-policy-resolver.service';
+import {
+  AdminControlCenterRuntimeBridgeContext,
+  AdminControlCenterRuntimeBridgeService
+} from '../../services/admin-control-center-runtime-bridge.service';
 
 @Component({
   selector: 'app-dynamic-subject-editor',
@@ -72,6 +76,8 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private fixedDocumentDirection: string | null = null;
   private suppressDirectionRebuild = false;
   private lastResolvedDirectionKey: string | null = null;
+  runtimeBridgeContext: AdminControlCenterRuntimeBridgeContext | null = null;
+  private runtimeBridgeNoticeShown = false;
 
   private controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>();
   private readonly subscriptions: Subscription[] = [];
@@ -89,7 +95,8 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     private readonly previewFoundation: CentralAdminPreviewFoundationService,
     private readonly genericFormService: GenericFormsService,
     private readonly appNotification: AppNotificationService,
-    private readonly requestPolicyResolver: RequestPolicyResolverService
+    private readonly requestPolicyResolver: RequestPolicyResolverService,
+    private readonly runtimeBridgeService: AdminControlCenterRuntimeBridgeService
   ) {
     this.editorForm = this.fb.group({
       categoryId: [0, Validators.required],
@@ -128,8 +135,21 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     } else {
       this.subscriptions.push(
         this.route.queryParamMap.subscribe(params => {
-          const categoryId = Number(params.get('categoryId') ?? 0);
-          const requestedDirection = this.normalizeDocumentDirection(params.get('documentDirection'));
+          this.runtimeBridgeContext = this.runtimeBridgeService.resolveFromQueryParams(params);
+
+          const categoryIdFromQuery = Number(params.get('categoryId') ?? 0);
+          const categoryId = this.runtimeBridgeContext?.categoryId ?? categoryIdFromQuery;
+          const requestedDirection = this.runtimeBridgeContext?.documentDirection
+            ?? this.normalizeDocumentDirection(params.get('documentDirection'));
+
+          if (!this.runtimeBridgeNoticeShown && this.runtimeBridgeContext) {
+            this.runtimeBridgeNoticeShown = true;
+            if (this.runtimeBridgeContext.issues.length > 0) {
+              this.appNotification.warning(this.runtimeBridgeContext.issues[0]);
+            } else {
+              this.appNotification.info('تم تفعيل وضع التشغيل من Admin Control Center لهذا النموذج.');
+            }
+          }
 
           if (requestedDirection) {
             this.editorForm.patchValue({ documentDirection: requestedDirection }, { emitEvent: false });
@@ -397,6 +417,16 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
     const dynamicFields = this.buildDynamicFieldValues();
     const documentDirection = this.resolveDocumentDirectionForSave(dynamicFields);
+    const runtimeValidation = this.runtimeBridgeService.evaluateSubmission(this.runtimeBridgeContext, dynamicFields);
+    if (runtimeValidation.blockingIssues.length > 0) {
+      this.appNotification.warning(runtimeValidation.blockingIssues[0]);
+      return;
+    }
+
+    if (runtimeValidation.warnings.length > 0) {
+      this.appNotification.info(runtimeValidation.warnings[0]);
+    }
+
     if (this.categoryRequiresDocumentDirection() && !documentDirection) {
       this.editorForm.get('documentDirection')?.markAsTouched();
       this.appNotification.warning('يرجى تحديد اتجاه الطلب (وارد/صادر).');
@@ -658,20 +688,22 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       } as SubjectFieldDefinitionDto;
     });
 
-    return {
+    const policyResolved: SubjectFormDefinitionDto = {
       ...source,
       groups: (source.groups ?? []).map(group => ({ ...group })),
       fields,
       requestPolicy: this.activeRequestPolicy ?? source.requestPolicy
     };
+
+    return this.runtimeBridgeService.applyDefinitionOverrides(policyResolved, this.runtimeBridgeContext);
   }
 
   private buildRuntimePolicyContext(documentDirection: string | null): RequestPolicyRuntimeContext {
     return {
       applicationId: this.dynamicSubjectAccess.getApplicationId(),
       categoryId: Number(this.editorForm.get('categoryId')?.value ?? 0) || null,
-      routeKeyPrefix: 'DynamicSubjects',
-      documentDirection,
+      routeKeyPrefix: this.runtimeBridgeContext?.routeKeyPrefix ?? 'DynamicSubjects',
+      documentDirection: documentDirection ?? this.runtimeBridgeContext?.documentDirection ?? null,
       requestMode: this.isEditMode ? 'edit' : 'create',
       creatorUnitId: null,
       targetUnitId: null,
