@@ -14,6 +14,7 @@ import {
   ControlCenterStepViewModel,
   ControlCenterViewModel
 } from '../domain/models/admin-control-center.view-models';
+import { PreviewSimulationArtifactEngine } from '../domain/preview-simulation/preview-simulation-artifact.engine';
 import {
   AdminControlCenterStore,
   ControlCenterDraftSaveResult,
@@ -29,7 +30,10 @@ export class AdminControlCenterFacade {
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
-  constructor(private readonly store: AdminControlCenterStore) {}
+  constructor(
+    private readonly store: AdminControlCenterStore,
+    private readonly previewArtifactEngine: PreviewSimulationArtifactEngine
+  ) {}
 
   initialize(rawStepKey?: string | null): void {
     this.store.initialize(rawStepKey);
@@ -128,6 +132,7 @@ export class AdminControlCenterFacade {
 
   private buildViewModelFromState(state: ControlCenterState): ControlCenterViewModel {
     const definitions = this.store.getStepDefinitions();
+    const previewDerived = this.previewArtifactEngine.buildDerivedArtifact(state);
     const steps = definitions.map(definition => {
       const matchingState = state.steps.find(step => step.key === definition.key);
       const safeState = matchingState ?? {
@@ -175,7 +180,10 @@ export class AdminControlCenterFacade {
       draftRestoredAt: state.draftRestoredAt,
       draftErrorMessage: state.draftErrorMessage,
       lastSavedAt: state.lastSavedAt,
-      lastPublishedAt: state.lastPublishedAt
+      lastPublishedAt: state.lastPublishedAt,
+      derived: {
+        preview: previewDerived
+      }
     };
   }
 

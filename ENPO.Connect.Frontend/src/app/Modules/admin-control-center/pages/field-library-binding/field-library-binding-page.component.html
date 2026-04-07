@@ -78,6 +78,7 @@
         <header class="card-head">
           <h3>Reusable Field Library</h3>
           <input
+            class="library-search"
             pInputText
             type="text"
             [(ngModel)]="librarySearchTerm"
@@ -85,35 +86,37 @@
             placeholder="بحث بالاسم أو المفتاح" />
         </header>
 
-        <p-table [value]="filteredReusableFields" styleClass="p-datatable-sm">
-          <ng-template pTemplate="header">
-            <tr>
-              <th>Label</th>
-              <th>Field Key</th>
-              <th>Type</th>
-              <th>Action</th>
-            </tr>
-          </ng-template>
+        <div class="table-wrapper table-wrapper--library">
+          <p-table [value]="filteredReusableFields" styleClass="p-datatable-sm library-table">
+            <ng-template pTemplate="header">
+              <tr>
+                <th class="label-col">Label</th>
+                <th class="key-col">Field Key</th>
+                <th class="type-col">Type</th>
+                <th class="actions-col">Action</th>
+              </tr>
+            </ng-template>
 
-          <ng-template pTemplate="body" let-row>
-            <tr>
-              <td>{{ row.label }}</td>
-              <td><code>{{ row.fieldKey }}</code></td>
-              <td>{{ row.type }}</td>
-              <td>
-                <button
-                  pButton
-                  type="button"
-                  class="p-button-text p-button-sm"
-                  icon="pi pi-plus"
-                  label="ربط"
-                  [disabled]="isFieldAlreadyBound(row)"
-                  (click)="onAddFromLibrary(row)">
-                </button>
-              </td>
-            </tr>
-          </ng-template>
-        </p-table>
+            <ng-template pTemplate="body" let-row>
+              <tr>
+                <td class="label-col">{{ row.label }}</td>
+                <td class="key-col"><code>{{ row.fieldKey }}</code></td>
+                <td class="type-col">{{ row.type }}</td>
+                <td class="actions-col">
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-sm"
+                    icon="pi pi-plus"
+                    label="ربط"
+                    [disabled]="isFieldAlreadyBound(row)"
+                    (click)="onAddFromLibrary(row)">
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
       </section>
 
       <section class="card">
@@ -122,92 +125,96 @@
           <small>{{ bindings.length }} حقل</small>
         </header>
 
-        <p-table [value]="bindings" styleClass="p-datatable-sm bindings-table">
-          <ng-template pTemplate="header">
-            <tr>
-              <th>Label</th>
-              <th>Type</th>
-              <th>Field Key</th>
-              <th>Order</th>
-              <th>Visible</th>
-              <th>Required</th>
-              <th>Readonly</th>
-              <th>Default</th>
-              <th>إجراءات</th>
-            </tr>
-          </ng-template>
+        <div class="table-wrapper table-wrapper--bindings">
+          <p-table [value]="bindings" styleClass="p-datatable-sm bindings-table">
+            <ng-template pTemplate="header">
+              <tr>
+                <th class="label-col">Label</th>
+                <th class="type-col">Type</th>
+                <th class="key-col">Field Key</th>
+                <th class="order-col">Order</th>
+                <th class="switch-col">Visible</th>
+                <th class="switch-col">Required</th>
+                <th class="switch-col">Readonly</th>
+                <th class="default-col">Default</th>
+                <th class="actions-col">إجراءات</th>
+              </tr>
+            </ng-template>
 
-          <ng-template pTemplate="body" let-row>
-            <tr>
-              <td>
-                <input
-                  pInputText
-                  [(ngModel)]="row.label"
-                  [ngModelOptions]="{ standalone: true }"
-                  (ngModelChange)="onBindingChanged()" />
-              </td>
-              <td>
-                <p-dropdown appendTo="body"
-                  [options]="fieldTypeOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  [(ngModel)]="row.type"
-                  [ngModelOptions]="{ standalone: true }"
-                  (ngModelChange)="onBindingChanged()">
-                </p-dropdown>
-              </td>
-              <td>
-                <input
-                  pInputText
-                  [(ngModel)]="row.fieldKey"
-                  [ngModelOptions]="{ standalone: true }"
-                  (ngModelChange)="onBindingChanged()" />
-              </td>
-              <td>
-                <input
-                  pInputText
-                  type="number"
-                  min="1"
-                  [(ngModel)]="row.displayOrder"
-                  [ngModelOptions]="{ standalone: true }"
-                  (ngModelChange)="onBindingChanged()" />
-              </td>
-              <td>
-                <p-inputSwitch
-                  [(ngModel)]="row.visible"
-                  [ngModelOptions]="{ standalone: true }"
-                  (ngModelChange)="onBindingChanged()">
-                </p-inputSwitch>
-              </td>
-              <td>
-                <p-inputSwitch
-                  [(ngModel)]="row.required"
-                  [ngModelOptions]="{ standalone: true }"
-                  (ngModelChange)="onBindingChanged()">
-                </p-inputSwitch>
-              </td>
-              <td>
-                <p-inputSwitch
-                  [(ngModel)]="row.readonly"
-                  [ngModelOptions]="{ standalone: true }"
-                  (ngModelChange)="onBindingChanged()">
-                </p-inputSwitch>
-              </td>
-              <td>
-                <input
-                  pInputText
-                  [(ngModel)]="row.defaultValue"
-                  [ngModelOptions]="{ standalone: true }"
-                  (ngModelChange)="onBindingChanged()" />
-              </td>
-              <td class="row-actions">
-                <button pButton type="button" icon="pi pi-arrow-up" class="p-button-text p-button-sm" (click)="onMoveBindingUp(row)"></button>
-                <button pButton type="button" icon="pi pi-arrow-down" class="p-button-text p-button-sm" (click)="onMoveBindingDown(row)"></button>
-                <button pButton type="button" icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm" (click)="onDeleteBinding(row)"></button>
-              </td>
-            </tr>
-          </ng-template>
-        </p-table>
+            <ng-template pTemplate="body" let-row>
+              <tr>
+                <td class="label-col">
+                  <input
+                    pInputText
+                    [(ngModel)]="row.label"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()" />
+                </td>
+                <td class="type-col">
+                  <p-dropdown appendTo="body"
+                    [options]="fieldTypeOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="row.type"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-dropdown>
+                </td>
+                <td class="key-col">
+                  <input
+                    pInputText
+                    [(ngModel)]="row.fieldKey"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()" />
+                </td>
+                <td class="order-col">
+                  <input
+                    pInputText
+                    type="number"
+                    min="1"
+                    [(ngModel)]="row.displayOrder"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()" />
+                </td>
+                <td class="switch-col">
+                  <p-inputSwitch
+                    [(ngModel)]="row.visible"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-inputSwitch>
+                </td>
+                <td class="switch-col">
+                  <p-inputSwitch
+                    [(ngModel)]="row.required"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-inputSwitch>
+                </td>
+                <td class="switch-col">
+                  <p-inputSwitch
+                    [(ngModel)]="row.readonly"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-inputSwitch>
+                </td>
+                <td class="default-col">
+                  <input
+                    pInputText
+                    [(ngModel)]="row.defaultValue"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()" />
+                </td>
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button pButton type="button" icon="pi pi-arrow-up" class="p-button-text p-button-sm" (click)="onMoveBindingUp(row)"></button>
+                    <button pButton type="button" icon="pi pi-arrow-down" class="p-button-text p-button-sm" (click)="onMoveBindingDown(row)"></button>
+                    <button pButton type="button" icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm" (click)="onDeleteBinding(row)"></button>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
       </section>
     </main>
 

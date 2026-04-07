@@ -3,8 +3,6 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { auditTime } from 'rxjs/operators';
-import { FormCompositionEngine } from '../../domain/form-composition/form-composition.engine';
-import { FieldLibraryBindingEngine } from '../../domain/field-library-binding/field-library-binding.engine';
 import {
   ControlCenterStepViewModel,
   ControlCenterViewModel
@@ -14,8 +12,6 @@ import {
   PreviewSimulationDirection,
   PreviewSimulationMode
 } from '../../domain/models/preview-simulation.models';
-import { ValidationRulesEngine } from '../../domain/validation-rules/validation-rules.engine';
-import { PreviewSimulationEngine } from '../../domain/preview-simulation/preview-simulation.engine';
 import { AdminControlCenterFacade } from '../../facades/admin-control-center.facade';
 
 @Component({
@@ -48,11 +44,7 @@ export class PreviewSimulationPageComponent implements OnInit, OnDestroy {
   constructor(
     private readonly fb: FormBuilder,
     private readonly facade: AdminControlCenterFacade,
-    private readonly router: Router,
-    private readonly bindingEngine: FieldLibraryBindingEngine,
-    private readonly compositionEngine: FormCompositionEngine,
-    private readonly validationRulesEngine: ValidationRulesEngine,
-    private readonly previewEngine: PreviewSimulationEngine
+    private readonly router: Router
   ) {}
 
   ngOnInit(): void {
@@ -64,11 +56,12 @@ export class PreviewSimulationPageComponent implements OnInit, OnDestroy {
         const matchingStep = vm.steps.find(step => step.key === this.stepKey) ?? null;
         this.step = matchingStep;
         if (!matchingStep) {
+          this.renderingMap = null;
           return;
         }
 
+        this.renderingMap = vm.derived.preview.renderingMap;
         this.patchFormFromStep(matchingStep.values, vm.context.documentDirection);
-        this.evaluatePreview(false);
       })
     );
 
@@ -80,7 +73,7 @@ export class PreviewSimulationPageComponent implements OnInit, OnDestroy {
             return;
           }
 
-          this.evaluatePreview(true);
+          this.syncPreviewInputsToStore();
         })
     );
   }
@@ -129,7 +122,7 @@ export class PreviewSimulationPageComponent implements OnInit, OnDestroy {
   }
 
   onSaveDraft(): void {
-    this.evaluatePreview(true);
+    this.syncPreviewInputsToStore();
     const draftResult = this.facade.saveDraft();
     this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
     this.stepMessage = draftResult.message;
@@ -137,7 +130,7 @@ export class PreviewSimulationPageComponent implements OnInit, OnDestroy {
 
   onGoNext(): void {
     this.previewForm.markAllAsTouched();
-    this.evaluatePreview(true);
+    this.syncPreviewInputsToStore();
 
     const hasBlockingIssues = (this.renderingMap?.blockingIssues.length ?? 0) > 0;
     if (this.previewForm.invalid || hasBlockingIssues || !this.step?.isCompleted) {
@@ -161,84 +154,14 @@ export class PreviewSimulationPageComponent implements OnInit, OnDestroy {
     this.router.navigate(['/Admin/ControlCenter', safeStep]);
   }
 
-  private evaluatePreview(syncToStore: boolean): void {
-    if (!this.vm) {
-      this.renderingMap = null;
-      return;
-    }
-
-    const input = this.buildPreviewInput(this.vm);
-    this.renderingMap = this.previewEngine.buildRenderingMap(input);
-
-    if (!syncToStore) {
-      return;
-    }
-
+  private syncPreviewInputsToStore(): void {
     const raw = this.previewForm.getRawValue();
-    const payload = this.previewEngine.serializeRenderingMap(this.renderingMap);
-    const token = this.renderingMap.blockingIssues.length === 0 ? 'valid' : null;
 
     this.facade.updateFieldValue(this.stepKey, 'previewDirection', raw.previewDirection);
     this.facade.updateFieldValue(this.stepKey, 'previewMode', raw.previewMode);
     this.facade.updateFieldValue(this.stepKey, 'sampleReference', raw.sampleReference);
     this.facade.updateFieldValue(this.stepKey, 'enableSimulationTrace', raw.enableSimulationTrace);
     this.facade.updateFieldValue(this.stepKey, 'previewNotes', raw.previewNotes);
-    this.facade.updateFieldValue(this.stepKey, 'renderingMapPayload', payload);
-    this.facade.updateFieldValue(this.stepKey, 'previewValidationToken', token);
-  }
-
-  private buildPreviewInput(vm: ControlCenterViewModel): {
-    mode: PreviewSimulationMode;
-    direction: PreviewSimulationDirection;
-    bindings: ReturnType<FieldLibraryBindingEngine['parseBindingsPayload']>;
-    containers: ReturnType<FormCompositionEngine['parseContainersPayload']>;
-    requiredFieldKeys: string[];
-    workflow: {
-      routingMode: string | null;
-      routeResolutionMode: string | null;
-      targetResolutionStrategy: string | null;
-      directionAwareBehavior: string | null;
-      createConfigRouteKey: string | null;
-      viewConfigRouteKey: string | null;
-      routeKeyPrefix: string | null;
-      primaryConfigRouteKey: string | null;
-    };
-  } {
-    const raw = this.previewForm.getRawValue();
-
-    const bindingStep = vm.steps.find(step => step.key === 'field-library-binding');
-    const compositionStep = vm.steps.find(step => step.key === 'form-composition');
-    const workflowStep = vm.steps.find(step => step.key === 'workflow-routing');
-    const validationStep = vm.steps.find(step => step.key === 'validation-rules');
-
-    const bindings = this.bindingEngine.parseBindingsPayload(bindingStep?.values['bindingPayload']);
-    const containers = this.compositionEngine.parseContainersPayload(compositionStep?.values['compositionLayoutPayload']);
-
-    const parsedConditionalPayload = this.validationRulesEngine.parseConditionalPayload(
-      validationStep?.values['conditionalRulesPayload']
-    );
-
-    const requiredFieldKeys = parsedConditionalPayload.requiredRules
-      .filter(rule => rule.isRequired)
-      .map(rule => rule.fieldKey);
-
-    return {
-      mode: this.normalizeMode(raw.previewMode),
-      direction: this.normalizeDirection(raw.previewDirection),
-      bindings,
-      containers,
-      requiredFieldKeys,
-      workflow: {
-        routingMode: this.normalizeNullable(workflowStep?.values['routingMode']),
-        routeResolutionMode: this.normalizeNullable(workflowStep?.values['routeResolutionMode']),
-        targetResolutionStrategy: this.normalizeNullable(workflowStep?.values['targetResolutionStrategy']),
-        directionAwareBehavior: this.normalizeNullable(workflowStep?.values['directionAwareBehavior']),
-        createConfigRouteKey: this.normalizeNullable(workflowStep?.values['createConfigRouteKey']),
-        viewConfigRouteKey: this.normalizeNullable(workflowStep?.values['viewConfigRouteKey']),
-        routeKeyPrefix: this.normalizeNullable(vm.context.routeKeyPrefix),
-        primaryConfigRouteKey: this.normalizeNullable(vm.context.primaryConfigRouteKey)
-      }
-    };
   }
 
   private patchFormFromStep(values: Record<string, unknown>, defaultDirection: 'incoming' | 'outgoing' | null): void {
@@ -270,10 +193,5 @@ export class PreviewSimulationPageComponent implements OnInit, OnDestroy {
   private normalizeDirection(value: unknown): PreviewSimulationDirection {
     const normalized = String(value ?? '').trim();
     return normalized === 'outgoing' ? 'outgoing' : 'incoming';
-  }
-
-  private normalizeNullable(value: unknown): string | null {
-    const normalized = String(value ?? '').trim();
-    return normalized.length > 0 ? normalized : null;
   }
 }

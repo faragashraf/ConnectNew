@@ -142,6 +142,7 @@
 }
 
 .readiness-grid,
+.runtime-grid,
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -149,6 +150,7 @@
 }
 
 .readiness-grid article,
+.runtime-grid article,
 .summary-grid article {
   border: 1px solid #d8e5ef;
   border-radius: 10px;
@@ -159,15 +161,23 @@
 }
 
 .readiness-grid span,
+.runtime-grid span,
 .summary-grid span {
   color: #627d98;
   font-size: 0.75rem;
 }
 
 .readiness-grid strong,
+.runtime-grid strong,
 .summary-grid strong {
   color: #102a43;
   font-size: 0.85rem;
+}
+
+.runtime-grid code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .issues h4,
@@ -235,6 +245,11 @@
   gap: 0.5rem;
 }
 
+.runtime-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .publish-page-unavailable {
   border: 1px solid #d8e5ef;
   border-radius: 16px;
@@ -271,6 +286,7 @@
 
   .grid,
   .readiness-grid,
+  .runtime-grid,
   .summary-grid {
     grid-template-columns: 1fr;
   }

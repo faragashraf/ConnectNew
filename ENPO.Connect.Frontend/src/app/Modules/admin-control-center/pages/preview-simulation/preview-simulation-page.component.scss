@@ -68,13 +68,14 @@
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   gap: 1rem;
 }
 
 .workspace {
   display: grid;
   gap: 1rem;
+  min-width: 0;
 }
 
 .card {
@@ -84,6 +85,8 @@
   padding: 0.95rem;
   display: grid;
   gap: 0.8rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .loading-card {
@@ -158,6 +161,7 @@
   padding: 0.6rem;
   display: grid;
   gap: 0.2rem;
+  min-width: 0;
 }
 
 .route-grid span {
@@ -168,11 +172,18 @@
 .route-grid strong {
   color: #102a43;
   font-size: 0.85rem;
+  min-width: 0;
+}
+
+.route-code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .container-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 0.75rem;
 }
 
@@ -183,23 +194,39 @@
   padding: 0.75rem;
   display: grid;
   gap: 0.55rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .container-card header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .container-card h4 {
   margin: 0;
   color: #102a43;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .header-tags {
   display: flex;
   gap: 0.25rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.table-wrapper {
+  border: 1px solid #d8e5ef;
+  border-radius: 10px;
+  background: #ffffff;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
 }
 
 .empty {
@@ -315,4 +342,23 @@
   .route-grid {
     grid-template-columns: 1fr;
   }
+
+  .container-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+:host ::ng-deep .preview-fields-table .p-datatable-wrapper {
+  overflow: visible;
+}
+
+:host ::ng-deep .preview-fields-table .p-datatable-table {
+  width: 100%;
+  min-width: 42rem;
+}
+
+:host ::ng-deep .preview-fields-table th,
+:host ::ng-deep .preview-fields-table td {
+  white-space: nowrap;
+  vertical-align: top;
 }

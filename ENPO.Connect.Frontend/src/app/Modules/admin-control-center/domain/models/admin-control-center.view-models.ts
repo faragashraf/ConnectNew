@@ -5,6 +5,7 @@ import {
   ControlCenterStepKey,
   ControlCenterStepStatus
 } from './admin-control-center.models';
+import { PreviewSimulationDerivedArtifact } from './preview-simulation.models';
 
 export interface ControlCenterStepViewModel {
   readonly key: ControlCenterStepKey;
@@ -51,4 +52,7 @@ export interface ControlCenterViewModel {
   readonly draftErrorMessage: string | null;
   readonly lastSavedAt: string | null;
   readonly lastPublishedAt: string | null;
+  readonly derived: {
+    readonly preview: PreviewSimulationDerivedArtifact;
+  };
 }

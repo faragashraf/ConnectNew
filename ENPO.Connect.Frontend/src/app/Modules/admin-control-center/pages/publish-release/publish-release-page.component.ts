@@ -9,6 +9,8 @@ import {
 } from '../../domain/models/admin-control-center.view-models';
 import { PublishChangeSummary, PublishReadinessResult } from '../../domain/models/publish-release.models';
 import { PublishReleaseEngine } from '../../domain/publish-release/publish-release.engine';
+import { RuntimeRequestLaunchPlan } from '../../domain/models/runtime-request-integration.models';
+import { RuntimeRequestIntegrationEngine } from '../../domain/runtime-request/runtime-request-integration.engine';
 import { AdminControlCenterFacade } from '../../facades/admin-control-center.facade';
 
 @Component({
@@ -32,6 +34,7 @@ export class PublishReleasePageComponent implements OnInit, OnDestroy {
   step: ControlCenterStepViewModel | null = null;
   changeSummary: PublishChangeSummary | null = null;
   publishReadiness: PublishReadinessResult | null = null;
+  runtimeLaunchPlan: RuntimeRequestLaunchPlan | null = null;
   auditBlockingCount = 0;
   auditWarningCount = 0;
 
@@ -45,6 +48,7 @@ export class PublishReleasePageComponent implements OnInit, OnDestroy {
     private readonly fb: FormBuilder,
     private readonly facade: AdminControlCenterFacade,
     private readonly publishEngine: PublishReleaseEngine,
+    private readonly runtimeIntegrationEngine: RuntimeRequestIntegrationEngine,
     private readonly router: Router
   ) {}
 
@@ -144,6 +148,25 @@ export class PublishReleasePageComponent implements OnInit, OnDestroy {
     this.evaluatePublish(false);
   }
 
+  onOpenRuntimeRequestEntry(): void {
+    if (!this.runtimeLaunchPlan) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'تعذر تجهيز مسار التشغيل الفعلي. أعد فتح خطوة النشر.';
+      return;
+    }
+
+    if (!this.runtimeLaunchPlan.isRuntimeReady) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = this.runtimeLaunchPlan.blockingIssues[0]
+        ?? 'المسار الفعلي غير جاهز بسبب نواقص إلزامية.';
+      return;
+    }
+
+    this.router.navigate([this.runtimeLaunchPlan.runtimePath], {
+      queryParams: this.runtimeLaunchPlan.queryParams
+    });
+  }
+
   goToSafeStep(): void {
     const safeStep = this.facade.resolveSafeStepKey(this.stepKey);
     this.facade.setActiveStepByKey(safeStep);
@@ -179,6 +202,7 @@ export class PublishReleasePageComponent implements OnInit, OnDestroy {
     if (!this.vm) {
       this.changeSummary = null;
       this.publishReadiness = null;
+      this.runtimeLaunchPlan = null;
       return;
     }
 
@@ -188,6 +212,7 @@ export class PublishReleasePageComponent implements OnInit, OnDestroy {
 
     this.auditBlockingCount = auditBlockingIssues.length;
     this.auditWarningCount = auditWarnings.length;
+    this.runtimeLaunchPlan = this.runtimeIntegrationEngine.buildLaunchPlan(this.vm, this.auditBlockingCount);
 
     this.changeSummary = this.publishEngine.buildChangeSummary(this.vm, this.auditWarningCount);
 

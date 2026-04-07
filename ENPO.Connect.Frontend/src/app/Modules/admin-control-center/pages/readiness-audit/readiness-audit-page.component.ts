@@ -14,7 +14,6 @@ import {
   ReadinessAuditCheckGroup,
   ReadinessAuditResult
 } from '../../domain/models/readiness-audit.models';
-import { PreviewSimulationEngine } from '../../domain/preview-simulation/preview-simulation.engine';
 import { ReadinessAuditEngine } from '../../domain/readiness-audit/readiness-audit.engine';
 import { ValidationRulesEngine } from '../../domain/validation-rules/validation-rules.engine';
 import { WorkflowRoutingEngine } from '../../domain/workflow-routing/workflow-routing.engine';
@@ -56,7 +55,6 @@ export class ReadinessAuditPageComponent implements OnInit, OnDestroy {
     private readonly workflowRoutingEngine: WorkflowRoutingEngine,
     private readonly accessEngine: AccessVisibilityEngine,
     private readonly validationRulesEngine: ValidationRulesEngine,
-    private readonly previewEngine: PreviewSimulationEngine,
     private readonly readinessAuditEngine: ReadinessAuditEngine
   ) {}
 
@@ -211,7 +209,6 @@ export class ReadinessAuditPageComponent implements OnInit, OnDestroy {
     const workflowStep = vm.steps.find(step => step.key === 'workflow-routing');
     const accessStep = vm.steps.find(step => step.key === 'access-visibility');
     const validationStep = vm.steps.find(step => step.key === 'validation-rules');
-    const previewStep = vm.steps.find(step => step.key === 'preview-simulation');
 
     const bindings = this.bindingEngine.parseBindingsPayload(bindingStep?.values['bindingPayload']);
     const bindingValidation = this.bindingEngine.validateBindings(bindings);
@@ -353,15 +350,13 @@ export class ReadinessAuditPageComponent implements OnInit, OnDestroy {
       warnings: [...rulesEvaluation.warnings]
     };
 
-    const previewMap = this.previewEngine.parseRenderingMap(previewStep?.values['renderingMapPayload']);
+    const previewMap = vm.derived.preview.renderingMap;
     const previewGroup: ReadinessAuditCheckGroup = {
       category: 'preview',
       title: 'المعاينة والمحاكاة',
       stepKey: 'preview-simulation',
-      blockingIssues: previewMap?.blockingIssues?.length
-        ? [...previewMap.blockingIssues]
-        : ['لم يتم توليد Rendering Map صالح من شاشة Preview.'],
-      warnings: previewMap?.warnings?.length ? [...previewMap.warnings] : []
+      blockingIssues: [...previewMap.blockingIssues],
+      warnings: [...previewMap.warnings]
     };
 
     return [

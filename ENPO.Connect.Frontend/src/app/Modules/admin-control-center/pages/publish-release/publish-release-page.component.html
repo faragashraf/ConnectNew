@@ -119,6 +119,59 @@
         </section>
       </ng-template>
 
+      <section class="card" *ngIf="runtimeLaunchPlan as runtime">
+        <header class="card-head">
+          <h3>مسار تسجيل الطلب الفعلي</h3>
+          <p-tag [value]="runtime.isRuntimeReady ? 'Runtime Ready' : 'يتطلب استكمال'" [severity]="runtime.isRuntimeReady ? 'success' : 'warning'"></p-tag>
+        </header>
+
+        <div class="runtime-grid">
+          <article>
+            <span>المسار المستهدف</span>
+            <strong><code>{{ runtime.runtimePath }}</code></strong>
+          </article>
+          <article>
+            <span>Category Id</span>
+            <strong>{{ runtime.queryParams['categoryId'] || '-' }}</strong>
+          </article>
+          <article>
+            <span>Document Direction</span>
+            <strong>{{ runtime.queryParams['documentDirection'] || '-' }}</strong>
+          </article>
+          <article>
+            <span>Create Config Route Key</span>
+            <strong><code>{{ runtime.queryParams['scopeCreateRouteKey'] || '-' }}</code></strong>
+          </article>
+        </div>
+
+        <section class="issues" *ngIf="runtime.blockingIssues.length > 0">
+          <h4>فجوات مانعة قبل التشغيل الفعلي</h4>
+          <ul>
+            <li *ngFor="let issue of runtime.blockingIssues">{{ issue }}</li>
+          </ul>
+        </section>
+
+        <section class="warnings" *ngIf="runtime.warnings.length > 0">
+          <h4>ملاحظات تكامل</h4>
+          <ul>
+            <li *ngFor="let warning of runtime.warnings">{{ warning }}</li>
+          </ul>
+        </section>
+
+        <div class="runtime-actions">
+          <button
+            pButton
+            type="button"
+            class="p-button-outlined"
+            icon="pi pi-external-link"
+            iconPos="left"
+            label="فتح شاشة تسجيل الطلب"
+            [disabled]="!runtime.isRuntimeReady"
+            (click)="onOpenRuntimeRequestEntry()">
+          </button>
+        </div>
+      </section>
+
       <section class="card" *ngIf="changeSummary as summary">
         <header class="card-head">
           <h3>ملخص التغييرات</h3>

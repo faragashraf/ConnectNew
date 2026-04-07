@@ -83,7 +83,7 @@
         <div class="route-grid">
           <article>
             <span>المسار النهائي</span>
-            <strong><code>{{ map.routeSnapshot.resolvedRouteKey || '-' }}</code></strong>
+            <strong><code class="route-code">{{ map.routeSnapshot.resolvedRouteKey || '-' }}</code></strong>
           </article>
           <article>
             <span>نمط التوجيه</span>
@@ -103,7 +103,7 @@
           </article>
           <article>
             <span>مسار الإعداد الأساسي</span>
-            <strong><code>{{ map.routeSnapshot.primaryConfigRouteKey || '-' }}</code></strong>
+            <strong><code class="route-code">{{ map.routeSnapshot.primaryConfigRouteKey || '-' }}</code></strong>
           </article>
         </div>
       </section>
@@ -124,31 +124,33 @@
               </div>
             </header>
 
-            <p-table [value]="container.fields.slice()" styleClass="p-datatable-sm">
-              <ng-template pTemplate="header">
-                <tr>
-                  <th>الحقل</th>
-                  <th>النوع</th>
-                  <th>إلزامي</th>
-                  <th>قراءة فقط</th>
-                  <th>القيمة الافتراضية</th>
-                </tr>
-              </ng-template>
+            <div class="table-wrapper">
+              <p-table [value]="container.fields.slice()" styleClass="p-datatable-sm preview-fields-table">
+                <ng-template pTemplate="header">
+                  <tr>
+                    <th>الحقل</th>
+                    <th>النوع</th>
+                    <th>إلزامي</th>
+                    <th>قراءة فقط</th>
+                    <th>القيمة الافتراضية</th>
+                  </tr>
+                </ng-template>
 
-              <ng-template pTemplate="body" let-row>
-                <tr>
-                  <td>{{ row.label }} <code>({{ row.fieldKey }})</code></td>
-                  <td>{{ row.type }}</td>
-                  <td>
-                    <p-tag [value]="row.required ? 'نعم' : 'لا'" [severity]="row.required ? 'danger' : 'info'"></p-tag>
-                  </td>
-                  <td>
-                    <p-tag [value]="row.readonly ? 'نعم' : 'لا'" [severity]="row.readonly ? 'warning' : 'success'"></p-tag>
-                  </td>
-                  <td><code>{{ row.defaultValue || '-' }}</code></td>
-                </tr>
-              </ng-template>
-            </p-table>
+                <ng-template pTemplate="body" let-row>
+                  <tr>
+                    <td>{{ row.label }} <code>({{ row.fieldKey }})</code></td>
+                    <td>{{ row.type }}</td>
+                    <td>
+                      <p-tag [value]="row.required ? 'نعم' : 'لا'" [severity]="row.required ? 'danger' : 'info'"></p-tag>
+                    </td>
+                    <td>
+                      <p-tag [value]="row.readonly ? 'نعم' : 'لا'" [severity]="row.readonly ? 'warning' : 'success'"></p-tag>
+                    </td>
+                    <td><code>{{ row.defaultValue || '-' }}</code></td>
+                  </tr>
+                </ng-template>
+              </p-table>
+            </div>
           </article>
         </div>
 

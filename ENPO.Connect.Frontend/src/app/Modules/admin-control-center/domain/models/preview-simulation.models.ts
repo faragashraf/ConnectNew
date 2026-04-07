@@ -61,3 +61,8 @@ export interface PreviewRenderingMap {
   readonly blockingIssues: ReadonlyArray<string>;
   readonly warnings: ReadonlyArray<string>;
 }
+
+export interface PreviewSimulationDerivedArtifact {
+  readonly input: PreviewSimulationInput;
+  readonly renderingMap: PreviewRenderingMap;
+}

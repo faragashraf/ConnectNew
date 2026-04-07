@@ -27,7 +27,9 @@ import { PreviewSimulationPageComponent } from './pages/preview-simulation/previ
 import { ReadinessAuditPageComponent } from './pages/readiness-audit/readiness-audit-page.component';
 import { PublishReleasePageComponent } from './pages/publish-release/publish-release-page.component';
 import { PreviewSimulationEngine } from './domain/preview-simulation/preview-simulation.engine';
+import { PreviewSimulationArtifactEngine } from './domain/preview-simulation/preview-simulation-artifact.engine';
 import { ReadinessAuditEngine } from './domain/readiness-audit/readiness-audit.engine';
+import { RuntimeRequestIntegrationEngine } from './domain/runtime-request/runtime-request-integration.engine';
 import { PublishReleaseEngine } from './domain/publish-release/publish-release.engine';
 import { AdminControlCenterDraftStorageService } from './services/admin-control-center-draft-storage.service';
 import { AdminControlCenterDemoScopeService } from './services/admin-control-center-demo-scope.service';
@@ -69,7 +71,9 @@ import { AdminControlCenterDemoScopeService } from './services/admin-control-cen
     AccessVisibilityEngine,
     ValidationRulesEngine,
     PreviewSimulationEngine,
+    PreviewSimulationArtifactEngine,
     ReadinessAuditEngine,
+    RuntimeRequestIntegrationEngine,
     PublishReleaseEngine
   ]
 })

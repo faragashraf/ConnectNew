@@ -15,6 +15,7 @@ import {
   PersistedControlCenterDraftState
 } from '../services/admin-control-center-draft-storage.service';
 import { AdminControlCenterDemoScopeService } from '../services/admin-control-center-demo-scope.service';
+import { PreviewSimulationArtifactEngine } from '../domain/preview-simulation/preview-simulation-artifact.engine';
 
 export interface ControlCenterPublishResult {
   success: boolean;
@@ -49,9 +50,12 @@ export class AdminControlCenterStore implements OnDestroy {
   constructor(
     private readonly workflowEngine: AdminControlCenterWorkflowEngine,
     private readonly draftStorage: AdminControlCenterDraftStorageService,
-    private readonly demoScopeService: AdminControlCenterDemoScopeService
+    private readonly demoScopeService: AdminControlCenterDemoScopeService,
+    private readonly previewArtifactEngine: PreviewSimulationArtifactEngine
   ) {
-    this.stateSubject = new BehaviorSubject<ControlCenterState>(this.workflowEngine.createInitialState());
+    this.stateSubject = new BehaviorSubject<ControlCenterState>(
+      this.recalculateState(this.workflowEngine.createInitialState())
+    );
     this.state$ = this.stateSubject.asObservable();
   }
 
@@ -74,11 +78,11 @@ export class AdminControlCenterStore implements OnDestroy {
       return;
     }
 
-    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    const current = this.recalculateState(this.stateSubject.value);
     const safeStepKey = this.workflowEngine.resolveSafeStepKey(current, rawStepKey ?? current.activeStepKey);
 
     this.stateSubject.next(
-      this.workflowEngine.recalculateState({
+      this.recalculateState({
         ...current,
         activeStepKey: safeStepKey
       })
@@ -86,7 +90,7 @@ export class AdminControlCenterStore implements OnDestroy {
   }
 
   patchContext(patch: Partial<ControlCenterContextState>): void {
-    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    const current = this.recalculateState(this.stateSubject.value);
     const contextPatch = this.normalizeContextPatch(patch);
     const nextContext: ControlCenterContextState = {
       ...current.context,
@@ -112,7 +116,7 @@ export class AdminControlCenterStore implements OnDestroy {
       return false;
     }
 
-    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    const current = this.recalculateState(this.stateSubject.value);
     this.pushState(
       {
         ...current,
@@ -130,7 +134,7 @@ export class AdminControlCenterStore implements OnDestroy {
       return;
     }
 
-    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    const current = this.recalculateState(this.stateSubject.value);
     const stepExists = current.steps.some(step => step.key === stepKey);
     if (!stepExists) {
       return;
@@ -176,11 +180,11 @@ export class AdminControlCenterStore implements OnDestroy {
   saveDraft(): ControlCenterDraftSaveResult {
     this.clearAutoSaveTimer();
 
-    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    const current = this.recalculateState(this.stateSubject.value);
     const persisted = this.persistState(current, new Date().toISOString());
     if (!persisted.success) {
       this.stateSubject.next(
-        this.workflowEngine.recalculateState({
+        this.recalculateState({
           ...current,
           hasUnsavedChanges: true,
           draftErrorMessage: persisted.message
@@ -196,7 +200,7 @@ export class AdminControlCenterStore implements OnDestroy {
 
     const savedAt = persisted.savedAt ?? new Date().toISOString();
     this.stateSubject.next(
-      this.workflowEngine.recalculateState({
+      this.recalculateState({
         ...current,
         lastSavedAt: savedAt,
         hasUnsavedChanges: false,
@@ -218,9 +222,9 @@ export class AdminControlCenterStore implements OnDestroy {
     const safeStep = this.workflowEngine.resolveSafeStepKey(this.stateSubject.value, rawStepKey);
 
     if (!clearResult.success) {
-      const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+      const current = this.recalculateState(this.stateSubject.value);
       this.stateSubject.next(
-        this.workflowEngine.recalculateState({
+        this.recalculateState({
           ...current,
           draftErrorMessage: clearResult.message
         })
@@ -233,7 +237,7 @@ export class AdminControlCenterStore implements OnDestroy {
       };
     }
 
-    const fresh = this.workflowEngine.recalculateState({
+    const fresh = this.recalculateState({
       ...this.workflowEngine.createInitialState(safeStep),
       hasUnsavedChanges: false,
       draftRestoredAt: null,
@@ -254,10 +258,10 @@ export class AdminControlCenterStore implements OnDestroy {
     this.clearAutoSaveTimer();
 
     const clearResult = this.draftStorage.clearDraft();
-    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    const current = this.recalculateState(this.stateSubject.value);
     const safeStep = this.workflowEngine.resolveSafeStepKey(current, rawStepKey);
 
-    const fresh = this.workflowEngine.recalculateState({
+    const fresh = this.recalculateState({
       ...this.workflowEngine.createInitialState(safeStep),
       hasUnsavedChanges: false,
       draftRestoredAt: null,
@@ -286,7 +290,7 @@ export class AdminControlCenterStore implements OnDestroy {
     const persisted = this.persistState(withDemo, restoredAt);
     if (!persisted.success) {
       this.stateSubject.next(
-        this.workflowEngine.recalculateState({
+        this.recalculateState({
           ...withDemo,
           hasUnsavedChanges: true,
           draftErrorMessage: persisted.message
@@ -302,7 +306,7 @@ export class AdminControlCenterStore implements OnDestroy {
 
     const savedAt = persisted.savedAt ?? restoredAt;
     this.stateSubject.next(
-      this.workflowEngine.recalculateState({
+      this.recalculateState({
         ...withDemo,
         lastSavedAt: savedAt,
         hasUnsavedChanges: false,
@@ -320,7 +324,7 @@ export class AdminControlCenterStore implements OnDestroy {
   publish(): ControlCenterPublishResult {
     this.clearAutoSaveTimer();
 
-    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    const current = this.recalculateState(this.stateSubject.value);
     if (current.blockingIssues.length > 0) {
       return {
         success: false,
@@ -341,7 +345,7 @@ export class AdminControlCenterStore implements OnDestroy {
       now
     );
 
-    const nextState = this.workflowEngine.recalculateState({
+    const nextState = this.recalculateState({
       ...current,
       isPublished: true,
       lastPublishedAt: now,
@@ -376,6 +380,11 @@ export class AdminControlCenterStore implements OnDestroy {
     return this.workflowEngine.getPreviousStepKey(rawStepKey);
   }
 
+  private recalculateState(state: ControlCenterState): ControlCenterState {
+    const withDerivedPreview = this.previewArtifactEngine.applyDerivedArtifactToState(state);
+    return this.workflowEngine.recalculateState(withDerivedPreview);
+  }
+
   private restoreInitialState(rawStepKey?: string | null): ControlCenterState {
     const loadResult = this.draftStorage.loadDraft();
     if (loadResult.status === 'loaded' && loadResult.state) {
@@ -389,7 +398,7 @@ export class AdminControlCenterStore implements OnDestroy {
 
     const initial = this.workflowEngine.createInitialState();
     const safeStep = this.workflowEngine.resolveSafeStepKey(initial, rawStepKey ?? initial.activeStepKey);
-    return this.workflowEngine.recalculateState({
+    return this.recalculateState({
       ...initial,
       activeStepKey: safeStep,
       hasUnsavedChanges: false,
@@ -425,7 +434,7 @@ export class AdminControlCenterStore implements OnDestroy {
       };
     });
 
-    const recalculated = this.workflowEngine.recalculateState({
+    const recalculated = this.recalculateState({
       ...initial,
       context: {
         ...initial.context,
@@ -446,7 +455,7 @@ export class AdminControlCenterStore implements OnDestroy {
       return recalculated;
     }
 
-    return this.workflowEngine.recalculateState({
+    return this.recalculateState({
       ...recalculated,
       activeStepKey: safeStep
     });
@@ -456,8 +465,8 @@ export class AdminControlCenterStore implements OnDestroy {
     nextState: ControlCenterState,
     options: { markUnsaved: boolean; scheduleAutoSave: boolean }
   ): void {
-    const recalculated = this.workflowEngine.recalculateState(nextState);
-    const finalState = this.workflowEngine.recalculateState({
+    const recalculated = this.recalculateState(nextState);
+    const finalState = this.recalculateState({
       ...recalculated,
       hasUnsavedChanges: options.markUnsaved ? true : recalculated.hasUnsavedChanges,
       draftErrorMessage: options.markUnsaved ? null : recalculated.draftErrorMessage
@@ -480,7 +489,7 @@ export class AdminControlCenterStore implements OnDestroy {
   private flushAutoSave(): void {
     this.autoSaveTimer = null;
 
-    const current = this.workflowEngine.recalculateState(this.stateSubject.value);
+    const current = this.recalculateState(this.stateSubject.value);
     if (!current.hasUnsavedChanges) {
       return;
     }
@@ -488,7 +497,7 @@ export class AdminControlCenterStore implements OnDestroy {
     const persisted = this.persistState(current, new Date().toISOString());
     if (!persisted.success) {
       this.stateSubject.next(
-        this.workflowEngine.recalculateState({
+        this.recalculateState({
           ...current,
           draftErrorMessage: persisted.message,
           hasUnsavedChanges: true
@@ -499,7 +508,7 @@ export class AdminControlCenterStore implements OnDestroy {
 
     const savedAt = persisted.savedAt ?? new Date().toISOString();
     this.stateSubject.next(
-      this.workflowEngine.recalculateState({
+      this.recalculateState({
         ...current,
         lastSavedAt: savedAt,
         hasUnsavedChanges: false,

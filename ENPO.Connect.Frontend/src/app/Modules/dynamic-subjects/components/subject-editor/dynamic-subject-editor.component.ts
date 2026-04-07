@@ -129,8 +129,14 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       this.subscriptions.push(
         this.route.queryParamMap.subscribe(params => {
           const categoryId = Number(params.get('categoryId') ?? 0);
+          const requestedDirection = this.normalizeDocumentDirection(params.get('documentDirection'));
+
+          if (requestedDirection) {
+            this.editorForm.patchValue({ documentDirection: requestedDirection }, { emitEvent: false });
+          }
+
           if (categoryId > 0) {
-            this.editorForm.patchValue({ categoryId });
+            this.editorForm.patchValue({ categoryId }, { emitEvent: false });
             this.loadFormDefinition(categoryId);
             this.executeConfigRequests('onCategoryChanged', { categoryId });
           }
