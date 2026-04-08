@@ -5,6 +5,7 @@ export type SummerFieldAliasMap = {
   familyCount: string[];
   extraCount: string[];
   proxyMode: string[];
+  membershipType: string[];
   ownerName: string[];
   ownerFileNumber: string[];
   ownerNationalId: string[];
@@ -22,6 +23,7 @@ export type SummerFieldAliasMap = {
   pricingConfigId: string[];
   pricingMode: string[];
   pricingTransportationMandatory: string[];
+  pricingMembershipType: string[];
   pricingSelectedStayMode: string[];
   pricingPersonsCount: string[];
   pricingAccommodationUnitPrice: string[];
@@ -59,6 +61,7 @@ const SUMMER_DEFAULT_FIELD_ALIASES: SummerFieldAliasMap = {
   familyCount: ['FamilyCount'],
   extraCount: ['Over_Count', 'ExtraCount'],
   proxyMode: ['SummerProxyMode', 'ProxyMode'],
+  membershipType: ['SummerMembershipType', 'SUM2026_MembershipType', 'MembershipType'],
   ownerName: ['Emp_Name', 'EmployeeName', 'EmpName', 'OwnerName'],
   ownerFileNumber: ['Emp_Id', 'EmployeeFileNumber', 'FileNumber'],
   ownerNationalId: ['NationalId', 'EmployeeNationalId', 'National_ID'],
@@ -76,6 +79,7 @@ const SUMMER_DEFAULT_FIELD_ALIASES: SummerFieldAliasMap = {
   pricingConfigId: ['Summer_PricingConfigId', 'Summer_PricingPolicyId'],
   pricingMode: ['Summer_PricingMode'],
   pricingTransportationMandatory: ['Summer_PricingTransportationMandatory'],
+  pricingMembershipType: ['Summer_PricingMembershipType'],
   pricingSelectedStayMode: ['Summer_PricingSelectedStayMode'],
   pricingPersonsCount: ['Summer_PricingPersonsCount'],
   pricingAccommodationUnitPrice: ['Summer_PricingAccommodationPricePerPerson'],
@@ -99,6 +103,7 @@ export function createDefaultSummerFieldAliases(): SummerFieldAliasMap {
     familyCount: [...SUMMER_DEFAULT_FIELD_ALIASES.familyCount],
     extraCount: [...SUMMER_DEFAULT_FIELD_ALIASES.extraCount],
     proxyMode: [...SUMMER_DEFAULT_FIELD_ALIASES.proxyMode],
+    membershipType: [...SUMMER_DEFAULT_FIELD_ALIASES.membershipType],
     ownerName: [...SUMMER_DEFAULT_FIELD_ALIASES.ownerName],
     ownerFileNumber: [...SUMMER_DEFAULT_FIELD_ALIASES.ownerFileNumber],
     ownerNationalId: [...SUMMER_DEFAULT_FIELD_ALIASES.ownerNationalId],
@@ -116,6 +121,7 @@ export function createDefaultSummerFieldAliases(): SummerFieldAliasMap {
     pricingConfigId: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingConfigId],
     pricingMode: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingMode],
     pricingTransportationMandatory: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingTransportationMandatory],
+    pricingMembershipType: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingMembershipType],
     pricingSelectedStayMode: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingSelectedStayMode],
     pricingPersonsCount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingPersonsCount],
     pricingAccommodationUnitPrice: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingAccommodationUnitPrice],

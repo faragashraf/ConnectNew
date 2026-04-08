@@ -101,9 +101,9 @@ namespace Persistence.Services
         {
             SummerWorkflowDomainConstants.PricingFieldKinds.InsuranceAmount
         };
-        private static readonly string[] PricingProxyInsuranceAmountFieldKinds =
+        private static readonly string[] PricingMembershipTypeFieldKinds =
         {
-            SummerWorkflowDomainConstants.PricingFieldKinds.ProxyInsuranceAmount
+            SummerWorkflowDomainConstants.PricingFieldKinds.MembershipType
         };
         private static readonly string[] PricingAppliedInsuranceAmountFieldKinds =
         {
@@ -2132,14 +2132,18 @@ namespace Persistence.Services
             var transportationTotal = ParseDecimal(GetFirstFieldValue(fields, PricingTransportationTotalFieldKinds), 0m);
             var explicitBookingAmount = Math.Max(0m, accommodationTotal + transportationTotal);
 
-            var isProxyBooking = ParseBooleanLike(GetFirstFieldValue(fields, SummerWorkflowDomainConstants.ProxyModeFieldKinds)) == true;
             var appliedInsuranceAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingAppliedInsuranceAmountFieldKinds));
+            var membershipTypeRaw = GetFirstFieldValue(fields, PricingMembershipTypeFieldKinds);
+            if (string.IsNullOrWhiteSpace(membershipTypeRaw))
+            {
+                membershipTypeRaw = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.MembershipTypeFieldKinds);
+            }
+            var normalizedMembershipType = SummerMembershipPolicy.NormalizeMembershipType(membershipTypeRaw);
             var baseInsuranceAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingInsuranceAmountFieldKinds));
-            var proxyInsuranceAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingProxyInsuranceAmountFieldKinds));
             var insuranceAmount = appliedInsuranceAmount
-                ?? (isProxyBooking && proxyInsuranceAmount.HasValue
-                    ? proxyInsuranceAmount.Value
-                    : baseInsuranceAmount ?? proxyInsuranceAmount ?? 0m);
+                ?? (IsMembershipTypeDefined(membershipTypeRaw)
+                    ? SummerMembershipPolicy.ResolveInsuranceAmount(normalizedMembershipType)
+                    : baseInsuranceAmount ?? SummerMembershipPolicy.WorkerInsuranceAmount);
             insuranceAmount = Math.Max(0m, insuranceAmount);
 
             var grandTotalAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingGrandTotalFieldKinds));
@@ -2166,6 +2170,11 @@ namespace Persistence.Services
         private static decimal NormalizeMoneyAmount(decimal value)
         {
             return decimal.Round(Math.Max(0m, value), 2, MidpointRounding.AwayFromZero);
+        }
+
+        private static bool IsMembershipTypeDefined(string? membershipTypeRaw)
+        {
+            return !string.IsNullOrWhiteSpace((membershipTypeRaw ?? string.Empty).Trim());
         }
 
         private static string ResolveBookingTypeLabel(
@@ -2234,9 +2243,16 @@ namespace Persistence.Services
             return normalized.Length > 0 ? normalized : fallback;
         }
 
-        public Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuoteAsync(SummerPricingQuoteRequest request)
+        public async Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuoteAsync(
+            SummerPricingQuoteRequest request,
+            bool hasSummerAdminPermission = false)
         {
-            return _summerPricingService.GetQuoteAsync(request);
+            request ??= new SummerPricingQuoteRequest();
+            var allowMembershipOverride = hasSummerAdminPermission;
+
+            return await _summerPricingService.GetQuoteAsync(
+                request,
+                allowMembershipOverride: allowMembershipOverride);
         }
 
         public async Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalogAsync(

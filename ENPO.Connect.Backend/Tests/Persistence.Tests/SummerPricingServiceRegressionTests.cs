@@ -12,42 +12,42 @@ public class SummerPricingServiceRegressionTests
         {
             147, "W01", "الفوج الأول - الخميس 4/6/2026", 4, 0,
             SummerWorkflowDomainConstants.StayModes.ResidenceOnly, false,
-            "SUM2026-MATROUH-JUN", 2900m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceOnly
+            "SUM2026-MATROUH-JUN", 3300m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceOnly
         };
 
         yield return new object[]
         {
             147, "W08", "الفوج الثامن - الخميس 23/7/2026", 4, 0,
             SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport, false,
-            "SUM2026-MATROUH-JULAUG", 4100m, "JUL_AUG", SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport
+            "SUM2026-MATROUH-JULAUG", 4500m, "JUL_AUG", SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport
         };
 
         yield return new object[]
         {
             148, "W14", "الفوج الرابع عشر - الأحد 6/9/2026", 2, 0,
             SummerWorkflowDomainConstants.StayModes.ResidenceOnly, false,
-            "SUM2026-RASELBAR-SEP-LEGACY", 2100m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport
+            "SUM2026-RASELBAR-SEP-LEGACY", 2400m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport
         };
 
         yield return new object[]
         {
             148, "W14", "الفوج الرابع عشر - الأحد 6/9/2026", 2, 0,
             SummerWorkflowDomainConstants.StayModes.ResidenceOnly, true,
-            "SUM2026-RASELBAR-SEP-LEGACY", 2200m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport
+            "SUM2026-RASELBAR-SEP-LEGACY", 2400m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport
         };
 
         yield return new object[]
         {
             149, "W14", "الفوج الرابع عشر - الأحد 6/9/2026", 3, 0,
             SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport, false,
-            "SUM2026-PORTFOUAD-SEP-LEGACY", 3170m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport
+            "SUM2026-PORTFOUAD-SEP-LEGACY", 3620m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport
         };
 
         yield return new object[]
         {
             149, "W01", "الفوج الأول - الأحد 7/6/2026", 2, 0,
             SummerWorkflowDomainConstants.StayModes.ResidenceOnly, false,
-            "SUM2026-PORTFOUAD-JUN", 1330m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceOnly
+            "SUM2026-PORTFOUAD-JUN", 1780m, "JUN_SEP", SummerWorkflowDomainConstants.StayModes.ResidenceOnly
         };
     }
 

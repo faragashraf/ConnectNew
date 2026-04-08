@@ -35,6 +35,7 @@ namespace Persistence.Services.Summer
         public async Task<CommonResponse<SummerPricingQuoteDto>> GetQuoteAsync(
             SummerPricingQuoteRequest request,
             string? applicationId = null,
+            bool allowMembershipOverride = false,
             CancellationToken cancellationToken = default)
         {
             var response = new CommonResponse<SummerPricingQuoteDto>();
@@ -222,13 +223,13 @@ namespace Persistence.Services.Summer
                     stayModeWasNormalized = true;
                 }
 
-                var insuranceAmount = Math.Max(0m, selectedRule.InsuranceAmount);
-                var proxyInsuranceAmount = selectedRule.ProxyInsuranceAmount.HasValue
-                    ? Math.Max(0m, selectedRule.ProxyInsuranceAmount.Value)
-                    : (decimal?)null;
-                var appliedInsuranceAmount = request.IsProxyBooking && proxyInsuranceAmount.HasValue
-                    ? proxyInsuranceAmount.Value
-                    : insuranceAmount;
+                var resolvedMembershipType = SummerMembershipPolicy.ResolveMembershipType(
+                    request.MembershipType,
+                    allowMembershipOverride);
+                var resolvedMembershipLabel = SummerMembershipPolicy.ResolveMembershipLabel(resolvedMembershipType);
+                var appliedInsuranceAmount = SummerMembershipPolicy.ResolveInsuranceAmount(resolvedMembershipType);
+                var insuranceAmount = appliedInsuranceAmount;
+                decimal? proxyInsuranceAmount = null;
                 var accommodationTotal = personsCount * selectedRule.AccommodationPricePerPerson;
                 var transportationTotal = 0m;
 
@@ -309,6 +310,8 @@ namespace Persistence.Services.Summer
                     PersonsCount = personsCount,
                     AccommodationPricePerPerson = selectedRule.AccommodationPricePerPerson,
                     TransportationPricePerPerson = selectedRule.TransportationPricePerPerson,
+                    MembershipType = resolvedMembershipType,
+                    MembershipTypeLabel = resolvedMembershipLabel,
                     SelectedStayMode = requestedStayMode,
                     NormalizedStayMode = normalizedStayMode,
                     StayModeWasNormalized = stayModeWasNormalized,

@@ -67,7 +67,8 @@ namespace Api.Controllers
         [HttpPost(nameof(GetPricingQuote))]
         public Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuote([FromBody] SummerPricingQuoteRequest request)
         {
-            return _summerWorkflowService.GetPricingQuoteAsync(request);
+            var hasSummerAdminPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerAdmin);
+            return _summerWorkflowService.GetPricingQuoteAsync(request, hasSummerAdminPermission);
         }
 
         [HttpGet(nameof(GetPricingCatalog))]

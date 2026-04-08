@@ -77,6 +77,7 @@ namespace Persistence.Services
             SummerWorkflowDomainConstants.PricingFieldKinds.ConfigId,
             SummerWorkflowDomainConstants.PricingFieldKinds.PolicyId,
             SummerWorkflowDomainConstants.PricingFieldKinds.PricingMode,
+            SummerWorkflowDomainConstants.PricingFieldKinds.MembershipType,
             SummerWorkflowDomainConstants.PricingFieldKinds.TransportationMandatory,
             SummerWorkflowDomainConstants.PricingFieldKinds.SelectedStayMode,
             SummerWorkflowDomainConstants.PricingFieldKinds.PersonsCount,
@@ -199,6 +200,7 @@ namespace Persistence.Services
             var waveLabel = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.WaveLabelFieldKinds);
             var stayMode = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.StayModeFieldKinds);
             var isProxyBooking = ParseBoolean(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.ProxyModeFieldKinds));
+            var requestedMembershipType = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.MembershipTypeFieldKinds);
 
             if (categoryInfo == null)
             {
@@ -217,11 +219,20 @@ namespace Persistence.Services
             var normalizedActorUserId = string.IsNullOrWhiteSpace(actingUserId)
                 ? (messageRequest.CreatedBy ?? string.Empty).Trim()
                 : actingUserId.Trim();
+            var canManageSummerCategory = await CanUserManageSummerCategoryAsync(normalizedActorUserId, categoryInfo.Category.CatId);
+            var allowMembershipOverride = runtime.HasSummerAdminPermission;
+            var resolvedMembershipType = SummerMembershipPolicy.ResolveMembershipType(
+                requestedMembershipType,
+                allowMembershipOverride);
+            UpsertRequestFieldRange(
+                messageRequest.Fields,
+                SummerWorkflowDomainConstants.MembershipTypeFieldKinds,
+                resolvedMembershipType);
             var useFrozenInventory = ParseBoolean(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.UseFrozenUnitFieldKinds));
             var allowAdminFrozenBooking = false;
             if (useFrozenInventory)
             {
-                allowAdminFrozenBooking = await CanUserManageSummerCategoryAsync(normalizedActorUserId, categoryInfo.Category.CatId);
+                allowAdminFrozenBooking = canManageSummerCategory;
                 if (!allowAdminFrozenBooking)
                 {
                     response.Errors.Add(new Error
@@ -250,8 +261,10 @@ namespace Persistence.Services
                 PersonsCount = personsCount,
                 StayMode = stayMode,
                 IsProxyBooking = isProxyBooking,
+                MembershipType = resolvedMembershipType,
                 DestinationName = destinationName
-            });
+            },
+            allowMembershipOverride: allowMembershipOverride);
 
             if (!pricingQuoteResponse.IsSuccess || pricingQuoteResponse.Data == null)
             {
@@ -1065,6 +1078,7 @@ SELECT @result;
                 [SummerWorkflowDomainConstants.PricingFieldKinds.ConfigId] = quote.PricingConfigId,
                 [SummerWorkflowDomainConstants.PricingFieldKinds.PolicyId] = quote.PricingConfigId,
                 [SummerWorkflowDomainConstants.PricingFieldKinds.PricingMode] = quote.PricingMode,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.MembershipType] = quote.MembershipType,
                 [SummerWorkflowDomainConstants.PricingFieldKinds.TransportationMandatory] = quote.TransportationMandatory ? "true" : "false",
                 [SummerWorkflowDomainConstants.PricingFieldKinds.SelectedStayMode] = quote.NormalizedStayMode,
                 [SummerWorkflowDomainConstants.PricingFieldKinds.PersonsCount] = quote.PersonsCount.ToString(CultureInfo.InvariantCulture),

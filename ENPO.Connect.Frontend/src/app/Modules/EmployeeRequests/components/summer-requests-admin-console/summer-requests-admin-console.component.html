@@ -43,7 +43,7 @@
     <header class="pricing-header">
       <div>
         <h3>إعدادات التسعير (قابلة للتعديل من الإدارة)</h3>
-        <p class="pricing-note">الأسعار استرشادية وقابلة للتعديل بعد اعتماد اللجنة.</p>
+        <p class="pricing-note">الأسعار استرشادية وقابلة للتعديل بعد اعتماد اللجنة. قيمة التأمين تُحسب تلقائيًا من نوع العضوية (عامل 500 / غير عامل 1000).</p>
       </div>
       <div class="pricing-actions">
         <button type="button" class="ghost" (click)="loadPricingCatalog(false)" [disabled]="pricingCatalogLoading || pricingCatalogSaving">
@@ -98,8 +98,6 @@
                     <th>إلى</th>
                     <th>سعر الإقامة/فرد</th>
                     <th>سعر الانتقالات/فرد</th>
-                    <th>التأمين</th>
-                    <th>تأمين بالنيابة</th>
                     <th>وضع التسعير</th>
                     <th>مفعّل</th>
                     <th>وصف العرض</th>
@@ -141,12 +139,6 @@
                         [(ngModel)]="entry.record.transportationPricePerPerson"
                         [disabled]="isAccommodationOnlyMode(entry.record)"
                         [ngModelOptions]="{standalone: true}" />
-                    </td>
-                    <td class="cell-number">
-                      <input type="number" min="0" step="0.01" [(ngModel)]="entry.record.insuranceAmount" [ngModelOptions]="{standalone: true}" />
-                    </td>
-                    <td class="cell-number">
-                      <input type="number" min="0" step="0.01" [(ngModel)]="entry.record.proxyInsuranceAmount" [ngModelOptions]="{standalone: true}" />
                     </td>
                     <td class="cell-mode">
                       <select

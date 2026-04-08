@@ -149,7 +149,12 @@ namespace Persistence.Repositories
             }
             return res;
         }
-        public async Task<CommonResponse<MessageDto>> CreateRequest(MessageRequest messageRequest, string userId, string UserEmail, string ip)
+        public async Task<CommonResponse<MessageDto>> CreateRequest(
+            MessageRequest messageRequest,
+            string userId,
+            string UserEmail,
+            string ip,
+            bool hasSummerAdminPermission = false)
         {
             var response = new CommonResponse<MessageDto>();
 
@@ -185,7 +190,15 @@ namespace Persistence.Repositories
                 _summerUnitFreezeService);
             if (isSummerCategory)
             {
-                await categoryHandler.SummerRequests(messageRequest, categoryInfo, response, userId);
+                await categoryHandler.SummerRequests(
+                    messageRequest,
+                    categoryInfo,
+                    response,
+                    userId,
+                    new SummerRequestRuntimeOptions
+                    {
+                        HasSummerAdminPermission = hasSummerAdminPermission
+                    });
                 await TrySendCreateNotificationAsync(response?.Data);
                 _logger.AppendLine("CreateRequest: Handled by SummerRequests path.");
                 return response;

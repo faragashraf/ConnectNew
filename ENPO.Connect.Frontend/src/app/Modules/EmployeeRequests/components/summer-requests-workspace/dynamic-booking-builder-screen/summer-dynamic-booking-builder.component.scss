@@ -46,6 +46,14 @@
   color: #124d73;
 }
 
+.top-controls .membership-select {
+  max-width: 360px;
+}
+
+:host ::ng-deep .top-controls .membership-select .p-dropdown {
+  width: 100%;
+}
+
 .top-controls select {
   border: 1px solid #c5d4e3;
   border-radius: 8px;

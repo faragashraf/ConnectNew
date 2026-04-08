@@ -2742,6 +2742,9 @@
         "proxyMode": [
           "SUM2026_ProxyMode"
         ],
+        "membershipType": [
+          "SUM2026_MembershipType"
+        ],
         "ownerName": [
           "SUM2026_OwnerName"
         ],

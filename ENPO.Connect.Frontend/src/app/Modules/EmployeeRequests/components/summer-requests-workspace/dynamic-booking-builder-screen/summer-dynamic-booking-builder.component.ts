@@ -77,15 +77,21 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   editRequestError = '';
   hasEditChanges = false;
   canUseProxyRegistration = false;
+  canSelectMembershipType = false;
   canUseFrozenUnitsInCurrentFlow = false;
 
   bookingCapacityLoading = false;
   bookingWaveCapacities: SummerWaveCapacityDto[] = [];
   includeFrozenUnitsInBooking = false;
+  membershipTypeValue = 'WORKER_MEMBER';
   pricingQuoteLoading = false;
   pricingQuoteError = '';
   pricingQuote: SummerPricingQuoteDto | null = null;
   myRequests: SummerRequestSummaryDto[] = [];
+  readonly membershipTypeOptions: Array<{ label: string; value: string }> = [
+    { label: 'عضو عامل', value: 'WORKER_MEMBER' },
+    { label: 'عضو غير عامل', value: 'NON_WORKER_MEMBER' }
+  ];
 
   private readonly subscriptions = new Subscription();
   private baseFormConfig: ComponentConfig;
@@ -116,6 +122,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
   ngOnInit(): void {
     this.refreshProxyModeAccess();
+    this.syncMembershipTypeAccessAndDefaults();
     this.resolvedApplicationId = this.applicationId;
     this.resolveEditMode();
     this.applyFormModeConfig();
@@ -161,8 +168,32 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return this.canUseFrozenUnitsToggle && this.includeFrozenUnitsInBooking;
   }
 
+  get selectedMembershipType(): string {
+    return this.membershipTypeValue;
+  }
+
   get submitDisabled(): boolean {
-    return this.isEditMode && !this.hasEditChanges;
+    if (this.isEditMode && !this.hasEditChanges) {
+      return true;
+    }
+
+    if (this.canSelectMembershipType && !this.hasValidMembershipSelection()) {
+      return true;
+    }
+
+    return false;
+  }
+
+  onMembershipTypeChanged(value: string | null | undefined): void {
+    if (!this.canSelectMembershipType) {
+      this.membershipTypeValue = 'WORKER_MEMBER';
+      return;
+    }
+
+    const normalized = this.normalizeMembershipType(String(value ?? ''));
+    this.membershipTypeValue = normalized;
+    this.loadPricingQuote();
+    this.updateEditChangeState();
   }
 
   onDestinationChanged(
@@ -241,6 +272,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     const preserveMessageFields = options?.preserveMessageFields === true;
+    if (!preserveMessageFields) {
+      this.membershipTypeValue = 'WORKER_MEMBER';
+    }
     this.messageDto = {
       ...(this.messageDto ?? {}),
       fields: preserveMessageFields ? [...(this.messageDto?.fields ?? [])] : [],
@@ -254,6 +288,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.ticketForm = form;
     this.applyDestinationFieldDefaults();
     this.applyOwnerDefaultMode(this.isEditMode);
+    this.syncMembershipTypeAccessAndDefaults();
     this.applySummerBusinessRules();
     this.updateEditChangeState();
   }
@@ -284,6 +319,12 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     if (this.matchesAlias(baseName, this.engine.aliases.stayMode)) {
+      this.loadPricingQuote();
+      return;
+    }
+
+    if (this.matchesAlias(baseName, this.engine.aliases.membershipType)) {
+      this.syncMembershipTypeAccessAndDefaults();
       this.loadPricingQuote();
       return;
     }
@@ -416,6 +457,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     const proxyMode = this.canUseProxyRegistration
       ? this.getStringValue(this.engine.aliases.proxyMode)
       : 'false';
+    const membershipType = this.resolveMembershipTypeForSubmission();
     const destinationSlug = String(destination.slug ?? '').trim() || `CAT${destination.categoryId}`;
     const generatedRequestRef = `SUMMER-${destinationSlug}-${employeeFileNumber}-${Date.now()}`;
     const requestRef = this.isEditMode
@@ -464,6 +506,8 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.ensureKeyField(fields, 'Over_Count', extraCount, destination.categoryId);
     this.ensureKeyField(fields, 'SummerStayMode', stayMode, destination.categoryId);
     this.ensureKeyField(fields, 'SummerProxyMode', proxyMode, destination.categoryId);
+    this.ensureKeyField(fields, 'SummerMembershipType', membershipType, destination.categoryId);
+    this.ensureKeyField(fields, 'SUM2026_MembershipType', membershipType, destination.categoryId);
     this.ensureKeyField(fields, 'Summer_UseFrozenUnit', this.includeFrozenUnitsForApi ? 'true' : 'false', destination.categoryId);
     this.ensureKeyField(fields, 'SUM2026_UseFrozenUnit', this.includeFrozenUnitsForApi ? 'true' : 'false', destination.categoryId);
     this.ensureKeyField(fields, 'Description', notes, destination.categoryId);
@@ -872,6 +916,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     const fallbackStayMode = destination.stayModes.length > 0 ? destination.stayModes[0].code : '';
     const requestedStayMode = stayModeValue || fallbackStayMode;
     const isProxyBooking = this.toBoolean(this.getStringValue(this.engine.aliases.proxyMode));
+    const membershipType = this.resolveMembershipTypeForSubmission();
 
     const quoteRequest: SummerPricingQuoteRequest = {
       categoryId: destination.categoryId,
@@ -884,6 +929,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       extraCount,
       stayMode: requestedStayMode,
       isProxyBooking,
+      membershipType,
       destinationName: destination.name
     };
 
@@ -894,7 +940,8 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       quoteRequest.waveLabel,
       quoteRequest.personsCount,
       quoteRequest.stayMode,
-      quoteRequest.isProxyBooking ? '1' : '0'
+      quoteRequest.isProxyBooking ? '1' : '0',
+      quoteRequest.membershipType ?? ''
     ].join('|');
 
     if (quoteKey === this.lastPricingQuoteKey && (this.pricingQuoteLoading || !!this.pricingQuote)) {
@@ -1029,6 +1076,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
     if (destination.stayModes.length > 1 && !stayMode) {
       alerts.push('يرجى اختيار نوع الحجز.');
+    }
+
+    if (this.canSelectMembershipType && !this.hasValidMembershipSelection()) {
+      alerts.push('يرجى اختيار نوع العضوية.');
     }
 
     const maxFamily = destination.familyOptions.length > 0 ? Math.max(...destination.familyOptions) : 0;
@@ -1237,6 +1288,73 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return aliases.some(alias => alias.toLowerCase() === lowered);
   }
 
+  private syncMembershipTypeAccessAndDefaults(): void {
+    const requested = this.normalizeMembershipType(this.membershipTypeValue);
+    const enforced = this.canSelectMembershipType ? requested : 'WORKER_MEMBER';
+    this.membershipTypeValue = enforced;
+
+    const membershipControl = this.engine.resolveControl(
+      this.ticketForm,
+      this.genericFormService,
+      this.engine.aliases.membershipType
+    );
+    if (!membershipControl) {
+      return;
+    }
+
+    membershipControl.setValue(enforced, { emitEvent: false });
+    if (this.canSelectMembershipType) {
+      membershipControl.enable({ emitEvent: false });
+      membershipControl.setValidators([Validators.required]);
+    } else {
+      membershipControl.clearValidators();
+      membershipControl.disable({ emitEvent: false });
+    }
+    membershipControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private resolveMembershipTypeForSubmission(): string {
+    if (!this.canSelectMembershipType) {
+      return 'WORKER_MEMBER';
+    }
+
+    return this.normalizeMembershipType(this.membershipTypeValue);
+  }
+
+  private hasValidMembershipSelection(): boolean {
+    if (!this.canSelectMembershipType) {
+      return true;
+    }
+
+    const normalized = this.normalizeMembershipType(this.membershipTypeValue);
+    return this.membershipTypeOptions.some(item => item.value === normalized);
+  }
+
+  private normalizeMembershipType(value: string): string {
+    const raw = String(value ?? '').trim();
+    if (raw.length === 0) {
+      return 'WORKER_MEMBER';
+    }
+
+    const token = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (token === 'NONWORKERMEMBER' || token === 'NONWORKER') {
+      return 'NON_WORKER_MEMBER';
+    }
+
+    if (token === 'WORKERMEMBER' || token === 'WORKER') {
+      return 'WORKER_MEMBER';
+    }
+
+    const normalizedArabic = raw
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/\s+/g, '');
+    if (normalizedArabic.includes('غيرعامل')) {
+      return 'NON_WORKER_MEMBER';
+    }
+
+    return 'WORKER_MEMBER';
+  }
+
   private toBoolean(value: unknown): boolean {
     if (typeof value === 'boolean') {
       return value;
@@ -1273,6 +1391,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         const authSub = this.authObjectsService.authObject$.subscribe(() => {
           this.refreshProxyModeAccess();
           this.applyOwnerDefaultMode(this.isEditMode);
+          this.syncMembershipTypeAccessAndDefaults();
         });
         this.subscriptions.add(authSub);
       },
@@ -1311,25 +1430,31 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     try {
       const hasSummerAdminPermission = this.authObjectsService.checkAuthFun('SummerAdminFunc');
       this.canUseProxyRegistration = hasSummerAdminPermission;
+      this.canSelectMembershipType = hasSummerAdminPermission;
       this.canUseFrozenUnitsInCurrentFlow = hasSummerAdminPermission;
       if (!this.canUseFrozenUnitsInCurrentFlow) {
         this.includeFrozenUnitsInBooking = false;
       }
     } catch {
       this.canUseProxyRegistration = false;
+      this.canSelectMembershipType = false;
       this.canUseFrozenUnitsInCurrentFlow = false;
       this.includeFrozenUnitsInBooking = false;
     }
   }
 
   private filterRestrictedFields(fields: CdCategoryMandDto[]): CdCategoryMandDto[] {
-    if (this.canUseProxyRegistration) {
-      return [...(fields ?? [])];
-    }
-
     return (fields ?? []).filter(field => {
       const key = String(field?.mendField ?? '').trim();
-      return !this.matchesAlias(key, this.engine.aliases.proxyMode);
+      if (this.matchesAlias(key, this.engine.aliases.membershipType)) {
+        return false;
+      }
+
+      if (!this.canUseProxyRegistration && this.matchesAlias(key, this.engine.aliases.proxyMode)) {
+        return false;
+      }
+
+      return true;
     });
   }
 
@@ -1527,6 +1652,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       categoryCd: destinationId,
       fields: [...(message?.fields ?? [])]
     } as MessageDto;
+    this.membershipTypeValue = this.normalizeMembershipType(
+      this.getFieldTextByAliases(this.messageDto.fields ?? [], this.engine.aliases.membershipType)
+    );
 
     this.loadedEditRequestId = messageId;
     this.initialEditSignature = '';
@@ -1577,6 +1705,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     try {
       return JSON.stringify({
         form: rawFormValue,
+        membershipType: this.resolveMembershipTypeForSubmission(),
         files
       });
     } catch {

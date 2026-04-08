@@ -20,6 +20,20 @@
         </option>
       </select>
     </label>
+    <label *ngIf="canSelectMembershipType" class="membership-select">
+      <span class="required-label">نوع العضوية</span>
+      <p-dropdown
+        [options]="membershipTypeOptions"
+        optionLabel="label"
+        optionValue="value"
+        [appendTo]="'body'"
+        [placeholder]="'اختر نوع العضوية'"
+        [disabled]="loadingMetadata || loadingEditRequest || submitting"
+        [ngModel]="selectedMembershipType"
+        [ngModelOptions]="{ standalone: true }"
+        (onChange)="onMembershipTypeChanged($event.value)">
+      </p-dropdown>
+    </label>
     <small class="meta-error" *ngIf="metadataError.length > 0">{{ metadataError }}</small>
     <small class="meta-error" *ngIf="editRequestError.length > 0">{{ editRequestError }}</small>
     <small class="mode-note" *ngIf="isEditMode && editRequestError.length === 0 && !loadingEditRequest">
@@ -89,6 +103,10 @@
       <article class="pricing-item">
         <span>نوع الحجز المعتمد</span>
         <strong>{{ resolveStayModeLabel(quote.normalizedStayMode) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>نوع العضوية</span>
+        <strong>{{ quote.membershipTypeLabel || '-' }}</strong>
       </article>
       <article class="pricing-item">
         <span>إجمالي الإقامة</span>

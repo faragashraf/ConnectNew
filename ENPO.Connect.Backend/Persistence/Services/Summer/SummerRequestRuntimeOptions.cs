@@ -9,4 +9,7 @@ public sealed class SummerRequestRuntimeOptions
 
     // Seed mode can skip expensive response hydration that depends on external systems.
     public bool SkipResponseHydration { get; init; }
+
+    // Mirrors SummerAdminFunc permission from the authenticated caller.
+    public bool HasSummerAdminPermission { get; init; }
 }

@@ -140,6 +140,7 @@ public class SummerPricingQuoteRequest
     public int? ExtraCount { get; set; }
     public string? StayMode { get; set; }
     public bool IsProxyBooking { get; set; }
+    public string? MembershipType { get; set; }
     public string? DestinationName { get; set; }
 }
 
@@ -156,6 +157,8 @@ public class SummerPricingQuoteDto
     public int PersonsCount { get; set; }
     public decimal AccommodationPricePerPerson { get; set; }
     public decimal TransportationPricePerPerson { get; set; }
+    public string MembershipType { get; set; } = string.Empty;
+    public string MembershipTypeLabel { get; set; } = string.Empty;
     public string SelectedStayMode { get; set; } = string.Empty;
     public string NormalizedStayMode { get; set; } = string.Empty;
     public bool StayModeWasNormalized { get; set; }

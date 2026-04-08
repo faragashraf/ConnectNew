@@ -114,6 +114,7 @@ internal static class SummerPricingTestDataFactory
         int extraCount = 0,
         string stayMode = SummerWorkflowDomainConstants.StayModes.ResidenceOnly,
         bool isProxyBooking = false,
+        string membershipType = SummerWorkflowDomainConstants.MembershipTypes.Worker,
         int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear,
         string destinationName = "")
     {
@@ -127,6 +128,7 @@ internal static class SummerPricingTestDataFactory
             ExtraCount = extraCount,
             StayMode = stayMode,
             IsProxyBooking = isProxyBooking,
+            MembershipType = membershipType,
             DestinationName = destinationName
         };
     }

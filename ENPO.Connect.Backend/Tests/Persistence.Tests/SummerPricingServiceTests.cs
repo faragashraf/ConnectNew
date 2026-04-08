@@ -32,7 +32,7 @@ public class SummerPricingServiceTests
         Assert.NotNull(response.Data);
         Assert.Equal(696m, response.Data.AccommodationPricePerPerson);
         Assert.Equal(600m, response.Data.TransportationPricePerPerson);
-        Assert.Equal(3480m, response.Data.GrandTotal);
+        Assert.Equal(3980m, response.Data.GrandTotal);
         Assert.Equal(0m, response.Data.TransportationTotal);
         Assert.Equal(SummerWorkflowDomainConstants.StayModes.ResidenceOnly, response.Data.NormalizedStayMode);
         Assert.DoesNotContain("تم اعتماد تسعير الحجز", response.Data.DisplayText);
@@ -72,7 +72,7 @@ public class SummerPricingServiceTests
         Assert.Equal(600m, response.Data.TransportationPricePerPerson);
         Assert.Equal(4842m, response.Data.AccommodationTotal);
         Assert.Equal(3600m, response.Data.TransportationTotal);
-        Assert.Equal(8442m, response.Data.GrandTotal);
+        Assert.Equal(8942m, response.Data.GrandTotal);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class SummerPricingServiceTests
         Assert.Equal(350m, response.Data.TransportationPricePerPerson);
         Assert.Equal(2784m, response.Data.AccommodationTotal);
         Assert.Equal(1400m, response.Data.TransportationTotal);
-        Assert.Equal(4184m, response.Data.GrandTotal);
+        Assert.Equal(4684m, response.Data.GrandTotal);
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public class SummerPricingServiceTests
         Assert.True(response.Data.TransportationMandatory);
         Assert.True(response.Data.StayModeWasNormalized);
         Assert.Equal(SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport, response.Data.NormalizedStayMode);
-        Assert.Equal(2088m, response.Data.GrandTotal);
+        Assert.Equal(2588m, response.Data.GrandTotal);
         Assert.Equal(0m, response.Data.TransportationTotal);
     }
 
@@ -193,11 +193,11 @@ public class SummerPricingServiceTests
 
         Assert.True(quoteResponse.IsSuccess);
         Assert.NotNull(quoteResponse.Data);
-        Assert.Equal(2620m, quoteResponse.Data.GrandTotal);
+        Assert.Equal(3120m, quoteResponse.Data.GrandTotal);
     }
 
     [Fact]
-    public async Task Quote_AppliesBaseInsurance_ForNormalBooking()
+    public async Task Quote_UsesWorkerInsurance_WhenMembershipOverrideNotAllowed()
     {
         await using var context = CreateContext();
         SeedDefaultCatalog(context);
@@ -234,19 +234,21 @@ public class SummerPricingServiceTests
             PeriodKey = "JUN_SEP",
             PersonsCount = 2,
             StayMode = "RESIDENCE_WITH_TRANSPORT",
-            IsProxyBooking = false
+            IsProxyBooking = true,
+            MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
         });
 
         Assert.True(quoteResponse.IsSuccess);
         Assert.NotNull(quoteResponse.Data);
-        Assert.Equal(120m, quoteResponse.Data.InsuranceAmount);
-        Assert.Equal(180m, quoteResponse.Data.ProxyInsuranceAmount);
-        Assert.Equal(120m, quoteResponse.Data.AppliedInsuranceAmount);
-        Assert.Equal(2740m, quoteResponse.Data.GrandTotal);
+        Assert.Equal(SummerWorkflowDomainConstants.MembershipTypes.Worker, quoteResponse.Data.MembershipType);
+        Assert.Equal(500m, quoteResponse.Data.InsuranceAmount);
+        Assert.Null(quoteResponse.Data.ProxyInsuranceAmount);
+        Assert.Equal(500m, quoteResponse.Data.AppliedInsuranceAmount);
+        Assert.Equal(3120m, quoteResponse.Data.GrandTotal);
     }
 
     [Fact]
-    public async Task Quote_AppliesProxyInsurance_WhenProxyBooking()
+    public async Task Quote_UsesSelectedMembershipInsurance_WhenOverrideAllowed()
     {
         await using var context = CreateContext();
         SeedDefaultCatalog(context);
@@ -283,13 +285,56 @@ public class SummerPricingServiceTests
             PeriodKey = "JUN_SEP",
             PersonsCount = 2,
             StayMode = "RESIDENCE_WITH_TRANSPORT",
-            IsProxyBooking = true
-        });
+            IsProxyBooking = true,
+            MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
+        },
+        allowMembershipOverride: true);
 
         Assert.True(quoteResponse.IsSuccess);
         Assert.NotNull(quoteResponse.Data);
-        Assert.Equal(180m, quoteResponse.Data.AppliedInsuranceAmount);
-        Assert.Equal(2800m, quoteResponse.Data.GrandTotal);
+        Assert.Equal(SummerWorkflowDomainConstants.MembershipTypes.NonWorker, quoteResponse.Data.MembershipType);
+        Assert.Equal(1000m, quoteResponse.Data.AppliedInsuranceAmount);
+        Assert.Equal(3620m, quoteResponse.Data.GrandTotal);
+    }
+
+    [Fact]
+    public async Task Quote_IgnoresProxyFlag_ForInsuranceCalculation()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+        var service = new SummerPricingService(context);
+
+        var quoteWithoutProxy = await service.GetQuoteAsync(new SummerPricingQuoteRequest
+        {
+            CategoryId = 147,
+            SeasonYear = 2026,
+            PeriodKey = "JUN_SEP",
+            PersonsCount = 2,
+            StayMode = "RESIDENCE_WITH_TRANSPORT",
+            IsProxyBooking = false,
+            MembershipType = SummerWorkflowDomainConstants.MembershipTypes.Worker
+        },
+        allowMembershipOverride: true);
+
+        var quoteWithProxy = await service.GetQuoteAsync(new SummerPricingQuoteRequest
+        {
+            CategoryId = 147,
+            SeasonYear = 2026,
+            PeriodKey = "JUN_SEP",
+            PersonsCount = 2,
+            StayMode = "RESIDENCE_WITH_TRANSPORT",
+            IsProxyBooking = true,
+            MembershipType = SummerWorkflowDomainConstants.MembershipTypes.Worker
+        },
+        allowMembershipOverride: true);
+
+        Assert.True(quoteWithoutProxy.IsSuccess);
+        Assert.True(quoteWithProxy.IsSuccess);
+        Assert.NotNull(quoteWithoutProxy.Data);
+        Assert.NotNull(quoteWithProxy.Data);
+        Assert.Equal(500m, quoteWithoutProxy.Data.AppliedInsuranceAmount);
+        Assert.Equal(500m, quoteWithProxy.Data.AppliedInsuranceAmount);
+        Assert.Equal(quoteWithoutProxy.Data.GrandTotal, quoteWithProxy.Data.GrandTotal);
     }
 
     [Fact]

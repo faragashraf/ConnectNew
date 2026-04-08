@@ -159,6 +159,65 @@ public class SummerWorkflowServicePricingAuthorizationTests
         Assert.Empty(response.Errors);
     }
 
+    [Fact]
+    public async Task GetPricingQuoteAsync_NonAdmin_IgnoresNonWorkerMembershipSelection()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedSummerDestinationCatalog(connectContext);
+        SeedSummerPricingCatalog(connectContext);
+        await connectContext.SaveChangesAsync();
+
+        var service = CreateService(connectContext, gpaContext);
+        var response = await service.GetPricingQuoteAsync(
+            new SummerPricingQuoteRequest
+            {
+                CategoryId = 147,
+                SeasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear,
+                PeriodKey = "JUN_SEP",
+                PersonsCount = 2,
+                StayMode = SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
+                IsProxyBooking = true,
+                MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
+            },
+            hasSummerAdminPermission: false);
+
+        Assert.True(response.IsSuccess);
+        Assert.NotNull(response.Data);
+        Assert.Equal(SummerWorkflowDomainConstants.MembershipTypes.Worker, response.Data!.MembershipType);
+        Assert.Equal(500m, response.Data.AppliedInsuranceAmount);
+    }
+
+    [Fact]
+    public async Task GetPricingQuoteAsync_Admin_CanSelectNonWorkerMembership()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedSummerDestinationCatalog(connectContext);
+        SeedSummerPricingCatalog(connectContext);
+        await connectContext.SaveChangesAsync();
+
+        var service = CreateService(connectContext, gpaContext);
+        var response = await service.GetPricingQuoteAsync(
+            new SummerPricingQuoteRequest
+            {
+                CategoryId = 147,
+                SeasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear,
+                PeriodKey = "JUN_SEP",
+                PersonsCount = 2,
+                StayMode = SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
+                MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
+            },
+            hasSummerAdminPermission: true);
+
+        Assert.True(response.IsSuccess);
+        Assert.NotNull(response.Data);
+        Assert.Equal(SummerWorkflowDomainConstants.MembershipTypes.NonWorker, response.Data!.MembershipType);
+        Assert.Equal(1000m, response.Data.AppliedInsuranceAmount);
+    }
+
     private static SummerWorkflowService CreateService(ConnectContext connectContext, GPAContext gpaContext)
     {
         return new SummerWorkflowService(
@@ -238,6 +297,51 @@ public class SummerWorkflowServicePricingAuthorizationTests
             CdmendType = "Textarea",
             CdmendTxt = SummerWorkflowDomainConstants.DestinationCatalogMend,
             CDMendLbl = "Destination Catalog",
+            Placeholder = string.Empty,
+            DefaultValue = string.Empty,
+            CdmendTbl = payload,
+            CdmendDatatype = "json",
+            Required = false,
+            RequiredTrue = false,
+            Email = false,
+            Pattern = false,
+            MinValue = null,
+            MaxValue = null,
+            Cdmendmask = null,
+            CdmendStat = false,
+            Width = 0,
+            Height = 0,
+            IsDisabledInit = false,
+            IsSearchable = false,
+            ApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId
+        });
+    }
+
+    private static void SeedSummerPricingCatalog(ConnectContext context)
+    {
+        var payload = @"{
+  ""seasonYear"": 2026,
+  ""pricingRecords"": [
+    {
+      ""pricingConfigId"": ""SUM2026-MATROUH-JUN-SEP"",
+      ""categoryId"": 147,
+      ""seasonYear"": 2026,
+      ""periodKey"": ""JUN_SEP"",
+      ""accommodationPricePerPerson"": 700,
+      ""transportationPricePerPerson"": 200,
+      ""pricingMode"": ""AccommodationAndTransportationOptional"",
+      ""transportationMandatory"": false,
+      ""isActive"": true
+    }
+  ]
+}";
+
+        context.Cdmends.Add(new Cdmend
+        {
+            CdmendSql = 925002,
+            CdmendType = "Textarea",
+            CdmendTxt = SummerWorkflowDomainConstants.PricingCatalogMend,
+            CDMendLbl = "Pricing Catalog",
             Placeholder = string.Empty,
             DefaultValue = string.Empty,
             CdmendTbl = payload,

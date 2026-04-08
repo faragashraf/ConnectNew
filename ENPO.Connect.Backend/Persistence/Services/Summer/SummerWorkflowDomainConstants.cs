@@ -25,6 +25,7 @@ namespace Persistence.Services.Summer
         public static readonly string[] SeasonYearFieldKinds = { "SummerSeasonYear", "SUM2026_SeasonYear", "SeasonYear" };
         public static readonly string[] StayModeFieldKinds = { "SummerStayMode", "SUM2026_StayMode", "StayMode" };
         public static readonly string[] ProxyModeFieldKinds = { "SummerProxyMode", "SUM2026_ProxyMode", "ProxyMode" };
+        public static readonly string[] MembershipTypeFieldKinds = { "SummerMembershipType", "SUM2026_MembershipType", "MembershipType" };
         public static readonly string[] UseFrozenUnitFieldKinds = { "Summer_UseFrozenUnit", "SUM2026_UseFrozenUnit", "UseFrozenUnit" };
         public static readonly string[] DestinationIdFieldKinds = { "SummerDestinationId", "SUM2026_DestinationId" };
         public static readonly string[] DestinationNameFieldKinds = { "SummerDestinationName", "SUM2026_DestinationName" };
@@ -48,11 +49,18 @@ namespace Persistence.Services.Summer
             public const string TransportationMandatoryIncluded = "TransportationMandatoryIncluded";
         }
 
+        public static class MembershipTypes
+        {
+            public const string Worker = "WORKER_MEMBER";
+            public const string NonWorker = "NON_WORKER_MEMBER";
+        }
+
         public static class PricingFieldKinds
         {
             public const string ConfigId = "Summer_PricingConfigId";
             public const string PolicyId = "Summer_PricingPolicyId";
             public const string PricingMode = "Summer_PricingMode";
+            public const string MembershipType = "Summer_PricingMembershipType";
             public const string TransportationMandatory = "Summer_PricingTransportationMandatory";
             public const string SelectedStayMode = "Summer_PricingSelectedStayMode";
             public const string PersonsCount = "Summer_PricingPersonsCount";

@@ -154,6 +154,7 @@ export interface SummerPricingQuoteRequest {
   extraCount?: number | null;
   stayMode?: string;
   isProxyBooking?: boolean;
+  membershipType?: string;
   destinationName?: string;
 }
 
@@ -169,6 +170,8 @@ export interface SummerPricingQuoteDto {
   personsCount: number;
   accommodationPricePerPerson: number;
   transportationPricePerPerson: number;
+  membershipType: string;
+  membershipTypeLabel: string;
   selectedStayMode: string;
   normalizedStayMode: string;
   stayModeWasNormalized: boolean;
