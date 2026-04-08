@@ -133,6 +133,68 @@ public class DynamicSubjectsAdminCatalogController : ControllerBase
         return _adminCatalogService.DeleteGroupAsync(groupId, GetCurrentUserId(), cancellationToken);
     }
 
+    [HttpGet("FieldLibrary/Lookups")]
+    public Task<CommonResponse<AdminCatalogFieldLookupsDto>> GetFieldLookups(
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.GetFieldLookupsAsync(GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpGet("FieldLibrary")]
+    public Task<CommonResponse<IEnumerable<AdminCatalogFieldListItemDto>>> GetFieldLibrary(
+        string? appId,
+        string? search,
+        string? status,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.GetFieldsAsync(GetCurrentUserId(), appId, search, status, cancellationToken);
+    }
+
+    [HttpGet("FieldLibrary/{applicationId}/{fieldKey}")]
+    public Task<CommonResponse<AdminCatalogFieldDto>> GetField(
+        string applicationId,
+        string fieldKey,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.GetFieldAsync(applicationId, fieldKey, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpPost("FieldLibrary")]
+    public Task<CommonResponse<AdminCatalogFieldDto>> CreateField(
+        [FromBody] AdminCatalogFieldCreateRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.CreateFieldAsync(request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpPut("FieldLibrary/{applicationId}/{fieldKey}")]
+    public Task<CommonResponse<AdminCatalogFieldDto>> UpdateField(
+        string applicationId,
+        string fieldKey,
+        [FromBody] AdminCatalogFieldUpdateRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.UpdateFieldAsync(applicationId, fieldKey, request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpGet("FieldLibrary/{applicationId}/{fieldKey}/DeleteDiagnostics")]
+    public Task<CommonResponse<AdminCatalogFieldDeleteDiagnosticsDto>> DiagnoseFieldDelete(
+        string applicationId,
+        string fieldKey,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.DiagnoseFieldDeleteAsync(applicationId, fieldKey, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpDelete("FieldLibrary/{applicationId}/{fieldKey}")]
+    public Task<CommonResponse<AdminCatalogDeleteResultDto>> DeleteField(
+        string applicationId,
+        string fieldKey,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.DeleteFieldAsync(applicationId, fieldKey, GetCurrentUserId(), cancellationToken);
+    }
+
     private string GetCurrentUserId()
     {
         return HttpContext.User.Claims.FirstOrDefault(claim => claim.Type == "UserId")?.Value ?? string.Empty;

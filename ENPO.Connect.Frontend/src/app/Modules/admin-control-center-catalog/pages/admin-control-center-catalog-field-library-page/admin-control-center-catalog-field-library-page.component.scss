@@ -1,0 +1,275 @@
+:host {
+  display: block;
+}
+
+.field-library-page {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.page-header {
+  border: 1px solid #d7e0dd;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fdfdf8 0%, #eef5ec 55%, #e3f0ec 100%);
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: #2f6f56;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.page-header h2 {
+  margin: 0;
+  color: #173329;
+  font-size: 1.42rem;
+}
+
+.page-header p {
+  margin: 0.45rem 0 0;
+  color: #34584a;
+  line-height: 1.55;
+}
+
+.page-header code {
+  background: #ecf4f0;
+  border: 1px solid #cde2d8;
+  border-radius: 8px;
+  padding: 0.08rem 0.35rem;
+}
+
+.message {
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.message.success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.message.warn {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.message.error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.progress-card {
+  border: 1px solid #d7e0dd;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.progress-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #26453a;
+  font-size: 0.85rem;
+}
+
+.progress-row strong {
+  color: #25624c;
+}
+
+.progress-row.overall {
+  margin-top: 0.25rem;
+  font-weight: 700;
+}
+
+.card {
+  border: 1px solid #d7e0dd;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0.85rem;
+  box-shadow: 0 10px 24px rgba(17, 46, 34, 0.05);
+}
+
+.toolbar-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) minmax(190px, 1fr) minmax(140px, 0.7fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-box i {
+  position: absolute;
+  right: 0.72rem;
+  color: #608071;
+}
+
+.search-box input {
+  width: 100%;
+  padding-right: 2rem;
+}
+
+.toolbar-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.table-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.table-row.selected {
+  background: #edf8f3;
+}
+
+.action-col {
+  width: 88px;
+  text-align: center;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.1rem;
+}
+
+.usage-cell {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.usage-cell small {
+  color: #6a7f73;
+  font-size: 0.76rem;
+}
+
+.empty-row {
+  text-align: center;
+  color: #607065;
+  padding: 1.1rem 0;
+}
+
+.dialog-body {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.field-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.required-note {
+  margin: 0;
+  color: #6b7f73;
+  font-size: 0.8rem;
+}
+
+.required-note span,
+.required {
+  color: #c81e1e;
+  font-weight: 800;
+}
+
+.form-section {
+  border: 1px solid #d8e3de;
+  border-radius: 12px;
+  background: #fbfdfc;
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.form-section h4 {
+  margin: 0;
+  color: #1d4033;
+  font-size: 0.96rem;
+}
+
+.grid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.two-cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field label {
+  color: #2b4f40;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.toggle-field {
+  align-content: start;
+}
+
+.span-two {
+  grid-column: 1 / -1;
+}
+
+.field-error {
+  color: #b91c1c;
+  font-size: 0.76rem;
+}
+
+.field-form :global(input.ng-invalid.ng-touched),
+.field-form :global(textarea.ng-invalid.ng-touched),
+.field-form :global(.p-dropdown.ng-invalid.ng-touched .p-dropdown-label) {
+  border-color: #ef4444;
+}
+
+@media (max-width: 1100px) {
+  .toolbar-row {
+    grid-template-columns: 1fr;
+  }
+
+  .two-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .span-two {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+  }
+
+  .card {
+    padding: 0.7rem;
+  }
+
+  .toolbar-actions {
+    justify-content: flex-start;
+  }
+}

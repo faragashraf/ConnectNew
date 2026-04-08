@@ -195,3 +195,212 @@ public sealed class AdminCatalogGroupUpdateRequestDto
 
     public bool IsActive { get; set; } = true;
 }
+
+public sealed class AdminCatalogFieldListItemDto
+{
+    public string ApplicationId { get; set; } = string.Empty;
+
+    public string FieldKey { get; set; } = string.Empty;
+
+    public int CdmendSql { get; set; }
+
+    public string FieldLabel { get; set; } = string.Empty;
+
+    public string FieldType { get; set; } = string.Empty;
+
+    public string? DataType { get; set; }
+
+    public bool Required { get; set; }
+
+    public bool IsActive { get; set; }
+
+    public int LinkedCategoriesCount { get; set; }
+
+    public int LinkedSettingsCount { get; set; }
+
+    public int LinkedHistoryCount { get; set; }
+
+    public bool IsUsed { get; set; }
+}
+
+public sealed class AdminCatalogFieldDto
+{
+    public string ApplicationId { get; set; } = string.Empty;
+
+    public string FieldKey { get; set; } = string.Empty;
+
+    public int CdmendSql { get; set; }
+
+    public string FieldType { get; set; } = string.Empty;
+
+    public string FieldLabel { get; set; } = string.Empty;
+
+    public string? Placeholder { get; set; }
+
+    public string? DefaultValue { get; set; }
+
+    public string? CdmendTbl { get; set; }
+
+    public string? DataType { get; set; }
+
+    public bool Required { get; set; }
+
+    public bool RequiredTrue { get; set; }
+
+    public bool Email { get; set; }
+
+    public bool Pattern { get; set; }
+
+    public string? MinValue { get; set; }
+
+    public string? MaxValue { get; set; }
+
+    public string? Mask { get; set; }
+
+    public bool IsActive { get; set; }
+
+    public int Width { get; set; }
+
+    public int Height { get; set; }
+
+    public bool IsDisabledInit { get; set; }
+
+    public bool IsSearchable { get; set; }
+
+    public int LinkedCategoriesCount { get; set; }
+
+    public int LinkedSettingsCount { get; set; }
+
+    public int LinkedHistoryCount { get; set; }
+
+    public bool IsUsed { get; set; }
+}
+
+public sealed class AdminCatalogFieldCreateRequestDto
+{
+    public string ApplicationId { get; set; } = string.Empty;
+
+    public string FieldKey { get; set; } = string.Empty;
+
+    public int? CdmendSql { get; set; }
+
+    public string FieldType { get; set; } = string.Empty;
+
+    public string? FieldLabel { get; set; }
+
+    public string? Placeholder { get; set; }
+
+    public string? DefaultValue { get; set; }
+
+    public string? CdmendTbl { get; set; }
+
+    public string? DataType { get; set; }
+
+    public bool Required { get; set; }
+
+    public bool RequiredTrue { get; set; }
+
+    public bool Email { get; set; }
+
+    public bool Pattern { get; set; }
+
+    public string? MinValue { get; set; }
+
+    public string? MaxValue { get; set; }
+
+    public string? Mask { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public int Width { get; set; }
+
+    public int Height { get; set; }
+
+    public bool IsDisabledInit { get; set; }
+
+    public bool IsSearchable { get; set; }
+}
+
+public sealed class AdminCatalogFieldUpdateRequestDto
+{
+    public int? CdmendSql { get; set; }
+
+    public string FieldType { get; set; } = string.Empty;
+
+    public string? FieldLabel { get; set; }
+
+    public string? Placeholder { get; set; }
+
+    public string? DefaultValue { get; set; }
+
+    public string? CdmendTbl { get; set; }
+
+    public string? DataType { get; set; }
+
+    public bool Required { get; set; }
+
+    public bool RequiredTrue { get; set; }
+
+    public bool Email { get; set; }
+
+    public bool Pattern { get; set; }
+
+    public string? MinValue { get; set; }
+
+    public string? MaxValue { get; set; }
+
+    public string? Mask { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public int Width { get; set; }
+
+    public int Height { get; set; }
+
+    public bool IsDisabledInit { get; set; }
+
+    public bool IsSearchable { get; set; }
+}
+
+public sealed class AdminCatalogFieldDeleteDiagnosticsDto
+{
+    public string ApplicationId { get; set; } = string.Empty;
+
+    public string FieldKey { get; set; } = string.Empty;
+
+    public int CdmendSql { get; set; }
+
+    public int LinkedCategoriesCount { get; set; }
+
+    public int LinkedActiveCategoriesCount { get; set; }
+
+    public int LinkedSettingsCount { get; set; }
+
+    public int LinkedHistoryByKeyCount { get; set; }
+
+    public int LinkedHistoryBySqlCount { get; set; }
+
+    public bool CanHardDelete { get; set; }
+
+    public bool WillUseSoftDelete { get; set; }
+
+    public bool IsBlocked { get; set; }
+
+    public string? DecisionReason { get; set; }
+}
+
+public sealed class AdminCatalogFieldLookupsDto
+{
+    public IReadOnlyList<string> FieldTypes { get; set; } = new List<string>();
+
+    public IReadOnlyList<string> DataTypes { get; set; } = new List<string>();
+
+    public IReadOnlyList<AdminCatalogFieldStatusOptionDto> StatusOptions { get; set; } = new List<AdminCatalogFieldStatusOptionDto>();
+}
+
+public sealed class AdminCatalogFieldStatusOptionDto
+{
+    public string Key { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+}

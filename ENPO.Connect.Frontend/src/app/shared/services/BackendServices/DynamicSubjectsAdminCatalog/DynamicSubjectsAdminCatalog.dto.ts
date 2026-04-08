@@ -114,3 +114,120 @@ export interface AdminCatalogGroupUpdateRequestDto {
   displayOrder: number;
   isActive: boolean;
 }
+
+export interface AdminCatalogFieldListItemDto {
+  applicationId: string;
+  fieldKey: string;
+  cdmendSql: number;
+  fieldLabel: string;
+  fieldType: string;
+  dataType?: string;
+  required: boolean;
+  isActive: boolean;
+  linkedCategoriesCount: number;
+  linkedSettingsCount: number;
+  linkedHistoryCount: number;
+  isUsed: boolean;
+}
+
+export interface AdminCatalogFieldDto {
+  applicationId: string;
+  fieldKey: string;
+  cdmendSql: number;
+  fieldType: string;
+  fieldLabel: string;
+  placeholder?: string;
+  defaultValue?: string;
+  cdmendTbl?: string;
+  dataType?: string;
+  required: boolean;
+  requiredTrue: boolean;
+  email: boolean;
+  pattern: boolean;
+  minValue?: string;
+  maxValue?: string;
+  mask?: string;
+  isActive: boolean;
+  width: number;
+  height: number;
+  isDisabledInit: boolean;
+  isSearchable: boolean;
+  linkedCategoriesCount: number;
+  linkedSettingsCount: number;
+  linkedHistoryCount: number;
+  isUsed: boolean;
+}
+
+export interface AdminCatalogFieldCreateRequestDto {
+  applicationId: string;
+  fieldKey: string;
+  cdmendSql?: number;
+  fieldType: string;
+  fieldLabel?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  cdmendTbl?: string;
+  dataType?: string;
+  required: boolean;
+  requiredTrue: boolean;
+  email: boolean;
+  pattern: boolean;
+  minValue?: string;
+  maxValue?: string;
+  mask?: string;
+  isActive: boolean;
+  width: number;
+  height: number;
+  isDisabledInit: boolean;
+  isSearchable: boolean;
+}
+
+export interface AdminCatalogFieldUpdateRequestDto {
+  cdmendSql?: number;
+  fieldType: string;
+  fieldLabel?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  cdmendTbl?: string;
+  dataType?: string;
+  required: boolean;
+  requiredTrue: boolean;
+  email: boolean;
+  pattern: boolean;
+  minValue?: string;
+  maxValue?: string;
+  mask?: string;
+  isActive: boolean;
+  width: number;
+  height: number;
+  isDisabledInit: boolean;
+  isSearchable: boolean;
+}
+
+export interface AdminCatalogFieldDeleteDiagnosticsDto {
+  applicationId: string;
+  fieldKey: string;
+  cdmendSql: number;
+  linkedCategoriesCount: number;
+  linkedActiveCategoriesCount: number;
+  linkedSettingsCount: number;
+  linkedHistoryByKeyCount: number;
+  linkedHistoryBySqlCount: number;
+  canHardDelete: boolean;
+  willUseSoftDelete: boolean;
+  isBlocked: boolean;
+  decisionReason?: string;
+}
+
+export interface AdminCatalogFieldStatusOptionDto {
+  key: string;
+  label: string;
+}
+
+export interface AdminCatalogFieldLookupsDto {
+  fieldTypes: string[];
+  dataTypes: string[];
+  statusOptions: AdminCatalogFieldStatusOptionDto[];
+}
+
+export type AdminCatalogFieldStatusFilter = 'all' | 'active' | 'inactive';

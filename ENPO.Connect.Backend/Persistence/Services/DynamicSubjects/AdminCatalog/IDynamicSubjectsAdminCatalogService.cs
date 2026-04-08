@@ -76,4 +76,45 @@ public interface IDynamicSubjectsAdminCatalogService
         int groupId,
         string userId,
         CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogFieldLookupsDto>> GetFieldLookupsAsync(
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<IEnumerable<AdminCatalogFieldListItemDto>>> GetFieldsAsync(
+        string userId,
+        string? appId,
+        string? search,
+        string? status,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogFieldDto>> GetFieldAsync(
+        string applicationId,
+        string fieldKey,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogFieldDto>> CreateFieldAsync(
+        AdminCatalogFieldCreateRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogFieldDto>> UpdateFieldAsync(
+        string applicationId,
+        string fieldKey,
+        AdminCatalogFieldUpdateRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogFieldDeleteDiagnosticsDto>> DiagnoseFieldDeleteAsync(
+        string applicationId,
+        string fieldKey,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogDeleteResultDto>> DeleteFieldAsync(
+        string applicationId,
+        string fieldKey,
+        string userId,
+        CancellationToken cancellationToken = default);
 }

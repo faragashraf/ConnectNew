@@ -14,6 +14,13 @@ import {
   AdminCatalogCategoryDto,
   AdminCatalogCategoryTreeNodeDto,
   AdminCatalogCategoryUpdateRequestDto,
+  AdminCatalogFieldCreateRequestDto,
+  AdminCatalogFieldDeleteDiagnosticsDto,
+  AdminCatalogFieldDto,
+  AdminCatalogFieldListItemDto,
+  AdminCatalogFieldLookupsDto,
+  AdminCatalogFieldStatusFilter,
+  AdminCatalogFieldUpdateRequestDto,
   AdminCatalogGroupCreateRequestDto,
   AdminCatalogGroupDto,
   AdminCatalogGroupTreeNodeDto,
@@ -100,5 +107,70 @@ export class DynamicSubjectsAdminCatalogController {
 
   deleteGroup(groupId: number): Observable<CommonResponse<AdminCatalogDeleteResultDto>> {
     return this.http.delete<CommonResponse<AdminCatalogDeleteResultDto>>(`${this.baseUrl}/Groups/${groupId}`);
+  }
+
+  getFieldLookups(): Observable<CommonResponse<AdminCatalogFieldLookupsDto>> {
+    return this.http.get<CommonResponse<AdminCatalogFieldLookupsDto>>(`${this.baseUrl}/FieldLibrary/Lookups`);
+  }
+
+  getFieldLibrary(
+    appId?: string,
+    search?: string,
+    status?: AdminCatalogFieldStatusFilter
+  ): Observable<CommonResponse<AdminCatalogFieldListItemDto[]>> {
+    let params = new HttpParams();
+    const normalizedAppId = String(appId ?? '').trim();
+    const normalizedSearch = String(search ?? '').trim();
+    const normalizedStatus = String(status ?? '').trim();
+
+    if (normalizedAppId.length > 0) {
+      params = params.set('appId', normalizedAppId);
+    }
+
+    if (normalizedSearch.length > 0) {
+      params = params.set('search', normalizedSearch);
+    }
+
+    if (normalizedStatus.length > 0) {
+      params = params.set('status', normalizedStatus);
+    }
+
+    return this.http.get<CommonResponse<AdminCatalogFieldListItemDto[]>>(`${this.baseUrl}/FieldLibrary`, { params });
+  }
+
+  getField(applicationId: string, fieldKey: string): Observable<CommonResponse<AdminCatalogFieldDto>> {
+    return this.http.get<CommonResponse<AdminCatalogFieldDto>>(
+      `${this.baseUrl}/FieldLibrary/${encodeURIComponent(applicationId)}/${encodeURIComponent(fieldKey)}`
+    );
+  }
+
+  createField(request: AdminCatalogFieldCreateRequestDto): Observable<CommonResponse<AdminCatalogFieldDto>> {
+    return this.http.post<CommonResponse<AdminCatalogFieldDto>>(`${this.baseUrl}/FieldLibrary`, request);
+  }
+
+  updateField(
+    applicationId: string,
+    fieldKey: string,
+    request: AdminCatalogFieldUpdateRequestDto
+  ): Observable<CommonResponse<AdminCatalogFieldDto>> {
+    return this.http.put<CommonResponse<AdminCatalogFieldDto>>(
+      `${this.baseUrl}/FieldLibrary/${encodeURIComponent(applicationId)}/${encodeURIComponent(fieldKey)}`,
+      request
+    );
+  }
+
+  diagnoseFieldDelete(
+    applicationId: string,
+    fieldKey: string
+  ): Observable<CommonResponse<AdminCatalogFieldDeleteDiagnosticsDto>> {
+    return this.http.get<CommonResponse<AdminCatalogFieldDeleteDiagnosticsDto>>(
+      `${this.baseUrl}/FieldLibrary/${encodeURIComponent(applicationId)}/${encodeURIComponent(fieldKey)}/DeleteDiagnostics`
+    );
+  }
+
+  deleteField(applicationId: string, fieldKey: string): Observable<CommonResponse<AdminCatalogDeleteResultDto>> {
+    return this.http.delete<CommonResponse<AdminCatalogDeleteResultDto>>(
+      `${this.baseUrl}/FieldLibrary/${encodeURIComponent(applicationId)}/${encodeURIComponent(fieldKey)}`
+    );
   }
 }

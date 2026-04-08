@@ -1,0 +1,360 @@
+<section class="field-library-page" dir="rtl">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Progressive Replacement - ControlCenterCatalog</p>
+      <h2>المرحلة التالية: إدارة مكتبة الحقول</h2>
+      <p>
+        إدارة كاملة لمكتبة الحقول من جدول <code>CDMend</code> (تحميل، بحث، فلترة، إضافة، تعديل، حذف آمن) مع حفظ فعلي في قاعدة البيانات.
+      </p>
+    </div>
+    <div class="header-actions">
+      <button pButton type="button" class="p-button-outlined" label="العودة لمراحل التطبيقات/الشجرة/الجروبات" routerLink="/Admin/ControlCenterCatalog"></button>
+    </div>
+  </header>
+
+  <div class="message" *ngIf="message.length > 0" [ngClass]="messageSeverity">
+    {{ message }}
+  </div>
+
+  <section class="progress-card">
+    <div class="progress-row">
+      <span>اكتمال مرحلة مكتبة الحقول</span>
+      <strong>{{ phaseCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="phaseCompletionPercent"></p-progressBar>
+
+    <div class="progress-row overall">
+      <span>اكتمال لوحة التحكم (نطاق مكتبة الحقول)</span>
+      <strong>{{ overallCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="overallCompletionPercent"></p-progressBar>
+  </section>
+
+  <section class="card toolbar-card">
+    <div class="toolbar-row">
+      <span class="search-box">
+        <i class="pi pi-search"></i>
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="searchTerm"
+          placeholder="بحث بـ CDMendTxt / CDMendLbl / النوع / التطبيق"
+          (keyup.enter)="onSearch()" />
+      </span>
+
+      <p-dropdown
+        [options]="applicationFilterOptions"
+        optionLabel="label"
+        optionValue="value"
+        [(ngModel)]="selectedApplicationFilter"
+        appendTo="body"
+        [showClear]="false"
+        placeholder="فلترة حسب التطبيق"
+        (onChange)="onApplicationFilterChange()">
+      </p-dropdown>
+
+      <p-dropdown
+        [options]="statusOptions"
+        optionLabel="label"
+        optionValue="value"
+        [(ngModel)]="statusFilter"
+        appendTo="body"
+        [showClear]="false"
+        placeholder="الحالة"
+        (onChange)="onStatusFilterChange()">
+      </p-dropdown>
+
+      <div class="toolbar-actions">
+        <button pButton type="button" class="p-button-text" icon="pi pi-filter-slash" label="إلغاء الفلاتر" (click)="onResetFilters()"></button>
+        <button pButton type="button" class="p-button-text" icon="pi pi-refresh" label="تحديث" (click)="onRefresh()"></button>
+        <button pButton type="button" icon="pi pi-plus" label="إضافة حقل جديد" (click)="onCreateField()"></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card table-card">
+    <p-table
+      [value]="fields"
+      [loading]="loadingBootstrap || loadingFields"
+      [rows]="10"
+      [paginator]="true"
+      [rowsPerPageOptions]="[10, 20, 50]"
+      responsiveLayout="scroll"
+      dataKey="fieldKey"
+      styleClass="p-datatable-sm">
+      <ng-template pTemplate="header">
+        <tr>
+          <th pSortableColumn="fieldKey">CDMendTxt <p-sortIcon field="fieldKey"></p-sortIcon></th>
+          <th pSortableColumn="fieldLabel">CDMendLbl <p-sortIcon field="fieldLabel"></p-sortIcon></th>
+          <th pSortableColumn="fieldType">CDMendType <p-sortIcon field="fieldType"></p-sortIcon></th>
+          <th pSortableColumn="dataType">CDMendDatatype <p-sortIcon field="dataType"></p-sortIcon></th>
+          <th>إلزامي</th>
+          <th pSortableColumn="isActive">الحالة <p-sortIcon field="isActive"></p-sortIcon></th>
+          <th pSortableColumn="applicationId">ApplicationID <p-sortIcon field="applicationId"></p-sortIcon></th>
+          <th>مؤشر الاستخدام</th>
+          <th class="action-col">إجراءات</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-row>
+        <tr
+          class="table-row"
+          [class.selected]="composeFieldIdentity(row.applicationId, row.fieldKey) === selectedFieldIdentity"
+          (click)="onSelectField(row)">
+          <td><code>{{ row.fieldKey }}</code></td>
+          <td>{{ row.fieldLabel }}</td>
+          <td>{{ row.fieldType }}</td>
+          <td>{{ row.dataType || '-' }}</td>
+          <td>
+            <p-tag [value]="row.required ? 'إلزامي' : 'اختياري'" [severity]="row.required ? 'danger' : 'info'"></p-tag>
+          </td>
+          <td>
+            <p-tag [value]="row.isActive ? 'مفعل' : 'غير مفعل'" [severity]="row.isActive ? 'success' : 'warning'"></p-tag>
+          </td>
+          <td>{{ row.applicationId }}</td>
+          <td>
+            <div class="usage-cell">
+              <p-tag [value]="row.isUsed ? 'مستخدم' : 'غير مستخدم'" [severity]="row.isUsed ? 'warning' : 'success'"></p-tag>
+              <small>{{ row.linkedCategoriesCount + row.linkedSettingsCount + row.linkedHistoryCount }} ارتباط</small>
+            </div>
+          </td>
+          <td class="action-col">
+            <div class="row-actions">
+              <button
+                pButton
+                type="button"
+                class="p-button-text"
+                icon="pi pi-pencil"
+                [disabled]="loadingFieldDetails"
+                (click)="onEditField(row, $event)">
+              </button>
+              <button
+                pButton
+                type="button"
+                class="p-button-text p-button-danger"
+                icon="pi pi-trash"
+                [loading]="deletingFieldIdentity === composeFieldIdentity(row.applicationId, row.fieldKey)"
+                (click)="onDeleteField(row, $event)">
+              </button>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="9" class="empty-row">
+            لا توجد حقول مطابقة للفلاتر الحالية.
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </section>
+</section>
+
+<p-dialog
+  [(visible)]="dialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(1120px, 96vw)' }"
+  [contentStyle]="{ 'max-height': '82vh', overflow: 'auto' }"
+  [header]="isEditMode ? 'تعديل حقل' : 'إضافة حقل جديد'"
+  appendTo="body"
+  styleClass="rtl-dialog field-editor-dialog">
+
+  <div class="dialog-body" dir="rtl">
+    <form [formGroup]="fieldForm" class="field-form" novalidate>
+      <p class="required-note"><span>*</span> حقل إلزامي</p>
+
+      <section class="form-section">
+        <h4>1) البيانات الأساسية</h4>
+        <div class="grid two-cols">
+          <div class="field">
+            <label for="fieldAppId">ApplicationID <span class="required">*</span></label>
+            <p-dropdown
+              inputId="fieldAppId"
+              [options]="applicationSelectOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="applicationId"
+              appendTo="body"
+              [showClear]="false"
+              placeholder="اختر التطبيق">
+            </p-dropdown>
+            <small class="field-error" *ngIf="isInvalid('applicationId')">{{ validationMessage('applicationId', 'ApplicationID') }}</small>
+          </div>
+
+          <div class="field">
+            <label for="fieldKey">CDMendTxt <span class="required">*</span></label>
+            <input pInputText id="fieldKey" formControlName="fieldKey" placeholder="مفتاح الحقل" />
+            <small class="field-error" *ngIf="isInvalid('fieldKey')">{{ validationMessage('fieldKey', 'CDMendTxt') }}</small>
+          </div>
+
+          <div class="field">
+            <label for="fieldLabel">CDMendLbl <span class="required">*</span></label>
+            <input pInputText id="fieldLabel" formControlName="fieldLabel" placeholder="عنوان العرض" />
+            <small class="field-error" *ngIf="isInvalid('fieldLabel')">{{ validationMessage('fieldLabel', 'CDMendLbl') }}</small>
+          </div>
+
+          <div class="field">
+            <label for="fieldType">CDMendType <span class="required">*</span></label>
+            <p-dropdown
+              inputId="fieldType"
+              [options]="fieldTypeOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="fieldType"
+              appendTo="body"
+              [showClear]="false"
+              placeholder="اختر النوع">
+            </p-dropdown>
+            <small class="field-error" *ngIf="isInvalid('fieldType')">{{ validationMessage('fieldType', 'CDMendType') }}</small>
+          </div>
+
+          <div class="field">
+            <label for="fieldDataType">CDMendDatatype</label>
+            <p-dropdown
+              inputId="fieldDataType"
+              [options]="dataTypeOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="dataType"
+              appendTo="body"
+              [showClear]="true"
+              placeholder="نوع البيانات">
+            </p-dropdown>
+            <small class="field-error" *ngIf="isInvalid('dataType')">{{ validationMessage('dataType', 'CDMendDatatype') }}</small>
+          </div>
+
+          <div class="field">
+            <label for="fieldStatus">CDMendStat (الحالة)</label>
+            <p-inputSwitch inputId="fieldStatus" formControlName="isActive"></p-inputSwitch>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h4>2) العرض والقيم الافتراضية</h4>
+        <div class="grid two-cols">
+          <div class="field">
+            <label for="placeholder">Placeholder</label>
+            <input pInputText id="placeholder" formControlName="placeholder" placeholder="نص إرشادي" />
+            <small class="field-error" *ngIf="isInvalid('placeholder')">{{ validationMessage('placeholder', 'Placeholder') }}</small>
+          </div>
+
+          <div class="field">
+            <label for="defaultValue">DefaultValue</label>
+            <input pInputText id="defaultValue" formControlName="defaultValue" placeholder="قيمة افتراضية" />
+            <small class="field-error" *ngIf="isInvalid('defaultValue')">{{ validationMessage('defaultValue', 'DefaultValue') }}</small>
+          </div>
+
+          <div class="field">
+            <label for="width">Width</label>
+            <input pInputText id="width" type="number" formControlName="width" min="0" />
+            <small class="field-error" *ngIf="isInvalid('width')">{{ validationMessage('width', 'Width') }}</small>
+          </div>
+
+          <div class="field">
+            <label for="height">Height</label>
+            <input pInputText id="height" type="number" formControlName="height" min="0" />
+            <small class="field-error" *ngIf="isInvalid('height')">{{ validationMessage('height', 'Height') }}</small>
+          </div>
+
+          <div class="field toggle-field">
+            <label for="disabledInit">IsDisabledInit</label>
+            <p-inputSwitch inputId="disabledInit" formControlName="isDisabledInit"></p-inputSwitch>
+          </div>
+
+          <div class="field toggle-field">
+            <label for="isSearchable">IsSearchable</label>
+            <p-inputSwitch inputId="isSearchable" formControlName="isSearchable"></p-inputSwitch>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h4>3) التحقق</h4>
+        <div class="grid two-cols">
+          <div class="field toggle-field">
+            <label for="required">Required</label>
+            <p-inputSwitch inputId="required" formControlName="required"></p-inputSwitch>
+          </div>
+
+          <div class="field toggle-field">
+            <label for="requiredTrue">RequiredTrue</label>
+            <p-inputSwitch inputId="requiredTrue" formControlName="requiredTrue"></p-inputSwitch>
+          </div>
+
+          <div class="field toggle-field" *ngIf="showEmailPatternControls">
+            <label for="emailValidation">email</label>
+            <p-inputSwitch inputId="emailValidation" formControlName="email"></p-inputSwitch>
+          </div>
+
+          <div class="field toggle-field" *ngIf="showEmailPatternControls">
+            <label for="patternValidation">Pattern</label>
+            <p-inputSwitch inputId="patternValidation" formControlName="pattern"></p-inputSwitch>
+          </div>
+
+          <div class="field" *ngIf="showRangeControls">
+            <label for="minValue">MinValue</label>
+            <input pInputText id="minValue" formControlName="minValue" />
+            <small class="field-error" *ngIf="isInvalid('minValue')">{{ validationMessage('minValue', 'MinValue') }}</small>
+          </div>
+
+          <div class="field" *ngIf="showRangeControls">
+            <label for="maxValue">MaxValue</label>
+            <input pInputText id="maxValue" formControlName="maxValue" />
+            <small class="field-error" *ngIf="isInvalid('maxValue')">{{ validationMessage('maxValue', 'MaxValue') }}</small>
+          </div>
+
+          <div class="field" *ngIf="showMaskControl">
+            <label for="mask">CDMendmask</label>
+            <input pInputText id="mask" formControlName="mask" />
+            <small class="field-error" *ngIf="isInvalid('mask')">{{ validationMessage('mask', 'CDMendmask') }}</small>
+          </div>
+        </div>
+
+        <small class="field-error" *ngIf="fieldForm.hasError('rangeError')">
+          MinValue يجب أن تكون أقل من أو تساوي MaxValue.
+        </small>
+      </section>
+
+      <section class="form-section">
+        <h4>4) البيانات المتقدمة</h4>
+        <div class="grid two-cols">
+          <div class="field span-two">
+            <label for="cdmendTbl">CDMendTbl <span class="required" *ngIf="requiresOptionsPayload">*</span></label>
+            <textarea
+              pInputTextarea
+              id="cdmendTbl"
+              formControlName="cdmendTbl"
+              rows="4"
+              [placeholder]="requiresOptionsPayload ? 'أدخل مصدر/حمولة الخيارات المطلوبة لهذا النوع' : 'بيانات متقدمة اختيارية'">
+            </textarea>
+            <small class="field-error" *ngIf="isInvalid('cdmendTbl')">{{ validationMessage('cdmendTbl', 'CDMendTbl') }}</small>
+          </div>
+
+          <div class="field">
+            <label for="cdmendSql">CDMendSQL</label>
+            <input pInputText id="cdmendSql" type="number" formControlName="cdmendSql" min="1" placeholder="يُولّد تلقائيًا عند الإضافة إذا تُرك فارغًا" />
+            <small class="field-error" *ngIf="isInvalid('cdmendSql')">{{ validationMessage('cdmendSql', 'CDMendSQL') }}</small>
+          </div>
+        </div>
+      </section>
+    </form>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" class="p-button-text" label="إلغاء" (click)="dialogVisible = false"></button>
+    <button
+      pButton
+      type="button"
+      label="حفظ"
+      icon="pi pi-check"
+      [loading]="savingField"
+      [disabled]="!canSaveField"
+      (click)="onSaveField()">
+    </button>
+  </ng-template>
+</p-dialog>

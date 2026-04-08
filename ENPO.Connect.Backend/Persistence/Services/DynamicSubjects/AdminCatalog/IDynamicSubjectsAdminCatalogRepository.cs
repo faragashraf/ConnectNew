@@ -70,5 +70,61 @@ public interface IDynamicSubjectsAdminCatalogRepository
 
     Task<int> GenerateNextGroupIdAsync(CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<Cdmend>> ListFieldsAsync(
+        string? applicationId,
+        string? search,
+        bool? isActive,
+        CancellationToken cancellationToken = default);
+
+    Task<Cdmend?> FindFieldAsync(
+        string applicationId,
+        string fieldKey,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> FieldExistsAsync(
+        string applicationId,
+        string fieldKey,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> FieldSqlExistsAsync(int cdmendSql, CancellationToken cancellationToken = default);
+
+    Task<int> GenerateNextFieldSqlAsync(CancellationToken cancellationToken = default);
+
+    Task AddFieldAsync(Cdmend field, CancellationToken cancellationToken = default);
+
+    void RemoveField(Cdmend field);
+
+    Task<int> CountFieldCategoryLinksAsync(
+        string fieldKey,
+        bool activeOnly,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountFieldSettingsLinksAsync(int cdmendSql, CancellationToken cancellationToken = default);
+
+    Task<int> CountFieldHistoryLinksByKeyAsync(string fieldKey, CancellationToken cancellationToken = default);
+
+    Task<int> CountFieldHistoryLinksBySqlAsync(int cdmendSql, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<string, int>> CountFieldCategoryLinksByKeysAsync(
+        IReadOnlyCollection<string> fieldKeys,
+        bool activeOnly,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<int, int>> CountFieldSettingsLinksBySqlsAsync(
+        IReadOnlyCollection<int> cdmendSqls,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<string, int>> CountFieldHistoryLinksByKeysAsync(
+        IReadOnlyCollection<string> fieldKeys,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<int, int>> CountFieldHistoryLinksBySqlsAsync(
+        IReadOnlyCollection<int> cdmendSqls,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> ListDistinctFieldTypesAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> ListDistinctFieldDataTypesAsync(CancellationToken cancellationToken = default);
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

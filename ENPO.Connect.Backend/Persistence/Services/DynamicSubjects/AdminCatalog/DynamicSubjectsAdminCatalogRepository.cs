@@ -408,6 +408,308 @@ public sealed class DynamicSubjectsAdminCatalogRepository : IDynamicSubjectsAdmi
         return maxGroupId + 1;
     }
 
+    public async Task<IReadOnlyList<Cdmend>> ListFieldsAsync(
+        string? applicationId,
+        string? search,
+        bool? isActive,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedApplicationId = NormalizeNullable(applicationId);
+        var normalizedSearch = NormalizeNullable(search);
+
+        IQueryable<Cdmend> query = _connectContext.Cdmends.AsNoTracking();
+
+        if (normalizedApplicationId != null)
+        {
+            query = query.Where(item => (item.ApplicationId ?? string.Empty) == normalizedApplicationId);
+        }
+
+        if (isActive.HasValue)
+        {
+            var isInactiveValue = !isActive.Value;
+            query = query.Where(item => item.CdmendStat == isInactiveValue);
+        }
+
+        if (normalizedSearch != null)
+        {
+            var term = $"%{normalizedSearch}%";
+            query = query.Where(item =>
+                EF.Functions.Like(item.CdmendTxt, term)
+                || EF.Functions.Like(item.CDMendLbl, term)
+                || EF.Functions.Like(item.CdmendType, term)
+                || EF.Functions.Like(item.CdmendDatatype ?? string.Empty, term)
+                || EF.Functions.Like(item.ApplicationId ?? string.Empty, term));
+        }
+
+        return await query
+            .OrderBy(item => item.ApplicationId)
+            .ThenBy(item => item.CdmendTxt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<Cdmend?> FindFieldAsync(
+        string applicationId,
+        string fieldKey,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedApplicationId = NormalizeNullable(applicationId);
+        var normalizedFieldKey = NormalizeNullable(fieldKey);
+        if (normalizedApplicationId == null || normalizedFieldKey == null)
+        {
+            return null;
+        }
+
+        return await _connectContext.Cdmends
+            .FirstOrDefaultAsync(
+                item => (item.ApplicationId ?? string.Empty) == normalizedApplicationId && item.CdmendTxt == normalizedFieldKey,
+                cancellationToken);
+    }
+
+    public async Task<bool> FieldExistsAsync(
+        string applicationId,
+        string fieldKey,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedApplicationId = NormalizeNullable(applicationId);
+        var normalizedFieldKey = NormalizeNullable(fieldKey);
+        if (normalizedApplicationId == null || normalizedFieldKey == null)
+        {
+            return false;
+        }
+
+        return await _connectContext.Cdmends
+            .AsNoTracking()
+            .AnyAsync(
+                item => (item.ApplicationId ?? string.Empty) == normalizedApplicationId && item.CdmendTxt == normalizedFieldKey,
+                cancellationToken);
+    }
+
+    public async Task<bool> FieldSqlExistsAsync(int cdmendSql, CancellationToken cancellationToken = default)
+    {
+        if (cdmendSql <= 0)
+        {
+            return false;
+        }
+
+        return await _connectContext.Cdmends
+            .AsNoTracking()
+            .AnyAsync(item => item.CdmendSql == cdmendSql, cancellationToken);
+    }
+
+    public async Task<int> GenerateNextFieldSqlAsync(CancellationToken cancellationToken = default)
+    {
+        var maxSql = await _connectContext.Cdmends
+            .AsNoTracking()
+            .MaxAsync(item => (int?)item.CdmendSql, cancellationToken)
+            ?? 0;
+
+        return maxSql + 1;
+    }
+
+    public Task AddFieldAsync(Cdmend field, CancellationToken cancellationToken = default)
+    {
+        return _connectContext.Cdmends.AddAsync(field, cancellationToken).AsTask();
+    }
+
+    public void RemoveField(Cdmend field)
+    {
+        _connectContext.Cdmends.Remove(field);
+    }
+
+    public async Task<int> CountFieldCategoryLinksAsync(
+        string fieldKey,
+        bool activeOnly,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedFieldKey = NormalizeNullable(fieldKey);
+        if (normalizedFieldKey == null)
+        {
+            return 0;
+        }
+
+        var query = _connectContext.CdCategoryMands
+            .AsNoTracking()
+            .Where(item => item.MendField == normalizedFieldKey);
+
+        if (activeOnly)
+        {
+            query = query.Where(item => !item.MendStat);
+        }
+
+        return await query.CountAsync(cancellationToken);
+    }
+
+    public async Task<int> CountFieldSettingsLinksAsync(int cdmendSql, CancellationToken cancellationToken = default)
+    {
+        if (cdmendSql <= 0)
+        {
+            return 0;
+        }
+
+        return await _connectContext.SubjectCategoryFieldSettings
+            .AsNoTracking()
+            .CountAsync(item => item.MendSql == cdmendSql, cancellationToken);
+    }
+
+    public async Task<int> CountFieldHistoryLinksByKeyAsync(string fieldKey, CancellationToken cancellationToken = default)
+    {
+        var normalizedFieldKey = NormalizeNullable(fieldKey);
+        if (normalizedFieldKey == null)
+        {
+            return 0;
+        }
+
+        return await _connectContext.TkmendFields
+            .AsNoTracking()
+            .CountAsync(item => (item.FildKind ?? string.Empty) == normalizedFieldKey, cancellationToken);
+    }
+
+    public async Task<int> CountFieldHistoryLinksBySqlAsync(int cdmendSql, CancellationToken cancellationToken = default)
+    {
+        if (cdmendSql <= 0)
+        {
+            return 0;
+        }
+
+        return await _connectContext.TkmendFields
+            .AsNoTracking()
+            .CountAsync(item => item.FildSql == cdmendSql, cancellationToken);
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> CountFieldCategoryLinksByKeysAsync(
+        IReadOnlyCollection<string> fieldKeys,
+        bool activeOnly,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedFieldKeys = NormalizeCollection(fieldKeys);
+        if (normalizedFieldKeys.Count == 0)
+        {
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var query = _connectContext.CdCategoryMands
+            .AsNoTracking()
+            .Where(item => normalizedFieldKeys.Contains(item.MendField));
+
+        if (activeOnly)
+        {
+            query = query.Where(item => !item.MendStat);
+        }
+
+        var result = await query
+            .GroupBy(item => item.MendField)
+            .Select(group => new
+            {
+                FieldKey = group.Key,
+                Count = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        return result.ToDictionary(item => item.FieldKey, item => item.Count, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public async Task<IReadOnlyDictionary<int, int>> CountFieldSettingsLinksBySqlsAsync(
+        IReadOnlyCollection<int> cdmendSqls,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedSqls = cdmendSqls?
+            .Where(item => item > 0)
+            .Distinct()
+            .ToList() ?? new List<int>();
+
+        if (normalizedSqls.Count == 0)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var result = await _connectContext.SubjectCategoryFieldSettings
+            .AsNoTracking()
+            .Where(item => normalizedSqls.Contains(item.MendSql))
+            .GroupBy(item => item.MendSql)
+            .Select(group => new
+            {
+                MendSql = group.Key,
+                Count = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        return result.ToDictionary(item => item.MendSql, item => item.Count);
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> CountFieldHistoryLinksByKeysAsync(
+        IReadOnlyCollection<string> fieldKeys,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedFieldKeys = NormalizeCollection(fieldKeys);
+        if (normalizedFieldKeys.Count == 0)
+        {
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var result = await _connectContext.TkmendFields
+            .AsNoTracking()
+            .Where(item => normalizedFieldKeys.Contains(item.FildKind ?? string.Empty))
+            .GroupBy(item => item.FildKind ?? string.Empty)
+            .Select(group => new
+            {
+                FieldKey = group.Key,
+                Count = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        return result.ToDictionary(item => item.FieldKey, item => item.Count, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public async Task<IReadOnlyDictionary<int, int>> CountFieldHistoryLinksBySqlsAsync(
+        IReadOnlyCollection<int> cdmendSqls,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedSqls = cdmendSqls?
+            .Where(item => item > 0)
+            .Distinct()
+            .ToList() ?? new List<int>();
+
+        if (normalizedSqls.Count == 0)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var result = await _connectContext.TkmendFields
+            .AsNoTracking()
+            .Where(item => normalizedSqls.Contains(item.FildSql))
+            .GroupBy(item => item.FildSql)
+            .Select(group => new
+            {
+                FieldSql = group.Key,
+                Count = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        return result.ToDictionary(item => item.FieldSql, item => item.Count);
+    }
+
+    public async Task<IReadOnlyList<string>> ListDistinctFieldTypesAsync(CancellationToken cancellationToken = default)
+    {
+        return await _connectContext.Cdmends
+            .AsNoTracking()
+            .Select(item => item.CdmendType)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct()
+            .OrderBy(item => item)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<string>> ListDistinctFieldDataTypesAsync(CancellationToken cancellationToken = default)
+    {
+        return await _connectContext.Cdmends
+            .AsNoTracking()
+            .Select(item => item.CdmendDatatype)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct()
+            .OrderBy(item => item)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         return _connectContext.SaveChangesAsync(cancellationToken);
@@ -455,5 +757,15 @@ public sealed class DynamicSubjectsAdminCatalogRepository : IDynamicSubjectsAdmi
     {
         var normalized = (value ?? string.Empty).Trim();
         return normalized.Length == 0 ? null : normalized;
+    }
+
+    private static List<string> NormalizeCollection(IReadOnlyCollection<string>? values)
+    {
+        return values?
+            .Select(item => NormalizeNullable(item))
+            .Where(item => item != null)
+            .Select(item => item!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
     }
 }

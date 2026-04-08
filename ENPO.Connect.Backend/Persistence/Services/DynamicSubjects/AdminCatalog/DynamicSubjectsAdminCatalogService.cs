@@ -1,6 +1,7 @@
 using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
+using System.Globalization;
 
 namespace Persistence.Services.DynamicSubjects.AdminCatalog;
 
@@ -13,6 +14,39 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
     private const int GroupDescriptionMaxLength = 255;
     private const int GroupDisplayOrderMin = 0;
     private const int GroupDisplayOrderMax = 100000;
+    private const int FieldKeyMaxLength = 50;
+    private const int FieldTypeMaxLength = 50;
+    private const int FieldLabelMaxLength = 50;
+    private const int FieldDataTypeMaxLength = 50;
+    private const int FieldMaskMaxLength = 30;
+    private const int FieldMinMaxValueMaxLength = 30;
+    private const int FieldPlaceholderMaxLength = 150;
+    private const int FieldDefaultValueMaxLength = 100;
+
+    private static readonly IReadOnlyList<string> DefaultFieldTypes = new List<string>
+    {
+        "InputText",
+        "Textarea",
+        "Dropdown",
+        "DropdownTree",
+        "RadioButton",
+        "Date",
+        "DateTime",
+        "ToggleSwitch",
+        "FileUpload",
+        "DomainUser",
+        "JsonData"
+    };
+
+    private static readonly IReadOnlyList<string> DefaultFieldDataTypes = new List<string>
+    {
+        "string",
+        "number",
+        "date",
+        "boolean",
+        "json",
+        "nvarchar"
+    };
 
     private readonly IDynamicSubjectsAdminCatalogRepository _repository;
 
@@ -997,6 +1031,439 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
         return response;
     }
 
+    public async Task<CommonResponse<AdminCatalogFieldLookupsDto>> GetFieldLookupsAsync(
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<AdminCatalogFieldLookupsDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            var fieldTypesFromDb = await _repository.ListDistinctFieldTypesAsync(cancellationToken);
+            var dataTypesFromDb = await _repository.ListDistinctFieldDataTypesAsync(cancellationToken);
+
+            response.Data = new AdminCatalogFieldLookupsDto
+            {
+                FieldTypes = MergeLookupValues(DefaultFieldTypes, fieldTypesFromDb),
+                DataTypes = MergeLookupValues(DefaultFieldDataTypes, dataTypesFromDb),
+                StatusOptions = new List<AdminCatalogFieldStatusOptionDto>
+                {
+                    new() { Key = "all", Label = "الكل" },
+                    new() { Key = "active", Label = "مفعل" },
+                    new() { Key = "inactive", Label = "غير مفعل" }
+                }
+            };
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<IEnumerable<AdminCatalogFieldListItemDto>>> GetFieldsAsync(
+        string userId,
+        string? appId,
+        string? search,
+        string? status,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<IEnumerable<AdminCatalogFieldListItemDto>>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            var normalizedAppId = NormalizeNullable(appId);
+            if (normalizedAppId != null && ExceedsMaxLength(normalizedAppId, ApplicationIdMaxLength))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"معرف التطبيق يجب ألا يزيد عن {ApplicationIdMaxLength} أحرف." });
+                return response;
+            }
+
+            var normalizedStatus = NormalizeNullable(status);
+            var statusFilter = ParseFieldStatus(normalizedStatus);
+            if (normalizedStatus != null && statusFilter == null && !IsAllStatus(normalizedStatus))
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "قيمة حالة الحقول غير صالحة." });
+                return response;
+            }
+
+            var fields = await _repository.ListFieldsAsync(
+                normalizedAppId,
+                NormalizeNullable(search),
+                statusFilter,
+                cancellationToken);
+
+            var fieldKeys = fields
+                .Select(item => item.CdmendTxt)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var fieldSqls = fields
+                .Select(item => item.CdmendSql)
+                .Distinct()
+                .ToList();
+
+            var linkedCategoriesByField = await _repository.CountFieldCategoryLinksByKeysAsync(fieldKeys, activeOnly: true, cancellationToken);
+            var linkedSettingsBySql = await _repository.CountFieldSettingsLinksBySqlsAsync(fieldSqls, cancellationToken);
+            var linkedHistoryByField = await _repository.CountFieldHistoryLinksByKeysAsync(fieldKeys, cancellationToken);
+            var linkedHistoryBySql = await _repository.CountFieldHistoryLinksBySqlsAsync(fieldSqls, cancellationToken);
+
+            response.Data = fields
+                .Select(field =>
+                {
+                    var linkedCategoriesCount = ReadDictionaryValue(linkedCategoriesByField, field.CdmendTxt);
+                    var linkedSettingsCount = ReadDictionaryValue(linkedSettingsBySql, field.CdmendSql);
+                    var linkedHistoryByKeyCount = ReadDictionaryValue(linkedHistoryByField, field.CdmendTxt);
+                    var linkedHistoryBySqlCount = ReadDictionaryValue(linkedHistoryBySql, field.CdmendSql);
+                    var linkedHistoryCount = Math.Max(linkedHistoryByKeyCount, linkedHistoryBySqlCount);
+
+                    return MapFieldListItem(field, linkedCategoriesCount, linkedSettingsCount, linkedHistoryCount);
+                })
+                .ToList();
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<AdminCatalogFieldDto>> GetFieldAsync(
+        string applicationId,
+        string fieldKey,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<AdminCatalogFieldDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            var normalizedAppId = NormalizeNullable(applicationId);
+            var normalizedFieldKey = NormalizeNullable(fieldKey);
+            if (normalizedAppId == null || normalizedFieldKey == null)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف التطبيق ومفتاح الحقل مطلوبان." });
+                return response;
+            }
+
+            var field = await _repository.FindFieldAsync(normalizedAppId, normalizedFieldKey, cancellationToken);
+            if (field == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "الحقل غير موجود." });
+                return response;
+            }
+
+            var diagnostics = await BuildFieldDeleteDiagnosticsAsync(field, cancellationToken);
+            response.Data = MapFieldDetails(field, diagnostics);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<AdminCatalogFieldDto>> CreateFieldAsync(
+        AdminCatalogFieldCreateRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<AdminCatalogFieldDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            var safeRequest = request ?? new AdminCatalogFieldCreateRequestDto();
+            var validation = await ValidateFieldCreateRequestAsync(safeRequest, response, cancellationToken);
+            if (!validation.IsValid)
+            {
+                return response;
+            }
+
+            var cdmendSql = safeRequest.CdmendSql.GetValueOrDefault();
+            if (cdmendSql <= 0)
+            {
+                cdmendSql = await _repository.GenerateNextFieldSqlAsync(cancellationToken);
+                while (await _repository.FieldSqlExistsAsync(cdmendSql, cancellationToken))
+                {
+                    cdmendSql++;
+                }
+            }
+            else if (await _repository.FieldSqlExistsAsync(cdmendSql, cancellationToken))
+            {
+                response.Errors.Add(new Error { Code = "409", Message = "رقم الحقل (CDMendSQL) مستخدم بالفعل." });
+                return response;
+            }
+
+            var field = new Cdmend
+            {
+                ApplicationId = validation.ApplicationId!,
+                CdmendTxt = validation.FieldKey!,
+                CdmendSql = cdmendSql,
+                CdmendType = validation.FieldType!,
+                CDMendLbl = validation.FieldLabel!,
+                Placeholder = validation.Placeholder,
+                DefaultValue = validation.DefaultValue,
+                CdmendTbl = validation.CdmendTbl,
+                CdmendDatatype = validation.DataType,
+                Required = safeRequest.Required,
+                RequiredTrue = safeRequest.RequiredTrue,
+                Email = safeRequest.Email,
+                Pattern = safeRequest.Pattern,
+                MinValue = validation.MinValue,
+                MaxValue = validation.MaxValue,
+                Cdmendmask = validation.Mask,
+                CdmendStat = !safeRequest.IsActive,
+                Width = safeRequest.Width,
+                Height = safeRequest.Height,
+                IsDisabledInit = safeRequest.IsDisabledInit,
+                IsSearchable = safeRequest.IsSearchable
+            };
+
+            await _repository.AddFieldAsync(field, cancellationToken);
+            await _repository.SaveChangesAsync(cancellationToken);
+
+            response.Data = MapFieldDetails(
+                field,
+                new AdminCatalogFieldDeleteDiagnosticsDto
+                {
+                    LinkedCategoriesCount = 0,
+                    LinkedSettingsCount = 0,
+                    LinkedHistoryByKeyCount = 0,
+                    LinkedHistoryBySqlCount = 0
+                });
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<AdminCatalogFieldDto>> UpdateFieldAsync(
+        string applicationId,
+        string fieldKey,
+        AdminCatalogFieldUpdateRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<AdminCatalogFieldDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            var normalizedAppId = NormalizeNullable(applicationId);
+            var normalizedFieldKey = NormalizeNullable(fieldKey);
+            if (normalizedAppId == null || normalizedFieldKey == null)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف التطبيق ومفتاح الحقل مطلوبان." });
+                return response;
+            }
+
+            var field = await _repository.FindFieldAsync(normalizedAppId, normalizedFieldKey, cancellationToken);
+            if (field == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "الحقل غير موجود." });
+                return response;
+            }
+
+            var safeRequest = request ?? new AdminCatalogFieldUpdateRequestDto();
+            var validation = ValidateFieldUpdateRequest(safeRequest, normalizedAppId, normalizedFieldKey, response);
+            if (!validation.IsValid)
+            {
+                return response;
+            }
+
+            if (safeRequest.CdmendSql.HasValue && safeRequest.CdmendSql.Value > 0 && safeRequest.CdmendSql.Value != field.CdmendSql)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "لا يمكن تعديل CDMendSQL في مرحلة مكتبة الحقول للحفاظ على سلامة الروابط الحالية."
+                });
+                return response;
+            }
+
+            field.CdmendType = validation.FieldType!;
+            field.CDMendLbl = validation.FieldLabel!;
+            field.Placeholder = validation.Placeholder;
+            field.DefaultValue = validation.DefaultValue;
+            field.CdmendTbl = validation.CdmendTbl;
+            field.CdmendDatatype = validation.DataType;
+            field.Required = safeRequest.Required;
+            field.RequiredTrue = safeRequest.RequiredTrue;
+            field.Email = safeRequest.Email;
+            field.Pattern = safeRequest.Pattern;
+            field.MinValue = validation.MinValue;
+            field.MaxValue = validation.MaxValue;
+            field.Cdmendmask = validation.Mask;
+            field.CdmendStat = !safeRequest.IsActive;
+            field.Width = safeRequest.Width;
+            field.Height = safeRequest.Height;
+            field.IsDisabledInit = safeRequest.IsDisabledInit;
+            field.IsSearchable = safeRequest.IsSearchable;
+
+            await _repository.SaveChangesAsync(cancellationToken);
+
+            var diagnostics = await BuildFieldDeleteDiagnosticsAsync(field, cancellationToken);
+            response.Data = MapFieldDetails(field, diagnostics);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<AdminCatalogFieldDeleteDiagnosticsDto>> DiagnoseFieldDeleteAsync(
+        string applicationId,
+        string fieldKey,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<AdminCatalogFieldDeleteDiagnosticsDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            var normalizedAppId = NormalizeNullable(applicationId);
+            var normalizedFieldKey = NormalizeNullable(fieldKey);
+            if (normalizedAppId == null || normalizedFieldKey == null)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف التطبيق ومفتاح الحقل مطلوبان." });
+                return response;
+            }
+
+            var field = await _repository.FindFieldAsync(normalizedAppId, normalizedFieldKey, cancellationToken);
+            if (field == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "الحقل غير موجود." });
+                return response;
+            }
+
+            response.Data = await BuildFieldDeleteDiagnosticsAsync(field, cancellationToken);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<AdminCatalogDeleteResultDto>> DeleteFieldAsync(
+        string applicationId,
+        string fieldKey,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<AdminCatalogDeleteResultDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            var normalizedAppId = NormalizeNullable(applicationId);
+            var normalizedFieldKey = NormalizeNullable(fieldKey);
+            if (normalizedAppId == null || normalizedFieldKey == null)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف التطبيق ومفتاح الحقل مطلوبان." });
+                return response;
+            }
+
+            var field = await _repository.FindFieldAsync(normalizedAppId, normalizedFieldKey, cancellationToken);
+            if (field == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "الحقل غير موجود." });
+                return response;
+            }
+
+            var diagnostics = await BuildFieldDeleteDiagnosticsAsync(field, cancellationToken);
+            if (diagnostics.CanHardDelete)
+            {
+                _repository.RemoveField(field);
+                await _repository.SaveChangesAsync(cancellationToken);
+                response.Data = new AdminCatalogDeleteResultDto
+                {
+                    Deleted = true,
+                    Mode = "hard",
+                    Message = "تم حذف الحقل حذفًا نهائيًا لعدم وجود أي استخدامات مرتبطة به."
+                };
+
+                return response;
+            }
+
+            if (field.CdmendStat)
+            {
+                response.Data = new AdminCatalogDeleteResultDto
+                {
+                    Deleted = false,
+                    Mode = "soft",
+                    Message = "الحقل غير مفعل بالفعل (حذف منطقي سابق)."
+                };
+
+                return response;
+            }
+
+            field.CdmendStat = true;
+            await _repository.SaveChangesAsync(cancellationToken);
+            response.Data = new AdminCatalogDeleteResultDto
+            {
+                Deleted = true,
+                Mode = "soft",
+                Message = "تم تنفيذ حذف منطقي (Soft Delete) للحفاظ على سلامة الروابط القائمة."
+            };
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
     private async Task<AdminCatalogApplicationDeleteDiagnosticsDto> BuildApplicationDeleteDiagnosticsAsync(
         string applicationId,
         CancellationToken cancellationToken)
@@ -1059,6 +1526,381 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             IsBlocked = isBlocked,
             DecisionReason = decisionReason
         };
+    }
+
+    private async Task<AdminCatalogFieldDeleteDiagnosticsDto> BuildFieldDeleteDiagnosticsAsync(
+        Cdmend field,
+        CancellationToken cancellationToken)
+    {
+        var linkedCategoriesCount = await _repository.CountFieldCategoryLinksAsync(
+            field.CdmendTxt,
+            activeOnly: false,
+            cancellationToken);
+
+        var linkedActiveCategoriesCount = await _repository.CountFieldCategoryLinksAsync(
+            field.CdmendTxt,
+            activeOnly: true,
+            cancellationToken);
+
+        var linkedSettingsCount = await _repository.CountFieldSettingsLinksAsync(field.CdmendSql, cancellationToken);
+        var linkedHistoryByKeyCount = await _repository.CountFieldHistoryLinksByKeyAsync(field.CdmendTxt, cancellationToken);
+        var linkedHistoryBySqlCount = await _repository.CountFieldHistoryLinksBySqlAsync(field.CdmendSql, cancellationToken);
+
+        var canHardDelete = linkedCategoriesCount == 0
+            && linkedSettingsCount == 0
+            && linkedHistoryByKeyCount == 0
+            && linkedHistoryBySqlCount == 0;
+
+        return new AdminCatalogFieldDeleteDiagnosticsDto
+        {
+            ApplicationId = field.ApplicationId ?? string.Empty,
+            FieldKey = field.CdmendTxt,
+            CdmendSql = field.CdmendSql,
+            LinkedCategoriesCount = linkedCategoriesCount,
+            LinkedActiveCategoriesCount = linkedActiveCategoriesCount,
+            LinkedSettingsCount = linkedSettingsCount,
+            LinkedHistoryByKeyCount = linkedHistoryByKeyCount,
+            LinkedHistoryBySqlCount = linkedHistoryBySqlCount,
+            CanHardDelete = canHardDelete,
+            WillUseSoftDelete = !canHardDelete,
+            IsBlocked = false,
+            DecisionReason = canHardDelete
+                ? "لا توجد أي استخدامات مرتبطة بالحقل ويمكن تنفيذ حذف نهائي (Hard Delete)."
+                : "الحقل مستخدم أو له أثر بيانات، وسيتم تنفيذ حذف منطقي (Soft Delete) للحفاظ على سلامة النظام."
+        };
+    }
+
+    private async Task<FieldValidationContext> ValidateFieldCreateRequestAsync(
+        AdminCatalogFieldCreateRequestDto request,
+        CommonResponse<AdminCatalogFieldDto> response,
+        CancellationToken cancellationToken)
+    {
+        var validation = ValidateFieldPayload(
+            request.ApplicationId,
+            request.FieldKey,
+            request.FieldType,
+            request.FieldLabel,
+            request.Placeholder,
+            request.DefaultValue,
+            request.CdmendTbl,
+            request.DataType,
+            request.MinValue,
+            request.MaxValue,
+            request.Mask,
+            request.Width,
+            request.Height,
+            response);
+
+        if (!validation.IsValid)
+        {
+            return validation;
+        }
+
+        if (!await _repository.ApplicationIdExistsAsync(validation.ApplicationId!, cancellationToken))
+        {
+            response.Errors.Add(new Error { Code = "404", Message = "التطبيق المحدد غير موجود." });
+            return FieldValidationContext.Invalid;
+        }
+
+        if (await _repository.FieldExistsAsync(validation.ApplicationId!, validation.FieldKey!, cancellationToken))
+        {
+            response.Errors.Add(new Error { Code = "409", Message = "مفتاح الحقل موجود بالفعل داخل نفس التطبيق." });
+            return FieldValidationContext.Invalid;
+        }
+
+        return validation;
+    }
+
+    private FieldValidationContext ValidateFieldUpdateRequest(
+        AdminCatalogFieldUpdateRequestDto request,
+        string applicationId,
+        string currentFieldKey,
+        CommonResponse<AdminCatalogFieldDto> response)
+    {
+        return ValidateFieldPayload(
+            applicationId: applicationId,
+            fieldKey: currentFieldKey,
+            fieldType: request.FieldType,
+            fieldLabel: request.FieldLabel,
+            placeholder: request.Placeholder,
+            defaultValue: request.DefaultValue,
+            cdmendTbl: request.CdmendTbl,
+            dataType: request.DataType,
+            minValue: request.MinValue,
+            maxValue: request.MaxValue,
+            mask: request.Mask,
+            width: request.Width,
+            height: request.Height,
+            response);
+    }
+
+    private FieldValidationContext ValidateFieldPayload(
+        string? applicationId,
+        string? fieldKey,
+        string? fieldType,
+        string? fieldLabel,
+        string? placeholder,
+        string? defaultValue,
+        string? cdmendTbl,
+        string? dataType,
+        string? minValue,
+        string? maxValue,
+        string? mask,
+        int width,
+        int height,
+        CommonResponse<AdminCatalogFieldDto> response)
+    {
+        var normalizedApplicationId = NormalizeNullable(applicationId);
+        if (normalizedApplicationId == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "معرف التطبيق مطلوب." });
+            return FieldValidationContext.Invalid;
+        }
+
+        if (ExceedsMaxLength(normalizedApplicationId, ApplicationIdMaxLength))
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"معرف التطبيق يجب ألا يزيد عن {ApplicationIdMaxLength} أحرف." });
+            return FieldValidationContext.Invalid;
+        }
+
+        var normalizedFieldKey = NormalizeNullable(fieldKey);
+        if (normalizedFieldKey == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "مفتاح الحقل (CDMendTxt) مطلوب." });
+            return FieldValidationContext.Invalid;
+        }
+
+        if (ExceedsMaxLength(normalizedFieldKey, FieldKeyMaxLength))
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"مفتاح الحقل يجب ألا يزيد عن {FieldKeyMaxLength} حرفًا." });
+            return FieldValidationContext.Invalid;
+        }
+
+        var normalizedFieldType = NormalizeNullable(fieldType);
+        if (normalizedFieldType == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "نوع الحقل (CDMendType) مطلوب." });
+            return FieldValidationContext.Invalid;
+        }
+
+        if (ExceedsMaxLength(normalizedFieldType, FieldTypeMaxLength))
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"نوع الحقل يجب ألا يزيد عن {FieldTypeMaxLength} حرفًا." });
+            return FieldValidationContext.Invalid;
+        }
+
+        var normalizedFieldLabel = NormalizeNullable(fieldLabel) ?? normalizedFieldKey;
+        if (ExceedsMaxLength(normalizedFieldLabel, FieldLabelMaxLength))
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"عنوان الحقل يجب ألا يزيد عن {FieldLabelMaxLength} حرفًا." });
+            return FieldValidationContext.Invalid;
+        }
+
+        var normalizedPlaceholder = NormalizeNullable(placeholder);
+        if (ExceedsMaxLength(normalizedPlaceholder, FieldPlaceholderMaxLength))
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"Placeholder يجب ألا يزيد عن {FieldPlaceholderMaxLength} حرفًا." });
+            return FieldValidationContext.Invalid;
+        }
+
+        var normalizedDefaultValue = NormalizeNullable(defaultValue);
+        if (ExceedsMaxLength(normalizedDefaultValue, FieldDefaultValueMaxLength))
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"DefaultValue يجب ألا يزيد عن {FieldDefaultValueMaxLength} حرفًا." });
+            return FieldValidationContext.Invalid;
+        }
+
+        var normalizedDataType = NormalizeNullable(dataType);
+        if (ExceedsMaxLength(normalizedDataType, FieldDataTypeMaxLength))
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"نوع البيانات يجب ألا يزيد عن {FieldDataTypeMaxLength} حرفًا." });
+            return FieldValidationContext.Invalid;
+        }
+
+        var normalizedMinValue = NormalizeNullable(minValue);
+        var normalizedMaxValue = NormalizeNullable(maxValue);
+        if (ExceedsMaxLength(normalizedMinValue, FieldMinMaxValueMaxLength)
+            || ExceedsMaxLength(normalizedMaxValue, FieldMinMaxValueMaxLength))
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"قيم Min/Max يجب ألا تزيد عن {FieldMinMaxValueMaxLength} حرفًا." });
+            return FieldValidationContext.Invalid;
+        }
+
+        if (normalizedMinValue != null
+            && normalizedMaxValue != null
+            && decimal.TryParse(normalizedMinValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedMin)
+            && decimal.TryParse(normalizedMaxValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedMax)
+            && parsedMin > parsedMax)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "قيمة MinValue يجب أن تكون أقل من أو تساوي MaxValue." });
+            return FieldValidationContext.Invalid;
+        }
+
+        var normalizedMask = NormalizeNullable(mask);
+        if (ExceedsMaxLength(normalizedMask, FieldMaskMaxLength))
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"قناع الحقل يجب ألا يزيد عن {FieldMaskMaxLength} حرفًا." });
+            return FieldValidationContext.Invalid;
+        }
+
+        var normalizedCdmendTbl = NormalizeNullable(cdmendTbl);
+        if (IsOptionFieldType(normalizedFieldType) && normalizedCdmendTbl == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "مصدر الخيارات (CDMendTbl) مطلوب لأن نوع الحقل قائم على قائمة." });
+            return FieldValidationContext.Invalid;
+        }
+
+        if (width < 0 || height < 0)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "القيم Width و Height يجب أن تكون صفرًا أو أعلى." });
+            return FieldValidationContext.Invalid;
+        }
+
+        return new FieldValidationContext
+        {
+            IsValid = true,
+            ApplicationId = normalizedApplicationId,
+            FieldKey = normalizedFieldKey,
+            FieldType = normalizedFieldType,
+            FieldLabel = normalizedFieldLabel,
+            Placeholder = normalizedPlaceholder,
+            DefaultValue = normalizedDefaultValue,
+            CdmendTbl = normalizedCdmendTbl,
+            DataType = normalizedDataType,
+            MinValue = normalizedMinValue,
+            MaxValue = normalizedMaxValue,
+            Mask = normalizedMask
+        };
+    }
+
+    private static AdminCatalogFieldListItemDto MapFieldListItem(
+        Cdmend field,
+        int linkedCategoriesCount,
+        int linkedSettingsCount,
+        int linkedHistoryCount)
+    {
+        var isUsed = linkedCategoriesCount > 0 || linkedSettingsCount > 0 || linkedHistoryCount > 0;
+
+        return new AdminCatalogFieldListItemDto
+        {
+            ApplicationId = field.ApplicationId ?? string.Empty,
+            FieldKey = field.CdmendTxt,
+            CdmendSql = field.CdmendSql,
+            FieldLabel = field.CDMendLbl,
+            FieldType = field.CdmendType,
+            DataType = field.CdmendDatatype,
+            Required = field.Required ?? false,
+            IsActive = !field.CdmendStat,
+            LinkedCategoriesCount = linkedCategoriesCount,
+            LinkedSettingsCount = linkedSettingsCount,
+            LinkedHistoryCount = linkedHistoryCount,
+            IsUsed = isUsed
+        };
+    }
+
+    private static AdminCatalogFieldDto MapFieldDetails(
+        Cdmend field,
+        AdminCatalogFieldDeleteDiagnosticsDto diagnostics)
+    {
+        var linkedHistoryCount = Math.Max(diagnostics.LinkedHistoryByKeyCount, diagnostics.LinkedHistoryBySqlCount);
+        var isUsed = diagnostics.LinkedCategoriesCount > 0
+            || diagnostics.LinkedSettingsCount > 0
+            || linkedHistoryCount > 0;
+
+        return new AdminCatalogFieldDto
+        {
+            ApplicationId = field.ApplicationId ?? string.Empty,
+            FieldKey = field.CdmendTxt,
+            CdmendSql = field.CdmendSql,
+            FieldType = field.CdmendType,
+            FieldLabel = field.CDMendLbl,
+            Placeholder = field.Placeholder,
+            DefaultValue = field.DefaultValue,
+            CdmendTbl = field.CdmendTbl,
+            DataType = field.CdmendDatatype,
+            Required = field.Required ?? false,
+            RequiredTrue = field.RequiredTrue ?? false,
+            Email = field.Email ?? false,
+            Pattern = field.Pattern ?? false,
+            MinValue = field.MinValue,
+            MaxValue = field.MaxValue,
+            Mask = field.Cdmendmask,
+            IsActive = !field.CdmendStat,
+            Width = field.Width,
+            Height = field.Height,
+            IsDisabledInit = field.IsDisabledInit,
+            IsSearchable = field.IsSearchable,
+            LinkedCategoriesCount = diagnostics.LinkedCategoriesCount,
+            LinkedSettingsCount = diagnostics.LinkedSettingsCount,
+            LinkedHistoryCount = linkedHistoryCount,
+            IsUsed = isUsed
+        };
+    }
+
+    private static IReadOnlyList<string> MergeLookupValues(
+        IReadOnlyList<string> baseline,
+        IReadOnlyList<string> additional)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var value in baseline.Concat(additional))
+        {
+            var normalized = NormalizeNullable(value);
+            if (normalized == null || !seen.Add(normalized))
+            {
+                continue;
+            }
+
+            result.Add(normalized);
+        }
+
+        return result;
+    }
+
+    private static bool? ParseFieldStatus(string? status)
+    {
+        var normalized = NormalizeNullable(status);
+        if (normalized == null || normalized.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (normalized.Equals("active", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (normalized.Equals("inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return null;
+    }
+
+    private static bool IsAllStatus(string status)
+    {
+        return string.Equals(status.Trim(), "all", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsOptionFieldType(string fieldType)
+    {
+        var normalized = fieldType.ToLowerInvariant();
+        return normalized.Contains("drop")
+            || normalized.Contains("radio")
+            || normalized.Contains("select")
+            || normalized.Contains("combo");
+    }
+
+    private static int ReadDictionaryValue(IReadOnlyDictionary<string, int> source, string key)
+    {
+        return source.TryGetValue(key, out var value) ? value : 0;
+    }
+
+    private static int ReadDictionaryValue(IReadOnlyDictionary<int, int> source, int key)
+    {
+        return source.TryGetValue(key, out var value) ? value : 0;
     }
 
     private static AdminCatalogApplicationDto MapApplication(Application application)
@@ -1284,6 +2126,35 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
     private static void AddUnhandledError<T>(CommonResponse<T> response)
     {
         response.Errors.Add(new Error { Code = "500", Message = "حدث خطأ غير متوقع أثناء معالجة الطلب." });
+    }
+
+    private sealed class FieldValidationContext
+    {
+        public static FieldValidationContext Invalid { get; } = new();
+
+        public bool IsValid { get; init; }
+
+        public string? ApplicationId { get; init; }
+
+        public string? FieldKey { get; init; }
+
+        public string? FieldType { get; init; }
+
+        public string? FieldLabel { get; init; }
+
+        public string? Placeholder { get; init; }
+
+        public string? DefaultValue { get; init; }
+
+        public string? CdmendTbl { get; init; }
+
+        public string? DataType { get; init; }
+
+        public string? MinValue { get; init; }
+
+        public string? MaxValue { get; init; }
+
+        public string? Mask { get; init; }
     }
 
     private sealed class CategoryTreeBuilderNode
