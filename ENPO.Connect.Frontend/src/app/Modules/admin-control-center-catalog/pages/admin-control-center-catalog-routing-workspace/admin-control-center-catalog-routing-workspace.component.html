@@ -1034,71 +1034,74 @@
           </div>
 
           <div #previewGraphContainer class="visual-graph-wrapper" *ngIf="hasPreviewGraph; else previewGraphFallback">
-            <svg
-              class="preview-graph"
-              [attr.viewBox]="'0 0 ' + previewGraphWidth + ' ' + previewGraphHeight"
-              [attr.width]="previewGraphWidth"
-              [attr.height]="previewGraphHeight"
-              preserveAspectRatio="xMidYMid meet">
-              <defs>
-                <marker id="routingArrowHead" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
-                </marker>
-              </defs>
+            <div
+              class="preview-graph-stage"
+              [style.width.px]="previewGraphWidth"
+              [style.height.px]="previewGraphHeight">
+              <svg
+                class="preview-graph preview-graph--edges"
+                [attr.viewBox]="'0 0 ' + previewGraphWidth + ' ' + previewGraphHeight"
+                [attr.width]="previewGraphWidth"
+                [attr.height]="previewGraphHeight"
+                preserveAspectRatio="none">
+                <defs>
+                  <marker id="routingArrowHead" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+                  </marker>
+                </defs>
 
-              <g class="graph-edges">
-                <g *ngFor="let edge of previewGraphEdges">
-                  <path
-                    [attr.class]="edge.cssClass"
-                    [attr.d]="edge.path"
-                    marker-end="url(#routingArrowHead)">
-                  </path>
-                  <path
-                    class="preview-edge-hit"
-                    [attr.d]="edge.path"
-                    (click)="onOpenTransitionFromPreview(edge.transitionId)">
-                  </path>
-                  <g
-                    class="preview-edge-label-group"
-                    [attr.transform]="'translate(' + edge.labelX + ',' + edge.labelY + ')'"
-                    (click)="onOpenTransitionFromPreview(edge.transitionId)">
-                    <rect class="preview-edge-label-box" [attr.width]="edge.labelWidth" [attr.height]="edge.labelHeight" rx="8"></rect>
-                    <text class="preview-edge-label" [attr.x]="edge.labelWidth / 2" y="16">
-                      {{ edge.labelPrimary }}
-                    </text>
-                    <text *ngIf="edge.labelSecondary" class="preview-edge-flag" [attr.x]="edge.labelWidth / 2" y="31">
-                      {{ edge.labelSecondary }}
-                    </text>
+                <g class="graph-edges">
+                  <g *ngFor="let edge of previewGraphEdges">
+                    <path
+                      [attr.class]="edge.cssClass"
+                      [attr.d]="edge.path"
+                      marker-end="url(#routingArrowHead)">
+                    </path>
+                    <path
+                      class="preview-edge-hit"
+                      [attr.d]="edge.path"
+                      (click)="onOpenTransitionFromPreview(edge.transitionId)">
+                    </path>
+                    <g
+                      class="preview-edge-label-group"
+                      [attr.transform]="'translate(' + edge.labelX + ',' + edge.labelY + ')'"
+                      (click)="onOpenTransitionFromPreview(edge.transitionId)">
+                      <rect class="preview-edge-label-box" [attr.width]="edge.labelWidth" [attr.height]="edge.labelHeight" rx="8"></rect>
+                      <text class="preview-edge-label" [attr.x]="edge.labelWidth / 2" y="16">
+                        {{ edge.labelPrimary }}
+                      </text>
+                      <text *ngIf="edge.labelSecondary" class="preview-edge-flag" [attr.x]="edge.labelWidth / 2" y="31">
+                        {{ edge.labelSecondary }}
+                      </text>
+                    </g>
                   </g>
                 </g>
-              </g>
+              </svg>
 
-              <g class="graph-nodes">
-                <g
+              <div class="graph-nodes-layer">
+                <div
                   *ngFor="let node of previewGraphNodes"
-                  class="preview-node-group"
-                  [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
+                  [attr.class]="node.cssClass + ' preview-node-group'"
+                  [style.width.px]="node.width"
+                  [style.height.px]="node.height"
+                  [style.transform]="'translate(' + node.x + 'px,' + node.y + 'px)'"
                   (click)="onOpenStepFromPreview(node.stepId)">
-                  <rect [attr.class]="node.cssClass" [attr.width]="node.width" [attr.height]="node.height" rx="14"></rect>
-                  <title>{{ node.titleLine }} | {{ node.fullTargetSummary }}</title>
-
-                  <line class="preview-node-divider" x1="12" [attr.x2]="node.width - 12" y1="38" y2="38"></line>
-                  <line class="preview-node-divider" x1="12" [attr.x2]="node.width - 12" y1="60" y2="60"></line>
-                  <line class="preview-node-divider" x1="12" [attr.x2]="node.width - 12" y1="88" y2="88"></line>
-
-                  <text class="preview-node-title" x="14" y="24">{{ node.titleLine }}</text>
-                  <text class="preview-node-type" x="14" y="52">{{ node.codeLine }}</text>
-                  <text class="preview-node-target" x="14" y="76">
-                    {{ node.targetLine }}
-                  </text>
-
-                  <g *ngFor="let badge of node.badges; let i = index" [attr.transform]="'translate(' + (14 + (i * 74)) + ',98)'">
-                    <rect [attr.class]="'preview-node-badge ' + badge.cssClass" width="54" height="18" rx="9"></rect>
-                    <text class="preview-node-badge-text" x="27" y="13">{{ badge.label }}</text>
-                  </g>
-                </g>
-              </g>
-            </svg>
+                  <div class="preview-node-header" [attr.title]="node.titleLine">{{ node.titleLine }}</div>
+                  <div class="preview-node-body">
+                    <div class="preview-node-code" [attr.title]="node.codeLine">{{ node.codeLine }}</div>
+                    <div class="preview-node-target" [attr.title]="node.fullTargetSummary">{{ node.targetLine }}</div>
+                  </div>
+                  <div class="preview-node-footer">
+                    <span
+                      *ngFor="let badge of node.badges"
+                      [attr.class]="'preview-node-badge ' + badge.cssClass"
+                      [attr.title]="badge.label">
+                      <span class="preview-node-badge-text">{{ badge.label }}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <ng-template #previewGraphFallback>

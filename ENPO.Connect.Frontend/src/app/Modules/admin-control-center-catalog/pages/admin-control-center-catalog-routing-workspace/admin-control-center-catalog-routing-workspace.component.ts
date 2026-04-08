@@ -2744,11 +2744,11 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     const minGraphWidth = 480;
     const maxRows = Math.max(...Array.from(rowsByLevel.values()).map(items => items.length), 1);
     const paddingY = maxRows <= 1
-      ? 46
+      ? 64
       : maxRows === 2
-        ? 52
+        ? 56
         : 44;
-    const minGraphHeight = maxRows <= 1 ? 224 : 292;
+    const minGraphHeight = maxRows <= 1 ? 260 : 292;
     const verticalGap = maxRows <= 1
       ? 0
       : maxRows === 2
@@ -2997,6 +2997,21 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     const anchors = this.resolveEdgeAnchors(from, to);
     const startAnchor = this.pushAnchorOutward(this.applySiblingOffsetToAnchor(anchors.start, laneOffset), 6);
     const endAnchor = this.pushAnchorOutward(this.applySiblingOffsetToAnchor(anchors.end, laneOffset), 6);
+    const horizontalLanePath = this.buildHorizontalEdgeLanePath(
+      startAnchor,
+      endAnchor,
+      from,
+      to,
+      laneOffset,
+      labelWidth,
+      labelHeight,
+      nodes,
+      graphWidth,
+      graphHeight
+    );
+    if (horizontalLanePath) {
+      return horizontalLanePath;
+    }
 
     let control1X = startAnchor.x;
     let control1Y = startAnchor.y;
@@ -3117,6 +3132,96 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     return { ...anchor, y: anchor.y + distance };
   }
 
+  private buildHorizontalEdgeLanePath(
+    startAnchor: EdgeAnchor,
+    endAnchor: EdgeAnchor,
+    from: GraphNodeBounds,
+    to: GraphNodeBounds,
+    laneOffset: number,
+    labelWidth: number,
+    labelHeight: number,
+    nodes: GraphNodeBounds[],
+    graphWidth: number,
+    graphHeight: number): { path: string; labelX: number; labelY: number } | null {
+    const isHorizontalAnchors = (
+      (startAnchor.side === 'left' || startAnchor.side === 'right') &&
+      (endAnchor.side === 'left' || endAnchor.side === 'right')
+    );
+    if (!isHorizontalAnchors) {
+      return null;
+    }
+
+    const sameRow = Math.abs(startAnchor.y - endAnchor.y) <= Math.max(42, Math.min(from.height, to.height) * 0.48);
+    if (!sameRow) {
+      return null;
+    }
+
+    const topBound = Math.min(from.y, to.y);
+    const bottomBound = Math.max(from.y + from.height, to.y + to.height);
+    const laneGap = 24 + Math.min(14, Math.abs(laneOffset) * 0.45);
+    const topLaneY = topBound - laneGap;
+    const bottomLaneY = bottomBound + laneGap;
+    const topLaneFits = topLaneY >= 18;
+    const bottomLaneFits = bottomLaneY <= (graphHeight - 18);
+    if (!topLaneFits && !bottomLaneFits) {
+      return null;
+    }
+
+    const laneAbove = topLaneFits;
+    let laneY = laneAbove ? topLaneY : bottomLaneY;
+    laneY += laneAbove ? (-laneOffset * 0.35) : (laneOffset * 0.35);
+    const direction = endAnchor.x >= startAnchor.x ? 1 : -1;
+    const horizontalDistance = Math.abs(endAnchor.x - startAnchor.x);
+    const bend = Math.max(44, Math.min(104, horizontalDistance * 0.2));
+    const laneStartX = startAnchor.x + (bend * direction);
+    const laneEndX = endAnchor.x - (bend * direction);
+    const laneSpan = Math.abs(laneEndX - laneStartX);
+    if (laneSpan < 24) {
+      return null;
+    }
+
+    const path = `M ${startAnchor.x} ${startAnchor.y} C ${startAnchor.x + (direction * 28)} ${startAnchor.y}, ${laneStartX} ${laneY}, ${laneStartX} ${laneY} L ${laneEndX} ${laneY} C ${laneEndX} ${laneY}, ${endAnchor.x - (direction * 28)} ${endAnchor.y}, ${endAnchor.x} ${endAnchor.y}`;
+    const baseLabelPoint = this.adjustEdgeLabelPosition(
+      {
+        x: (laneStartX + laneEndX) / 2,
+        y: laneAbove ? laneY - 14 : laneY + 14
+      },
+      labelWidth,
+      labelHeight,
+      nodes,
+      graphWidth,
+      graphHeight
+    );
+    if (!this.doesLabelRectCollideNodes(baseLabelPoint, labelWidth, labelHeight, nodes, 34)) {
+      return {
+        path,
+        labelX: baseLabelPoint.x,
+        labelY: baseLabelPoint.y
+      };
+    }
+
+    const alternateLabelPoint = this.adjustEdgeLabelPosition(
+      {
+        x: (laneStartX + laneEndX) / 2,
+        y: laneAbove ? laneY + 20 : laneY - 20
+      },
+      labelWidth,
+      labelHeight,
+      nodes,
+      graphWidth,
+      graphHeight
+    );
+    if (!this.doesLabelRectCollideNodes(alternateLabelPoint, labelWidth, labelHeight, nodes, 34)) {
+      return {
+        path,
+        labelX: alternateLabelPoint.x,
+        labelY: alternateLabelPoint.y
+      };
+    }
+
+    return null;
+  }
+
   private computeEdgeLabelPoint(
     start: { x: number; y: number },
     control1: { x: number; y: number },
@@ -3163,7 +3268,7 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
         graphHeight
       );
 
-      if (!this.doesLabelRectCollideNodes(point, labelWidth, labelHeight, nodes, 26)) {
+      if (!this.doesLabelRectCollideNodes(point, labelWidth, labelHeight, nodes, 34)) {
         return point;
       }
 
@@ -3179,7 +3284,7 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
         graphHeight
       );
 
-      if (!this.doesLabelRectCollideNodes(invertedPoint, labelWidth, labelHeight, nodes, 26)) {
+      if (!this.doesLabelRectCollideNodes(invertedPoint, labelWidth, labelHeight, nodes, 34)) {
         return invertedPoint;
       }
     }
@@ -3195,7 +3300,7 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
       graphWidth,
       graphHeight
     );
-    if (!this.doesLabelRectCollideNodes(liftedFallback, labelWidth, labelHeight, nodes, 26)) {
+    if (!this.doesLabelRectCollideNodes(liftedFallback, labelWidth, labelHeight, nodes, 34)) {
       return liftedFallback;
     }
 
@@ -3259,7 +3364,7 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     graphHeight: number): { x: number; y: number } {
     const margin = 12;
     let labelRect = this.buildRectFromCenter(point, labelWidth, labelHeight);
-    const nodePadding = 24;
+    const nodePadding = 30;
 
     for (let attempt = 0; attempt < 12; attempt += 1) {
       let collided = false;
