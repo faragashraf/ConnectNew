@@ -38,6 +38,11 @@ const routes: Routes = [
     path: 'Admin/ControlCenter',
     loadChildren: () => import('./Modules/admin-control-center/admin-control-center.module').then(m => m.AdminControlCenterModule)
   },
+  {
+    path: 'Admin/ControlCenterCatalog',
+    loadChildren: () => import('./Modules/admin-control-center-catalog/admin-control-center-catalog.module')
+      .then(m => m.AdminControlCenterCatalogModule)
+  },
   { path: 'Admin', loadChildren: () => import('./Modules/admins/admins.module').then(m => m.AdminsModule) },
   { path: 'Docs', loadChildren: () => import('./Modules/docs/docs.module').then(m => m.DocsModule) },
   { path: 'AdminCer', loadChildren: () => import('./Modules/AdminCertificates/AdminCer.module').then(m => m.AdminCerModule) },

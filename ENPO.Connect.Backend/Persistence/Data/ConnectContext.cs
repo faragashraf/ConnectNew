@@ -166,6 +166,8 @@ public partial class ConnectContext : DbContext
 
         modelBuilder.Entity<Application>(entity =>
         {
+            entity.ToTable("Applications");
+
             entity.Property(e => e.ApplicationId)
                 .HasMaxLength(10)
                 .HasColumnName("ApplicationID");
