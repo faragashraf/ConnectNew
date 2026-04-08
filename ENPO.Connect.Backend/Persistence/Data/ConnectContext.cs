@@ -616,6 +616,10 @@ public partial class ConnectContext : DbContext
             entity.Property(e => e.IncludeYear).HasDefaultValue(true);
             entity.Property(e => e.UseSequence).HasDefaultValue(true);
             entity.Property(e => e.SequenceName).HasMaxLength(80);
+            entity.Property(e => e.SequencePaddingLength).HasDefaultValue(0);
+            entity.Property(e => e.SequenceResetScope)
+                .HasMaxLength(16)
+                .HasDefaultValue("none");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.CreatedBy)
                 .HasMaxLength(64)

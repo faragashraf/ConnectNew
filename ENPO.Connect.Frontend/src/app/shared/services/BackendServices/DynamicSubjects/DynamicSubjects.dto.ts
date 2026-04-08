@@ -437,6 +437,8 @@ export interface SubjectTypeAdminDto {
   includeYear: boolean;
   useSequence: boolean;
   sequenceName?: string;
+  sequencePaddingLength?: number;
+  sequenceResetScope?: 'none' | 'yearly' | 'monthly' | string;
   lastModifiedBy?: string;
   lastModifiedAtUtc?: string;
   requestPolicy?: RequestPolicyDefinitionDto;
@@ -451,6 +453,8 @@ export interface SubjectTypeAdminUpsertRequestDto {
   includeYear: boolean;
   useSequence: boolean;
   sequenceName?: string;
+  sequencePaddingLength?: number;
+  sequenceResetScope?: 'none' | 'yearly' | 'monthly' | string;
   requestPolicy?: RequestPolicyDefinitionDto;
 }
 

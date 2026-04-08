@@ -87,8 +87,10 @@ public sealed class SubjectReferenceGenerator : ISubjectReferenceGenerator
         if (policy?.UseSequence != false)
         {
             var sequenceValue = messageId;
-            var sequenceName = NormalizeSequenceName(
-                ResolveTemplateTokens((policy?.SequenceName ?? string.Empty).Trim(), contextTokens));
+            var resetScope = NormalizeSequenceResetScope(policy?.SequenceResetScope);
+            var sequenceNameTemplate = ResolveTemplateTokens((policy?.SequenceName ?? string.Empty).Trim(), contextTokens);
+            var effectiveSequenceNameTemplate = ApplySequenceResetScope(sequenceNameTemplate, resetScope, DateTime.UtcNow);
+            var sequenceName = NormalizeSequenceName(effectiveSequenceNameTemplate);
 
             if (sequenceName.Length > 0
                 && !string.Equals(sequenceName, "Seq_Tickets", StringComparison.OrdinalIgnoreCase))
@@ -105,7 +107,7 @@ public sealed class SubjectReferenceGenerator : ISubjectReferenceGenerator
                 }
             }
 
-            components.Add(sequenceValue.ToString(CultureInfo.InvariantCulture));
+            components.Add(FormatSequence(sequenceValue, policy?.SequencePaddingLength ?? 0));
         }
 
         if (components.Count == 0)
@@ -236,6 +238,59 @@ public sealed class SubjectReferenceGenerator : ISubjectReferenceGenerator
         }
 
         return normalized.Length > 80 ? normalized[..80] : normalized;
+    }
+
+    private static string NormalizeSequenceResetScope(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "yearly" => "yearly",
+            "annual" => "yearly",
+            "year" => "yearly",
+            "monthly" => "monthly",
+            "month" => "monthly",
+            _ => "none"
+        };
+    }
+
+    private static string ApplySequenceResetScope(string sequenceNameTemplate, string resetScope, DateTime utcNow)
+    {
+        var template = (sequenceNameTemplate ?? string.Empty).Trim();
+        if (template.Length == 0 || string.Equals(resetScope, "none", StringComparison.Ordinal))
+        {
+            return template;
+        }
+
+        if (string.Equals(resetScope, "yearly", StringComparison.Ordinal))
+        {
+            return $"{template}_{utcNow:yyyy}";
+        }
+
+        if (string.Equals(resetScope, "monthly", StringComparison.Ordinal))
+        {
+            return $"{template}_{utcNow:yyyyMM}";
+        }
+
+        return template;
+    }
+
+    private static string FormatSequence(int sequenceValue, int paddingLength)
+    {
+        var safePadding = paddingLength;
+        if (safePadding < 0)
+        {
+            safePadding = 0;
+        }
+
+        if (safePadding > 12)
+        {
+            safePadding = 12;
+        }
+
+        return safePadding > 0
+            ? sequenceValue.ToString($"D{safePadding}", CultureInfo.InvariantCulture)
+            : sequenceValue.ToString(CultureInfo.InvariantCulture);
     }
 
     private async Task EnsureSequenceExistsAsync(string sequenceName, CancellationToken cancellationToken)

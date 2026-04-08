@@ -20,6 +20,10 @@ public partial class SubjectReferencePolicy
 
     public string? SequenceName { get; set; }
 
+    public int SequencePaddingLength { get; set; }
+
+    public string SequenceResetScope { get; set; } = "none";
+
     public bool IsActive { get; set; }
 
     public string CreatedBy { get; set; } = null!;

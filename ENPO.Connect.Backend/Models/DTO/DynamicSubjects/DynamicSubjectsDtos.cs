@@ -758,6 +758,10 @@ public sealed class SubjectTypeAdminDto
 
     public string? SequenceName { get; set; }
 
+    public int SequencePaddingLength { get; set; }
+
+    public string SequenceResetScope { get; set; } = "none";
+
     public string? LastModifiedBy { get; set; }
 
     public DateTime? LastModifiedAtUtc { get; set; }
@@ -782,6 +786,10 @@ public sealed class SubjectTypeAdminUpsertRequestDto
     public bool UseSequence { get; set; } = true;
 
     public string? SequenceName { get; set; }
+
+    public int SequencePaddingLength { get; set; }
+
+    public string SequenceResetScope { get; set; } = "none";
 
     public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
 }

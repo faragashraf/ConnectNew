@@ -2146,6 +2146,20 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
+            var sequencePaddingLength = safeRequest.SequencePaddingLength;
+            if (sequencePaddingLength < 0 || sequencePaddingLength > 12)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "Sequence padding يجب أن يكون بين 0 و 12." });
+                return response;
+            }
+
+            var sequenceResetScope = NormalizeSequenceResetScope(safeRequest.SequenceResetScope);
+            if (sequenceResetScope == null)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "Reset scope غير صالح. القيم المدعومة: none أو yearly أو monthly." });
+                return response;
+            }
+
             if (policy == null)
             {
                 policy = new SubjectReferencePolicy
@@ -2157,6 +2171,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     IncludeYear = safeRequest.IncludeYear,
                     UseSequence = safeRequest.UseSequence,
                     SequenceName = sequenceName,
+                    SequencePaddingLength = sequencePaddingLength,
+                    SequenceResetScope = sequenceResetScope,
                     IsActive = safeRequest.ReferencePolicyEnabled,
                     CreatedBy = auditActorId,
                     CreatedAtUtc = DateTime.UtcNow,
@@ -2173,6 +2189,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 policy.IncludeYear = safeRequest.IncludeYear;
                 policy.UseSequence = safeRequest.UseSequence;
                 policy.SequenceName = sequenceName;
+                policy.SequencePaddingLength = sequencePaddingLength;
+                policy.SequenceResetScope = sequenceResetScope;
                 policy.IsActive = safeRequest.ReferencePolicyEnabled;
                 policy.LastModifiedBy = auditActorId;
                 policy.LastModifiedAtUtc = DateTime.UtcNow;
@@ -2895,6 +2913,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             IncludeYear = policy?.IncludeYear ?? true,
             UseSequence = policy?.UseSequence ?? true,
             SequenceName = policy?.SequenceName,
+            SequencePaddingLength = policy?.SequencePaddingLength ?? 0,
+            SequenceResetScope = NormalizeSequenceResetScope(policy?.SequenceResetScope) ?? "none",
             LastModifiedBy = policy?.LastModifiedBy ?? policy?.CreatedBy,
             LastModifiedAtUtc = policy?.LastModifiedAtUtc ?? policy?.CreatedAtUtc,
             RequestPolicy = requestPolicy
@@ -4353,6 +4373,27 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         if (normalized == "incoming" || normalized == "outgoing")
         {
             return normalized;
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeSequenceResetScope(string? value)
+    {
+        var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+        if (normalized == null || normalized == "none")
+        {
+            return "none";
+        }
+
+        if (normalized == "yearly" || normalized == "annual" || normalized == "year")
+        {
+            return "yearly";
+        }
+
+        if (normalized == "monthly" || normalized == "month")
+        {
+            return "monthly";
         }
 
         return null;

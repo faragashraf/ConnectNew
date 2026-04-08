@@ -235,16 +235,40 @@ export class AdminControlCenterLegacyMetadataPersistenceService {
 
       const sourceFieldKeys = this.buildSourceFieldKeys(resolvedBindings, targetType.sourceFieldKeys);
       const prefixFromStep = this.normalizeString(context.structureValues['subjectPrefix']);
+      const referencePolicyEnabled = this.toBoolean(context.bindingValues['referencePolicyEnabled'])
+        ?? targetType.referencePolicyEnabled;
+      const referencePrefix = this.normalizeString(context.bindingValues['referencePrefix'])
+        ?? prefixFromStep
+        ?? targetType.referencePrefix
+        ?? `SUBJ${categoryId}`;
+      const referenceSeparator = this.normalizeString(context.bindingValues['referenceSeparator'])
+        ?? targetType.referenceSeparator
+        ?? '-';
+      const includeYear = this.toBoolean(context.bindingValues['referenceIncludeYear'])
+        ?? targetType.includeYear;
+      const useSequence = this.toBoolean(context.bindingValues['referenceUseSequence'])
+        ?? targetType.useSequence;
+      const sequenceName = this.normalizeString(context.bindingValues['referenceSequenceName'])
+        ?? targetType.sequenceName
+        ?? undefined;
+      const sequencePaddingLength = this.toNonNegativeInt(context.bindingValues['referenceSequencePaddingLength'])
+        ?? this.toNonNegativeInt(targetType.sequencePaddingLength)
+        ?? 0;
+      const sequenceResetScope = this.normalizeSequenceResetScope(context.bindingValues['referenceSequenceResetScope'])
+        ?? this.normalizeSequenceResetScope(targetType.sequenceResetScope)
+        ?? 'none';
 
       const subjectTypeRequest: SubjectTypeAdminUpsertRequestDto = {
         isActive: true,
-        referencePolicyEnabled: true,
-        referencePrefix: prefixFromStep ?? targetType.referencePrefix ?? `SUBJ${categoryId}`,
-        referenceSeparator: targetType.referenceSeparator ?? '-',
+        referencePolicyEnabled,
+        referencePrefix,
+        referenceSeparator,
         sourceFieldKeys,
-        includeYear: targetType.includeYear,
-        useSequence: targetType.useSequence,
-        sequenceName: targetType.sequenceName ?? undefined,
+        includeYear,
+        useSequence,
+        sequenceName,
+        sequencePaddingLength,
+        sequenceResetScope,
         requestPolicy: policyBuild
       };
 
@@ -930,6 +954,53 @@ export class AdminControlCenterLegacyMetadataPersistenceService {
   private normalizeString(value: unknown): string | null {
     const normalized = String(value ?? '').trim();
     return normalized.length > 0 ? normalized : null;
+  }
+
+  private toBoolean(value: unknown): boolean | null {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = this.normalizeFieldKey(value);
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y' || normalized === 'on') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'n' || normalized === 'off') {
+      return false;
+    }
+
+    return null;
+  }
+
+  private toNonNegativeInt(value: unknown): number | null {
+    const numeric = Number(value ?? Number.NaN);
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      return null;
+    }
+
+    return Math.trunc(numeric);
+  }
+
+  private normalizeSequenceResetScope(value: unknown): 'none' | 'yearly' | 'monthly' | null {
+    const normalized = this.normalizeFieldKey(value);
+    if (!normalized || normalized === 'none') {
+      return 'none';
+    }
+
+    if (normalized === 'yearly' || normalized === 'year' || normalized === 'annual') {
+      return 'yearly';
+    }
+
+    if (normalized === 'monthly' || normalized === 'month') {
+      return 'monthly';
+    }
+
+    return null;
   }
 
   private toPositiveInt(value: unknown): number | null {
