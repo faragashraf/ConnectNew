@@ -1026,7 +1026,14 @@
             </ul>
           </div>
 
-          <div class="visual-graph-wrapper" *ngIf="hasPreviewGraph; else previewGraphFallback">
+          <div class="empty-state preview-special-path-note" *ngIf="previewUnrenderedSpecialPaths.length > 0">
+            <strong>تنبيه المسارات الخاصة:</strong>
+            <ul class="preview-alert-list">
+              <li *ngFor="let warning of previewUnrenderedSpecialPaths">{{ warning }}</li>
+            </ul>
+          </div>
+
+          <div #previewGraphContainer class="visual-graph-wrapper" *ngIf="hasPreviewGraph; else previewGraphFallback">
             <svg
               class="preview-graph"
               [attr.viewBox]="'0 0 ' + previewGraphWidth + ' ' + previewGraphHeight"
@@ -1035,7 +1042,7 @@
               preserveAspectRatio="xMidYMid meet">
               <defs>
                 <marker id="routingArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M 0 0 L 10 5 L 0 10 z"></path>
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
                 </marker>
               </defs>
 
@@ -1099,7 +1106,7 @@
                 <th>من</th>
                 <th>إلى</th>
                 <th>الإجراء</th>
-                <th>ملخص الاستهداف</th>
+                <th class="preview-target-summary-header">ملخص الاستهداف</th>
                 <th>المسارات الخاصة</th>
               </tr>
             </ng-template>
@@ -1111,7 +1118,9 @@
                 <td>{{ getStepName(edge.fromStepId) }}</td>
                 <td>{{ getStepName(edge.toStepId) }}</td>
                 <td>{{ edge.actionNameAr }}</td>
-                <td>{{ truncateText(getPreviewStepTargetSummary(edge.toStepId), 64) }}</td>
+                <td class="preview-target-summary-cell" [attr.title]="getPreviewStepTargetSummary(edge.toStepId)">
+                  {{ getPreviewStepTargetSummary(edge.toStepId) }}
+                </td>
                 <td>
                   <p-tag *ngIf="edge.isRejectPath" severity="danger" value="رفض"></p-tag>
                   <p-tag *ngIf="edge.isReturnPath" severity="warning" value="إعادة"></p-tag>

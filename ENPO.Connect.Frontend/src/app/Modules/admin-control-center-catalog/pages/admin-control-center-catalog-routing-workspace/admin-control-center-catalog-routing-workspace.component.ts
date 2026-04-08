@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { TreeNode } from 'primeng/api';
@@ -83,6 +83,12 @@ type PreviewGraphEdge = {
   labelY: number;
   cssClass: string;
   flagLabel: string;
+};
+type GraphNodeBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 type TargetNodeResolution = {
   selectedNodeType: RoutingSelectedNodeType;
@@ -312,10 +318,12 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
   previewPanel: PreviewPanelModel | null = null;
   previewGraphNodes: PreviewGraphNode[] = [];
   previewGraphEdges: PreviewGraphEdge[] = [];
+  previewUnrenderedSpecialPaths: string[] = [];
   previewGraphWidth = 980;
   previewGraphHeight = 380;
   selectedPreviewStepId: number | null = null;
   selectedPreviewTransitionId: number | null = null;
+  @ViewChild('previewGraphContainer') private previewGraphContainerRef?: ElementRef<HTMLDivElement>;
 
   message = '';
   messageSeverity: MessageSeverity = 'success';
@@ -735,6 +743,8 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     this.activeSection = sectionKey;
     if (sectionKey === 'visual' && this.preview == null && this.selectedProfileId) {
       this.onRefreshPreview();
+    } else if (sectionKey === 'visual') {
+      this.schedulePreviewViewportCentering();
     }
 
     if (sectionKey === 'validation' && this.validationResult == null && this.selectedProfileId) {
@@ -2638,6 +2648,7 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     if (nodes.length === 0) {
       this.previewGraphNodes = [];
       this.previewGraphEdges = [];
+      this.previewUnrenderedSpecialPaths = [];
       this.previewGraphWidth = 980;
       this.previewGraphHeight = 380;
       return;
@@ -2659,27 +2670,46 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
       bucket.sort((a, b) => (a.stepOrder - b.stepOrder) || (a.stepId - b.stepId));
     }
 
+    const levelCount = maxLevel + 1;
     const nodeWidth = 286;
     const nodeHeight = 118;
-    const horizontalGap = 108;
-    const verticalGap = 30;
-    const padding = 36;
+    const horizontalGap = levelCount <= 1
+      ? 0
+      : levelCount === 2
+        ? 168
+        : levelCount === 3
+          ? 136
+          : 108;
+    const paddingX = 42;
+    const paddingY = 34;
+    const minGraphWidth = 620;
+    const minGraphHeight = 260;
     const maxRows = Math.max(...Array.from(rowsByLevel.values()).map(items => items.length), 1);
-    const contentHeight = (maxRows * nodeHeight) + ((maxRows - 1) * verticalGap);
+    const verticalGap = maxRows <= 1
+      ? 0
+      : maxRows === 2
+        ? 46
+        : maxRows === 3
+          ? 34
+          : 28;
+    const contentWidth = (levelCount * nodeWidth) + (Math.max(levelCount - 1, 0) * horizontalGap);
+    const contentHeight = (maxRows * nodeHeight) + (Math.max(maxRows - 1, 0) * verticalGap);
 
-    this.previewGraphWidth = Math.max(980, (padding * 2) + ((maxLevel + 1) * nodeWidth) + (maxLevel * horizontalGap));
-    this.previewGraphHeight = Math.max(380, (padding * 2) + contentHeight);
+    this.previewGraphWidth = Math.max(minGraphWidth, (paddingX * 2) + contentWidth);
+    this.previewGraphHeight = Math.max(minGraphHeight, (paddingY * 2) + contentHeight);
+    const horizontalOffset = Math.max(paddingX, (this.previewGraphWidth - contentWidth) / 2);
+    const verticalOffset = Math.max(paddingY, (this.previewGraphHeight - contentHeight) / 2);
 
-    const positions = new Map<number, { x: number; y: number; width: number; height: number }>();
+    const positions = new Map<number, GraphNodeBounds>();
     const graphNodes: PreviewGraphNode[] = [];
 
     for (const [level, bucket] of rowsByLevel.entries()) {
       const columnIndex = maxLevel - level;
-      const x = padding + (columnIndex * (nodeWidth + horizontalGap));
+      const x = horizontalOffset + (columnIndex * (nodeWidth + horizontalGap));
       const columnHeight = (bucket.length * nodeHeight) + ((Math.max(bucket.length - 1, 0)) * verticalGap);
-      const verticalOffset = Math.max(0, (contentHeight - columnHeight) / 2);
+      const columnVerticalOffset = Math.max(0, (contentHeight - columnHeight) / 2);
       bucket.forEach((node, rowIndex) => {
-        const y = padding + verticalOffset + (rowIndex * (nodeHeight + verticalGap));
+        const y = verticalOffset + columnVerticalOffset + (rowIndex * (nodeHeight + verticalGap));
         positions.set(node.stepId, { x, y, width: nodeWidth, height: nodeHeight });
 
         const cssClass = [
@@ -2733,14 +2763,40 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     }
 
     const graphEdges: PreviewGraphEdge[] = [];
+    const allNodeBounds = Array.from(positions.values());
+    const pairCounts = new Map<string, number>();
+    const pairIndexes = new Map<string, number>();
+    const unrenderedSpecialPaths: string[] = [];
+    for (const edge of edges) {
+      const key = `${edge.fromStepId}->${edge.toStepId}`;
+      pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+    }
+
     for (const edge of edges) {
       const from = positions.get(edge.fromStepId);
       const to = positions.get(edge.toStepId);
+      const flagLabel = this.resolvePreviewEdgeFlagLabel(edge);
       if (!from || !to) {
+        if (flagLabel.length > 0) {
+          unrenderedSpecialPaths.push(this.buildUnrenderedSpecialPathLabel(preview, edge, flagLabel));
+        }
+
         continue;
       }
 
-      const pathInfo = this.buildEdgePath(from, to);
+      const pairKey = `${edge.fromStepId}->${edge.toStepId}`;
+      const siblingIndex = pairIndexes.get(pairKey) ?? 0;
+      pairIndexes.set(pairKey, siblingIndex + 1);
+      const siblingCount = pairCounts.get(pairKey) ?? 1;
+      const pathInfo = this.buildEdgePath(
+        from,
+        to,
+        allNodeBounds,
+        this.previewGraphWidth,
+        this.previewGraphHeight,
+        siblingIndex,
+        siblingCount
+      );
       const cssClass = [
         'preview-edge',
         edge.isRejectPath ? 'is-reject' : '',
@@ -2748,15 +2804,6 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
         edge.isEscalationPath ? 'is-escalation' : '',
         this.selectedPreviewTransitionId === edge.transitionId ? 'is-selected' : ''
       ].filter(Boolean).join(' ');
-
-      let flagLabel = '';
-      if (edge.isRejectPath) {
-        flagLabel = 'رفض';
-      } else if (edge.isReturnPath) {
-        flagLabel = 'إعادة';
-      } else if (edge.isEscalationPath) {
-        flagLabel = 'تصعيد';
-      }
 
       graphEdges.push({
         transitionId: edge.transitionId,
@@ -2773,6 +2820,8 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
 
     this.previewGraphNodes = graphNodes;
     this.previewGraphEdges = graphEdges;
+    this.previewUnrenderedSpecialPaths = unrenderedSpecialPaths;
+    this.schedulePreviewViewportCentering();
   }
 
   private computeStepLevels(
@@ -2829,20 +2878,41 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
   }
 
   private buildEdgePath(
-    from: { x: number; y: number; width: number; height: number },
-    to: { x: number; y: number; width: number; height: number }): { path: string; labelX: number; labelY: number } {
+    from: GraphNodeBounds,
+    to: GraphNodeBounds,
+    nodes: GraphNodeBounds[],
+    graphWidth: number,
+    graphHeight: number,
+    siblingIndex: number,
+    siblingCount: number): { path: string; labelX: number; labelY: number } {
     const fromMidY = from.y + (from.height / 2);
     const toMidY = to.y + (to.height / 2);
     const goesLeft = to.x < from.x;
-    const startX = goesLeft ? from.x : from.x + from.width;
-    const endX = goesLeft ? to.x + to.width : to.x;
+    const edgeInset = 8;
+    const siblingSpread = siblingCount <= 1
+      ? 0
+      : (siblingIndex - ((siblingCount - 1) / 2)) * 22;
+    const startX = goesLeft ? from.x - edgeInset : from.x + from.width + edgeInset;
+    const endX = goesLeft ? to.x + to.width + edgeInset : to.x - edgeInset;
+    const startY = fromMidY;
+    const endY = toMidY;
 
     if (from.x === to.x && from.y === to.y) {
-      const loopPath = `M ${startX} ${fromMidY} C ${startX - 70} ${fromMidY - 60}, ${startX + 70} ${fromMidY - 60}, ${startX} ${fromMidY}`;
+      const loopLift = 76 + Math.abs(siblingSpread);
+      const loopArc = 84 + Math.abs(siblingSpread);
+      const anchorY = startY + siblingSpread;
+      const controlY = anchorY - loopLift;
+      const loopPath = `M ${startX} ${anchorY} C ${startX + loopArc} ${controlY}, ${startX - loopArc} ${controlY}, ${startX} ${anchorY}`;
+      const loopLabel = this.adjustEdgeLabelPosition(
+        { x: startX, y: anchorY - loopLift - 10 },
+        nodes,
+        graphWidth,
+        graphHeight
+      );
       return {
         path: loopPath,
-        labelX: startX,
-        labelY: fromMidY - 68
+        labelX: loopLabel.x,
+        labelY: loopLabel.y
       };
     }
 
@@ -2850,13 +2920,144 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     const curvature = Math.max(60, Math.abs(endX - startX) * 0.42);
     const control1X = startX + (curvature * direction);
     const control2X = endX - (curvature * direction);
-    const path = `M ${startX} ${fromMidY} C ${control1X} ${fromMidY}, ${control2X} ${toMidY}, ${endX} ${toMidY}`;
+    const control1Y = startY + siblingSpread;
+    const control2Y = endY + siblingSpread;
+    const path = `M ${startX} ${startY} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${endX} ${endY}`;
+    const labelBaseX = this.evaluateCubicBezier(startX, control1X, control2X, endX, 0.5);
+    const labelBaseY = this.evaluateCubicBezier(startY, control1Y, control2Y, endY, 0.5);
+    const tangentX = this.evaluateCubicBezierDerivative(startX, control1X, control2X, endX, 0.5);
+    const tangentY = this.evaluateCubicBezierDerivative(startY, control1Y, control2Y, endY, 0.5);
+    const tangentLength = Math.max(1, Math.hypot(tangentX, tangentY));
+    let normalX = (-tangentY / tangentLength);
+    let normalY = (tangentX / tangentLength);
+    const normalSign = (toMidY - fromMidY) >= 0 ? -1 : 1;
+    normalX *= normalSign;
+    normalY *= normalSign;
+
+    const labelDistance = 22 + Math.min(8, Math.abs(siblingSpread) * 0.35);
+    let labelX = labelBaseX + (normalX * labelDistance);
+    let labelY = labelBaseY + (normalY * labelDistance);
+    if (Math.abs(toMidY - fromMidY) < 14) {
+      labelY -= 8;
+    }
+
+    const adjustedLabel = this.adjustEdgeLabelPosition(
+      { x: labelX, y: labelY },
+      nodes,
+      graphWidth,
+      graphHeight
+    );
 
     return {
       path,
-      labelX: (startX + endX) / 2,
-      labelY: ((fromMidY + toMidY) / 2) - 8
+      labelX: adjustedLabel.x,
+      labelY: adjustedLabel.y
     };
+  }
+
+  private resolvePreviewEdgeFlagLabel(edge: SubjectRoutingPreviewEdgeDto): string {
+    const labels: string[] = [];
+    if (edge.isRejectPath) {
+      labels.push('رفض');
+    }
+
+    if (edge.isReturnPath) {
+      labels.push('إعادة');
+    }
+
+    if (edge.isEscalationPath) {
+      labels.push('تصعيد');
+    }
+
+    return labels.join(' + ');
+  }
+
+  private buildUnrenderedSpecialPathLabel(
+    preview: SubjectRoutingPreviewDto,
+    edge: SubjectRoutingPreviewEdgeDto,
+    flagLabel: string): string {
+    const nodesById = new Map(
+      (preview.nodes ?? []).map(item => [item.stepId, this.normalizeText(item.stepNameAr) ?? `#${item.stepId}`])
+    );
+    const fromLabel = nodesById.get(edge.fromStepId) ?? `#${edge.fromStepId}`;
+    const toLabel = nodesById.get(edge.toStepId) ?? `#${edge.toStepId}`;
+    return `${flagLabel}: من ${fromLabel} إلى ${toLabel} (غير مرسوم بصريًا)`;
+  }
+
+  private evaluateCubicBezier(start: number, control1: number, control2: number, end: number, t: number): number {
+    const inverse = 1 - t;
+    return (
+      (inverse ** 3 * start) +
+      (3 * inverse * inverse * t * control1) +
+      (3 * inverse * t * t * control2) +
+      (t ** 3 * end)
+    );
+  }
+
+  private evaluateCubicBezierDerivative(start: number, control1: number, control2: number, end: number, t: number): number {
+    const inverse = 1 - t;
+    return (
+      (3 * inverse * inverse * (control1 - start)) +
+      (6 * inverse * t * (control2 - control1)) +
+      (3 * t * t * (end - control2))
+    );
+  }
+
+  private adjustEdgeLabelPosition(
+    point: { x: number; y: number },
+    nodes: GraphNodeBounds[],
+    graphWidth: number,
+    graphHeight: number): { x: number; y: number } {
+    let x = point.x;
+    let y = point.y;
+    const padding = 14;
+    const nudge = 12;
+
+    for (const node of nodes) {
+      const minX = node.x - padding;
+      const maxX = node.x + node.width + padding;
+      const minY = node.y - padding;
+      const maxY = node.y + node.height + padding;
+      if (x < minX || x > maxX || y < minY || y > maxY) {
+        continue;
+      }
+
+      const distanceLeft = Math.abs(x - minX);
+      const distanceRight = Math.abs(maxX - x);
+      const distanceTop = Math.abs(y - minY);
+      const distanceBottom = Math.abs(maxY - y);
+      const smallest = Math.min(distanceLeft, distanceRight, distanceTop, distanceBottom);
+      if (smallest === distanceLeft) {
+        x = minX - nudge;
+      } else if (smallest === distanceRight) {
+        x = maxX + nudge;
+      } else if (smallest === distanceTop) {
+        y = minY - nudge;
+      } else {
+        y = maxY + nudge;
+      }
+    }
+
+    const clampedX = Math.min(Math.max(26, x), Math.max(26, graphWidth - 26));
+    const clampedY = Math.min(Math.max(22, y), Math.max(22, graphHeight - 22));
+    return {
+      x: Math.round(clampedX * 10) / 10,
+      y: Math.round(clampedY * 10) / 10
+    };
+  }
+
+  private schedulePreviewViewportCentering(): void {
+    setTimeout(() => this.centerPreviewViewport(), 0);
+  }
+
+  private centerPreviewViewport(): void {
+    const container = this.previewGraphContainerRef?.nativeElement;
+    if (!container) {
+      return;
+    }
+
+    container.scrollLeft = Math.max((container.scrollWidth - container.clientWidth) / 2, 0);
+    container.scrollTop = Math.max((container.scrollHeight - container.clientHeight) / 2, 0);
   }
 
   private resetPreviewState(): void {
@@ -2865,6 +3066,7 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     this.previewPanel = null;
     this.previewGraphNodes = [];
     this.previewGraphEdges = [];
+    this.previewUnrenderedSpecialPaths = [];
     this.previewGraphWidth = 980;
     this.previewGraphHeight = 380;
     this.selectedPreviewStepId = null;

@@ -506,14 +506,14 @@
     linear-gradient(130deg, rgba(228, 241, 250, 0.35), rgba(247, 252, 255, 0.3));
   padding: 0.65rem;
   overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 .preview-graph {
-  min-width: 980px;
-}
-
-.preview-graph defs path {
-  fill: #7a94a8;
+  display: block;
+  min-width: 0;
 }
 
 .graph-edges path {
@@ -524,18 +524,23 @@
   stroke: #6e889c;
   stroke-width: 2.2;
   opacity: 0.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .preview-edge.is-reject {
   stroke: #c62828;
+  stroke-dasharray: 7 4;
 }
 
 .preview-edge.is-return {
   stroke: #e67e22;
+  stroke-dasharray: 7 4;
 }
 
 .preview-edge.is-escalation {
   stroke: #0288d1;
+  stroke-dasharray: 7 4;
 }
 
 .preview-edge.is-selected {
@@ -554,6 +559,10 @@
   font-size: 11.3px;
   font-weight: 700;
   text-anchor: middle;
+  paint-order: stroke fill;
+  stroke: #f6fbff;
+  stroke-width: 4;
+  stroke-linejoin: round;
   pointer-events: all;
   cursor: pointer;
 }
@@ -561,7 +570,12 @@
 .preview-edge-flag {
   fill: #0d6985;
   font-size: 10px;
+  font-weight: 700;
   text-anchor: middle;
+  paint-order: stroke fill;
+  stroke: #f6fbff;
+  stroke-width: 3.2;
+  stroke-linejoin: round;
   pointer-events: all;
   cursor: pointer;
 }
@@ -665,6 +679,24 @@
 .preview-edge-row.selected {
   background: #eaf6fe;
   box-shadow: inset 3px 0 0 #0f6f8d;
+}
+
+.preview-special-path-note {
+  margin-bottom: 0.6rem;
+}
+
+.preview-target-summary-header {
+  min-width: 18rem;
+}
+
+.preview-target-summary-cell {
+  min-width: 18rem;
+  max-width: 26rem;
+  white-space: normal !important;
+  line-height: 1.55;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: top;
 }
 
 .validation-layout {
