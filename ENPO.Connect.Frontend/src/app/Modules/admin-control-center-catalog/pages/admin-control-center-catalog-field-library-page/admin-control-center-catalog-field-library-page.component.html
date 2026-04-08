@@ -323,16 +323,78 @@
       <section class="form-section">
         <h4>4) البيانات المتقدمة</h4>
         <div class="grid two-cols">
-          <div class="field span-two">
-            <label for="cdmendTbl">CDMendTbl <span class="required" *ngIf="requiresOptionsPayload">*</span></label>
-            <textarea
-              pInputTextarea
-              id="cdmendTbl"
-              formControlName="cdmendTbl"
-              rows="4"
-              [placeholder]="requiresOptionsPayload ? 'أدخل مصدر/حمولة الخيارات المطلوبة لهذا النوع' : 'بيانات متقدمة اختيارية'">
-            </textarea>
-            <small class="field-error" *ngIf="isInvalid('cdmendTbl')">{{ validationMessage('cdmendTbl', 'CDMendTbl') }}</small>
+          <div class="field span-two advanced-data-editor">
+            <div class="advanced-data-header">
+              <label>CDMendTbl <span class="required" *ngIf="requiresOptionsPayload">*</span></label>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-plus"
+                label="إضافة صف"
+                class="p-button-sm p-button-outlined"
+                (click)="onAddAdvancedDataRow()">
+              </button>
+            </div>
+
+            <p class="advanced-data-hint">
+              أدخل البيانات بصيغة Key / Value. سيتم الحفظ تلقائيًا كـ JSON منظم ومتوافق مع النظام الحالي.
+            </p>
+
+            <div class="advanced-data-warning" *ngIf="advancedDataParseMessage.length > 0">
+              {{ advancedDataParseMessage }}
+            </div>
+
+            <div class="advanced-table-wrap">
+              <table class="advanced-data-table">
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th>Value</th>
+                    <th class="remove-col">حذف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of advancedDataRows; let i = index; trackBy: trackByAdvancedDataRow">
+                    <td>
+                      <input
+                        pInputText
+                        type="text"
+                        [(ngModel)]="row.key"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="onAdvancedDataRowsChanged()"
+                        placeholder="مثال: تم" />
+                    </td>
+                    <td>
+                      <input
+                        pInputText
+                        type="text"
+                        [(ngModel)]="row.value"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="onAdvancedDataRowsChanged()"
+                        placeholder="مثال: تم" />
+                    </td>
+                    <td class="remove-col">
+                      <button
+                        pButton
+                        type="button"
+                        icon="pi pi-trash"
+                        class="p-button-rounded p-button-text p-button-danger"
+                        (click)="onRemoveAdvancedDataRow(i)">
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <small class="field-error" *ngIf="advancedDataValidationMessage.length > 0">
+              {{ advancedDataValidationMessage }}
+            </small>
+
+            <div class="field payload-preview">
+              <label>معاينة JSON الناتج</label>
+              <textarea pInputTextarea rows="3" [readonly]="true" [value]="advancedDataPreviewValue"></textarea>
+            </div>
           </div>
 
           <div class="field">

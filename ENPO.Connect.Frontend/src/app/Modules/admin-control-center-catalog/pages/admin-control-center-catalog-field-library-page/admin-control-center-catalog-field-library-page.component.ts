@@ -19,6 +19,12 @@ type MessageSeverity = 'success' | 'warn' | 'error';
 
 type SelectOption = { label: string; value: string };
 
+type AdvancedDataRow = {
+  rowId: number;
+  key: string;
+  value: string;
+};
+
 @Component({
   selector: 'app-admin-control-center-catalog-field-library-page',
   templateUrl: './admin-control-center-catalog-field-library-page.component.html',
@@ -86,6 +92,11 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
   message = '';
   messageSeverity: MessageSeverity = 'success';
 
+  advancedDataRows: AdvancedDataRow[] = [];
+  advancedDataRowsTouched = false;
+  advancedDataParseMessage = '';
+
+  private advancedDataRowSeed = 0;
   private pendingPersistenceRefresh = false;
   private readonly subscriptions = new Subscription();
 
@@ -127,7 +138,8 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     return !this.savingField
       && this.fieldForm.valid
       && this.areMandatoryFieldsCompleted
-      && !this.fieldForm.hasError('rangeError');
+      && !this.fieldForm.hasError('rangeError')
+      && !this.hasAdvancedDataValidationError;
   }
 
   get applicationSelectOptions(): SelectOption[] {
@@ -207,6 +219,44 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       || fieldType.includes('combo');
   }
 
+  get hasAdvancedDataValidationError(): boolean {
+    return this.advancedDataValidationMessage.length > 0;
+  }
+
+  get advancedDataValidationMessage(): string {
+    const normalizedRows = this.normalizeAdvancedDataRows(this.advancedDataRows);
+    const hasAnyContent = normalizedRows.some(row => row.key.length > 0 || row.value.length > 0);
+
+    if (!this.requiresOptionsPayload && !hasAnyContent) {
+      return '';
+    }
+
+    if (!hasAnyContent) {
+      return 'يجب إدخال صف واحد على الأقل في بيانات CDMendTbl.';
+    }
+
+    const invalidRowIndex = normalizedRows.findIndex(row => row.key.length === 0 || row.value.length === 0);
+    if (invalidRowIndex >= 0) {
+      return `الصف رقم ${invalidRowIndex + 1} يجب أن يحتوي على مفتاح وقيمة.`;
+    }
+
+    const seenKeys = new Set<string>();
+    for (const row of normalizedRows) {
+      const normalizedKey = row.key.toLowerCase();
+      if (seenKeys.has(normalizedKey)) {
+        return `لا يمكن تكرار المفتاح '${row.key}'.`;
+      }
+
+      seenKeys.add(normalizedKey);
+    }
+
+    return '';
+  }
+
+  get advancedDataPreviewValue(): string {
+    return this.serializeAdvancedDataRows(this.advancedDataRows) ?? '';
+  }
+
   onSearch(): void {
     this.loadFields();
   }
@@ -265,6 +315,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       cdmendSql: null
     }, { emitEvent: false });
 
+    this.hydrateAdvancedDataEditor('');
     this.setIdentityControlsDisabled(false);
     this.applyFieldTypeRules();
     this.validateRange();
@@ -318,6 +369,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
           cdmendSql: details.cdmendSql
         }, { emitEvent: false });
 
+        this.hydrateAdvancedDataEditor(details.cdmendTbl ?? '');
         this.setIdentityControlsDisabled(true);
         this.applyFieldTypeRules();
         this.validateRange();
@@ -394,6 +446,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
 
   onSaveField(): void {
     this.fieldForm.markAllAsTouched();
+    this.syncAdvancedDataControl();
     this.applyFieldTypeRules();
     this.validateRange();
 
@@ -498,6 +551,38 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
 
   trackByField(_index: number, item: AdminCatalogFieldListItemDto): string {
     return this.composeFieldIdentity(item.applicationId, item.fieldKey);
+  }
+
+  trackByAdvancedDataRow(_index: number, row: AdvancedDataRow): number {
+    return row.rowId;
+  }
+
+  onAddAdvancedDataRow(): void {
+    this.advancedDataRows = [...this.advancedDataRows, this.createAdvancedDataRow('', '')];
+    this.advancedDataRowsTouched = true;
+    this.advancedDataParseMessage = '';
+    this.syncAdvancedDataControl();
+    this.applyFieldTypeRules();
+  }
+
+  onRemoveAdvancedDataRow(index: number): void {
+    if (index < 0 || index >= this.advancedDataRows.length) {
+      return;
+    }
+
+    this.advancedDataRows = this.advancedDataRows.filter((_item, currentIndex) => currentIndex !== index);
+    this.ensureAtLeastOneAdvancedDataRow();
+    this.advancedDataRowsTouched = true;
+    this.advancedDataParseMessage = '';
+    this.syncAdvancedDataControl();
+    this.applyFieldTypeRules();
+  }
+
+  onAdvancedDataRowsChanged(): void {
+    this.advancedDataRowsTouched = true;
+    this.advancedDataParseMessage = '';
+    this.syncAdvancedDataControl();
+    this.applyFieldTypeRules();
   }
 
   composeFieldIdentity(applicationId: string, fieldKey: string): string {
@@ -657,8 +742,13 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
 
     if (this.requiresOptionsPayload) {
       optionsPayloadControl.setValidators([Validators.required]);
+      this.ensureAtLeastOneAdvancedDataRow();
+      this.syncAdvancedDataControl();
     } else {
       optionsPayloadControl.clearValidators();
+      if (this.advancedDataRowsTouched) {
+        this.syncAdvancedDataControl();
+      }
     }
 
     optionsPayloadControl.updateValueAndValidity({ emitEvent: false });
@@ -674,7 +764,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       fieldLabel: this.normalizeText(raw.fieldLabel) ?? undefined,
       placeholder: this.normalizeText(raw.placeholder) ?? undefined,
       defaultValue: this.normalizeText(raw.defaultValue) ?? undefined,
-      cdmendTbl: this.normalizeText(raw.cdmendTbl) ?? undefined,
+      cdmendTbl: this.resolveCdmendTblForSubmit(raw.cdmendTbl),
       dataType: this.normalizeText(raw.dataType) ?? undefined,
       required: raw.required === true,
       requiredTrue: raw.requiredTrue === true,
@@ -699,7 +789,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       fieldLabel: this.normalizeText(raw.fieldLabel) ?? undefined,
       placeholder: this.normalizeText(raw.placeholder) ?? undefined,
       defaultValue: this.normalizeText(raw.defaultValue) ?? undefined,
-      cdmendTbl: this.normalizeText(raw.cdmendTbl) ?? undefined,
+      cdmendTbl: this.resolveCdmendTblForSubmit(raw.cdmendTbl),
       dataType: this.normalizeText(raw.dataType) ?? undefined,
       required: raw.required === true,
       requiredTrue: raw.requiredTrue === true,
@@ -770,6 +860,220 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
   private showMessage(severity: MessageSeverity, message: string): void {
     this.messageSeverity = severity;
     this.message = message;
+  }
+
+  private hydrateAdvancedDataEditor(payload: string | null | undefined): void {
+    const parsed = this.parseAdvancedDataRows(payload);
+    this.advancedDataRows = parsed.rows.length > 0
+      ? parsed.rows
+      : [this.createAdvancedDataRow('', '')];
+    this.advancedDataRowsTouched = false;
+    this.advancedDataParseMessage = parsed.parseMessage;
+    this.syncAdvancedDataControl();
+  }
+
+  private parseAdvancedDataRows(payload: string | null | undefined): { rows: AdvancedDataRow[]; parseMessage: string } {
+    const raw = String(payload ?? '').trim();
+    if (raw.length === 0) {
+      return { rows: [], parseMessage: '' };
+    }
+
+    const parsedJson = this.parseLooseJson(raw);
+    if (parsedJson !== null) {
+      const mappedRows = this.mapParsedAdvancedDataToRows(parsedJson);
+      if (mappedRows.length > 0) {
+        return { rows: mappedRows, parseMessage: '' };
+      }
+
+      if (Array.isArray(parsedJson) || typeof parsedJson === 'object') {
+        return {
+          rows: [],
+          parseMessage: 'تم تحميل JSON قديم لكنه لا يحتوي عناصر مفتاح/قيمة قابلة للعرض.'
+        };
+      }
+    }
+
+    const fallbackRows = this.parseDelimitedAdvancedDataRows(raw);
+    if (fallbackRows.length > 0) {
+      return {
+        rows: fallbackRows,
+        parseMessage: 'تعذر تحليل JSON القديم مباشرةً؛ تم تحويل النص إلى صفوف. يرجى مراجعة القيم قبل الحفظ.'
+      };
+    }
+
+    return {
+      rows: [],
+      parseMessage: 'تعذر تحليل قيمة CDMendTbl القديمة. يمكنك إدخال القيم يدويًا في الجدول.'
+    };
+  }
+
+  private parseLooseJson(raw: string): unknown | null {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      try {
+        const fixed = raw.replace(/\'/g, '"');
+        return JSON.parse(fixed);
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  private mapParsedAdvancedDataToRows(parsed: unknown): AdvancedDataRow[] {
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map(item => this.mapAdvancedDataArrayItem(item))
+        .filter((item): item is AdvancedDataRow => item !== null);
+    }
+
+    if (parsed && typeof parsed === 'object') {
+      return Object.entries(parsed as Record<string, unknown>)
+        .map(([key, value]) => {
+          const normalizedKey = this.normalizeText(key) ?? '';
+          const normalizedValue = this.stringifyAdvancedValue(value);
+          if (normalizedKey.length === 0 && normalizedValue.length === 0) {
+            return null;
+          }
+
+          return this.createAdvancedDataRow(
+            normalizedKey || normalizedValue,
+            normalizedValue || normalizedKey
+          );
+        })
+        .filter((item): item is AdvancedDataRow => item !== null);
+    }
+
+    return [];
+  }
+
+  private mapAdvancedDataArrayItem(item: unknown): AdvancedDataRow | null {
+    if (item == null) {
+      return null;
+    }
+
+    if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+      const text = String(item).trim();
+      return text.length > 0 ? this.createAdvancedDataRow(text, text) : null;
+    }
+
+    if (typeof item !== 'object') {
+      return null;
+    }
+
+    const payload = item as Record<string, unknown>;
+    const key = this.normalizeText(
+      payload['key']
+      ?? payload['value']
+      ?? payload['id']
+      ?? payload['code']
+      ?? payload['name']
+      ?? payload['label']
+      ?? payload['text']
+    ) ?? '';
+    const value = this.normalizeText(
+      payload['name']
+      ?? payload['value']
+      ?? payload['label']
+      ?? payload['text']
+      ?? payload['key']
+      ?? payload['id']
+      ?? payload['code']
+    ) ?? '';
+
+    if (key.length === 0 && value.length === 0) {
+      return null;
+    }
+
+    return this.createAdvancedDataRow(
+      key || value,
+      value || key
+    );
+  }
+
+  private parseDelimitedAdvancedDataRows(raw: string): AdvancedDataRow[] {
+    return raw
+      .split(/[|,;\n]+/g)
+      .map(token => token.trim())
+      .filter(token => token.length > 0)
+      .map(token => this.createAdvancedDataRow(token, token));
+  }
+
+  private stringifyAdvancedValue(value: unknown): string {
+    if (value == null) {
+      return '';
+    }
+
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return String(value).trim();
+    }
+
+    try {
+      return JSON.stringify(value).trim();
+    } catch {
+      return String(value).trim();
+    }
+  }
+
+  private createAdvancedDataRow(key: string, value: string): AdvancedDataRow {
+    this.advancedDataRowSeed += 1;
+    return {
+      rowId: this.advancedDataRowSeed,
+      key,
+      value
+    };
+  }
+
+  private ensureAtLeastOneAdvancedDataRow(): void {
+    if (this.advancedDataRows.length > 0) {
+      return;
+    }
+
+    this.advancedDataRows = [this.createAdvancedDataRow('', '')];
+  }
+
+  private normalizeAdvancedDataRows(rows: AdvancedDataRow[]): Array<{ key: string; value: string }> {
+    return rows.map(row => ({
+      key: String(row.key ?? '').trim(),
+      value: String(row.value ?? '').trim()
+    }));
+  }
+
+  private serializeAdvancedDataRows(rows: AdvancedDataRow[]): string | undefined {
+    const normalizedRows = this.normalizeAdvancedDataRows(rows)
+      .filter(row => row.key.length > 0 || row.value.length > 0)
+      .map(row => ({
+        key: row.key || row.value,
+        name: row.value || row.key
+      }));
+
+    if (normalizedRows.length === 0) {
+      return undefined;
+    }
+
+    return JSON.stringify(normalizedRows);
+  }
+
+  private syncAdvancedDataControl(): void {
+    const control = this.fieldForm.get('cdmendTbl');
+    if (!control) {
+      return;
+    }
+
+    if (this.requiresOptionsPayload || this.advancedDataRowsTouched) {
+      control.setValue(this.serializeAdvancedDataRows(this.advancedDataRows) ?? '', { emitEvent: false });
+      return;
+    }
+
+    control.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private resolveCdmendTblForSubmit(rawValue: unknown): string | undefined {
+    if (this.requiresOptionsPayload || this.advancedDataRowsTouched) {
+      return this.serializeAdvancedDataRows(this.advancedDataRows);
+    }
+
+    return this.normalizeText(rawValue) ?? undefined;
   }
 
   private normalizeText(value: unknown): string | null {

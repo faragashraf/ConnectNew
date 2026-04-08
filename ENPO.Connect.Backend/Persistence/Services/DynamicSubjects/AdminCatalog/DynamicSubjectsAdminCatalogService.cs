@@ -2,6 +2,7 @@ using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
 using System.Globalization;
+using System.Text.Json;
 
 namespace Persistence.Services.DynamicSubjects.AdminCatalog;
 
@@ -1750,6 +1751,16 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             return FieldValidationContext.Invalid;
         }
 
+        if (IsOptionFieldType(normalizedFieldType) && normalizedCdmendTbl != null)
+        {
+            var optionsPayloadValidationError = ValidateOptionPayload(normalizedCdmendTbl);
+            if (optionsPayloadValidationError != null)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = optionsPayloadValidationError });
+                return FieldValidationContext.Invalid;
+            }
+        }
+
         if (width < 0 || height < 0)
         {
             response.Errors.Add(new Error { Code = "400", Message = "القيم Width و Height يجب أن تكون صفرًا أو أعلى." });
@@ -1891,6 +1902,138 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             || normalized.Contains("radio")
             || normalized.Contains("select")
             || normalized.Contains("combo");
+    }
+
+    private static string? ValidateOptionPayload(string payload)
+    {
+        var normalizedPayload = NormalizeNullable(payload);
+        if (normalizedPayload == null)
+        {
+            return "مصدر الخيارات (CDMendTbl) مطلوب لأن نوع الحقل قائم على قائمة.";
+        }
+
+        // نحافظ على التوافق مع أي تنسيقات قديمة غير JSON (مثل النص المفصول بعلامات).
+        if (!normalizedPayload.StartsWith('{') && !normalizedPayload.StartsWith('['))
+        {
+            return null;
+        }
+
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(normalizedPayload);
+        }
+        catch (JsonException)
+        {
+            return "صيغة JSON داخل CDMendTbl غير صحيحة.";
+        }
+
+        using (document)
+        {
+            var rows = new List<(string Key, string Value)>();
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    var key = NormalizeNullable(property.Name);
+                    var value = NormalizeNullable(ReadJsonScalarText(property.Value));
+                    if (key == null || value == null)
+                    {
+                        return "كل عنصر داخل CDMendTbl يجب أن يحتوي مفتاحًا وقيمة صالحين.";
+                    }
+
+                    rows.Add((key, value));
+                }
+            }
+            else if (document.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                var index = 0;
+                foreach (var item in document.RootElement.EnumerateArray())
+                {
+                    index++;
+                    string? key = null;
+                    string? value = null;
+
+                    if (item.ValueKind == JsonValueKind.Object)
+                    {
+                        key = NormalizeNullable(ReadJsonObjectValue(item, "key", "value", "id", "code", "name", "label", "text"));
+                        value = NormalizeNullable(ReadJsonObjectValue(item, "name", "value", "label", "text", "key", "id", "code"));
+                    }
+                    else if (item.ValueKind == JsonValueKind.String
+                        || item.ValueKind == JsonValueKind.Number
+                        || item.ValueKind == JsonValueKind.True
+                        || item.ValueKind == JsonValueKind.False)
+                    {
+                        var scalar = NormalizeNullable(ReadJsonScalarText(item));
+                        key = scalar;
+                        value = scalar;
+                    }
+
+                    if (key == null || value == null)
+                    {
+                        return $"العنصر رقم {index} داخل CDMendTbl غير مكتمل: يجب أن يحتوي مفتاحًا وقيمة.";
+                    }
+
+                    rows.Add((key, value));
+                }
+            }
+            else
+            {
+                return "CDMendTbl يجب أن يكون JSON Object أو JSON Array.";
+            }
+
+            if (rows.Count == 0)
+            {
+                return "CDMendTbl يجب أن يحتوي صفًا واحدًا على الأقل.";
+            }
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows)
+            {
+                if (!seen.Add(row.Key))
+                {
+                    return $"لا يمكن تكرار المفتاح '{row.Key}' داخل CDMendTbl.";
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ReadJsonObjectValue(JsonElement source, params string[] keys)
+    {
+        foreach (var property in source.EnumerateObject())
+        {
+            foreach (var key in keys)
+            {
+                if (!string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var text = NormalizeNullable(ReadJsonScalarText(property.Value));
+                if (text != null)
+                {
+                    return text;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string ReadJsonScalarText(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? string.Empty,
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Null => string.Empty,
+            JsonValueKind.Undefined => string.Empty,
+            _ => value.GetRawText()
+        };
     }
 
     private static int ReadDictionaryValue(IReadOnlyDictionary<string, int> source, string key)
