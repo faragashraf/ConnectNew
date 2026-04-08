@@ -62,15 +62,16 @@ type PreviewGraphNode = {
   y: number;
   width: number;
   height: number;
-  title: string;
-  subtitle: string;
-  stepType: string;
+  titleLine: string;
+  codeLine: string;
+  targetLine: string;
+  fullTargetSummary: string;
+  badges: Array<{ label: string; cssClass: string }>;
   isStart: boolean;
   isEnd: boolean;
   isRejectStep: boolean;
   isReturnStep: boolean;
   isEscalationStep: boolean;
-  badges: Array<{ label: string; cssClass: string }>;
   cssClass: string;
 };
 type PreviewGraphEdge = {
@@ -81,12 +82,34 @@ type PreviewGraphEdge = {
   path: string;
   labelX: number;
   labelY: number;
+  labelWidth: number;
+  labelHeight: number;
+  labelPrimary: string;
+  labelSecondary: string | null;
   cssClass: string;
   flagLabel: string;
 };
 type GraphNodeBounds = {
   x: number;
   y: number;
+  width: number;
+  height: number;
+};
+type GraphRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+type EdgeAnchorSide = 'left' | 'right' | 'top' | 'bottom';
+type EdgeAnchor = {
+  x: number;
+  y: number;
+  side: EdgeAnchorSide;
+};
+type EdgeLabelLayout = {
+  primary: string;
+  secondary: string | null;
   width: number;
   height: number;
 };
@@ -2161,6 +2184,38 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     return `${normalized.substring(0, maxLength - 1)}…`;
   }
 
+  private buildNodeCodeLine(node: SubjectRoutingPreviewNodeDto): string {
+    const stepCode = this.normalizeText(node.stepCode) ?? `STEP-${node.stepId}`;
+    const stepType = this.normalizeText(node.stepType) ?? 'Unknown';
+    return this.truncateText(`${stepCode} | ${stepType}`, 36);
+  }
+
+  private buildActionBadge(actionsCount: number): { label: string; cssClass: string } | null {
+    if (actionsCount <= 0) {
+      return null;
+    }
+
+    return {
+      label: actionsCount === 1 ? 'إجراء واحد' : `${actionsCount} إجراءات`,
+      cssClass: 'is-action'
+    };
+  }
+
+  private buildEdgeLabelLayout(actionNameAr: string, flagLabel: string): EdgeLabelLayout {
+    const primary = this.truncateText(actionNameAr, 40) || 'إجراء غير مسمى';
+    const secondary = this.normalizeText(flagLabel);
+    const widestChars = Math.max(primary.length, secondary?.length ?? 0);
+    const width = Math.min(248, Math.max(124, 26 + (widestChars * 6.25)));
+    const height = secondary ? 42 : 28;
+
+    return {
+      primary,
+      secondary: secondary ?? null,
+      width: Math.round(width),
+      height
+    };
+  }
+
   private reloadRequestTypeContext(preferredProfileId?: number | null): void {
     this.clearMessage();
     if (!this.canManageWorkspace || !this.requestTypeId) {
@@ -2670,28 +2725,37 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
       bucket.sort((a, b) => (a.stepOrder - b.stepOrder) || (a.stepId - b.stepId));
     }
 
+    const outgoingActionsByStep = new Map<number, number>();
+    for (const edge of edges) {
+      outgoingActionsByStep.set(edge.fromStepId, (outgoingActionsByStep.get(edge.fromStepId) ?? 0) + 1);
+    }
+
     const levelCount = maxLevel + 1;
-    const nodeWidth = 286;
-    const nodeHeight = 118;
+    const nodeWidth = 316;
+    const nodeHeight = 132;
     const horizontalGap = levelCount <= 1
       ? 0
       : levelCount === 2
-        ? 168
+        ? 212
         : levelCount === 3
-          ? 136
-          : 108;
-    const paddingX = 42;
-    const paddingY = 34;
-    const minGraphWidth = 620;
-    const minGraphHeight = 260;
+          ? 172
+          : 144;
+    const paddingX = levelCount <= 2 ? 42 : 48;
+    const minGraphWidth = 480;
     const maxRows = Math.max(...Array.from(rowsByLevel.values()).map(items => items.length), 1);
+    const paddingY = maxRows <= 1
+      ? 46
+      : maxRows === 2
+        ? 52
+        : 44;
+    const minGraphHeight = maxRows <= 1 ? 224 : 292;
     const verticalGap = maxRows <= 1
       ? 0
       : maxRows === 2
-        ? 46
+        ? 52
         : maxRows === 3
-          ? 34
-          : 28;
+          ? 46
+          : 40;
     const contentWidth = (levelCount * nodeWidth) + (Math.max(levelCount - 1, 0) * horizontalGap);
     const contentHeight = (maxRows * nodeHeight) + (Math.max(maxRows - 1, 0) * verticalGap);
 
@@ -2703,7 +2767,9 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     const positions = new Map<number, GraphNodeBounds>();
     const graphNodes: PreviewGraphNode[] = [];
 
-    for (const [level, bucket] of rowsByLevel.entries()) {
+    const sortedLevels = Array.from(rowsByLevel.keys()).sort((a, b) => a - b);
+    for (const level of sortedLevels) {
+      const bucket = rowsByLevel.get(level) ?? [];
       const columnIndex = maxLevel - level;
       const x = horizontalOffset + (columnIndex * (nodeWidth + horizontalGap));
       const columnHeight = (bucket.length * nodeHeight) + ((Math.max(bucket.length - 1, 0)) * verticalGap);
@@ -2742,21 +2808,30 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
           badges.push({ label: 'تصعيد', cssClass: 'is-escalation' });
         }
 
+        const stepName = this.normalizeText(node.stepNameAr) ?? `الخطوة #${node.stepId}`;
+        const targetSummary = this.normalizeText(node.targetsSummaryAr) ?? 'لا توجد جهة مستهدفة';
+        const actionsCount = outgoingActionsByStep.get(node.stepId) ?? 0;
+        const actionBadge = this.buildActionBadge(actionsCount);
+        if (actionBadge) {
+          badges.push(actionBadge);
+        }
+
         graphNodes.push({
           stepId: node.stepId,
           x,
           y,
           width: nodeWidth,
           height: nodeHeight,
-          title: node.stepNameAr,
-          subtitle: this.normalizeText(node.targetsSummaryAr) ?? 'لا توجد جهة مستهدفة',
-          stepType: node.stepType,
+          titleLine: this.truncateText(stepName, 30),
+          codeLine: this.buildNodeCodeLine(node),
+          targetLine: this.truncateText(targetSummary, 44),
+          fullTargetSummary: targetSummary,
+          badges: badges.slice(0, 4),
           isStart: node.isStart,
           isEnd: node.isEnd,
           isRejectStep: node.isRejectStep,
           isReturnStep: node.isReturnStep,
           isEscalationStep: node.isEscalationStep,
-          badges,
           cssClass
         });
       });
@@ -2788,12 +2863,15 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
       const siblingIndex = pairIndexes.get(pairKey) ?? 0;
       pairIndexes.set(pairKey, siblingIndex + 1);
       const siblingCount = pairCounts.get(pairKey) ?? 1;
+      const labelLayout = this.buildEdgeLabelLayout(edge.actionNameAr, flagLabel);
       const pathInfo = this.buildEdgePath(
         from,
         to,
         allNodeBounds,
         this.previewGraphWidth,
         this.previewGraphHeight,
+        labelLayout.width,
+        labelLayout.height,
         siblingIndex,
         siblingCount
       );
@@ -2811,8 +2889,12 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
         toStepId: edge.toStepId,
         actionNameAr: edge.actionNameAr,
         path: pathInfo.path,
-        labelX: pathInfo.labelX,
-        labelY: pathInfo.labelY,
+        labelX: pathInfo.labelX - (labelLayout.width / 2),
+        labelY: pathInfo.labelY - (labelLayout.height / 2),
+        labelWidth: labelLayout.width,
+        labelHeight: labelLayout.height,
+        labelPrimary: labelLayout.primary,
+        labelSecondary: labelLayout.secondary,
         cssClass,
         flagLabel
       });
@@ -2883,28 +2965,24 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
     nodes: GraphNodeBounds[],
     graphWidth: number,
     graphHeight: number,
+    labelWidth: number,
+    labelHeight: number,
     siblingIndex: number,
     siblingCount: number): { path: string; labelX: number; labelY: number } {
-    const fromMidY = from.y + (from.height / 2);
-    const toMidY = to.y + (to.height / 2);
-    const goesLeft = to.x < from.x;
-    const edgeInset = 8;
-    const siblingSpread = siblingCount <= 1
+    const laneOffset = siblingCount <= 1
       ? 0
-      : (siblingIndex - ((siblingCount - 1) / 2)) * 22;
-    const startX = goesLeft ? from.x - edgeInset : from.x + from.width + edgeInset;
-    const endX = goesLeft ? to.x + to.width + edgeInset : to.x - edgeInset;
-    const startY = fromMidY;
-    const endY = toMidY;
+      : (siblingIndex - ((siblingCount - 1) / 2)) * 24;
 
     if (from.x === to.x && from.y === to.y) {
-      const loopLift = 76 + Math.abs(siblingSpread);
-      const loopArc = 84 + Math.abs(siblingSpread);
-      const anchorY = startY + siblingSpread;
-      const controlY = anchorY - loopLift;
-      const loopPath = `M ${startX} ${anchorY} C ${startX + loopArc} ${controlY}, ${startX - loopArc} ${controlY}, ${startX} ${anchorY}`;
+      const loopBaseX = from.x + from.width;
+      const loopBaseY = from.y + (from.height / 2) + laneOffset;
+      const loopOut = 96 + Math.abs(laneOffset * 0.38);
+      const loopLift = 88 + Math.abs(laneOffset * 0.22);
+      const loopPath = `M ${loopBaseX} ${loopBaseY} C ${loopBaseX + loopOut} ${loopBaseY - loopLift}, ${loopBaseX + loopOut} ${loopBaseY + loopLift}, ${loopBaseX} ${loopBaseY}`;
       const loopLabel = this.adjustEdgeLabelPosition(
-        { x: startX, y: anchorY - loopLift - 10 },
+        { x: loopBaseX + loopOut + 24, y: loopBaseY - 8 },
+        labelWidth,
+        labelHeight,
         nodes,
         graphWidth,
         graphHeight
@@ -2916,33 +2994,53 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
       };
     }
 
-    const direction = endX >= startX ? 1 : -1;
-    const curvature = Math.max(60, Math.abs(endX - startX) * 0.42);
-    const control1X = startX + (curvature * direction);
-    const control2X = endX - (curvature * direction);
-    const control1Y = startY + siblingSpread;
-    const control2Y = endY + siblingSpread;
-    const path = `M ${startX} ${startY} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${endX} ${endY}`;
-    const labelBaseX = this.evaluateCubicBezier(startX, control1X, control2X, endX, 0.5);
-    const labelBaseY = this.evaluateCubicBezier(startY, control1Y, control2Y, endY, 0.5);
-    const tangentX = this.evaluateCubicBezierDerivative(startX, control1X, control2X, endX, 0.5);
-    const tangentY = this.evaluateCubicBezierDerivative(startY, control1Y, control2Y, endY, 0.5);
-    const tangentLength = Math.max(1, Math.hypot(tangentX, tangentY));
-    let normalX = (-tangentY / tangentLength);
-    let normalY = (tangentX / tangentLength);
-    const normalSign = (toMidY - fromMidY) >= 0 ? -1 : 1;
-    normalX *= normalSign;
-    normalY *= normalSign;
+    const anchors = this.resolveEdgeAnchors(from, to);
+    const startAnchor = this.pushAnchorOutward(this.applySiblingOffsetToAnchor(anchors.start, laneOffset), 6);
+    const endAnchor = this.pushAnchorOutward(this.applySiblingOffsetToAnchor(anchors.end, laneOffset), 6);
 
-    const labelDistance = 22 + Math.min(8, Math.abs(siblingSpread) * 0.35);
-    let labelX = labelBaseX + (normalX * labelDistance);
-    let labelY = labelBaseY + (normalY * labelDistance);
-    if (Math.abs(toMidY - fromMidY) < 14) {
-      labelY -= 8;
+    let control1X = startAnchor.x;
+    let control1Y = startAnchor.y;
+    let control2X = endAnchor.x;
+    let control2Y = endAnchor.y;
+    const horizontalAnchors = (
+      (startAnchor.side === 'left' || startAnchor.side === 'right') &&
+      (endAnchor.side === 'left' || endAnchor.side === 'right')
+    );
+    const verticalAnchors = (
+      (startAnchor.side === 'top' || startAnchor.side === 'bottom') &&
+      (endAnchor.side === 'top' || endAnchor.side === 'bottom')
+    );
+
+    if (horizontalAnchors) {
+      const direction = endAnchor.x >= startAnchor.x ? 1 : -1;
+      const curvature = Math.max(88, Math.abs(endAnchor.x - startAnchor.x) * 0.42);
+      control1X = startAnchor.x + (curvature * direction);
+      control2X = endAnchor.x - (curvature * direction);
+    } else if (verticalAnchors) {
+      const direction = endAnchor.y >= startAnchor.y ? 1 : -1;
+      const curvature = Math.max(86, Math.abs(endAnchor.y - startAnchor.y) * 0.42);
+      control1Y = startAnchor.y + (curvature * direction);
+      control2Y = endAnchor.y - (curvature * direction);
+    } else {
+      const directionX = endAnchor.x >= startAnchor.x ? 1 : -1;
+      const directionY = endAnchor.y >= startAnchor.y ? 1 : -1;
+      const curveX = Math.max(68, Math.abs(endAnchor.x - startAnchor.x) * 0.34);
+      const curveY = Math.max(58, Math.abs(endAnchor.y - startAnchor.y) * 0.3);
+      control1X = startAnchor.x + (curveX * directionX);
+      control1Y = startAnchor.y + (curveY * directionY * 0.5);
+      control2X = endAnchor.x - (curveX * directionX);
+      control2Y = endAnchor.y - (curveY * directionY * 0.5);
     }
 
-    const adjustedLabel = this.adjustEdgeLabelPosition(
-      { x: labelX, y: labelY },
+    const path = `M ${startAnchor.x} ${startAnchor.y} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${endAnchor.x} ${endAnchor.y}`;
+    const label = this.computeEdgeLabelPoint(
+      startAnchor,
+      { x: control1X, y: control1Y },
+      { x: control2X, y: control2Y },
+      endAnchor,
+      laneOffset,
+      labelWidth,
+      labelHeight,
       nodes,
       graphWidth,
       graphHeight
@@ -2950,9 +3048,158 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
 
     return {
       path,
-      labelX: adjustedLabel.x,
-      labelY: adjustedLabel.y
+      labelX: label.x,
+      labelY: label.y
     };
+  }
+
+  private resolveEdgeAnchors(from: GraphNodeBounds, to: GraphNodeBounds): { start: EdgeAnchor; end: EdgeAnchor } {
+    const fromCenterX = from.x + (from.width / 2);
+    const fromCenterY = from.y + (from.height / 2);
+    const toCenterX = to.x + (to.width / 2);
+    const toCenterY = to.y + (to.height / 2);
+    const deltaX = toCenterX - fromCenterX;
+    const deltaY = toCenterY - fromCenterY;
+    const preferHorizontal = Math.abs(deltaX) >= Math.abs(deltaY) || Math.abs(deltaX) > 132;
+
+    if (preferHorizontal) {
+      const goesRight = deltaX >= 0;
+      return {
+        start: {
+          x: goesRight ? from.x + from.width : from.x,
+          y: fromCenterY,
+          side: goesRight ? 'right' : 'left'
+        },
+        end: {
+          x: goesRight ? to.x : to.x + to.width,
+          y: toCenterY,
+          side: goesRight ? 'left' : 'right'
+        }
+      };
+    }
+
+    const goesDown = deltaY >= 0;
+    return {
+      start: {
+        x: fromCenterX,
+        y: goesDown ? from.y + from.height : from.y,
+        side: goesDown ? 'bottom' : 'top'
+      },
+      end: {
+        x: toCenterX,
+        y: goesDown ? to.y : to.y + to.height,
+        side: goesDown ? 'top' : 'bottom'
+      }
+    };
+  }
+
+  private applySiblingOffsetToAnchor(anchor: EdgeAnchor, laneOffset: number): EdgeAnchor {
+    if (anchor.side === 'left' || anchor.side === 'right') {
+      return { ...anchor, y: anchor.y + laneOffset };
+    }
+
+    return { ...anchor, x: anchor.x + laneOffset };
+  }
+
+  private pushAnchorOutward(anchor: EdgeAnchor, distance: number): EdgeAnchor {
+    if (anchor.side === 'left') {
+      return { ...anchor, x: anchor.x - distance };
+    }
+
+    if (anchor.side === 'right') {
+      return { ...anchor, x: anchor.x + distance };
+    }
+
+    if (anchor.side === 'top') {
+      return { ...anchor, y: anchor.y - distance };
+    }
+
+    return { ...anchor, y: anchor.y + distance };
+  }
+
+  private computeEdgeLabelPoint(
+    start: { x: number; y: number },
+    control1: { x: number; y: number },
+    control2: { x: number; y: number },
+    end: { x: number; y: number },
+    laneOffset: number,
+    labelWidth: number,
+    labelHeight: number,
+    nodes: GraphNodeBounds[],
+    graphWidth: number,
+    graphHeight: number): { x: number; y: number } {
+    const tCandidates = [0.5, 0.44, 0.56, 0.38, 0.62, 0.32, 0.68];
+    const normalSign = (end.y - start.y) >= 0 ? -1 : 1;
+    const labelDistance = 34 + Math.min(14, Math.abs(laneOffset) * 0.35);
+    const fallback = this.adjustEdgeLabelPosition(
+      { x: (start.x + end.x) / 2, y: ((start.y + end.y) / 2) - 22 },
+      labelWidth,
+      labelHeight,
+      nodes,
+      graphWidth,
+      graphHeight
+    );
+
+    for (const t of tCandidates) {
+      const baseX = this.evaluateCubicBezier(start.x, control1.x, control2.x, end.x, t);
+      const baseY = this.evaluateCubicBezier(start.y, control1.y, control2.y, end.y, t);
+      const tangentX = this.evaluateCubicBezierDerivative(start.x, control1.x, control2.x, end.x, t);
+      const tangentY = this.evaluateCubicBezierDerivative(start.y, control1.y, control2.y, end.y, t);
+      const tangentLength = Math.max(1, Math.hypot(tangentX, tangentY));
+      let normalX = (-tangentY / tangentLength);
+      let normalY = (tangentX / tangentLength);
+      normalX *= normalSign;
+      normalY *= normalSign;
+
+      const point = this.adjustEdgeLabelPosition(
+        {
+          x: baseX + (normalX * labelDistance),
+          y: baseY + (normalY * labelDistance)
+        },
+        labelWidth,
+        labelHeight,
+        nodes,
+        graphWidth,
+        graphHeight
+      );
+
+      if (!this.doesLabelRectCollideNodes(point, labelWidth, labelHeight, nodes, 26)) {
+        return point;
+      }
+
+      const invertedPoint = this.adjustEdgeLabelPosition(
+        {
+          x: baseX - (normalX * (labelDistance + 12)),
+          y: baseY - (normalY * (labelDistance + 12))
+        },
+        labelWidth,
+        labelHeight,
+        nodes,
+        graphWidth,
+        graphHeight
+      );
+
+      if (!this.doesLabelRectCollideNodes(invertedPoint, labelWidth, labelHeight, nodes, 26)) {
+        return invertedPoint;
+      }
+    }
+
+    const liftedFallback = this.adjustEdgeLabelPosition(
+      {
+        x: (start.x + end.x) / 2,
+        y: Math.min(start.y, end.y) - 28
+      },
+      labelWidth,
+      labelHeight,
+      nodes,
+      graphWidth,
+      graphHeight
+    );
+    if (!this.doesLabelRectCollideNodes(liftedFallback, labelWidth, labelHeight, nodes, 26)) {
+      return liftedFallback;
+    }
+
+    return fallback;
   }
 
   private resolvePreviewEdgeFlagLabel(edge: SubjectRoutingPreviewEdgeDto): string {
@@ -3005,45 +3252,104 @@ export class AdminControlCenterCatalogRoutingWorkspaceComponent implements OnIni
 
   private adjustEdgeLabelPosition(
     point: { x: number; y: number },
+    labelWidth: number,
+    labelHeight: number,
     nodes: GraphNodeBounds[],
     graphWidth: number,
     graphHeight: number): { x: number; y: number } {
-    let x = point.x;
-    let y = point.y;
-    const padding = 14;
-    const nudge = 12;
+    const margin = 12;
+    let labelRect = this.buildRectFromCenter(point, labelWidth, labelHeight);
+    const nodePadding = 24;
 
-    for (const node of nodes) {
-      const minX = node.x - padding;
-      const maxX = node.x + node.width + padding;
-      const minY = node.y - padding;
-      const maxY = node.y + node.height + padding;
-      if (x < minX || x > maxX || y < minY || y > maxY) {
-        continue;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      let collided = false;
+      for (const node of nodes) {
+        const expandedNodeRect: GraphRect = {
+          x: node.x - nodePadding,
+          y: node.y - nodePadding,
+          width: node.width + (nodePadding * 2),
+          height: node.height + (nodePadding * 2)
+        };
+        if (!this.rectsOverlap(labelRect, expandedNodeRect)) {
+          continue;
+        }
+
+        collided = true;
+        const nodeCenterX = expandedNodeRect.x + (expandedNodeRect.width / 2);
+        const nodeCenterY = expandedNodeRect.y + (expandedNodeRect.height / 2);
+        const labelCenterX = labelRect.x + (labelRect.width / 2);
+        const labelCenterY = labelRect.y + (labelRect.height / 2);
+        let directionX = labelCenterX - nodeCenterX;
+        let directionY = labelCenterY - nodeCenterY;
+        if (Math.abs(directionX) < 0.001 && Math.abs(directionY) < 0.001) {
+          directionY = -1;
+        }
+
+        const directionLength = Math.max(1, Math.hypot(directionX, directionY));
+        const step = 18;
+        labelRect = {
+          ...labelRect,
+          x: labelRect.x + ((directionX / directionLength) * step),
+          y: labelRect.y + ((directionY / directionLength) * step)
+        };
       }
 
-      const distanceLeft = Math.abs(x - minX);
-      const distanceRight = Math.abs(maxX - x);
-      const distanceTop = Math.abs(y - minY);
-      const distanceBottom = Math.abs(maxY - y);
-      const smallest = Math.min(distanceLeft, distanceRight, distanceTop, distanceBottom);
-      if (smallest === distanceLeft) {
-        x = minX - nudge;
-      } else if (smallest === distanceRight) {
-        x = maxX + nudge;
-      } else if (smallest === distanceTop) {
-        y = minY - nudge;
-      } else {
-        y = maxY + nudge;
+      const maxX = Math.max(margin, graphWidth - labelRect.width - margin);
+      const maxY = Math.max(margin, graphHeight - labelRect.height - margin);
+      labelRect = {
+        ...labelRect,
+        x: Math.min(Math.max(margin, labelRect.x), maxX),
+        y: Math.min(Math.max(margin, labelRect.y), maxY)
+      };
+
+      if (!collided) {
+        break;
       }
     }
 
-    const clampedX = Math.min(Math.max(26, x), Math.max(26, graphWidth - 26));
-    const clampedY = Math.min(Math.max(22, y), Math.max(22, graphHeight - 22));
+    const clampedX = labelRect.x + (labelRect.width / 2);
+    const clampedY = labelRect.y + (labelRect.height / 2);
     return {
       x: Math.round(clampedX * 10) / 10,
       y: Math.round(clampedY * 10) / 10
     };
+  }
+
+  private doesLabelRectCollideNodes(
+    point: { x: number; y: number },
+    labelWidth: number,
+    labelHeight: number,
+    nodes: GraphNodeBounds[],
+    padding: number): boolean {
+    const labelRect = this.buildRectFromCenter(point, labelWidth, labelHeight);
+    return nodes.some(node => this.rectsOverlap(
+      labelRect,
+      {
+        x: node.x - padding,
+        y: node.y - padding,
+        width: node.width + (padding * 2),
+        height: node.height + (padding * 2)
+      }
+    ));
+  }
+
+  private buildRectFromCenter(
+    center: { x: number; y: number },
+    width: number,
+    height: number): GraphRect {
+    return {
+      x: center.x - (width / 2),
+      y: center.y - (height / 2),
+      width,
+      height
+    };
+  }
+
+  private rectsOverlap(a: GraphRect, b: GraphRect): boolean {
+    return a.x < (b.x + b.width)
+      && (a.x + a.width) > b.x
+      && a.y < (b.y + b.height)
+      && (a.y + a.height) > b.y;
   }
 
   private schedulePreviewViewportCentering(): void {

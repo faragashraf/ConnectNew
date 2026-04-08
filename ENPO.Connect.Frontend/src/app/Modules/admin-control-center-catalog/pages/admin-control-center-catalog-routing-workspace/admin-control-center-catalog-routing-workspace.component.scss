@@ -550,21 +550,27 @@
 .preview-edge-hit {
   fill: none;
   stroke: transparent;
-  stroke-width: 14;
+  stroke-width: 16;
   cursor: pointer;
 }
 
+.preview-edge-label-group {
+  cursor: pointer;
+}
+
+.preview-edge-label-box {
+  fill: rgba(255, 255, 255, 0.96);
+  stroke: #c8dbe8;
+  stroke-width: 1;
+}
+
 .preview-edge-label {
-  fill: #2e4a61;
-  font-size: 11.3px;
+  fill: #2f4f66;
+  font-size: 11px;
   font-weight: 700;
   text-anchor: middle;
-  paint-order: stroke fill;
-  stroke: #f6fbff;
-  stroke-width: 4;
-  stroke-linejoin: round;
-  pointer-events: all;
-  cursor: pointer;
+  dominant-baseline: middle;
+  pointer-events: none;
 }
 
 .preview-edge-flag {
@@ -572,28 +578,18 @@
   font-size: 10px;
   font-weight: 700;
   text-anchor: middle;
-  paint-order: stroke fill;
-  stroke: #f6fbff;
-  stroke-width: 3.2;
-  stroke-linejoin: round;
-  pointer-events: all;
-  cursor: pointer;
+  dominant-baseline: middle;
+  pointer-events: none;
 }
 
 .preview-node-group {
   cursor: pointer;
-  transition: transform 0.15s ease;
-}
-
-.preview-node-group:hover {
-  transform: translateY(-2px);
 }
 
 .preview-node {
   fill: #ffffff;
   stroke: #8fadc1;
   stroke-width: 1.55;
-  filter: drop-shadow(0 3px 6px rgba(36, 74, 100, 0.14));
 }
 
 .preview-node.is-start {
@@ -621,24 +617,31 @@
   stroke-width: 2.6;
 }
 
+.preview-node-divider {
+  stroke: #e3edf4;
+  stroke-width: 1;
+}
+
 .preview-node-title {
   fill: #17384c;
-  font-size: 12.4px;
+  font-size: 12.2px;
   font-weight: 700;
 }
 
 .preview-node-type {
-  fill: #2f546d;
-  font-size: 10.4px;
+  fill: #2f566f;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .preview-node-target {
-  fill: #466981;
-  font-size: 10.8px;
+  fill: #3e627b;
+  font-size: 10.2px;
+  font-weight: 600;
 }
 
 .preview-node-badge {
-  fill: #e6f1f8;
+  fill: #e5f1f8;
 }
 
 .preview-node-badge.is-start {
@@ -661,9 +664,13 @@
   fill: #e0f2fe;
 }
 
+.preview-node-badge.is-action {
+  fill: #e8f6ef;
+}
+
 .preview-node-badge-text {
   fill: #1d4258;
-  font-size: 9px;
+  font-size: 8.6px;
   text-anchor: middle;
 }
 

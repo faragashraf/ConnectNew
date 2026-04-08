@@ -1041,7 +1041,7 @@
               [attr.height]="previewGraphHeight"
               preserveAspectRatio="xMidYMid meet">
               <defs>
-                <marker id="routingArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <marker id="routingArrowHead" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
                 </marker>
               </defs>
@@ -1058,17 +1058,18 @@
                     [attr.d]="edge.path"
                     (click)="onOpenTransitionFromPreview(edge.transitionId)">
                   </path>
-                  <text class="preview-edge-label" [attr.x]="edge.labelX" [attr.y]="edge.labelY" (click)="onOpenTransitionFromPreview(edge.transitionId)">
-                    {{ truncateText(edge.actionNameAr, 26) }}
-                  </text>
-                  <text
-                    *ngIf="edge.flagLabel.length > 0"
-                    class="preview-edge-flag"
-                    [attr.x]="edge.labelX"
-                    [attr.y]="edge.labelY + 14"
+                  <g
+                    class="preview-edge-label-group"
+                    [attr.transform]="'translate(' + edge.labelX + ',' + edge.labelY + ')'"
                     (click)="onOpenTransitionFromPreview(edge.transitionId)">
-                    {{ edge.flagLabel }}
-                  </text>
+                    <rect class="preview-edge-label-box" [attr.width]="edge.labelWidth" [attr.height]="edge.labelHeight" rx="8"></rect>
+                    <text class="preview-edge-label" [attr.x]="edge.labelWidth / 2" y="16">
+                      {{ edge.labelPrimary }}
+                    </text>
+                    <text *ngIf="edge.labelSecondary" class="preview-edge-flag" [attr.x]="edge.labelWidth / 2" y="31">
+                      {{ edge.labelSecondary }}
+                    </text>
+                  </g>
                 </g>
               </g>
 
@@ -1078,16 +1079,22 @@
                   class="preview-node-group"
                   [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
                   (click)="onOpenStepFromPreview(node.stepId)">
-                  <rect [attr.class]="node.cssClass" [attr.width]="node.width" [attr.height]="node.height" rx="12"></rect>
-                  <title>{{ node.title }} | {{ node.subtitle }}</title>
+                  <rect [attr.class]="node.cssClass" [attr.width]="node.width" [attr.height]="node.height" rx="14"></rect>
+                  <title>{{ node.titleLine }} | {{ node.fullTargetSummary }}</title>
 
-                  <text class="preview-node-title" x="12" y="24">{{ truncateText(node.title, 28) }}</text>
-                  <text class="preview-node-type" x="12" y="46">{{ truncateText(node.stepType, 30) }}</text>
-                  <text class="preview-node-target" x="12" y="70">{{ truncateText(node.subtitle, 58) }}</text>
+                  <line class="preview-node-divider" x1="12" [attr.x2]="node.width - 12" y1="38" y2="38"></line>
+                  <line class="preview-node-divider" x1="12" [attr.x2]="node.width - 12" y1="60" y2="60"></line>
+                  <line class="preview-node-divider" x1="12" [attr.x2]="node.width - 12" y1="88" y2="88"></line>
 
-                  <g *ngFor="let badge of node.badges; let i = index" [attr.transform]="'translate(' + (12 + (i * 48)) + ',90)'">
-                    <rect [attr.class]="'preview-node-badge ' + badge.cssClass" width="42" height="16" rx="8"></rect>
-                    <text class="preview-node-badge-text" x="21" y="12">{{ badge.label }}</text>
+                  <text class="preview-node-title" x="14" y="24">{{ node.titleLine }}</text>
+                  <text class="preview-node-type" x="14" y="52">{{ node.codeLine }}</text>
+                  <text class="preview-node-target" x="14" y="76">
+                    {{ node.targetLine }}
+                  </text>
+
+                  <g *ngFor="let badge of node.badges; let i = index" [attr.transform]="'translate(' + (14 + (i * 74)) + ',98)'">
+                    <rect [attr.class]="'preview-node-badge ' + badge.cssClass" width="54" height="18" rx="9"></rect>
+                    <text class="preview-node-badge-text" x="27" y="13">{{ badge.label }}</text>
                   </g>
                 </g>
               </g>
