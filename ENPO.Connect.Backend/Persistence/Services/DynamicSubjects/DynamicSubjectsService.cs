@@ -2052,7 +2052,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             var normalizedRequestPolicy = safeRequest.RequestPolicy == null
                 ? null
                 : RequestPolicyResolver.Normalize(safeRequest.RequestPolicy);
-            var policyValidationErrors = RequestPolicyResolver.Validate(normalizedRequestPolicy);
+            var policyValidationErrors = normalizedRequestPolicy == null
+                ? new List<Error>()
+                : RequestPolicyResolver.Validate(normalizedRequestPolicy);
             if (policyValidationErrors.Count > 0)
             {
                 foreach (var validationError in policyValidationErrors)

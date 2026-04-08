@@ -6,6 +6,7 @@ namespace Persistence.Services.DynamicSubjects;
 public static class DynamicSubjectsAdminClaimGuard
 {
     public const string RequiredRoleId = "2003";
+    public const string RequiredFunction = "ConnectSupperAdminFunc";
 
     private static readonly HashSet<string> SupportedRoleClaimTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -16,6 +17,14 @@ public static class DynamicSubjectsAdminClaimGuard
         ClaimTypes.Role
     };
 
+    private static readonly HashSet<string> SupportedFunctionClaimTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "functions",
+        "function",
+        "func",
+        "funcs"
+    };
+
     public static bool HasRequiredRoleClaim(ClaimsPrincipal? user)
     {
         if (user?.Identity?.IsAuthenticated != true)
@@ -23,16 +32,25 @@ public static class DynamicSubjectsAdminClaimGuard
             return false;
         }
 
+        return HasRequiredClaimToken(user, SupportedRoleClaimTypes, RequiredRoleId)
+            || HasRequiredClaimToken(user, SupportedFunctionClaimTypes, RequiredFunction);
+    }
+
+    private static bool HasRequiredClaimToken(
+        ClaimsPrincipal user,
+        HashSet<string> supportedClaimTypes,
+        string requiredToken)
+    {
         foreach (var claim in user.Claims)
         {
-            if (!SupportedRoleClaimTypes.Contains(claim.Type))
+            if (!supportedClaimTypes.Contains(claim.Type))
             {
                 continue;
             }
 
             foreach (var roleToken in ExpandClaimTokens(claim.Value))
             {
-                if (string.Equals(roleToken, RequiredRoleId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(roleToken, requiredToken, StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }

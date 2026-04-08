@@ -42,6 +42,32 @@ public class DynamicSubjectsAdminAuthorizationTests
     }
 
     [Theory]
+    [InlineData("functions")]
+    [InlineData("function")]
+    [InlineData("func")]
+    [InlineData("funcs")]
+    public void Allows_WhenRequiredFunctionExistsAsSingleToken(string claimType)
+    {
+        var principal = AuthenticatedPrincipal(new Claim(claimType, DynamicSubjectsAdminClaimGuard.RequiredFunction));
+
+        var result = DynamicSubjectsAdminClaimGuard.HasRequiredRoleClaim(principal);
+
+        Assert.True(result);
+    }
+
+    [Theory]
+    [InlineData("functions", "AllEnpoUsersFunc,ConnectSupperAdminFunc")]
+    [InlineData("func", "ConnectSupperAdminFunc|SomeOtherFunc")]
+    public void Allows_WhenRequiredFunctionExistsInDelimitedClaim(string claimType, string claimValue)
+    {
+        var principal = AuthenticatedPrincipal(new Claim(claimType, claimValue));
+
+        var result = DynamicSubjectsAdminClaimGuard.HasRequiredRoleClaim(principal);
+
+        Assert.True(result);
+    }
+
+    [Theory]
     [InlineData("RoleId", "1001,2003")]
     [InlineData("roles", "1001; 2003")]
     [InlineData("role", "1001|2003")]
@@ -68,11 +94,12 @@ public class DynamicSubjectsAdminAuthorizationTests
     }
 
     [Fact]
-    public void Rejects_WhenRequiredRoleIsAbsent()
+    public void Rejects_WhenRequiredRoleAndFunctionAreAbsent()
     {
         var principal = AuthenticatedPrincipal(
             new Claim("RoleId", "1001"),
-            new Claim("roles", "[\"1002\", \"1004\"]"));
+            new Claim("roles", "[\"1002\", \"1004\"]"),
+            new Claim("functions", "[\"AllEnpoUsersFunc\", \"SomeOtherFunc\"]"));
 
         var result = DynamicSubjectsAdminClaimGuard.HasRequiredRoleClaim(principal);
 

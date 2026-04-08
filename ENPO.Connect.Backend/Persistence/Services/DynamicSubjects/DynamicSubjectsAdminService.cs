@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
@@ -1613,7 +1614,21 @@ public sealed partial class DynamicSubjectsService
                 .Where(item => item.MendCategory == categoryId)
                 .ToListAsync(cancellationToken);
 
-            var touchedMendSql = new HashSet<int>();
+            int? nextGeneratedMendSql = null;
+
+            async Task<int> AllocateMendSqlAsync()
+            {
+                if (!nextGeneratedMendSql.HasValue)
+                {
+                    nextGeneratedMendSql = await _connectContext.CdCategoryMands
+                        .AsNoTracking()
+                        .Select(item => (int?)item.MendSql)
+                        .MaxAsync(cancellationToken) ?? 0;
+                }
+
+                nextGeneratedMendSql += 1;
+                return nextGeneratedMendSql.Value;
+            }
 
             foreach (var item in safeItems)
             {
@@ -1633,6 +1648,7 @@ public sealed partial class DynamicSubjectsService
                 {
                     link = new CdCategoryMand
                     {
+                        MendSql = await AllocateMendSqlAsync(),
                         MendCategory = categoryId,
                         MendField = item.FieldKey,
                         MendGroup = item.GroupId,
@@ -1648,10 +1664,6 @@ public sealed partial class DynamicSubjectsService
                     link.MendStat = !item.IsActive;
                 }
 
-                if (link.MendSql > 0)
-                {
-                    touchedMendSql.Add(link.MendSql);
-                }
             }
 
             await _connectContext.SaveChangesAsync(cancellationToken);
@@ -1676,7 +1688,6 @@ public sealed partial class DynamicSubjectsService
                     continue;
                 }
 
-                touchedMendSql.Add(link.MendSql);
                 var setting = await _connectContext.SubjectCategoryFieldSettings
                     .FirstOrDefaultAsync(s => s.MendSql == link.MendSql, cancellationToken);
                 if (setting == null)
@@ -1722,8 +1733,9 @@ public sealed partial class DynamicSubjectsService
 
             response.Data = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "Failed to upsert admin category field links for category {CategoryId}.", categoryId);
             AddUnhandledError(response);
         }
 

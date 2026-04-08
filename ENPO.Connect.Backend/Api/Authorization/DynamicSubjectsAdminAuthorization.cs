@@ -7,6 +7,7 @@ namespace Api.Authorization
     {
         public const string PolicyName = "DynamicSubjectsAdminSuperAdmin";
         public const string RequiredRoleId = DynamicSubjectsAdminClaimGuard.RequiredRoleId;
+        public const string RequiredFunction = DynamicSubjectsAdminClaimGuard.RequiredFunction;
 
         public static bool HasRequiredRoleClaim(ClaimsPrincipal? user)
         {

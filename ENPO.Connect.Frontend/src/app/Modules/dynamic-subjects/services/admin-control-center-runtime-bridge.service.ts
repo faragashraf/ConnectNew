@@ -13,6 +13,7 @@ import {
 } from './dynamic-subject-category-catalog.service';
 
 const ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY = 'enpo.admin-control-center.draft.v1';
+const CONNECT_TOKEN_STORAGE_KEY = 'ConnectToken';
 
 interface BridgeBoundField {
   fieldKey: string;
@@ -532,7 +533,9 @@ export class AdminControlCenterRuntimeBridgeService {
       return null;
     }
 
-    const raw = window.localStorage.getItem(ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY);
+    const scopedKey = this.resolveDraftStorageKey(window.localStorage);
+    const raw = window.localStorage.getItem(scopedKey)
+      ?? window.localStorage.getItem(ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY);
     if (!raw) {
       return null;
     }
@@ -606,6 +609,66 @@ export class AdminControlCenterRuntimeBridgeService {
     }
 
     return null;
+  }
+
+  private resolveDraftStorageKey(storage: Storage): string {
+    const ownerKey = this.resolveCurrentUserKey(storage) ?? 'anonymous';
+    return `${ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY}:${ownerKey}`;
+  }
+
+  private resolveCurrentUserKey(storage: Storage): string | null {
+    const token = this.normalizeNullable(storage.getItem(CONNECT_TOKEN_STORAGE_KEY));
+    if (!token) {
+      return null;
+    }
+
+    const payload = this.decodeJwtPayload(token);
+    if (!payload) {
+      return null;
+    }
+
+    const claimCandidates = [
+      payload['UserId'],
+      payload['userId'],
+      payload['sub'],
+      payload['nameid'],
+      payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier']
+    ];
+    const resolved = claimCandidates
+      .map(value => this.normalizeNullable(value))
+      .find(value => value != null);
+
+    if (!resolved) {
+      return null;
+    }
+
+    return resolved.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  private decodeJwtPayload(token: string): Record<string, unknown> | null {
+    const segments = token.split('.');
+    if (segments.length < 2) {
+      return null;
+    }
+
+    const payloadSegment = segments[1];
+    if (!payloadSegment) {
+      return null;
+    }
+
+    const normalizedPayload = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+    const paddingLength = (4 - (normalizedPayload.length % 4)) % 4;
+    const paddedPayload = `${normalizedPayload}${'='.repeat(paddingLength)}`;
+
+    try {
+      const decodedPayload = atob(paddedPayload);
+      const parsed = JSON.parse(decodedPayload);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   private hasValue(value: unknown): boolean {

@@ -9,6 +9,7 @@ import {
 
 export const ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY = 'enpo.admin-control-center.draft.v1';
 const ADMIN_CONTROL_CENTER_DRAFT_SCHEMA_VERSION = 1;
+const CONNECT_TOKEN_STORAGE_KEY = 'ConnectToken';
 
 export interface PersistedControlCenterStepSnapshot {
   readonly key: ControlCenterStepKey;
@@ -28,6 +29,7 @@ export interface PersistedControlCenterDraftState {
 interface PersistedControlCenterDraftEnvelope {
   readonly version: number;
   readonly savedAt: string;
+  readonly ownerKey: string | null;
   readonly state: PersistedControlCenterDraftState;
 }
 
@@ -57,7 +59,8 @@ export class AdminControlCenterDraftStorageService {
       };
     }
 
-    const raw = storage.getItem(ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY);
+    const draftStorageKey = this.resolveDraftStorageKey(storage);
+    const raw = storage.getItem(draftStorageKey);
     if (!raw) {
       return {
         status: 'missing',
@@ -69,9 +72,9 @@ export class AdminControlCenterDraftStorageService {
 
     try {
       const parsed = JSON.parse(raw);
-      const envelope = this.normalizeEnvelope(parsed);
+      const envelope = this.normalizeEnvelope(parsed, this.resolveCurrentUserKey(storage));
       if (!envelope) {
-        this.removeDraftSilently(storage);
+        this.removeDraftSilently(storage, draftStorageKey);
         return {
           status: 'invalid',
           savedAt: null,
@@ -87,7 +90,7 @@ export class AdminControlCenterDraftStorageService {
         message: null
       };
     } catch {
-      this.removeDraftSilently(storage);
+      this.removeDraftSilently(storage, draftStorageKey);
       return {
         status: 'invalid',
         savedAt: null,
@@ -112,9 +115,12 @@ export class AdminControlCenterDraftStorageService {
 
     const normalizedState = this.normalizeState(state);
     const effectiveSavedAt = this.normalizeIso(savedAt) ?? new Date().toISOString();
+    const ownerKey = this.resolveCurrentUserKey(storage);
+    const draftStorageKey = this.resolveDraftStorageKey(storage);
     const envelope: PersistedControlCenterDraftEnvelope = {
       version: ADMIN_CONTROL_CENTER_DRAFT_SCHEMA_VERSION,
       savedAt: effectiveSavedAt,
+      ownerKey,
       state: {
         ...normalizedState,
         lastSavedAt: effectiveSavedAt
@@ -122,7 +128,7 @@ export class AdminControlCenterDraftStorageService {
     };
 
     try {
-      storage.setItem(ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY, JSON.stringify(envelope));
+      storage.setItem(draftStorageKey, JSON.stringify(envelope));
       return {
         success: true,
         savedAt: effectiveSavedAt,
@@ -147,7 +153,9 @@ export class AdminControlCenterDraftStorageService {
       };
     }
 
-    this.removeDraftSilently(storage);
+    const draftStorageKey = this.resolveDraftStorageKey(storage);
+    this.removeDraftSilently(storage, draftStorageKey);
+    this.removeDraftSilently(storage, ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY);
     return {
       success: true,
       savedAt: null,
@@ -155,9 +163,9 @@ export class AdminControlCenterDraftStorageService {
     };
   }
 
-  private removeDraftSilently(storage: Storage): void {
+  private removeDraftSilently(storage: Storage, key: string): void {
     try {
-      storage.removeItem(ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY);
+      storage.removeItem(key);
     } catch {
       // no-op
     }
@@ -171,7 +179,10 @@ export class AdminControlCenterDraftStorageService {
     return window.localStorage;
   }
 
-  private normalizeEnvelope(raw: unknown): PersistedControlCenterDraftEnvelope | null {
+  private normalizeEnvelope(
+    raw: unknown,
+    expectedOwnerKey: string | null
+  ): PersistedControlCenterDraftEnvelope | null {
     if (!raw || typeof raw !== 'object') {
       return null;
     }
@@ -187,16 +198,82 @@ export class AdminControlCenterDraftStorageService {
       return null;
     }
 
+    const ownerKey = this.normalizeString(candidate['ownerKey']);
+    if (ownerKey && expectedOwnerKey && !this.equalsNormalized(ownerKey, expectedOwnerKey)) {
+      return null;
+    }
+
     const savedAt = this.normalizeIso(candidate['savedAt']) ?? state.lastSavedAt ?? new Date().toISOString();
 
     return {
       version,
       savedAt,
+      ownerKey,
       state: {
         ...state,
         lastSavedAt: savedAt
       }
     };
+  }
+
+  private resolveDraftStorageKey(storage: Storage): string {
+    const ownerKey = this.resolveCurrentUserKey(storage) ?? 'anonymous';
+    return `${ADMIN_CONTROL_CENTER_DRAFT_STORAGE_KEY}:${ownerKey}`;
+  }
+
+  private resolveCurrentUserKey(storage: Storage): string | null {
+    const token = this.normalizeString(storage.getItem(CONNECT_TOKEN_STORAGE_KEY));
+    if (!token) {
+      return null;
+    }
+
+    const payload = this.decodeJwtPayload(token);
+    if (!payload) {
+      return null;
+    }
+
+    const claimCandidates = [
+      payload['UserId'],
+      payload['userId'],
+      payload['sub'],
+      payload['nameid'],
+      payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier']
+    ];
+    const resolved = claimCandidates
+      .map(value => this.normalizeString(value))
+      .find(value => value != null);
+
+    if (!resolved) {
+      return null;
+    }
+
+    return resolved.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  private decodeJwtPayload(token: string): Record<string, unknown> | null {
+    const segments = token.split('.');
+    if (segments.length < 2) {
+      return null;
+    }
+
+    const payloadSegment = segments[1];
+    if (!payloadSegment) {
+      return null;
+    }
+
+    const normalizedPayload = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+    const paddingLength = (4 - (normalizedPayload.length % 4)) % 4;
+    const paddedPayload = `${normalizedPayload}${'='.repeat(paddingLength)}`;
+
+    try {
+      const decodedPayload = atob(paddedPayload);
+      const parsed = JSON.parse(decodedPayload);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   private normalizeState(raw: unknown): PersistedControlCenterDraftState {
@@ -311,5 +388,9 @@ export class AdminControlCenterDraftStorageService {
     }
 
     return null;
+  }
+
+  private equalsNormalized(left: string | null, right: string | null): boolean {
+    return String(left ?? '').trim().toLowerCase() === String(right ?? '').trim().toLowerCase();
   }
 }
