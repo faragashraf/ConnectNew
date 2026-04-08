@@ -626,6 +626,87 @@ export class AuthObjectsService {
       return fncs === fnc
     }
   }
+  checkAuthRole(roleId: string): boolean {
+    const normalizedRequiredRoleId = `${roleId ?? ''}`.trim();
+    if (!normalizedRequiredRoleId) {
+      return false;
+    }
+
+    const tokens = [
+      localStorage.getItem('ConnectToken'),
+      localStorage.getItem('ConnectFunctions')
+    ];
+
+    for (const token of tokens) {
+      if (!token) {
+        continue;
+      }
+
+      try {
+        const decoded: any = this.jwtHelper.decodeToken(token);
+        if (!decoded) {
+          continue;
+        }
+
+        const claimKeys = ['RoleId', 'roleId', 'role', 'roles', 'RoleIds', 'roleIds'];
+        for (const key of claimKeys) {
+          const values = this.expandClaimValues(decoded[key]);
+          if (values.includes(normalizedRequiredRoleId)) {
+            return true;
+          }
+        }
+      } catch {
+        // Ignore malformed token and continue checking the next one.
+      }
+    }
+
+    return false;
+  }
+  private expandClaimValues(value: any): string[] {
+    if (value === null || value === undefined) {
+      return [];
+    }
+
+    if (Array.isArray(value)) {
+      return value
+        .map(item => `${item ?? ''}`.trim())
+        .filter(item => item.length > 0);
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return [`${value}`];
+    }
+
+    if (typeof value === 'object') {
+      const extracted = value?.roleId ?? value?.RoleId;
+      return extracted !== undefined && extracted !== null
+        ? [`${extracted}`.trim()].filter(item => item.length > 0)
+        : [];
+    }
+
+    const raw = `${value}`.trim();
+    if (!raw) {
+      return [];
+    }
+
+    if (raw.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(item => `${item ?? ''}`.trim())
+            .filter(item => item.length > 0);
+        }
+      } catch {
+        // Fall back to delimiter parsing.
+      }
+    }
+
+    return raw
+      .split(/[;,|]/g)
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
+  }
   transformDistinct(value: any[], property: string): any[] {
     if (!value || !property) {
       return value;

@@ -9,6 +9,22 @@ namespace Api.Authorization
     public static class SummerFunctionClaimGuard
     {
         private static readonly JwtSecurityTokenHandler JwtHandler = new();
+        private static readonly HashSet<string> SupportedRoleClaimTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "RoleId",
+            "roleId",
+            "role",
+            "roles",
+            "RoleIds",
+            "roleIds",
+            ClaimTypes.Role
+        };
+        private static readonly IReadOnlyDictionary<string, string[]> FunctionRoleFallbackMap =
+            new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+            {
+                // Summer pricing admins in current production authorization matrix.
+                ["SummerPricingFunc"] = new[] { "2021" }
+            };
         private static readonly string[] UserIdClaimTypes =
         {
             "UserId",
@@ -108,7 +124,49 @@ namespace Api.Authorization
                 }
             }
 
+            if (HasRequiredRoleFallback(user, normalizedRequiredFunction))
+            {
+                return true;
+            }
+
             return false;
+        }
+
+        public static bool HasRequiredRole(ClaimsPrincipal? user, string requiredRoleId)
+        {
+            var normalizedRequiredRoleId = (requiredRoleId ?? string.Empty).Trim();
+            if (normalizedRequiredRoleId.Length == 0 || user?.Claims == null)
+            {
+                return false;
+            }
+
+            foreach (var claim in user.Claims)
+            {
+                if (!SupportedRoleClaimTypes.Contains(claim.Type))
+                {
+                    continue;
+                }
+
+                foreach (var roleToken in ExpandClaimTokens(claim.Value))
+                {
+                    if (string.Equals(roleToken, normalizedRequiredRoleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HasRequiredRoleFallback(ClaimsPrincipal? user, string requiredFunction)
+        {
+            if (!FunctionRoleFallbackMap.TryGetValue(requiredFunction, out var roleIds) || roleIds.Length == 0)
+            {
+                return false;
+            }
+
+            return roleIds.Any(roleId => HasRequiredRole(user, roleId));
         }
 
         private static bool TryValidateFunctionsToken(

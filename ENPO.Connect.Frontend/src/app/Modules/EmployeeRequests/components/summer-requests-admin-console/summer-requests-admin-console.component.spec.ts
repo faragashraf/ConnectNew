@@ -3,11 +3,12 @@ import { of } from 'rxjs';
 import { SummerRequestsAdminConsoleComponent } from './summer-requests-admin-console.component';
 
 describe('SummerRequestsAdminConsoleComponent - SummerPricingFunc', () => {
-  function createComponent(hasSummerPricingPermission: boolean): {
+  function createComponent(hasSummerPricingPermission: boolean, hasSummerPricingRole = false): {
     component: SummerRequestsAdminConsoleComponent;
     getPricingCatalogSpy: jasmine.Spy;
     savePricingCatalogSpy: jasmine.Spy;
     checkAuthFunSpy: jasmine.Spy;
+    checkAuthRoleSpy: jasmine.Spy;
   } {
     const getPricingCatalogSpy = jasmine.createSpy('getPricingCatalog').and.returnValue(of({
       isSuccess: true,
@@ -20,6 +21,7 @@ describe('SummerRequestsAdminConsoleComponent - SummerPricingFunc', () => {
       errors: []
     }));
     const checkAuthFunSpy = jasmine.createSpy('checkAuthFun').and.returnValue(hasSummerPricingPermission);
+    const checkAuthRoleSpy = jasmine.createSpy('checkAuthRole').and.returnValue(hasSummerPricingRole);
 
     const component = new SummerRequestsAdminConsoleComponent(
       new FormBuilder(),
@@ -33,6 +35,7 @@ describe('SummerRequestsAdminConsoleComponent - SummerPricingFunc', () => {
       {} as any,
       {
         checkAuthFun: checkAuthFunSpy,
+        checkAuthRole: checkAuthRoleSpy,
         authObject$: of(null)
       } as any,
       {
@@ -51,12 +54,13 @@ describe('SummerRequestsAdminConsoleComponent - SummerPricingFunc', () => {
       component,
       getPricingCatalogSpy,
       savePricingCatalogSpy,
-      checkAuthFunSpy
+      checkAuthFunSpy,
+      checkAuthRoleSpy
     };
   }
 
   it('blocks pricing load and save actions when SummerPricingFunc is missing', () => {
-    const { component, getPricingCatalogSpy, savePricingCatalogSpy, checkAuthFunSpy } = createComponent(false);
+    const { component, getPricingCatalogSpy, savePricingCatalogSpy, checkAuthFunSpy, checkAuthRoleSpy } = createComponent(false, false);
     component.pricingRecords = [{} as any];
 
     (component as any).refreshSummerPricingAccess();
@@ -64,6 +68,7 @@ describe('SummerRequestsAdminConsoleComponent - SummerPricingFunc', () => {
     component.savePricingCatalog();
 
     expect(checkAuthFunSpy).toHaveBeenCalledWith('SummerPricingFunc');
+    expect(checkAuthRoleSpy).toHaveBeenCalledWith('2021');
     expect(component.canManageSummerPricing).toBeFalse();
     expect(getPricingCatalogSpy).not.toHaveBeenCalled();
     expect(savePricingCatalogSpy).not.toHaveBeenCalled();
@@ -72,6 +77,19 @@ describe('SummerRequestsAdminConsoleComponent - SummerPricingFunc', () => {
 
   it('allows pricing load and save actions when SummerPricingFunc is granted', () => {
     const { component, getPricingCatalogSpy, savePricingCatalogSpy } = createComponent(true);
+    component.pricingRecords = [];
+
+    (component as any).refreshSummerPricingAccess();
+    component.loadPricingCatalog();
+    component.savePricingCatalog();
+
+    expect(component.canManageSummerPricing).toBeTrue();
+    expect(getPricingCatalogSpy).toHaveBeenCalled();
+    expect(savePricingCatalogSpy).toHaveBeenCalled();
+  });
+
+  it('allows pricing load and save actions when RoleId 2021 is granted', () => {
+    const { component, getPricingCatalogSpy, savePricingCatalogSpy } = createComponent(false, true);
     component.pricingRecords = [];
 
     (component as any).refreshSummerPricingAccess();

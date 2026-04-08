@@ -10,6 +10,8 @@ namespace Persistence.Tests;
 public class SummerFunctionClaimGuardTests
 {
     private const string RequiredFunction = "SummerAdminFunc";
+    private const string SummerPricingFunction = "SummerPricingFunc";
+    private const string SummerPricingRoleId = "2021";
     private const string SigningKey = "SummerAuthGuardTests_SigningKey_AtLeast_32_Bytes";
 
     [Fact]
@@ -80,6 +82,30 @@ public class SummerFunctionClaimGuardTests
             RequiredFunction,
             forgedToken,
             validationParameters);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void HasRequiredFunction_SummerPricingFunc_AllowsRoleFallback_2021()
+    {
+        var principal = CreateAuthenticatedPrincipal(
+            new Claim("UserId", "emp-100"),
+            new Claim("RoleId", SummerPricingRoleId));
+
+        var result = SummerFunctionClaimGuard.HasRequiredFunction(principal, SummerPricingFunction);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void HasRequiredFunction_SummerAdminFunc_DoesNotAllowRole2021WithoutFunctionClaim()
+    {
+        var principal = CreateAuthenticatedPrincipal(
+            new Claim("UserId", "emp-100"),
+            new Claim("RoleId", SummerPricingRoleId));
+
+        var result = SummerFunctionClaimGuard.HasRequiredFunction(principal, RequiredFunction);
 
         Assert.False(result);
     }
