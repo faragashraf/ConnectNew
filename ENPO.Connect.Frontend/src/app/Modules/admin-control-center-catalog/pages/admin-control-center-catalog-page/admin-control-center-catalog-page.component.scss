@@ -4,7 +4,7 @@
 
 .catalog-page {
   display: grid;
-  gap: 1rem;
+  gap: 0.95rem;
 }
 
 .page-header {
@@ -58,6 +58,52 @@
   color: #991b1b;
 }
 
+.progress-card {
+  border: 1px solid #d9e5ec;
+  border-radius: 14px;
+  background: linear-gradient(150deg, #ffffff 0%, #f5fbff 100%);
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.progress-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #26455e;
+  font-size: 0.85rem;
+}
+
+.progress-row strong {
+  color: #0f6f8d;
+}
+
+.progress-row.overall {
+  margin-top: 0.25rem;
+  font-weight: 700;
+}
+
+.phase-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.phase-switch :global(.p-button.active) {
+  background: #0f6f8d;
+  border-color: #0f6f8d;
+  color: #ffffff;
+}
+
+.phase-card {
+  transition: opacity 0.2s ease;
+}
+
+.phase-card.dimmed {
+  opacity: 0.75;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
@@ -96,9 +142,27 @@
   gap: 0.35rem;
 }
 
+.context-banner {
+  border: 1px solid #c8ddea;
+  background: #f3f9fd;
+  color: #284b65;
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.87rem;
+}
+
 .action-col {
   width: 68px;
   text-align: center;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.1rem;
 }
 
 .app-row {
@@ -128,6 +192,23 @@
   color: #304b63;
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.required-note {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #6f8191;
+}
+
+.required-note span,
+.required {
+  color: #c81e1e;
+  font-weight: 800;
+}
+
+.editor :global(input.ng-invalid.ng-touched),
+.editor :global(textarea.ng-invalid.ng-touched) {
+  border-color: #ef4444;
 }
 
 .category-layout {
@@ -163,6 +244,11 @@
   gap: 0.55rem;
 }
 
+.phase-two-layout {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .empty-state {
   border: 1px dashed #bad1de;
   border-radius: 12px;
@@ -178,5 +264,22 @@
 
   .category-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .card {
+    padding: 0.7rem;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .context-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
   }
 }

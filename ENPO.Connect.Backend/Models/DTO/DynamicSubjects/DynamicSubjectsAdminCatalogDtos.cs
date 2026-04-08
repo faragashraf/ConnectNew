@@ -75,3 +75,123 @@ public sealed class AdminCatalogCategoryUpdateRequestDto
 
     public bool IsActive { get; set; }
 }
+
+public sealed class AdminCatalogApplicationDeleteDiagnosticsDto
+{
+    public string ApplicationId { get; set; } = string.Empty;
+
+    public int LinkedCategoriesCount { get; set; }
+
+    public int LinkedFieldsCount { get; set; }
+
+    public int LinkedGroupsCount { get; set; }
+
+    public bool CanHardDelete { get; set; }
+
+    public bool WillUseSoftDelete { get; set; }
+
+    public bool IsBlocked { get; set; }
+
+    public string? DecisionReason { get; set; }
+}
+
+public sealed class AdminCatalogCategoryDeleteDiagnosticsDto
+{
+    public int CategoryId { get; set; }
+
+    public int ChildrenCount { get; set; }
+
+    public int LinkedFieldsCount { get; set; }
+
+    public int LinkedMessagesCount { get; set; }
+
+    public int LinkedGroupsCount { get; set; }
+
+    public bool CanHardDelete { get; set; }
+
+    public bool WillUseSoftDelete { get; set; }
+
+    public bool IsBlocked { get; set; }
+
+    public string? DecisionReason { get; set; }
+}
+
+public sealed class AdminCatalogDeleteResultDto
+{
+    public bool Deleted { get; set; }
+
+    public string Mode { get; set; } = "none";
+
+    public string? Message { get; set; }
+}
+
+public sealed class AdminCatalogGroupDto
+{
+    public int GroupId { get; set; }
+
+    public int CategoryId { get; set; }
+
+    public string ApplicationId { get; set; } = string.Empty;
+
+    public string GroupName { get; set; } = string.Empty;
+
+    public string? GroupDescription { get; set; }
+
+    public int? ParentGroupId { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public bool IsActive { get; set; }
+}
+
+public sealed class AdminCatalogGroupTreeNodeDto
+{
+    public int GroupId { get; set; }
+
+    public int CategoryId { get; set; }
+
+    public string ApplicationId { get; set; } = string.Empty;
+
+    public string GroupName { get; set; } = string.Empty;
+
+    public string? GroupDescription { get; set; }
+
+    public int? ParentGroupId { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public bool IsActive { get; set; }
+
+    public IReadOnlyList<AdminCatalogGroupTreeNodeDto> Children { get; set; }
+        = new List<AdminCatalogGroupTreeNodeDto>();
+}
+
+public sealed class AdminCatalogGroupCreateRequestDto
+{
+    public int CategoryId { get; set; }
+
+    public string ApplicationId { get; set; } = string.Empty;
+
+    public string GroupName { get; set; } = string.Empty;
+
+    public string? GroupDescription { get; set; }
+
+    public int? ParentGroupId { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public bool IsActive { get; set; } = true;
+}
+
+public sealed class AdminCatalogGroupUpdateRequestDto
+{
+    public string GroupName { get; set; } = string.Empty;
+
+    public string? GroupDescription { get; set; }
+
+    public int? ParentGroupId { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public bool IsActive { get; set; } = true;
+}

@@ -20,6 +20,16 @@ public interface IDynamicSubjectsAdminCatalogService
         string userId,
         CancellationToken cancellationToken = default);
 
+    Task<CommonResponse<AdminCatalogApplicationDeleteDiagnosticsDto>> DiagnoseApplicationDeleteAsync(
+        string applicationId,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogDeleteResultDto>> DeleteApplicationAsync(
+        string applicationId,
+        string userId,
+        CancellationToken cancellationToken = default);
+
     Task<CommonResponse<IEnumerable<AdminCatalogCategoryTreeNodeDto>>> GetCategoryTreeAsync(
         string userId,
         string? appId,
@@ -33,6 +43,37 @@ public interface IDynamicSubjectsAdminCatalogService
     Task<CommonResponse<AdminCatalogCategoryDto>> UpdateCategoryAsync(
         int categoryId,
         AdminCatalogCategoryUpdateRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogCategoryDeleteDiagnosticsDto>> DiagnoseCategoryDeleteAsync(
+        int categoryId,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogDeleteResultDto>> DeleteCategoryAsync(
+        int categoryId,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<IEnumerable<AdminCatalogGroupTreeNodeDto>>> GetGroupsByCategoryAsync(
+        int categoryId,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogGroupDto>> CreateGroupAsync(
+        AdminCatalogGroupCreateRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogGroupDto>> UpdateGroupAsync(
+        int groupId,
+        AdminCatalogGroupUpdateRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogDeleteResultDto>> DeleteGroupAsync(
+        int groupId,
         string userId,
         CancellationToken cancellationToken = default);
 }

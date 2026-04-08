@@ -43,6 +43,22 @@ public class DynamicSubjectsAdminCatalogController : ControllerBase
         return _adminCatalogService.UpdateApplicationAsync(applicationId, request, GetCurrentUserId(), cancellationToken);
     }
 
+    [HttpGet("Applications/{applicationId}/DeleteDiagnostics")]
+    public Task<CommonResponse<AdminCatalogApplicationDeleteDiagnosticsDto>> DiagnoseApplicationDelete(
+        string applicationId,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.DiagnoseApplicationDeleteAsync(applicationId, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpDelete("Applications/{applicationId}")]
+    public Task<CommonResponse<AdminCatalogDeleteResultDto>> DeleteApplication(
+        string applicationId,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.DeleteApplicationAsync(applicationId, GetCurrentUserId(), cancellationToken);
+    }
+
     [HttpGet("CategoryTree")]
     public Task<CommonResponse<IEnumerable<AdminCatalogCategoryTreeNodeDto>>> GetCategoryTree(
         string? appId,
@@ -66,6 +82,55 @@ public class DynamicSubjectsAdminCatalogController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         return _adminCatalogService.UpdateCategoryAsync(categoryId, request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpGet("Categories/{categoryId:int}/DeleteDiagnostics")]
+    public Task<CommonResponse<AdminCatalogCategoryDeleteDiagnosticsDto>> DiagnoseCategoryDelete(
+        int categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.DiagnoseCategoryDeleteAsync(categoryId, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpDelete("Categories/{categoryId:int}")]
+    public Task<CommonResponse<AdminCatalogDeleteResultDto>> DeleteCategory(
+        int categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.DeleteCategoryAsync(categoryId, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpGet("Categories/{categoryId:int}/Groups")]
+    public Task<CommonResponse<IEnumerable<AdminCatalogGroupTreeNodeDto>>> GetGroupsByCategory(
+        int categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.GetGroupsByCategoryAsync(categoryId, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpPost("Groups")]
+    public Task<CommonResponse<AdminCatalogGroupDto>> CreateGroup(
+        [FromBody] AdminCatalogGroupCreateRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.CreateGroupAsync(request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpPut("Groups/{groupId:int}")]
+    public Task<CommonResponse<AdminCatalogGroupDto>> UpdateGroup(
+        int groupId,
+        [FromBody] AdminCatalogGroupUpdateRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.UpdateGroupAsync(groupId, request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpDelete("Groups/{groupId:int}")]
+    public Task<CommonResponse<AdminCatalogDeleteResultDto>> DeleteGroup(
+        int groupId,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.DeleteGroupAsync(groupId, GetCurrentUserId(), cancellationToken);
     }
 
     private string GetCurrentUserId()

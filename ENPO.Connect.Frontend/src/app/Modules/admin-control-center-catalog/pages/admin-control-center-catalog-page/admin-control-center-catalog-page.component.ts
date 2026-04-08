@@ -3,20 +3,25 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { TreeNode } from 'primeng/api';
 import { OverlayPanel } from 'primeng/overlaypanel';
 import { CommonResponse } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
-import {
-  DynamicSubjectsAdminCatalogController
-} from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
+import { DynamicSubjectsAdminCatalogController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
 import {
   AdminCatalogApplicationCreateRequestDto,
+  AdminCatalogApplicationDeleteDiagnosticsDto,
   AdminCatalogApplicationDto,
   AdminCatalogApplicationUpdateRequestDto,
   AdminCatalogCategoryCreateRequestDto,
-  AdminCatalogCategoryDto,
+  AdminCatalogCategoryDeleteDiagnosticsDto,
   AdminCatalogCategoryTreeNodeDto,
-  AdminCatalogCategoryUpdateRequestDto
+  AdminCatalogCategoryUpdateRequestDto,
+  AdminCatalogDeleteResultDto,
+  AdminCatalogGroupCreateRequestDto,
+  AdminCatalogGroupTreeNodeDto,
+  AdminCatalogGroupUpdateRequestDto
 } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
 
 type MessageSeverity = 'success' | 'warn' | 'error';
+type UiPhase = 1 | 2;
+type ParentGroupOption = { label: string; value: number | null };
 
 @Component({
   selector: 'app-admin-control-center-catalog-page',
@@ -36,6 +41,14 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     isActive: [true]
   });
 
+  readonly groupForm: FormGroup = this.fb.group({
+    groupName: ['', [Validators.required, Validators.maxLength(200)]],
+    groupDescription: ['', [Validators.maxLength(255)]],
+    parentGroupId: [null],
+    displayOrder: [0, [Validators.required, Validators.min(0), Validators.max(100000)]],
+    isActive: [true]
+  });
+
   applications: AdminCatalogApplicationDto[] = [];
   selectedApplicationId: string | null = null;
 
@@ -43,13 +56,28 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   parentPickerTree: TreeNode[] = [];
   selectedCategoryNode: TreeNode | null = null;
 
+  groupTree: TreeNode[] = [];
+  selectedGroupNode: TreeNode | null = null;
+  groupParentOptions: ParentGroupOption[] = [{ label: 'بدون Parent (Main Group)', value: null }];
+
   editingApplicationId: string | null = null;
   editingCategoryId: number | null = null;
+  editingGroupId: number | null = null;
 
   loadingApplications = false;
   loadingTree = false;
+  loadingGroups = false;
+
   savingApplication = false;
   savingCategory = false;
+  savingGroup = false;
+
+  deletingApplicationId: string | null = null;
+  deletingCategory = false;
+  deletingGroup = false;
+
+  activePhase: UiPhase = 1;
+  groupsLoadedForCategoryId: number | null = null;
 
   message = '';
   messageSeverity: MessageSeverity = 'success';
@@ -57,6 +85,10 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   private readonly categoryIndex = new Map<number, AdminCatalogCategoryTreeNodeDto>();
   private readonly categoryPathIndex = new Map<number, string>();
   private readonly categoryTreeNodeIndex = new Map<number, TreeNode>();
+
+  private readonly groupIndex = new Map<number, AdminCatalogGroupTreeNodeDto>();
+  private readonly groupPathIndex = new Map<number, string>();
+  private readonly groupTreeNodeIndex = new Map<number, TreeNode>();
 
   constructor(
     private readonly fb: FormBuilder,
@@ -66,6 +98,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   ngOnInit(): void {
     this.prepareNewApplication();
     this.prepareNewCategory();
+    this.prepareNewGroup();
     this.loadApplications();
   }
 
@@ -77,6 +110,30 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     return this.applications.find(item => item.applicationId === this.selectedApplicationId) ?? null;
   }
 
+  get selectedCategory(): AdminCatalogCategoryTreeNodeDto | null {
+    const candidate = this.selectedCategoryNode?.data as AdminCatalogCategoryTreeNodeDto | undefined;
+    return candidate ?? null;
+  }
+
+  get selectedCategoryId(): number | null {
+    const selected = this.selectedCategory;
+    return selected ? this.toNonNegativeInt(selected.categoryId) : null;
+  }
+
+  get selectedCategoryPathLabel(): string {
+    const categoryId = this.selectedCategoryId;
+    if (!categoryId) {
+      return 'لا يوجد Node محددة';
+    }
+
+    return this.categoryPathIndex.get(categoryId) ?? `#${categoryId}`;
+  }
+
+  get selectedGroup(): AdminCatalogGroupTreeNodeDto | null {
+    const candidate = this.selectedGroupNode?.data as AdminCatalogGroupTreeNodeDto | undefined;
+    return candidate ?? null;
+  }
+
   get parentDisplayLabel(): string {
     const parentCategoryId = this.toNonNegativeInt(this.categoryForm.get('parentCategoryId')?.value);
     if (parentCategoryId === 0) {
@@ -86,14 +143,74 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     return this.categoryPathIndex.get(parentCategoryId) ?? `#${parentCategoryId}`;
   }
 
+  get canSaveApplication(): boolean {
+    return !this.savingApplication && this.applicationForm.valid;
+  }
+
   get canSaveCategory(): boolean {
-    return this.selectedApplicationId != null && !this.loadingTree;
+    return this.selectedApplicationId != null
+      && !this.loadingTree
+      && !this.savingCategory
+      && this.categoryForm.valid;
+  }
+
+  get canSaveGroup(): boolean {
+    return this.selectedApplicationId != null
+      && this.selectedCategoryId != null
+      && !this.loadingGroups
+      && !this.savingGroup
+      && this.groupForm.valid;
+  }
+
+  get phase1CompletionPercent(): number {
+    const checkpoints = [
+      this.applications.length > 0,
+      this.selectedApplicationId != null,
+      this.categoryTree.length > 0,
+      this.selectedCategoryId != null
+    ];
+
+    const passed = checkpoints.filter(Boolean).length;
+    return Math.round((passed / checkpoints.length) * 100);
+  }
+
+  get phase2CompletionPercent(): number {
+    if (!this.selectedCategoryId) {
+      return 0;
+    }
+
+    const checkpoints = [
+      this.groupsLoadedForCategoryId === this.selectedCategoryId,
+      this.groupTree.length > 0,
+      this.selectedGroup != null || this.editingGroupId != null
+    ];
+
+    const passed = checkpoints.filter(Boolean).length;
+    return Math.round((passed / checkpoints.length) * 100);
+  }
+
+  get overallCompletionPercent(): number {
+    return Math.round((this.phase1CompletionPercent + this.phase2CompletionPercent) / 2);
+  }
+
+  onActivatePhase(phase: UiPhase): void {
+    if (phase === 2 && !this.selectedCategoryId) {
+      this.showMessage('warn', 'اختر Node من الشجرة أولًا للانتقال إلى المرحلة الثانية.');
+      return;
+    }
+
+    this.activePhase = phase;
   }
 
   onSelectApplication(application: AdminCatalogApplicationDto): void {
     this.selectedApplicationId = application.applicationId;
+    this.activePhase = 1;
+
     this.clearTreeState();
+    this.clearGroupsState();
     this.prepareNewCategory();
+    this.prepareNewGroup();
+
     this.loadCategoryTree(application.applicationId);
   }
 
@@ -117,9 +234,53 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     );
   }
 
+  onDeleteApplication(application: AdminCatalogApplicationDto, event: Event): void {
+    event.stopPropagation();
+    const applicationId = this.normalizeString(application.applicationId);
+    if (!applicationId || this.deletingApplicationId) {
+      return;
+    }
+
+    this.deletingApplicationId = applicationId;
+    this.adminCatalogController.diagnoseApplicationDelete(applicationId).subscribe({
+      next: response => {
+        if (!this.ensureSuccess(response, 'تعذر تشخيص حذف التطبيق.')) {
+          return;
+        }
+
+        const diagnostics = response.data;
+        if (!diagnostics) {
+          this.showMessage('error', 'تعذر قراءة تفاصيل حذف التطبيق.');
+          return;
+        }
+
+        const confirmationMessage = this.buildApplicationDeleteConfirmationMessage(diagnostics);
+        if (!window.confirm(confirmationMessage)) {
+          return;
+        }
+
+        this.adminCatalogController.deleteApplication(applicationId).subscribe({
+          next: deleteResponse => {
+            if (!this.ensureSuccess(deleteResponse, 'تعذر حذف التطبيق.')) {
+              return;
+            }
+
+            this.handleApplicationDeleteResult(applicationId, deleteResponse.data);
+          },
+          error: () => this.showMessage('error', 'حدث خطأ أثناء حذف التطبيق.'),
+          complete: () => { this.deletingApplicationId = null; }
+        });
+      },
+      error: () => {
+        this.showMessage('error', 'حدث خطأ أثناء تشخيص حذف التطبيق.');
+        this.deletingApplicationId = null;
+      }
+    });
+  }
+
   onSaveApplication(): void {
     this.applicationForm.markAllAsTouched();
-    if (this.applicationForm.invalid || this.savingApplication) {
+    if (!this.canSaveApplication) {
       return;
     }
 
@@ -141,11 +302,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     this.savingApplication = true;
 
     if (editApplicationId) {
-      const request: AdminCatalogApplicationUpdateRequestDto = {
-        applicationName,
-        isActive
-      };
-
+      const request: AdminCatalogApplicationUpdateRequestDto = { applicationName, isActive };
       this.adminCatalogController.updateApplication(editApplicationId, request).subscribe({
         next: response => {
           if (!this.ensureSuccess(response, 'تعذر تعديل التطبيق.')) {
@@ -156,50 +313,41 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
           this.prepareNewApplication();
           this.loadApplications(editApplicationId);
         },
-        error: () => {
-          this.showMessage('error', 'حدث خطأ أثناء تعديل التطبيق.');
-        },
-        complete: () => {
-          this.savingApplication = false;
-        }
+        error: () => this.showMessage('error', 'حدث خطأ أثناء تعديل التطبيق.'),
+        complete: () => { this.savingApplication = false; }
       });
 
       return;
     }
 
-    const request: AdminCatalogApplicationCreateRequestDto = {
+    const createRequest: AdminCatalogApplicationCreateRequestDto = {
       applicationId: applicationIdFromForm!,
       applicationName,
       isActive
     };
 
-    this.adminCatalogController.createApplication(request).subscribe({
+    this.adminCatalogController.createApplication(createRequest).subscribe({
       next: response => {
         if (!this.ensureSuccess(response, 'تعذر إنشاء التطبيق.')) {
           return;
         }
 
-        const createdApplicationId = this.normalizeString(response.data?.applicationId) ?? request.applicationId;
+        const createdId = this.normalizeString(response.data?.applicationId) ?? createRequest.applicationId;
         this.showMessage('success', 'تم إنشاء التطبيق بنجاح.');
         this.prepareNewApplication();
-        this.loadApplications(createdApplicationId);
+        this.loadApplications(createdId);
       },
-      error: () => {
-        this.showMessage('error', 'حدث خطأ أثناء إنشاء التطبيق.');
-      },
-      complete: () => {
-        this.savingApplication = false;
-      }
+      error: () => this.showMessage('error', 'حدث خطأ أثناء إنشاء التطبيق.'),
+      complete: () => { this.savingApplication = false; }
     });
   }
 
   onStartCreateCategory(): void {
-    const selectedParentId = this.readSelectedCategoryId() ?? 0;
-    this.prepareNewCategory(selectedParentId);
+    this.prepareNewCategory(this.selectedCategoryId ?? 0);
   }
 
   onStartEditSelectedCategory(): void {
-    const selected = this.readSelectedCategory();
+    const selected = this.selectedCategory;
     if (!selected) {
       this.showMessage('warn', 'اختر عنصرًا من الشجرة أولًا للتعديل.');
       return;
@@ -214,6 +362,55 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
       },
       { emitEvent: false }
     );
+  }
+
+  onDeleteSelectedCategory(): void {
+    const selected = this.selectedCategory;
+    if (!selected || this.deletingCategory) {
+      this.showMessage('warn', 'اختر Node من الشجرة أولًا للحذف.');
+      return;
+    }
+
+    this.deletingCategory = true;
+    this.adminCatalogController.diagnoseCategoryDelete(selected.categoryId).subscribe({
+      next: response => {
+        if (!this.ensureSuccess(response, 'تعذر تشخيص حذف النود.')) {
+          return;
+        }
+
+        const diagnostics = response.data;
+        if (!diagnostics) {
+          this.showMessage('error', 'تعذر قراءة تفاصيل الحذف.');
+          return;
+        }
+
+        if (diagnostics.isBlocked) {
+          this.showMessage('warn', diagnostics.decisionReason ?? 'لا يمكن حذف النود في حالتها الحالية.');
+          return;
+        }
+
+        const confirmationMessage = this.buildCategoryDeleteConfirmationMessage(diagnostics);
+        if (!window.confirm(confirmationMessage)) {
+          return;
+        }
+
+        this.adminCatalogController.deleteCategory(selected.categoryId).subscribe({
+          next: deleteResponse => {
+            if (!this.ensureSuccess(deleteResponse, 'تعذر حذف النود.')) {
+              return;
+            }
+
+            this.handleCategoryDeleteResult(selected.categoryId, deleteResponse.data);
+          },
+          error: () => this.showMessage('error', 'حدث خطأ أثناء حذف النود.'),
+          complete: () => { this.deletingCategory = false; }
+        });
+      },
+      error: () => {
+        this.showMessage('error', 'حدث خطأ أثناء تشخيص حذف النود.');
+        this.deletingCategory = false;
+      }
+    });
   }
 
   openParentPicker(panel: OverlayPanel, event: Event): void {
@@ -245,6 +442,19 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     panel.hide();
   }
 
+  onCategoryTreeNodeSelect(): void {
+    const selected = this.selectedCategory;
+    if (!selected) {
+      return;
+    }
+
+    this.activePhase = 2;
+    this.prepareNewGroup();
+    this.selectedGroupNode = null;
+    this.editingGroupId = null;
+    this.loadGroupsByCategory(selected.categoryId);
+  }
+
   onSaveCategory(): void {
     if (!this.selectedApplicationId) {
       this.showMessage('warn', 'اختر تطبيقًا أولًا قبل إدارة الشجرة.');
@@ -252,7 +462,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     }
 
     this.categoryForm.markAllAsTouched();
-    if (this.categoryForm.invalid || this.savingCategory || this.loadingTree) {
+    if (!this.canSaveCategory) {
       return;
     }
 
@@ -281,12 +491,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     const preferredNodeId = this.editingCategoryId;
 
     if (this.editingCategoryId != null) {
-      const request: AdminCatalogCategoryUpdateRequestDto = {
-        categoryName,
-        parentCategoryId,
-        isActive
-      };
-
+      const request: AdminCatalogCategoryUpdateRequestDto = { categoryName, parentCategoryId, isActive };
       this.adminCatalogController.updateCategory(this.editingCategoryId, request).subscribe({
         next: response => {
           if (!this.ensureSuccess(response, 'تعذر تعديل عنصر الشجرة.')) {
@@ -298,12 +503,8 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
           this.prepareNewCategory(parentCategoryId);
           this.loadCategoryTree(this.selectedApplicationId!, resolvedCategoryId);
         },
-        error: () => {
-          this.showMessage('error', 'حدث خطأ أثناء تعديل عنصر الشجرة.');
-        },
-        complete: () => {
-          this.savingCategory = false;
-        }
+        error: () => this.showMessage('error', 'حدث خطأ أثناء تعديل عنصر الشجرة.'),
+        complete: () => { this.savingCategory = false; }
       });
 
       return;
@@ -327,12 +528,155 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
         this.prepareNewCategory(parentCategoryId);
         this.loadCategoryTree(this.selectedApplicationId!, createdCategoryId);
       },
-      error: () => {
-        this.showMessage('error', 'حدث خطأ أثناء إنشاء عنصر الشجرة.');
+      error: () => this.showMessage('error', 'حدث خطأ أثناء إنشاء عنصر الشجرة.'),
+      complete: () => { this.savingCategory = false; }
+    });
+  }
+
+  onStartCreateGroup(): void {
+    const suggestedParentId = this.selectedGroup ? this.toPositiveInt(this.selectedGroup.groupId) : null;
+    this.prepareNewGroup(suggestedParentId);
+  }
+
+  onStartEditSelectedGroup(): void {
+    const selected = this.selectedGroup;
+    if (!selected) {
+      this.showMessage('warn', 'اختر Group أولًا للتعديل.');
+      return;
+    }
+
+    this.editingGroupId = selected.groupId;
+    this.groupForm.reset(
+      {
+        groupName: selected.groupName,
+        groupDescription: selected.groupDescription ?? '',
+        parentGroupId: this.toPositiveInt(selected.parentGroupId),
+        displayOrder: this.toNonNegativeInt(selected.displayOrder),
+        isActive: selected.isActive
       },
-      complete: () => {
-        this.savingCategory = false;
-      }
+      { emitEvent: false }
+    );
+  }
+
+  onDeleteSelectedGroup(): void {
+    const selected = this.selectedGroup;
+    if (!selected || this.deletingGroup) {
+      this.showMessage('warn', 'اختر Group أولًا للحذف.');
+      return;
+    }
+
+    const confirmationMessage = [
+      `سيتم حذف الجروب: ${selected.groupName} (#${selected.groupId}).`,
+      'إذا كان للجروب أبناء فلن يتم الحذف.',
+      'هل تريد المتابعة؟'
+    ].join('\n');
+
+    if (!window.confirm(confirmationMessage)) {
+      return;
+    }
+
+    this.deletingGroup = true;
+    this.adminCatalogController.deleteGroup(selected.groupId).subscribe({
+      next: response => {
+        if (!this.ensureSuccess(response, 'تعذر حذف الجروب.')) {
+          return;
+        }
+
+        this.showMessage('success', response.data?.message ?? 'تم حذف الجروب بنجاح.');
+        this.prepareNewGroup();
+
+        const categoryId = this.selectedCategoryId;
+        if (categoryId) {
+          this.loadGroupsByCategory(categoryId);
+        }
+      },
+      error: () => this.showMessage('error', 'حدث خطأ أثناء حذف الجروب.'),
+      complete: () => { this.deletingGroup = false; }
+    });
+  }
+
+  onSaveGroup(): void {
+    const selectedApplicationId = this.selectedApplicationId;
+    const selectedCategoryId = this.selectedCategoryId;
+    if (!selectedApplicationId || !selectedCategoryId) {
+      this.showMessage('warn', 'اختر تطبيقًا وNode أولًا قبل إدارة الجروبات.');
+      return;
+    }
+
+    this.groupForm.markAllAsTouched();
+    if (!this.canSaveGroup) {
+      return;
+    }
+
+    const groupName = this.normalizeString(this.groupForm.get('groupName')?.value);
+    const groupDescription = this.normalizeString(this.groupForm.get('groupDescription')?.value);
+    const parentGroupId = this.toPositiveInt(this.groupForm.get('parentGroupId')?.value);
+    const displayOrder = this.toNonNegativeInt(this.groupForm.get('displayOrder')?.value);
+    const isActive = this.groupForm.get('isActive')?.value === true;
+
+    if (!groupName) {
+      this.showMessage('warn', 'اسم الجروب مطلوب.');
+      return;
+    }
+
+    const parentError = this.validateGroupParent(parentGroupId);
+    if (parentError) {
+      this.showMessage('warn', parentError);
+      return;
+    }
+
+    this.savingGroup = true;
+
+    if (this.editingGroupId != null) {
+      const request: AdminCatalogGroupUpdateRequestDto = {
+        groupName,
+        groupDescription: groupDescription ?? undefined,
+        parentGroupId: parentGroupId ?? undefined,
+        displayOrder,
+        isActive
+      };
+
+      this.adminCatalogController.updateGroup(this.editingGroupId, request).subscribe({
+        next: response => {
+          if (!this.ensureSuccess(response, 'تعذر تعديل الجروب.')) {
+            return;
+          }
+
+          const updatedGroupId = response.data?.groupId ?? this.editingGroupId;
+          this.showMessage('success', 'تم تعديل الجروب بنجاح.');
+          this.prepareNewGroup(parentGroupId);
+          this.loadGroupsByCategory(selectedCategoryId, updatedGroupId);
+        },
+        error: () => this.showMessage('error', 'حدث خطأ أثناء تعديل الجروب.'),
+        complete: () => { this.savingGroup = false; }
+      });
+
+      return;
+    }
+
+    const createRequest: AdminCatalogGroupCreateRequestDto = {
+      categoryId: selectedCategoryId,
+      applicationId: selectedApplicationId,
+      groupName,
+      groupDescription: groupDescription ?? undefined,
+      parentGroupId: parentGroupId ?? undefined,
+      displayOrder,
+      isActive
+    };
+
+    this.adminCatalogController.createGroup(createRequest).subscribe({
+      next: response => {
+        if (!this.ensureSuccess(response, 'تعذر إنشاء الجروب.')) {
+          return;
+        }
+
+        const createdGroupId = response.data?.groupId ?? null;
+        this.showMessage('success', 'تم إنشاء الجروب بنجاح.');
+        this.prepareNewGroup(parentGroupId);
+        this.loadGroupsByCategory(selectedCategoryId, createdGroupId);
+      },
+      error: () => this.showMessage('error', 'حدث خطأ أثناء إنشاء الجروب.'),
+      complete: () => { this.savingGroup = false; }
     });
   }
 
@@ -345,17 +689,19 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
           this.applications = [];
           this.selectedApplicationId = null;
           this.clearTreeState();
+          this.clearGroupsState();
           return;
         }
 
         this.applications = [...(response.data ?? [])];
-        const normalizedPreferred = this.normalizeString(preferredApplicationId);
-        const hasPreferred = normalizedPreferred
-          ? this.applications.some(item => item.applicationId === normalizedPreferred)
+
+        const preferred = this.normalizeString(preferredApplicationId);
+        const hasPreferred = preferred
+          ? this.applications.some(item => item.applicationId === preferred)
           : false;
 
         if (hasPreferred) {
-          this.selectedApplicationId = normalizedPreferred;
+          this.selectedApplicationId = preferred;
         } else {
           const hasCurrentSelection = this.selectedApplicationId
             ? this.applications.some(item => item.applicationId === this.selectedApplicationId)
@@ -368,6 +714,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
         if (!this.selectedApplicationId) {
           this.clearTreeState();
+          this.clearGroupsState();
           return;
         }
 
@@ -377,11 +724,10 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
         this.applications = [];
         this.selectedApplicationId = null;
         this.clearTreeState();
+        this.clearGroupsState();
         this.showMessage('error', 'حدث خطأ أثناء تحميل التطبيقات.');
       },
-      complete: () => {
-        this.loadingApplications = false;
-      }
+      complete: () => { this.loadingApplications = false; }
     });
   }
 
@@ -392,31 +738,65 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
       next: response => {
         if (!this.ensureSuccess(response, 'تعذر تحميل الشجرة من جدول CDCategory.')) {
           this.clearTreeState();
+          this.clearGroupsState();
           return;
         }
 
         const categories = response.data ?? [];
         this.rebuildCategoryIndex(categories);
-        this.rebuildTreeNodes(categories);
+        this.rebuildCategoryTreeNodes(categories);
 
-        const targetCategoryId = preferredCategoryId
-          ?? this.readSelectedCategoryId()
-          ?? this.editingCategoryId;
-
+        const targetCategoryId = preferredCategoryId ?? this.selectedCategoryId ?? this.editingCategoryId;
         if (targetCategoryId && this.categoryTreeNodeIndex.has(targetCategoryId)) {
           this.selectedCategoryNode = this.categoryTreeNodeIndex.get(targetCategoryId) ?? null;
-          return;
+        } else {
+          this.selectedCategoryNode = null;
+          this.activePhase = 1;
+          this.clearGroupsState();
         }
-
-        this.selectedCategoryNode = null;
       },
       error: () => {
         this.clearTreeState();
+        this.clearGroupsState();
         this.showMessage('error', 'حدث خطأ أثناء تحميل الشجرة.');
       },
-      complete: () => {
-        this.loadingTree = false;
-      }
+      complete: () => { this.loadingTree = false; }
+    });
+  }
+
+  private loadGroupsByCategory(categoryId: number, preferredGroupId?: number | null): void {
+    if (categoryId <= 0) {
+      this.clearGroupsState();
+      return;
+    }
+
+    this.loadingGroups = true;
+
+    this.adminCatalogController.getGroupsByCategory(categoryId).subscribe({
+      next: response => {
+        if (!this.ensureSuccess(response, 'تعذر تحميل الجروبات الخاصة بالنود المختارة.')) {
+          this.clearGroupsState();
+          return;
+        }
+
+        const groups = response.data ?? [];
+        this.groupsLoadedForCategoryId = categoryId;
+        this.rebuildGroupIndex(groups);
+        this.rebuildGroupTreeNodes(groups);
+        this.buildGroupParentOptions();
+
+        const targetGroupId = preferredGroupId ?? this.toPositiveInt(this.selectedGroup?.groupId) ?? this.editingGroupId;
+        if (targetGroupId && this.groupTreeNodeIndex.has(targetGroupId)) {
+          this.selectedGroupNode = this.groupTreeNodeIndex.get(targetGroupId) ?? null;
+        } else {
+          this.selectedGroupNode = null;
+        }
+      },
+      error: () => {
+        this.clearGroupsState();
+        this.showMessage('error', 'حدث خطأ أثناء تحميل الجروبات.');
+      },
+      complete: () => { this.loadingGroups = false; }
     });
   }
 
@@ -432,7 +812,6 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
         this.categoryIndex.set(item.categoryId, item);
         this.categoryPathIndex.set(item.categoryId, `${nextPath} (#${item.categoryId})`);
-
         walk(item.children ?? [], nextPath);
       }
     };
@@ -440,13 +819,13 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     walk(nodes, '');
   }
 
-  private rebuildTreeNodes(nodes: ReadonlyArray<AdminCatalogCategoryTreeNodeDto>): void {
+  private rebuildCategoryTreeNodes(nodes: ReadonlyArray<AdminCatalogCategoryTreeNodeDto>): void {
     this.categoryTreeNodeIndex.clear();
-    this.categoryTree = this.mapTreeNodes(nodes, true);
-    this.parentPickerTree = this.mapTreeNodes(nodes, false);
+    this.categoryTree = this.mapCategoryTreeNodes(nodes, true);
+    this.parentPickerTree = this.mapCategoryTreeNodes(nodes, false);
   }
 
-  private mapTreeNodes(nodes: ReadonlyArray<AdminCatalogCategoryTreeNodeDto>, withIndex: boolean): TreeNode[] {
+  private mapCategoryTreeNodes(nodes: ReadonlyArray<AdminCatalogCategoryTreeNodeDto>, withIndex: boolean): TreeNode[] {
     return (nodes ?? []).map(node => {
       const label = node.isActive
         ? `${node.categoryName} (#${node.categoryId})`
@@ -456,7 +835,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
         label,
         data: node,
         expanded: true,
-        children: this.mapTreeNodes(node.children ?? [], withIndex)
+        children: this.mapCategoryTreeNodes(node.children ?? [], withIndex)
       };
 
       if (withIndex) {
@@ -467,51 +846,87 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     });
   }
 
-  private clearTreeState(): void {
-    this.categoryTree = [];
-    this.parentPickerTree = [];
-    this.selectedCategoryNode = null;
-    this.categoryIndex.clear();
-    this.categoryPathIndex.clear();
-    this.categoryTreeNodeIndex.clear();
+  private rebuildGroupIndex(nodes: ReadonlyArray<AdminCatalogGroupTreeNodeDto>): void {
+    this.groupIndex.clear();
+    this.groupPathIndex.clear();
+
+    const walk = (items: ReadonlyArray<AdminCatalogGroupTreeNodeDto>, parentPath: string): void => {
+      for (const item of items ?? []) {
+        const nextPath = parentPath.length > 0
+          ? `${parentPath} / ${item.groupName}`
+          : item.groupName;
+
+        this.groupIndex.set(item.groupId, item);
+        this.groupPathIndex.set(item.groupId, `${nextPath} (#${item.groupId})`);
+        walk(item.children ?? [], nextPath);
+      }
+    };
+
+    walk(nodes, '');
   }
 
-  private prepareNewApplication(): void {
-    this.editingApplicationId = null;
-    this.applicationForm.reset(
-      {
-        applicationId: '',
-        applicationName: '',
-        isActive: true
-      },
-      { emitEvent: false }
-    );
+  private rebuildGroupTreeNodes(nodes: ReadonlyArray<AdminCatalogGroupTreeNodeDto>): void {
+    this.groupTreeNodeIndex.clear();
+    this.groupTree = this.mapGroupTreeNodes(nodes, true);
   }
 
-  private prepareNewCategory(defaultParentCategoryId = 0): void {
-    this.editingCategoryId = null;
-    this.categoryForm.reset(
-      {
-        categoryName: '',
-        parentCategoryId: this.toNonNegativeInt(defaultParentCategoryId),
-        isActive: true
-      },
-      { emitEvent: false }
-    );
+  private mapGroupTreeNodes(nodes: ReadonlyArray<AdminCatalogGroupTreeNodeDto>, withIndex: boolean): TreeNode[] {
+    return (nodes ?? []).map(node => {
+      const label = node.isActive
+        ? `${node.groupName} (#${node.groupId})`
+        : `${node.groupName} (#${node.groupId}) - غير مفعل`;
+
+      const mapped: TreeNode = {
+        label,
+        data: node,
+        expanded: true,
+        children: this.mapGroupTreeNodes(node.children ?? [], withIndex)
+      };
+
+      if (withIndex) {
+        this.groupTreeNodeIndex.set(node.groupId, mapped);
+      }
+
+      return mapped;
+    });
   }
 
-  private readSelectedCategory(): AdminCatalogCategoryTreeNodeDto | null {
-    const candidate = this.selectedCategoryNode?.data as AdminCatalogCategoryTreeNodeDto | undefined;
-    return candidate ?? null;
+  private buildGroupParentOptions(): void {
+    const options: ParentGroupOption[] = [{ label: 'بدون Parent (Main Group)', value: null }];
+
+    for (const [groupId, path] of this.groupPathIndex.entries()) {
+      options.push({ label: path, value: groupId });
+    }
+
+    options.sort((left, right) => {
+      if (left.value == null) {
+        return -1;
+      }
+
+      if (right.value == null) {
+        return 1;
+      }
+
+      return left.label.localeCompare(right.label, 'ar');
+    });
+
+    this.groupParentOptions = options;
   }
 
-  private readSelectedCategoryId(): number | null {
-    const selected = this.readSelectedCategory();
-    if (!selected) {
+  private validateGroupParent(candidateParentGroupId: number | null): string | null {
+    if (this.editingGroupId == null || candidateParentGroupId == null) {
       return null;
     }
 
-    return this.toNonNegativeInt(selected.categoryId);
+    if (candidateParentGroupId === this.editingGroupId) {
+      return 'لا يمكن اختيار نفس الجروب كأب له.';
+    }
+
+    if (this.isDescendantOfEditingGroup(candidateParentGroupId)) {
+      return 'لا يمكن اختيار جروب ابن كأب للجروب الحالي.';
+    }
+
+    return null;
   }
 
   private isDescendantOfEditingNode(candidateCategoryId: number): boolean {
@@ -534,6 +949,135 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
     walk(editingNode.children ?? []);
     return descendants.has(this.toNonNegativeInt(candidateCategoryId));
+  }
+
+  private isDescendantOfEditingGroup(candidateGroupId: number): boolean {
+    if (this.editingGroupId == null) {
+      return false;
+    }
+
+    const editingGroup = this.groupIndex.get(this.editingGroupId);
+    if (!editingGroup) {
+      return false;
+    }
+
+    const descendants = new Set<number>();
+    const walk = (items: ReadonlyArray<AdminCatalogGroupTreeNodeDto>): void => {
+      for (const item of items ?? []) {
+        descendants.add(item.groupId);
+        walk(item.children ?? []);
+      }
+    };
+
+    walk(editingGroup.children ?? []);
+    return descendants.has(this.toNonNegativeInt(candidateGroupId));
+  }
+
+  private handleApplicationDeleteResult(applicationId: string, result: AdminCatalogDeleteResultDto | undefined): void {
+    const message = this.normalizeString(result?.message)
+      ?? (result?.mode === 'soft' ? 'تم حذف التطبيق حذفًا منطقيًا.' : 'تم حذف التطبيق حذفًا نهائيًا.');
+
+    this.showMessage('success', message);
+
+    if (this.selectedApplicationId === applicationId) {
+      this.selectedApplicationId = null;
+      this.clearTreeState();
+      this.clearGroupsState();
+      this.prepareNewCategory();
+      this.prepareNewGroup();
+      this.activePhase = 1;
+    }
+
+    this.prepareNewApplication();
+    this.loadApplications(this.selectedApplicationId);
+  }
+
+  private handleCategoryDeleteResult(categoryId: number, result: AdminCatalogDeleteResultDto | undefined): void {
+    const message = this.normalizeString(result?.message)
+      ?? (result?.mode === 'soft' ? 'تم حذف النود حذفًا منطقيًا.' : 'تم حذف النود حذفًا نهائيًا.');
+
+    this.showMessage('success', message);
+
+    if (this.selectedCategoryId === categoryId) {
+      this.selectedCategoryNode = null;
+      this.clearGroupsState();
+      this.prepareNewGroup();
+      this.activePhase = 1;
+    }
+
+    this.prepareNewCategory();
+    if (this.selectedApplicationId) {
+      this.loadCategoryTree(this.selectedApplicationId);
+    }
+  }
+
+  private buildApplicationDeleteConfirmationMessage(diagnostics: AdminCatalogApplicationDeleteDiagnosticsDto): string {
+    const modeLabel = diagnostics.canHardDelete ? 'حذف نهائي (Hard Delete)' : 'حذف منطقي (Soft Delete)';
+    return [
+      `سيتم تنفيذ: ${modeLabel}`,
+      `التطبيق: ${diagnostics.applicationId}`,
+      `روابط CDCategory: ${diagnostics.linkedCategoriesCount}`,
+      `روابط CDMend: ${diagnostics.linkedFieldsCount}`,
+      `روابط Groups: ${diagnostics.linkedGroupsCount}`,
+      diagnostics.decisionReason ?? '',
+      'هل تريد المتابعة؟'
+    ].filter(item => item.trim().length > 0).join('\n');
+  }
+
+  private buildCategoryDeleteConfirmationMessage(diagnostics: AdminCatalogCategoryDeleteDiagnosticsDto): string {
+    const modeLabel = diagnostics.canHardDelete ? 'حذف نهائي (Hard Delete)' : 'حذف منطقي (Soft Delete)';
+    return [
+      `سيتم تنفيذ: ${modeLabel}`,
+      `Children فعالة: ${diagnostics.childrenCount}`,
+      `روابط Fields: ${diagnostics.linkedFieldsCount}`,
+      `روابط Requests/Messages: ${diagnostics.linkedMessagesCount}`,
+      `روابط Groups: ${diagnostics.linkedGroupsCount}`,
+      diagnostics.decisionReason ?? '',
+      'هل تريد المتابعة؟'
+    ].filter(item => item.trim().length > 0).join('\n');
+  }
+
+  private clearTreeState(): void {
+    this.categoryTree = [];
+    this.parentPickerTree = [];
+    this.selectedCategoryNode = null;
+    this.categoryIndex.clear();
+    this.categoryPathIndex.clear();
+    this.categoryTreeNodeIndex.clear();
+  }
+
+  private clearGroupsState(): void {
+    this.groupTree = [];
+    this.selectedGroupNode = null;
+    this.groupParentOptions = [{ label: 'بدون Parent (Main Group)', value: null }];
+    this.groupsLoadedForCategoryId = null;
+    this.groupIndex.clear();
+    this.groupPathIndex.clear();
+    this.groupTreeNodeIndex.clear();
+  }
+
+  private prepareNewApplication(): void {
+    this.editingApplicationId = null;
+    this.applicationForm.reset(
+      { applicationId: '', applicationName: '', isActive: true },
+      { emitEvent: false }
+    );
+  }
+
+  private prepareNewCategory(defaultParentCategoryId = 0): void {
+    this.editingCategoryId = null;
+    this.categoryForm.reset(
+      { categoryName: '', parentCategoryId: this.toNonNegativeInt(defaultParentCategoryId), isActive: true },
+      { emitEvent: false }
+    );
+  }
+
+  private prepareNewGroup(defaultParentGroupId: number | null = null): void {
+    this.editingGroupId = null;
+    this.groupForm.reset(
+      { groupName: '', groupDescription: '', parentGroupId: defaultParentGroupId, displayOrder: 0, isActive: true },
+      { emitEvent: false }
+    );
   }
 
   private ensureSuccess<T>(response: CommonResponse<T>, fallbackMessage: string): boolean {
@@ -559,6 +1103,15 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     const normalized = Number(value ?? 0);
     if (!Number.isFinite(normalized) || normalized < 0) {
       return 0;
+    }
+
+    return Math.trunc(normalized);
+  }
+
+  private toPositiveInt(value: unknown): number | null {
+    const normalized = Number(value ?? 0);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      return null;
     }
 
     return Math.trunc(normalized);

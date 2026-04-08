@@ -1,10 +1,10 @@
 <section class="catalog-page" dir="rtl">
   <header class="page-header">
     <div>
-      <p class="eyebrow">Progressive Replacement - Phase 1</p>
-      <h2>Admin Control Center Catalog</h2>
+      <p class="eyebrow">Progressive Replacement - ControlCenterCatalog</p>
+      <h2>لوحة إدارة الكتالوج</h2>
       <p>
-        إدارة التطبيقات وشجرة الفئات من قاعدة البيانات مباشرة دون أي state محلي أو خطوات خارج نطاق المرحلة الحالية.
+        المرحلة الحالية تغطي التطبيقات والشجرة ثم إدارة الجروبات المرتبطة بالنود المختارة، مع حفظ فعلي في قاعدة البيانات.
       </p>
     </div>
   </header>
@@ -13,176 +13,356 @@
     {{ message }}
   </div>
 
-  <div class="workspace">
-    <section class="card applications-card">
-      <header class="card-header">
-        <div>
-          <h3>Applications</h3>
-          <small>List / Select / Create / Update</small>
-        </div>
-        <div class="header-actions">
-          <button pButton type="button" class="p-button-text" icon="pi pi-refresh" (click)="onRefreshApplications()"></button>
-          <button pButton type="button" class="p-button-outlined" label="تطبيق جديد" (click)="onStartCreateApplication()"></button>
-        </div>
-      </header>
+  <section class="progress-card">
+    <div class="progress-row">
+      <span>اكتمال المرحلة الأولى</span>
+      <strong>{{ phase1CompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="phase1CompletionPercent"></p-progressBar>
 
-      <p-table
-        [value]="applications"
-        [loading]="loadingApplications"
-        [rows]="8"
-        [paginator]="applications.length > 8"
-        responsiveLayout="scroll">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>Application ID</th>
-            <th>Application Name</th>
-            <th>الحالة</th>
-            <th class="action-col">إجراء</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-app>
-          <tr
-            class="app-row"
-            [class.selected]="app.applicationId === selectedApplicationId"
-            (click)="onSelectApplication(app)">
-            <td>{{ app.applicationId }}</td>
-            <td>{{ app.applicationName }}</td>
-            <td>
-              <p-tag [value]="app.isActive ? 'مفعل' : 'غير مفعل'" [severity]="app.isActive ? 'success' : 'danger'"></p-tag>
-            </td>
-            <td class="action-col">
-              <button
-                pButton
-                type="button"
-                class="p-button-text"
-                icon="pi pi-pencil"
-                (click)="onStartEditApplication(app); $event.stopPropagation()">
-              </button>
-            </td>
-          </tr>
-        </ng-template>
-      </p-table>
+    <div class="progress-row">
+      <span>اكتمال المرحلة الثانية</span>
+      <strong>{{ phase2CompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="phase2CompletionPercent"></p-progressBar>
 
-      <form class="editor" [formGroup]="applicationForm" novalidate>
-        <h4>{{ editingApplicationId ? 'تعديل تطبيق' : 'إضافة تطبيق جديد' }}</h4>
+    <div class="progress-row overall">
+      <span>اكتمال لوحة التحكم (هذا النطاق)</span>
+      <strong>{{ overallCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="overallCompletionPercent"></p-progressBar>
+  </section>
 
-        <label for="applicationId">Application ID</label>
-        <input
-          pInputText
-          id="applicationId"
-          formControlName="applicationId"
-          [readonly]="editingApplicationId != null"
-          placeholder="مثال: 60" />
+  <div class="phase-switch">
+    <button
+      pButton
+      type="button"
+      [class.active]="activePhase === 1"
+      class="p-button-outlined"
+      label="المرحلة 1: Applications + Tree"
+      (click)="onActivatePhase(1)">
+    </button>
+    <button
+      pButton
+      type="button"
+      [class.active]="activePhase === 2"
+      [disabled]="selectedCategoryId == null"
+      class="p-button-outlined"
+      label="المرحلة 2: Groups"
+      (click)="onActivatePhase(2)">
+    </button>
+  </div>
 
-        <label for="applicationName">Application Name</label>
-        <input
-          pInputText
-          id="applicationName"
-          formControlName="applicationName"
-          placeholder="اسم التطبيق" />
+  <section class="card phase-card" [class.dimmed]="activePhase !== 1">
+    <header class="card-header">
+      <div>
+        <h3>المرحلة الأولى: إدارة التطبيقات والشجرة</h3>
+        <small>List / Select / Create / Update / Delete</small>
+      </div>
+      <p-tag [value]="'اكتمال المرحلة: ' + phase1CompletionPercent + '%'" severity="info"></p-tag>
+    </header>
 
-        <label for="applicationActive">الحالة</label>
-        <p-inputSwitch inputId="applicationActive" formControlName="isActive"></p-inputSwitch>
-
-        <button
-          pButton
-          type="button"
-          [label]="editingApplicationId ? 'حفظ التعديل' : 'إضافة التطبيق'"
-          [loading]="savingApplication"
-          (click)="onSaveApplication()">
-        </button>
-      </form>
-    </section>
-
-    <section class="card category-card">
-      <header class="card-header">
-        <div>
-          <h3>CDCategory Tree</h3>
-          <small>Tree load / Parent picker / Create node / Update node</small>
-        </div>
-        <p-tag
-          *ngIf="selectedApplication as selectedApp"
-          [value]="'التطبيق الحالي: ' + selectedApp.applicationId"
-          severity="info">
-        </p-tag>
-      </header>
-
-      <div *ngIf="selectedApplicationId; else selectApplicationFirst" class="category-layout">
-        <div class="tree-pane">
-          <div class="tree-toolbar">
-            <button pButton type="button" class="p-button-outlined" label="Node جديد" (click)="onStartCreateCategory()"></button>
-            <button pButton type="button" class="p-button-text" label="تعديل المحدد" (click)="onStartEditSelectedCategory()"></button>
+    <div class="workspace">
+      <section class="card applications-card">
+        <header class="card-header">
+          <div>
+            <h4>Applications</h4>
+            <small>جدول Applications</small>
           </div>
+          <div class="header-actions">
+            <button pButton type="button" class="p-button-text" icon="pi pi-refresh" (click)="onRefreshApplications()"></button>
+            <button pButton type="button" class="p-button-outlined" label="تطبيق جديد" (click)="onStartCreateApplication()"></button>
+          </div>
+        </header>
 
-          <p-tree
-            [value]="categoryTree"
-            [loading]="loadingTree"
-            selectionMode="single"
-            [(selection)]="selectedCategoryNode">
-          </p-tree>
-        </div>
+        <p-table
+          [value]="applications"
+          [loading]="loadingApplications"
+          [rows]="8"
+          [paginator]="applications.length > 8"
+          responsiveLayout="scroll">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Application ID</th>
+              <th>Application Name</th>
+              <th>الحالة</th>
+              <th class="action-col">إجراء</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-app>
+            <tr
+              class="app-row"
+              [class.selected]="app.applicationId === selectedApplicationId"
+              (click)="onSelectApplication(app)">
+              <td>{{ app.applicationId }}</td>
+              <td>{{ app.applicationName }}</td>
+              <td>
+                <p-tag [value]="app.isActive ? 'مفعل' : 'غير مفعل'" [severity]="app.isActive ? 'success' : 'danger'"></p-tag>
+              </td>
+              <td class="action-col">
+                <div class="row-actions">
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text"
+                    icon="pi pi-pencil"
+                    (click)="onStartEditApplication(app); $event.stopPropagation()">
+                  </button>
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-danger"
+                    icon="pi pi-trash"
+                    [loading]="deletingApplicationId === app.applicationId"
+                    (click)="onDeleteApplication(app, $event)">
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
 
-        <form class="editor" [formGroup]="categoryForm" novalidate>
-          <h4>{{ editingCategoryId ? 'تعديل Node' : 'إضافة Node جديدة' }}</h4>
+        <form class="editor" [formGroup]="applicationForm" novalidate>
+          <h5>{{ editingApplicationId ? 'تعديل تطبيق' : 'إضافة تطبيق جديد' }}</h5>
+          <p class="required-note"><span>*</span> حقل إلزامي</p>
 
-          <label for="categoryName">اسم العنصر</label>
+          <label for="applicationId">Application ID <span class="required">*</span></label>
           <input
             pInputText
-            id="categoryName"
-            formControlName="categoryName"
-            placeholder="اسم الفئة" />
+            id="applicationId"
+            formControlName="applicationId"
+            [readonly]="editingApplicationId != null"
+            placeholder="مثال: 60" />
 
-          <label for="parentDisplay">Parent</label>
-          <div class="parent-picker-row">
-            <input pInputText id="parentDisplay" [value]="parentDisplayLabel" readonly />
-            <button
-              pButton
-              type="button"
-              class="p-button-outlined"
-              icon="pi pi-sitemap"
-              label="اختيار Parent"
-              (click)="openParentPicker(parentPicker, $event)">
-            </button>
-          </div>
+          <label for="applicationName">Application Name <span class="required">*</span></label>
+          <input
+            pInputText
+            id="applicationName"
+            formControlName="applicationName"
+            placeholder="اسم التطبيق" />
 
-          <p-overlayPanel #parentPicker [showCloseIcon]="true" styleClass="parent-overlay">
-            <div class="overlay-content">
-              <button
-                pButton
-                type="button"
-                class="p-button-text"
-                icon="pi pi-home"
-                label="اختيار الجذر (بدون Parent)"
-                (click)="onChooseRootParent(parentPicker)">
-              </button>
-
-              <p-tree
-                [value]="parentPickerTree"
-                selectionMode="single"
-                (onNodeSelect)="onParentNodeSelect($event, parentPicker)">
-              </p-tree>
-            </div>
-          </p-overlayPanel>
-
-          <label for="categoryActive">الحالة</label>
-          <p-inputSwitch inputId="categoryActive" formControlName="isActive"></p-inputSwitch>
+          <label for="applicationActive">الحالة</label>
+          <p-inputSwitch inputId="applicationActive" formControlName="isActive"></p-inputSwitch>
 
           <button
             pButton
             type="button"
-            [label]="editingCategoryId ? 'حفظ تعديل Node' : 'إضافة Node'"
-            [disabled]="!canSaveCategory"
-            [loading]="savingCategory"
-            (click)="onSaveCategory()">
+            [label]="editingApplicationId ? 'حفظ التعديل' : 'إضافة التطبيق'"
+            [disabled]="!canSaveApplication"
+            [loading]="savingApplication"
+            (click)="onSaveApplication()">
           </button>
         </form>
+      </section>
+
+      <section class="card category-card">
+        <header class="card-header">
+          <div>
+            <h4>CDCategory Tree</h4>
+            <small>Tree load / Parent picker / Create / Update / Delete</small>
+          </div>
+          <p-tag
+            *ngIf="selectedApplication as selectedApp"
+            [value]="'التطبيق الحالي: ' + selectedApp.applicationId"
+            severity="info">
+          </p-tag>
+        </header>
+
+        <div *ngIf="selectedApplicationId; else selectApplicationFirst" class="category-layout">
+          <div class="tree-pane">
+            <div class="tree-toolbar">
+              <button pButton type="button" class="p-button-outlined" label="Node جديدة" (click)="onStartCreateCategory()"></button>
+              <button pButton type="button" class="p-button-text" label="تعديل المحدد" (click)="onStartEditSelectedCategory()"></button>
+              <button
+                pButton
+                type="button"
+                class="p-button-text p-button-danger"
+                label="حذف المحدد"
+                [loading]="deletingCategory"
+                (click)="onDeleteSelectedCategory()">
+              </button>
+            </div>
+
+            <p-tree
+              [value]="categoryTree"
+              [loading]="loadingTree"
+              selectionMode="single"
+              [(selection)]="selectedCategoryNode"
+              (onNodeSelect)="onCategoryTreeNodeSelect()">
+            </p-tree>
+          </div>
+
+          <form class="editor" [formGroup]="categoryForm" novalidate>
+            <h5>{{ editingCategoryId ? 'تعديل Node' : 'إضافة Node جديدة' }}</h5>
+            <p class="required-note"><span>*</span> حقل إلزامي</p>
+
+            <label for="categoryName">اسم العنصر <span class="required">*</span></label>
+            <input
+              pInputText
+              id="categoryName"
+              formControlName="categoryName"
+              placeholder="اسم الفئة" />
+
+            <label for="parentDisplay">Parent</label>
+            <div class="parent-picker-row">
+              <input pInputText id="parentDisplay" [value]="parentDisplayLabel" readonly />
+              <button
+                pButton
+                type="button"
+                class="p-button-outlined"
+                icon="pi pi-sitemap"
+                label="اختيار Parent"
+                (click)="openParentPicker(parentPicker, $event)">
+              </button>
+            </div>
+
+            <p-overlayPanel #parentPicker [showCloseIcon]="true" styleClass="parent-overlay">
+              <div class="overlay-content">
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-text"
+                  icon="pi pi-home"
+                  label="اختيار الجذر (بدون Parent)"
+                  (click)="onChooseRootParent(parentPicker)">
+                </button>
+
+                <p-tree
+                  [value]="parentPickerTree"
+                  selectionMode="single"
+                  (onNodeSelect)="onParentNodeSelect($event, parentPicker)">
+                </p-tree>
+              </div>
+            </p-overlayPanel>
+
+            <label for="categoryActive">الحالة</label>
+            <p-inputSwitch inputId="categoryActive" formControlName="isActive"></p-inputSwitch>
+
+            <button
+              pButton
+              type="button"
+              [label]="editingCategoryId ? 'حفظ تعديل Node' : 'إضافة Node'"
+              [disabled]="!canSaveCategory"
+              [loading]="savingCategory"
+              (click)="onSaveCategory()">
+            </button>
+          </form>
+        </div>
+
+        <ng-template #selectApplicationFirst>
+          <div class="empty-state">
+            اختر تطبيقًا من القائمة أولًا لتحميل الشجرة المرتبطة به.
+          </div>
+        </ng-template>
+      </section>
+    </div>
+  </section>
+
+  <section class="card phase-card" [class.dimmed]="activePhase !== 2">
+    <header class="card-header">
+      <div>
+        <h3>المرحلة الثانية: إدارة الجروبات للنود المختارة</h3>
+        <small>Main Group / Sub Group مع hierarchy آمن</small>
+      </div>
+      <p-tag [value]="'اكتمال المرحلة: ' + phase2CompletionPercent + '%'" severity="info"></p-tag>
+    </header>
+
+    <div *ngIf="selectedCategoryId; else selectNodeFirst" class="phase-two-layout">
+      <div class="context-banner">
+        <strong>النود المختارة:</strong>
+        <span>{{ selectedCategoryPathLabel }}</span>
       </div>
 
-      <ng-template #selectApplicationFirst>
-        <div class="empty-state">
-          اختر تطبيقًا من القائمة أولًا لتحميل الشجرة المرتبطة به.
-        </div>
-      </ng-template>
-    </section>
-  </div>
+      <div class="workspace">
+        <section class="card groups-tree-card">
+          <header class="card-header">
+            <div>
+              <h4>Groups Tree</h4>
+              <small>List / Select / Edit / Delete</small>
+            </div>
+            <div class="header-actions">
+              <button pButton type="button" class="p-button-outlined" label="Group جديدة" (click)="onStartCreateGroup()"></button>
+              <button pButton type="button" class="p-button-text" label="تعديل المحدد" (click)="onStartEditSelectedGroup()"></button>
+              <button
+                pButton
+                type="button"
+                class="p-button-text p-button-danger"
+                label="حذف المحدد"
+                [loading]="deletingGroup"
+                (click)="onDeleteSelectedGroup()">
+              </button>
+            </div>
+          </header>
+
+          <p-tree
+            [value]="groupTree"
+            [loading]="loadingGroups"
+            selectionMode="single"
+            [(selection)]="selectedGroupNode">
+          </p-tree>
+        </section>
+
+        <section class="card groups-editor-card">
+          <form class="editor" [formGroup]="groupForm" novalidate>
+            <h5>{{ editingGroupId ? 'تعديل Group' : 'إضافة Group جديدة' }}</h5>
+            <p class="required-note"><span>*</span> حقل إلزامي</p>
+
+            <label for="groupName">اسم Group <span class="required">*</span></label>
+            <input
+              pInputText
+              id="groupName"
+              formControlName="groupName"
+              placeholder="اسم الجروب" />
+
+            <label for="groupDescription">الوصف (اختياري)</label>
+            <textarea
+              pInputTextarea
+              id="groupDescription"
+              formControlName="groupDescription"
+              rows="3"
+              placeholder="وصف مختصر"></textarea>
+
+            <label for="groupParent">Parent Group</label>
+            <p-dropdown
+              inputId="groupParent"
+              [options]="groupParentOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="parentGroupId"
+              appendTo="body"
+              [showClear]="true"
+              placeholder="Main Group (بدون Parent)">
+            </p-dropdown>
+
+            <label for="displayOrder">Display Order <span class="required">*</span></label>
+            <input
+              pInputText
+              id="displayOrder"
+              type="number"
+              min="0"
+              formControlName="displayOrder"
+              placeholder="0" />
+
+            <label for="groupActive">الحالة</label>
+            <p-inputSwitch inputId="groupActive" formControlName="isActive"></p-inputSwitch>
+
+            <button
+              pButton
+              type="button"
+              [label]="editingGroupId ? 'حفظ تعديل Group' : 'إضافة Group'"
+              [disabled]="!canSaveGroup"
+              [loading]="savingGroup"
+              (click)="onSaveGroup()">
+            </button>
+          </form>
+        </section>
+      </div>
+    </div>
+
+    <ng-template #selectNodeFirst>
+      <div class="empty-state">
+        اختر Node من الشجرة في المرحلة الأولى. سيتم الانتقال تلقائيًا لهذه المرحلة عند اختيار النود.
+      </div>
+    </ng-template>
+  </section>
 </section>

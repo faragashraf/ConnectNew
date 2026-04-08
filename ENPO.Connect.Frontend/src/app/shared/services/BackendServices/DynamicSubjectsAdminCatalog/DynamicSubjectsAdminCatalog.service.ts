@@ -5,12 +5,19 @@ import { environment } from 'src/environments/environment';
 import { CommonResponse } from '../DynamicSubjects/DynamicSubjects.dto';
 import {
   AdminCatalogApplicationCreateRequestDto,
+  AdminCatalogApplicationDeleteDiagnosticsDto,
   AdminCatalogApplicationDto,
   AdminCatalogApplicationUpdateRequestDto,
   AdminCatalogCategoryCreateRequestDto,
+  AdminCatalogCategoryDeleteDiagnosticsDto,
+  AdminCatalogDeleteResultDto,
   AdminCatalogCategoryDto,
   AdminCatalogCategoryTreeNodeDto,
-  AdminCatalogCategoryUpdateRequestDto
+  AdminCatalogCategoryUpdateRequestDto,
+  AdminCatalogGroupCreateRequestDto,
+  AdminCatalogGroupDto,
+  AdminCatalogGroupTreeNodeDto,
+  AdminCatalogGroupUpdateRequestDto
 } from './DynamicSubjectsAdminCatalog.dto';
 
 @Injectable({ providedIn: 'root' })
@@ -37,6 +44,18 @@ export class DynamicSubjectsAdminCatalogController {
     );
   }
 
+  diagnoseApplicationDelete(applicationId: string): Observable<CommonResponse<AdminCatalogApplicationDeleteDiagnosticsDto>> {
+    return this.http.get<CommonResponse<AdminCatalogApplicationDeleteDiagnosticsDto>>(
+      `${this.baseUrl}/Applications/${encodeURIComponent(applicationId)}/DeleteDiagnostics`
+    );
+  }
+
+  deleteApplication(applicationId: string): Observable<CommonResponse<AdminCatalogDeleteResultDto>> {
+    return this.http.delete<CommonResponse<AdminCatalogDeleteResultDto>>(
+      `${this.baseUrl}/Applications/${encodeURIComponent(applicationId)}`
+    );
+  }
+
   getCategoryTree(appId?: string): Observable<CommonResponse<AdminCatalogCategoryTreeNodeDto[]>> {
     let params = new HttpParams();
     if ((appId ?? '').trim().length > 0) {
@@ -55,5 +74,31 @@ export class DynamicSubjectsAdminCatalogController {
     request: AdminCatalogCategoryUpdateRequestDto
   ): Observable<CommonResponse<AdminCatalogCategoryDto>> {
     return this.http.put<CommonResponse<AdminCatalogCategoryDto>>(`${this.baseUrl}/Categories/${categoryId}`, request);
+  }
+
+  diagnoseCategoryDelete(categoryId: number): Observable<CommonResponse<AdminCatalogCategoryDeleteDiagnosticsDto>> {
+    return this.http.get<CommonResponse<AdminCatalogCategoryDeleteDiagnosticsDto>>(
+      `${this.baseUrl}/Categories/${categoryId}/DeleteDiagnostics`
+    );
+  }
+
+  deleteCategory(categoryId: number): Observable<CommonResponse<AdminCatalogDeleteResultDto>> {
+    return this.http.delete<CommonResponse<AdminCatalogDeleteResultDto>>(`${this.baseUrl}/Categories/${categoryId}`);
+  }
+
+  getGroupsByCategory(categoryId: number): Observable<CommonResponse<AdminCatalogGroupTreeNodeDto[]>> {
+    return this.http.get<CommonResponse<AdminCatalogGroupTreeNodeDto[]>>(`${this.baseUrl}/Categories/${categoryId}/Groups`);
+  }
+
+  createGroup(request: AdminCatalogGroupCreateRequestDto): Observable<CommonResponse<AdminCatalogGroupDto>> {
+    return this.http.post<CommonResponse<AdminCatalogGroupDto>>(`${this.baseUrl}/Groups`, request);
+  }
+
+  updateGroup(groupId: number, request: AdminCatalogGroupUpdateRequestDto): Observable<CommonResponse<AdminCatalogGroupDto>> {
+    return this.http.put<CommonResponse<AdminCatalogGroupDto>>(`${this.baseUrl}/Groups/${groupId}`, request);
+  }
+
+  deleteGroup(groupId: number): Observable<CommonResponse<AdminCatalogDeleteResultDto>> {
+    return this.http.delete<CommonResponse<AdminCatalogDeleteResultDto>>(`${this.baseUrl}/Groups/${groupId}`);
   }
 }

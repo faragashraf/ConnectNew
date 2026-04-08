@@ -19,6 +19,8 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<Cdcategory> Cdcategories { get; set; }
 
+    public virtual DbSet<AdminCatalogCategoryGroup> AdminCatalogCategoryGroups { get; set; }
+
     public virtual DbSet<Cdmend> Cdmends { get; set; }
 
     public virtual DbSet<MandGroup> MandGroups { get; set; }
@@ -178,6 +180,49 @@ public partial class ConnectContext : DbContext
             entity.Property(e => e.StampDate)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
+        });
+
+        modelBuilder.Entity<AdminCatalogCategoryGroup>(entity =>
+        {
+            entity.HasKey(e => e.GroupId).HasName("PK_AdminCatalogCategoryGroups");
+
+            entity.ToTable("AdminCatalogCategoryGroups");
+
+            entity.HasIndex(e => new { e.CategoryId, e.ParentGroupId, e.DisplayOrder })
+                .HasDatabaseName("IX_AdminCatalogCategoryGroups_CategoryParentOrder");
+
+            entity.HasIndex(e => e.ApplicationId)
+                .HasDatabaseName("IX_AdminCatalogCategoryGroups_ApplicationID");
+
+            entity.HasIndex(e => new { e.CategoryId, e.ParentGroupId, e.GroupName })
+                .IsUnique()
+                .HasFilter("([IsActive]=(1))")
+                .HasDatabaseName("UX_AdminCatalogCategoryGroups_CategoryParentName");
+
+            entity.Property(e => e.GroupId).ValueGeneratedNever();
+            entity.Property(e => e.ApplicationId)
+                .HasMaxLength(10)
+                .HasColumnName("ApplicationID");
+            entity.Property(e => e.CreatedBy).HasColumnName("CreatedBy");
+            entity.Property(e => e.GroupDescription).HasMaxLength(255);
+            entity.Property(e => e.GroupName).HasMaxLength(200);
+            entity.Property(e => e.IsActive).HasDefaultValueSql("((1))");
+            entity.Property(e => e.DisplayOrder).HasDefaultValueSql("((0))");
+            entity.Property(e => e.StampDate)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+
+            entity.HasOne(d => d.Category)
+                .WithMany(p => p.AdminCatalogCategoryGroups)
+                .HasForeignKey(d => d.CategoryId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_AdminCatalogCategoryGroups_CDCategory");
+
+            entity.HasOne(d => d.ParentGroup)
+                .WithMany(p => p.Children)
+                .HasForeignKey(d => d.ParentGroupId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_AdminCatalogCategoryGroups_Parent");
         });
 
         modelBuilder.Entity<CdCategoryMand>(entity =>
