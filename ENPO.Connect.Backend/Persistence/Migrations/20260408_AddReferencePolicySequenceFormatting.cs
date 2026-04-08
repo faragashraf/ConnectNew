@@ -35,9 +35,11 @@ IF OBJECT_ID(N'[dbo].[SubjectReferencePolicies]', N'U') IS NULL
 
 IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'SequencePaddingLength') IS NOT NULL
 BEGIN
-    UPDATE [dbo].[SubjectReferencePolicies]
-       SET [SequencePaddingLength] = 0
-     WHERE [SequencePaddingLength] < 0;
+    EXEC(N'
+        UPDATE [dbo].[SubjectReferencePolicies]
+           SET [SequencePaddingLength] = 0
+         WHERE [SequencePaddingLength] < 0;
+    ');
 END
 ");
 
@@ -47,10 +49,12 @@ IF OBJECT_ID(N'[dbo].[SubjectReferencePolicies]', N'U') IS NULL
 
 IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'SequenceResetScope') IS NOT NULL
 BEGIN
-    UPDATE [dbo].[SubjectReferencePolicies]
-       SET [SequenceResetScope] = N'none'
-     WHERE [SequenceResetScope] IS NULL
-        OR LTRIM(RTRIM([SequenceResetScope])) = N'';
+    EXEC(N'
+        UPDATE [dbo].[SubjectReferencePolicies]
+           SET [SequenceResetScope] = N''none''
+         WHERE [SequenceResetScope] IS NULL
+            OR LTRIM(RTRIM([SequenceResetScope])) = N'''';
+    ');
 END
 ");
         }

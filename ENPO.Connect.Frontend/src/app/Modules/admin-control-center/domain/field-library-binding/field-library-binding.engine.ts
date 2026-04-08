@@ -221,14 +221,19 @@ export class FieldLibraryBindingEngine {
     const label = String(candidate['label'] ?? '').trim();
     const type = String(candidate['type'] ?? '').trim();
     const displayOrder = Number(candidate['displayOrder'] ?? 0);
+    const mendSql = Number(candidate['mendSql'] ?? 0);
+    const cdmendSql = Number(candidate['cdmendSql'] ?? 0);
+    const groupId = Number(candidate['groupId'] ?? 0);
+    const groupName = String(candidate['groupName'] ?? '').trim();
+    const displaySettingsJson = String(candidate['displaySettingsJson'] ?? '').trim();
 
-    if (!bindingId || !sourceFieldId || !fieldKey || !label || !this.isValidType(type) || !Number.isFinite(displayOrder)) {
+    if (!bindingId || !fieldKey || !label || !this.isValidType(type) || !Number.isFinite(displayOrder)) {
       return null;
     }
 
     return {
       bindingId,
-      sourceFieldId,
+      sourceFieldId: sourceFieldId || `local-${fieldKey}`,
       fieldKey,
       label,
       type: type as BoundFieldItem['type'],
@@ -236,7 +241,12 @@ export class FieldLibraryBindingEngine {
       visible: candidate['visible'] !== false,
       required: candidate['required'] === true,
       readonly: candidate['readonly'] === true,
-      defaultValue: String(candidate['defaultValue'] ?? '').trim()
+      defaultValue: String(candidate['defaultValue'] ?? '').trim(),
+      mendSql: Number.isFinite(mendSql) && mendSql > 0 ? Math.trunc(mendSql) : undefined,
+      cdmendSql: Number.isFinite(cdmendSql) && cdmendSql > 0 ? Math.trunc(cdmendSql) : undefined,
+      groupId: Number.isFinite(groupId) && groupId > 0 ? Math.trunc(groupId) : undefined,
+      groupName: groupName.length > 0 ? groupName : undefined,
+      displaySettingsJson: displaySettingsJson.length > 0 ? displaySettingsJson : undefined
     };
   }
 

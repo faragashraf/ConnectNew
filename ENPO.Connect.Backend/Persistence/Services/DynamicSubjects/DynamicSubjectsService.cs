@@ -1080,6 +1080,11 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     detail,
                     normalizedUserId,
                     cancellationToken);
+
+                await TryDispatchSubjectNotificationAsync(
+                    eventType: "FORWARD",
+                    detail: detail,
+                    cancellationToken: cancellationToken);
             }
         }
         catch (Exception ex)

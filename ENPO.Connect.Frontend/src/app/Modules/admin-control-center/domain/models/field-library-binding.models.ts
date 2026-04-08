@@ -21,6 +21,11 @@ export interface BoundFieldItem {
   required: boolean;
   readonly: boolean;
   defaultValue: string;
+  mendSql?: number;
+  cdmendSql?: number;
+  groupId?: number;
+  groupName?: string;
+  displaySettingsJson?: string;
 }
 
 export interface FieldLibraryBindingValidationResult {

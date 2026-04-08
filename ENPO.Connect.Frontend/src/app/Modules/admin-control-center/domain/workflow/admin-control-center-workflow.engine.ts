@@ -102,7 +102,7 @@ export class AdminControlCenterWorkflowEngine {
         .filter(field => this.isFieldCompleted(field, values[field.key]))
         .length;
 
-      const isUnlocked = allPreviousStepsCompleted;
+      const isUnlocked = this.resolveStepUnlocked(definition, allPreviousStepsCompleted, state.context);
       const isCompleted = isUnlocked && requiredCompleted === requiredTotal;
       const isBlocked = !isUnlocked;
       const status = isBlocked
@@ -127,7 +127,7 @@ export class AdminControlCenterWorkflowEngine {
       const stepHasAnyData = this.hasAnyFieldValue(values);
       hasAnyData = hasAnyData || stepHasAnyData;
 
-      allPreviousStepsCompleted = isCompleted;
+      allPreviousStepsCompleted = allPreviousStepsCompleted && isCompleted;
 
       return {
         key: definition.key,
@@ -453,5 +453,21 @@ export class AdminControlCenterWorkflowEngine {
   private normalizeString(value: unknown): string | null {
     const normalized = String(value ?? '').trim();
     return normalized.length > 0 ? normalized : null;
+  }
+
+  private resolveStepUnlocked(
+    definition: ControlCenterStepDefinition,
+    allPreviousStepsCompleted: boolean,
+    context: ControlCenterContextState | null | undefined
+  ): boolean {
+    if (allPreviousStepsCompleted) {
+      return true;
+    }
+
+    if (definition.key !== 'notifications-alerts') {
+      return false;
+    }
+
+    return this.normalizePositiveInt(context?.categoryId) != null;
   }
 }

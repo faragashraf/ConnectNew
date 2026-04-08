@@ -29,8 +29,9 @@ export class ControlCenterShellComponent implements OnInit {
 
   onNavigateToStep(step: ControlCenterStepViewModel): void {
     if (!step.isUnlocked) {
+      const transition = this.facade.evaluateStepTransition(step.key);
       this.actionSeverity = 'warn';
-      this.actionMessage = 'لا يمكن فتح هذه الخطوة قبل استكمال متطلبات الخطوات السابقة.';
+      this.actionMessage = transition.message;
       return;
     }
 

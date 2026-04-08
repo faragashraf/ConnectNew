@@ -1,10 +1,10 @@
 <section class="field-binding-page" dir="rtl" *ngIf="step as currentStep">
   <header class="page-header">
     <div>
-      <p class="eyebrow">الخطوة 3 من 10</p>
+      <p class="eyebrow">الخطوة 3 من 11</p>
       <h2>Field Library Binding</h2>
       <p>
-        اربط الحقول القابلة لإعادة الاستخدام بالنوع الحالي مع التحكم في الرؤية والإلزامية والقراءة فقط.
+        إدارة الحقول الفعلية المرتبطة بالنوع الحالي مباشرة من قاعدة البيانات مع دعم الخصائص والجروبات وسياسة الرقم المرجعي.
       </p>
     </div>
 
@@ -27,18 +27,59 @@
     {{ stepMessage }}
   </div>
 
+  <section class="backend-status" *ngIf="vm as currentVm">
+    <span>
+      <strong>Category:</strong>
+      {{ currentVm.context.categoryId ?? '-' }}
+    </span>
+    <span>
+      <strong>Application:</strong>
+      {{ currentVm.context.applicationId ?? '-' }}
+    </span>
+    <p-tag
+      [value]="libraryLoadedFromDb ? 'DB Source' : 'Fallback Local'"
+      [severity]="libraryLoadedFromDb ? 'success' : 'warning'">
+    </p-tag>
+    <p-tag
+      [value]="hasPendingBackendChanges ? 'Unsaved DB Changes' : 'DB Synced'"
+      [severity]="hasPendingBackendChanges ? 'warning' : 'success'">
+    </p-tag>
+  </section>
+
   <div class="layout">
     <main class="workspace">
       <section class="card">
         <header class="card-head">
           <h3>إعدادات الربط الأساسية</h3>
-          <small>تؤثر مباشرة على readiness لهذه الخطوة</small>
+          <div class="card-actions">
+            <button
+              pButton
+              type="button"
+              class="p-button-sm p-button-outlined"
+              label="إعادة تحميل من DB"
+              icon="pi pi-refresh"
+              [loading]="loadingLibrary"
+              [disabled]="loadingLibrary || savingToBackend"
+              (click)="onReloadFromBackend()">
+            </button>
+            <button
+              pButton
+              type="button"
+              class="p-button-sm"
+              label="حفظ في قاعدة البيانات"
+              icon="pi pi-save"
+              [loading]="savingToBackend"
+              [disabled]="savingToBackend || loadingLibrary"
+              (click)="onSaveToBackend()">
+            </button>
+          </div>
         </header>
 
         <form class="setup-grid" [formGroup]="setupForm" novalidate>
           <article class="field">
             <label for="libraryVersion">إصدار المكتبة <span>*</span></label>
-            <p-dropdown appendTo="body"
+            <p-dropdown
+              appendTo="body"
               inputId="libraryVersion"
               [options]="getOptions('libraryVersion')"
               optionLabel="label"
@@ -51,7 +92,8 @@
 
           <article class="field">
             <label for="bindingStrategy">استراتيجية الربط <span>*</span></label>
-            <p-dropdown appendTo="body"
+            <p-dropdown
+              appendTo="body"
               inputId="bindingStrategy"
               [options]="getOptions('bindingStrategy')"
               optionLabel="label"
@@ -76,7 +118,69 @@
 
       <section class="card">
         <header class="card-head">
-          <h3>Reusable Field Library</h3>
+          <h3>سياسة الرقم المرجعي</h3>
+          <small>إدارة فعلية مرتبطة بجدول SubjectReferencePolicies</small>
+        </header>
+
+        <form class="reference-grid" [formGroup]="referencePolicyForm" novalidate>
+          <article class="field switch-field field-wide">
+            <label for="referencePolicyEnabled">تفعيل السياسة</label>
+            <p-inputSwitch inputId="referencePolicyEnabled" formControlName="referencePolicyEnabled"></p-inputSwitch>
+          </article>
+
+          <article class="field">
+            <label for="referencePrefix">Prefix</label>
+            <input pInputText id="referencePrefix" formControlName="referencePrefix" />
+          </article>
+
+          <article class="field">
+            <label for="referenceSeparator">Separator</label>
+            <input pInputText id="referenceSeparator" formControlName="referenceSeparator" />
+          </article>
+
+          <article class="field switch-field">
+            <label for="referenceIncludeYear">Include Year</label>
+            <p-inputSwitch inputId="referenceIncludeYear" formControlName="referenceIncludeYear"></p-inputSwitch>
+          </article>
+
+          <article class="field switch-field">
+            <label for="referenceUseSequence">Use Sequence</label>
+            <p-inputSwitch inputId="referenceUseSequence" formControlName="referenceUseSequence"></p-inputSwitch>
+          </article>
+
+          <article class="field">
+            <label for="referenceSequenceName">Sequence Name</label>
+            <input pInputText id="referenceSequenceName" formControlName="referenceSequenceName" />
+          </article>
+
+          <article class="field">
+            <label for="referenceSequencePaddingLength">Padding Length</label>
+            <input pInputText id="referenceSequencePaddingLength" type="number" min="0" max="12" formControlName="referenceSequencePaddingLength" />
+          </article>
+
+          <article class="field">
+            <label for="referenceSequenceResetScope">Reset Scope</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="referenceSequenceResetScope"
+              [options]="sequenceResetScopeOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="referenceSequenceResetScope">
+            </p-dropdown>
+          </article>
+
+          <article class="field field-wide preview-chip">
+            <label>Preview</label>
+            <code>{{ referencePreview }}</code>
+          </article>
+        </form>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
+          <h3>Reusable Field Library (DB)</h3>
           <input
             class="library-search"
             pInputText
@@ -86,7 +190,11 @@
             placeholder="بحث بالاسم أو المفتاح" />
         </header>
 
-        <div class="table-wrapper table-wrapper--library">
+        <div class="loading-wrap" *ngIf="loadingLibrary">
+          <p-progressSpinner strokeWidth="4"></p-progressSpinner>
+        </div>
+
+        <div class="table-wrapper table-wrapper--library" *ngIf="!loadingLibrary">
           <p-table [value]="filteredReusableFields" styleClass="p-datatable-sm library-table">
             <ng-template pTemplate="header">
               <tr>
@@ -121,6 +229,83 @@
 
       <section class="card">
         <header class="card-head">
+          <h3>إضافة حقل جديد</h3>
+          <small>ينشأ في جدول تعريف الحقول ثم يُربط بالنوع الحالي عند الحفظ</small>
+        </header>
+
+        <form class="new-field-grid" [formGroup]="newFieldForm" novalidate>
+          <article class="field">
+            <label for="newFieldKey">Field Key</label>
+            <input pInputText id="newFieldKey" formControlName="fieldKey" placeholder="exampleFieldKey" />
+          </article>
+
+          <article class="field">
+            <label for="newFieldLabel">Label</label>
+            <input pInputText id="newFieldLabel" formControlName="label" placeholder="اسم الحقل" />
+          </article>
+
+          <article class="field">
+            <label for="newFieldType">Type</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="newFieldType"
+              [options]="fieldTypeOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="type">
+            </p-dropdown>
+          </article>
+
+          <article class="field">
+            <label for="newFieldGroup">Group</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="newFieldGroup"
+              [options]="groupOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="groupId"
+              placeholder="اختر جروب">
+            </p-dropdown>
+          </article>
+
+          <article class="field switch-field">
+            <label for="newFieldVisible">Visible</label>
+            <p-inputSwitch inputId="newFieldVisible" formControlName="visible"></p-inputSwitch>
+          </article>
+
+          <article class="field switch-field">
+            <label for="newFieldRequired">Required</label>
+            <p-inputSwitch inputId="newFieldRequired" formControlName="required"></p-inputSwitch>
+          </article>
+
+          <article class="field switch-field">
+            <label for="newFieldReadonly">Readonly</label>
+            <p-inputSwitch inputId="newFieldReadonly" formControlName="readonly"></p-inputSwitch>
+          </article>
+
+          <article class="field">
+            <label for="newFieldDefault">Default</label>
+            <input pInputText id="newFieldDefault" formControlName="defaultValue" />
+          </article>
+
+          <article class="field field-wide form-actions">
+            <button
+              pButton
+              type="button"
+              class="p-button-outlined"
+              label="إضافة إلى قائمة الربط"
+              icon="pi pi-plus"
+              (click)="onCreateField()">
+            </button>
+          </article>
+        </form>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
           <h3>الحقول المرتبطة بالنوع الحالي</h3>
           <small>{{ bindings.length }} حقل</small>
         </header>
@@ -132,6 +317,7 @@
                 <th class="label-col">Label</th>
                 <th class="type-col">Type</th>
                 <th class="key-col">Field Key</th>
+                <th class="group-col">Group</th>
                 <th class="order-col">Order</th>
                 <th class="switch-col">Visible</th>
                 <th class="switch-col">Required</th>
@@ -151,7 +337,8 @@
                     (ngModelChange)="onBindingChanged()" />
                 </td>
                 <td class="type-col">
-                  <p-dropdown appendTo="body"
+                  <p-dropdown
+                    appendTo="body"
                     [options]="fieldTypeOptions"
                     optionLabel="label"
                     optionValue="value"
@@ -166,6 +353,18 @@
                     [(ngModel)]="row.fieldKey"
                     [ngModelOptions]="{ standalone: true }"
                     (ngModelChange)="onBindingChanged()" />
+                </td>
+                <td class="group-col">
+                  <p-dropdown
+                    appendTo="body"
+                    [options]="groupOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="row.groupId"
+                    [ngModelOptions]="{ standalone: true }"
+                    [showClear]="false"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-dropdown>
                 </td>
                 <td class="order-col">
                   <input
@@ -226,8 +425,16 @@
         <strong>{{ bindings.length }}</strong>
       </div>
       <div class="summary-row">
-        <span>الحالة</span>
+        <span>حالة الربط</span>
         <strong>{{ validation.isValid ? 'صالح' : 'Blocked' }}</strong>
+      </div>
+      <div class="summary-row">
+        <span>مصدر المكتبة</span>
+        <strong>{{ libraryLoadedFromDb ? 'DB' : 'Fallback' }}</strong>
+      </div>
+      <div class="summary-row">
+        <span>حالة المزامنة</span>
+        <strong>{{ hasPendingBackendChanges ? 'تعديلات غير محفوظة' : 'متزامن' }}</strong>
       </div>
 
       <section class="issues" *ngIf="validation.blockingIssues.length > 0; else noBlockingIssues">
@@ -248,7 +455,16 @@
       </section>
 
       <div class="actions">
-        <button pButton type="button" class="p-button-outlined" label="حفظ" (click)="onSaveDraft()"></button>
+        <button pButton type="button" class="p-button-outlined" label="حفظ مسودة محلية" (click)="onSaveDraft()"></button>
+        <button
+          pButton
+          type="button"
+          label="حفظ في قاعدة البيانات"
+          icon="pi pi-save"
+          [loading]="savingToBackend"
+          [disabled]="savingToBackend || loadingLibrary"
+          (click)="onSaveToBackend()">
+        </button>
         <button pButton type="button" label="التالي: Form Composition" icon="pi pi-arrow-left" iconPos="left" (click)="onGoNext()"></button>
       </div>
     </aside>

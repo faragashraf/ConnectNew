@@ -66,6 +66,19 @@
   color: #991b1b;
 }
 
+.backend-status {
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.65rem 0.8rem;
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  flex-wrap: wrap;
+  color: #334155;
+  font-size: 0.84rem;
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
@@ -110,7 +123,20 @@
   color: #627d98;
 }
 
+.card-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
 .setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.reference-grid,
+.new-field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.8rem;
@@ -144,6 +170,22 @@
   align-content: center;
 }
 
+.preview-chip code {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.2rem;
+  border: 1px solid #d9e7f1;
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .row-actions {
   display: flex;
   gap: 0.25rem;
@@ -162,6 +204,12 @@
   overflow-x: auto;
   overflow-y: hidden;
   max-width: 100%;
+}
+
+.loading-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0;
 }
 
 .summary {
@@ -244,7 +292,9 @@
     flex-direction: column;
   }
 
-  .setup-grid {
+  .setup-grid,
+  .reference-grid,
+  .new-field-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -270,6 +320,11 @@
 :host ::ng-deep .bindings-table .p-inputtext {
   width: 100%;
   min-width: 7rem;
+}
+
+:host ::ng-deep .bindings-table .group-col,
+:host ::ng-deep .bindings-table td.group-col {
+  min-width: 10rem;
 }
 
 :host ::ng-deep .bindings-table .switch-col,

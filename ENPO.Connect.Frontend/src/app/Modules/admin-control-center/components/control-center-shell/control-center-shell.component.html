@@ -56,13 +56,15 @@
               type="button"
               class="step-item"
               *ngFor="let step of vm.steps"
-              [disabled]="!step.isUnlocked"
+              [class.locked]="!step.isUnlocked"
+              [attr.aria-disabled]="!step.isUnlocked"
               [class.active]="step.key === vm.activeStepKey"
               (click)="onNavigateToStep(step)">
               <div class="step-order">#{{ step.order }}</div>
               <div class="step-main">
                 <h4>{{ step.title }}</h4>
                 <p>{{ step.description }}</p>
+                <small class="locked-hint" *ngIf="!step.isUnlocked">أكمل الخطوات السابقة لفتح هذه الخطوة.</small>
                 <div class="step-metrics">
                   <span>إلزامي: {{ step.requiredCompleted }} / {{ step.requiredTotal }}</span>
                   <span>اختياري: {{ step.optionalCompleted }} / {{ step.optionalTotal }}</span>
