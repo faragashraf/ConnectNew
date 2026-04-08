@@ -2245,10 +2245,19 @@ namespace Persistence.Services
 
         public async Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuoteAsync(
             SummerPricingQuoteRequest request,
+            string? userId = null,
             bool hasSummerAdminPermission = false)
         {
             request ??= new SummerPricingQuoteRequest();
             var allowMembershipOverride = hasSummerAdminPermission;
+            if (!allowMembershipOverride && request.CategoryId > 0)
+            {
+                var normalizedUserId = (userId ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(normalizedUserId))
+                {
+                    allowMembershipOverride = await CanUserManageSummerCategoryAsync(normalizedUserId, request.CategoryId);
+                }
+            }
 
             return await _summerPricingService.GetQuoteAsync(
                 request,

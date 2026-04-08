@@ -1,4 +1,5 @@
-﻿using Core;
+﻿using Api.Authorization;
+using Core;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -7,7 +8,6 @@ using Models.DTO.Correspondance;
 using Persistence.Services.Summer;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 
 namespace Api.Controllers
 {
@@ -17,6 +17,7 @@ namespace Api.Controllers
     public class DynamicFormController : ControllerBase
     {
         private readonly IUnitOfWork _unitOfWork;
+
         public DynamicFormController(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
@@ -81,82 +82,7 @@ namespace Api.Controllers
 
         private bool HasRequiredFunction(string requiredFunction)
         {
-            var normalizedRequiredFunction = (requiredFunction ?? string.Empty).Trim();
-            if (normalizedRequiredFunction.Length == 0)
-            {
-                return false;
-            }
-
-            var claims = HttpContext?.User?.Claims;
-            if (claims == null)
-            {
-                return false;
-            }
-
-            foreach (var claim in claims)
-            {
-                if (!string.Equals(claim.Type, "functions", StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(claim.Type, "function", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                foreach (var functionToken in ExpandFunctionClaimValues(claim.Value))
-                {
-                    if (string.Equals(functionToken, normalizedRequiredFunction, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        private static IEnumerable<string> ExpandFunctionClaimValues(string? claimValue)
-        {
-            var rawValue = (claimValue ?? string.Empty).Trim();
-            if (rawValue.Length == 0)
-            {
-                return Array.Empty<string>();
-            }
-
-            if (rawValue.StartsWith("[", StringComparison.Ordinal))
-            {
-                try
-                {
-                    using var jsonDocument = JsonDocument.Parse(rawValue);
-                    if (jsonDocument.RootElement.ValueKind == JsonValueKind.Array)
-                    {
-                        var parsedItems = new List<string>();
-                        foreach (var element in jsonDocument.RootElement.EnumerateArray())
-                        {
-                            if (element.ValueKind != JsonValueKind.String)
-                            {
-                                continue;
-                            }
-
-                            var token = (element.GetString() ?? string.Empty).Trim();
-                            if (token.Length > 0)
-                            {
-                                parsedItems.Add(token);
-                            }
-                        }
-
-                        return parsedItems;
-                    }
-                }
-                catch
-                {
-                    // Fallback to delimiter parsing.
-                }
-            }
-
-            return rawValue
-                .Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(item => item.Trim())
-                .Where(item => item.Length > 0)
-                .ToArray();
+            return SummerFunctionClaimGuard.HasRequiredFunction(HttpContext?.User, requiredFunction);
         }
 
     }

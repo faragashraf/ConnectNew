@@ -181,6 +181,7 @@ public class SummerWorkflowServicePricingAuthorizationTests
                 IsProxyBooking = true,
                 MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
             },
+            userId: "employee-user",
             hasSummerAdminPermission: false);
 
         Assert.True(response.IsSuccess);
@@ -210,7 +211,41 @@ public class SummerWorkflowServicePricingAuthorizationTests
                 StayMode = SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
                 MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
             },
+            userId: "summer-admin",
             hasSummerAdminPermission: true);
+
+        Assert.True(response.IsSuccess);
+        Assert.NotNull(response.Data);
+        Assert.Equal(SummerWorkflowDomainConstants.MembershipTypes.NonWorker, response.Data!.MembershipType);
+        Assert.Equal(1000m, response.Data.AppliedInsuranceAmount);
+    }
+
+    [Fact]
+    public async Task GetPricingQuoteAsync_ManagedCategoryUser_CanSelectNonWorkerMembership_WhenClaimFlagUnavailable()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedSummerDestinationCatalog(connectContext);
+        SeedSummerPricingCatalog(connectContext);
+        SeedCategory(connectContext, categoryId: 147, stockholder: 101);
+        SeedActiveUserPosition(gpaContext, userId: "summer-manager", unitId: 101);
+        await connectContext.SaveChangesAsync();
+        await gpaContext.SaveChangesAsync();
+
+        var service = CreateService(connectContext, gpaContext);
+        var response = await service.GetPricingQuoteAsync(
+            new SummerPricingQuoteRequest
+            {
+                CategoryId = 147,
+                SeasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear,
+                PeriodKey = "JUN_SEP",
+                PersonsCount = 2,
+                StayMode = SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
+                MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
+            },
+            userId: "summer-manager",
+            hasSummerAdminPermission: false);
 
         Assert.True(response.IsSuccess);
         Assert.NotNull(response.Data);

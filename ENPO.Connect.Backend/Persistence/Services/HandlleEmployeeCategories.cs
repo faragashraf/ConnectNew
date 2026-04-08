@@ -220,7 +220,7 @@ namespace Persistence.Services
                 ? (messageRequest.CreatedBy ?? string.Empty).Trim()
                 : actingUserId.Trim();
             var canManageSummerCategory = await CanUserManageSummerCategoryAsync(normalizedActorUserId, categoryInfo.Category.CatId);
-            var allowMembershipOverride = runtime.HasSummerAdminPermission;
+            var allowMembershipOverride = runtime.HasSummerAdminPermission || canManageSummerCategory;
             var resolvedMembershipType = SummerMembershipPolicy.ResolveMembershipType(
                 requestedMembershipType,
                 allowMembershipOverride);
