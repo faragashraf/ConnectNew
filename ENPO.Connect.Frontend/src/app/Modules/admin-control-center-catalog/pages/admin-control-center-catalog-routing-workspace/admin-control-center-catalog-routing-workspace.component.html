@@ -1,0 +1,1194 @@
+<section class="routing-workspace" dir="rtl">
+  <header class="workspace-header">
+    <div>
+      <h4>إدارة التوجيه الذكي</h4>
+      <p>
+        نوع الطلب الحالي:
+        <strong>{{ requestTypeContextLabel }}</strong>
+      </p>
+    </div>
+
+    <div class="profile-switcher">
+      <label for="routingProfileSelect">ملف التوجيه (Routing Profile)</label>
+      <p-dropdown
+        inputId="routingProfileSelect"
+        [options]="profileOptions"
+        optionLabel="label"
+        optionValue="value"
+        [ngModel]="selectedProfileId"
+        (onChange)="onSelectProfile($event.value)"
+        appendTo="body"
+        [showClear]="false"
+        placeholder="اختر مسارًا">
+      </p-dropdown>
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined p-button-sm"
+        label="مسار جديد"
+        icon="pi pi-plus"
+        (click)="onStartCreateProfile()">
+      </button>
+    </div>
+  </header>
+
+  <div class="message" *ngIf="message.length > 0" [ngClass]="messageSeverity">
+    {{ message }}
+  </div>
+
+  <section class="progress-card">
+    <div class="progress-row">
+      <span>اكتمال العناصر الإلزامية</span>
+      <strong>{{ mandatoryCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="mandatoryCompletionPercent"></p-progressBar>
+
+    <div class="progress-row">
+      <span>اكتمال العناصر الاختيارية</span>
+      <strong>{{ optionalCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="optionalCompletionPercent"></p-progressBar>
+
+    <div class="progress-row overall">
+      <span>الاكتمال الكلي الحالي لقسم الإتاحة والتوجيه</span>
+      <strong>{{ overallCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="overallCompletionPercent"></p-progressBar>
+  </section>
+
+  <section class="scope-tags">
+    <p-tag severity="danger" value="إلزامي: إتاحة الطلب + البيانات الأساسية + الخطوات + الجهات + الانتقالات + المعاينة + التحقق"></p-tag>
+    <p-tag severity="info" value="اختياري: تحسينات إضافية مثل auto-layout أذكى أو التصدير"></p-tag>
+  </section>
+
+  <div class="workspace-layout" *ngIf="canManageWorkspace; else selectRequestTypeFirst">
+    <aside class="section-nav">
+      <button
+        *ngFor="let section of sectionMenu"
+        pButton
+        type="button"
+        class="p-button-text nav-btn"
+        [class.active]="activeSection === section.key"
+        [class.mandatory]="section.mandatory"
+        [label]="section.label"
+        (click)="onSwitchSection(section.key)">
+      </button>
+    </aside>
+
+    <section class="section-content">
+      <section class="card section-card" *ngIf="activeSection === 'availability'">
+        <header class="card-header">
+          <div>
+            <h5>إتاحة الطلب</h5>
+            <small>تحديد من يحق له رؤية نوع الطلب وتسجيله قبل أي إعدادات توجيه</small>
+          </div>
+          <p-tag severity="danger" value="إلزامي"></p-tag>
+        </header>
+
+        <div *ngIf="loadingAvailability" class="availability-loading">
+          <p-progressSpinner strokeWidth="4" [style]="{ width: '42px', height: '42px' }"></p-progressSpinner>
+          <span>جارٍ تحميل إعدادات إتاحة الطلب...</span>
+        </div>
+
+        <form [formGroup]="availabilityForm" class="editor" novalidate *ngIf="!loadingAvailability">
+          <p class="required-note"><span>*</span> نمط الإتاحة إلزامي، وعند اختيار «محدد» يجب اختيار عقدة من الشجرة</p>
+
+          <div class="grid two-cols availability-grid">
+            <div class="field span-two">
+              <label>نمط الإتاحة <span class="required">*</span></label>
+              <div class="availability-mode-switch">
+                <p-selectButton
+                  [options]="availabilityModeOptions"
+                  optionLabel="label"
+                  optionValue="value"
+                  formControlName="availabilityMode">
+                </p-selectButton>
+              </div>
+            </div>
+
+            <div class="field span-two info-hint" *ngIf="isAvailabilityPublic">
+              هذا النوع متاح لأي مستخدم قام بتسجيل الدخول. لا حاجة لاختيار جهة من الشجرة التنظيمية.
+            </div>
+
+            <ng-container *ngIf="isAvailabilityRestricted">
+              <div class="field span-two">
+                <label>الاختيار من الشجرة التنظيمية <span class="required">*</span></label>
+                <div class="target-node-picker">
+                  <button
+                    pButton
+                    type="button"
+                    icon="pi pi-sitemap"
+                    [label]="hasSelectedAvailabilityNode ? 'تغيير الفئة المحددة' : 'اختيار الفئة من الشجرة التنظيمية'"
+                    (click)="onOpenAvailabilityTreeDialog()">
+                  </button>
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-outlined p-button-secondary"
+                    icon="pi pi-times"
+                    label="إزالة الاختيار"
+                    [disabled]="!hasSelectedAvailabilityNode"
+                    (click)="onClearAvailabilityNodeSelection()">
+                  </button>
+                </div>
+                <small class="loading-hint">
+                  الشجرة تعتمد على Oracle (مرجع read-only): الوحدات التنظيمية، الوظائف/المناصب، والمستخدمون عند توفر البيانات.
+                </small>
+              </div>
+
+              <div class="field span-two node-selection-state" *ngIf="hasSelectedAvailabilityNode; else availabilityNodeNotSelected">
+                <div class="node-selection-grid">
+                  <div>
+                    <span>نوع العقدة</span>
+                    <strong>{{ selectedAvailabilityNodeTypeLabelAr }}</strong>
+                  </div>
+                  <div>
+                    <span>اسم العقدة</span>
+                    <strong>{{ selectedAvailabilityNodeLabelAr || 'غير محدد' }}</strong>
+                  </div>
+                  <div>
+                    <span>المسار التنظيمي</span>
+                    <strong>{{ selectedAvailabilityNodePathAr || 'غير متوفر' }}</strong>
+                  </div>
+                  <div>
+                    <span>الوصف</span>
+                    <strong>{{ resolvedAvailabilityDescriptionAr }}</strong>
+                  </div>
+                </div>
+                <small *ngIf="selectedAvailabilityNodeSecondaryLabelAr">{{ selectedAvailabilityNodeSecondaryLabelAr }}</small>
+              </div>
+
+              <ng-template #availabilityNodeNotSelected>
+                <div class="field span-two info-hint">
+                  لم يتم اختيار أي فئة بعد. اختر وحدة/منصب/مستخدم من الشجرة التنظيمية.
+                </div>
+              </ng-template>
+            </ng-container>
+
+            <div class="field span-two availability-summary">
+              <span>ملخص الإتاحة</span>
+              <strong>{{ availabilitySummaryAr }}</strong>
+            </div>
+          </div>
+
+          <small class="field-error" *ngIf="isAvailabilityRestricted && !hasSelectedAvailabilityNode">
+            عند اختيار نمط «محدد» يجب تحديد عقدة من الشجرة التنظيمية قبل الحفظ.
+          </small>
+          <small class="field-error" *ngIf="availabilityNodeValidationError.length > 0">
+            {{ availabilityNodeValidationError }}
+          </small>
+          <small class="loading-hint" *ngIf="validatingAvailabilityNode">
+            جارٍ التحقق من العقدة المختارة...
+          </small>
+
+          <div class="actions">
+            <button
+              pButton
+              type="button"
+              label="حفظ إعدادات الإتاحة"
+              icon="pi pi-save"
+              [disabled]="!canSaveAvailability"
+              [loading]="savingAvailability"
+              (click)="onSaveAvailability()">
+            </button>
+          </div>
+        </form>
+
+        <p-dialog
+          header="اختيار الفئة المسموح لها بتسجيل الطلب"
+          [(visible)]="availabilityTreeDialogVisible"
+          [modal]="true"
+          [draggable]="false"
+          [resizable]="false"
+          [maximizable]="true"
+          [dismissableMask]="true"
+          [style]="{ width: '78vw', maxWidth: '1080px' }"
+          [contentStyle]="{ overflow: 'hidden' }"
+          styleClass="availability-tree-dialog">
+          <div class="target-tree-layout">
+            <div class="target-tree-toolbar">
+              <label for="availabilityTreeSearch">بحث داخل الشجرة</label>
+              <div class="target-tree-search-row">
+                <input
+                  pInputText
+                  id="availabilityTreeSearch"
+                  [(ngModel)]="availabilityTreeSearchTerm"
+                  [ngModelOptions]="{ standalone: true }"
+                  placeholder="اكتب اسم وحدة أو منصب أو مستخدم"
+                  (keydown.enter)="onSearchAvailabilityTree()" />
+                <button pButton type="button" icon="pi pi-search" class="p-button-outlined" (click)="onSearchAvailabilityTree()" label="بحث"></button>
+                <button pButton type="button" icon="pi pi-refresh" class="p-button-text" (click)="onResetAvailabilityTreeSearch()" label="إعادة"></button>
+              </div>
+            </div>
+
+            <div class="target-tree-toolbar toggles">
+              <label for="availabilityTreeIncludeUsers">إظهار المستخدمين داخل الشجرة</label>
+              <p-inputSwitch
+                inputId="availabilityTreeIncludeUsers"
+                [(ngModel)]="availabilityTreeIncludeUsers"
+                [ngModelOptions]="{ standalone: true }"
+                (onChange)="onToggleAvailabilityTreeIncludeUsers()">
+              </p-inputSwitch>
+            </div>
+
+            <div class="empty-state" *ngIf="availabilityTreeLoadError">
+              {{ availabilityTreeLoadError }}
+            </div>
+
+            <div class="target-tree-panel" *ngIf="!availabilityTreeLoadError">
+              <p-tree
+                [value]="availabilityTreeNodes"
+                selectionMode="single"
+                [(selection)]="availabilityTreeSelection"
+                [loading]="availabilityTreeLoading"
+                [propagateSelectionDown]="false"
+                [propagateSelectionUp]="false"
+                (onNodeExpand)="onAvailabilityTreeNodeExpand($event)"
+                (onNodeSelect)="onAvailabilityTreeNodeSelect($event)">
+                <ng-template pTemplate="default" let-node>
+                  <div class="target-tree-node">
+                    <div class="target-tree-node-main">
+                      <span class="target-tree-node-label">{{ node.label }}</span>
+                      <small *ngIf="node.data?.secondaryLabelAr">{{ node.data?.secondaryLabelAr }}</small>
+                    </div>
+                    <div class="target-tree-node-tags">
+                      <p-tag [value]="getTreeNodeTypeTagLabel(node.data?.nodeType)" [severity]="getTreeNodeTypeTagSeverity(node.data?.nodeType)"></p-tag>
+                      <p-tag *ngIf="node.data?.isSelectable" value="قابل للاختيار" severity="success"></p-tag>
+                      <p-tag *ngIf="!node.data?.isSelectable" value="مرجعي فقط" severity="warning"></p-tag>
+                    </div>
+                  </div>
+                </ng-template>
+              </p-tree>
+            </div>
+
+            <div class="empty-state" *ngIf="!availabilityTreeLoading && !availabilityTreeLoadError && availabilityTreeNodes.length === 0">
+              لا توجد نتائج مطابقة للبحث الحالي.
+            </div>
+          </div>
+        </p-dialog>
+      </section>
+
+      <section class="card section-card" *ngIf="activeSection === 'basic'">
+        <header class="card-header">
+          <div>
+            <h5>البيانات الأساسية للتوجيه</h5>
+            <small>تفعيل/تعطيل + اختيار/إنشاء RoutingProfile + إعدادات الربط</small>
+          </div>
+          <p-tag severity="danger" value="إلزامي"></p-tag>
+        </header>
+
+        <form [formGroup]="basicForm" class="editor" novalidate>
+          <p class="required-note"><span>*</span> حقل إلزامي</p>
+
+          <div class="grid two-cols">
+            <div class="field">
+              <label for="profileNameAr">اسم المسار بالعربية <span class="required">*</span></label>
+              <input pInputText id="profileNameAr" formControlName="nameAr" placeholder="مثال: مسار الطلبات الواردة" />
+            </div>
+
+            <div class="field">
+              <label for="profileDirectionMode">اتجاه التوجيه (DirectionMode) <span class="required">*</span></label>
+              <p-dropdown
+                inputId="profileDirectionMode"
+                [options]="directionModeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="directionMode"
+                appendTo="body"
+                [showClear]="false"
+                placeholder="اختر اتجاه التوجيه">
+              </p-dropdown>
+            </div>
+
+            <div class="field span-two">
+              <label for="profileDescriptionAr">الوصف بالعربية</label>
+              <textarea
+                pInputTextarea
+                id="profileDescriptionAr"
+                formControlName="descriptionAr"
+                rows="3"
+                placeholder="وصف مختصر لسياسة التوجيه">
+              </textarea>
+            </div>
+
+            <div class="field">
+              <label for="profileVersionNo">رقم النسخة (Version No)</label>
+              <input pInputText id="profileVersionNo" type="number" min="1" formControlName="versionNo" />
+            </div>
+
+            <div class="field">
+              <label for="profileStartStep">خطوة البداية</label>
+              <p-dropdown
+                inputId="profileStartStep"
+                [options]="startStepOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="startStepId"
+                appendTo="body"
+                [showClear]="true"
+                placeholder="تحديد خطوة البداية">
+              </p-dropdown>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="profileActive">تفعيل Profile</label>
+              <p-inputSwitch inputId="profileActive" formControlName="profileIsActive"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="routingEnabled">تفعيل التوجيه لنوع الطلب</label>
+              <p-inputSwitch inputId="routingEnabled" formControlName="routingEnabled"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="bindingDefault">المسار الافتراضي لهذا النوع</label>
+              <p-inputSwitch inputId="bindingDefault" formControlName="isDefault"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="bindingInbound">ينطبق على الوارد</label>
+              <p-inputSwitch inputId="bindingInbound" formControlName="appliesToInbound"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="bindingOutbound">ينطبق على الصادر</label>
+              <p-inputSwitch inputId="bindingOutbound" formControlName="appliesToOutbound"></p-inputSwitch>
+            </div>
+          </div>
+
+          <small class="field-error" *ngIf="!canSaveBasic">
+            زر الحفظ يبقى معطلًا حتى اكتمال الحقول الإلزامية وتحديد اتجاه واحد على الأقل (وارد/صادر).
+          </small>
+
+          <div class="actions">
+            <button
+              pButton
+              type="button"
+              label="حفظ البيانات الأساسية"
+              icon="pi pi-save"
+              [disabled]="!canSaveBasic"
+              [loading]="savingBasic"
+              (click)="onSaveBasic()">
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card section-card" *ngIf="activeSection === 'steps'">
+        <header class="card-header">
+          <div>
+            <h5>الخطوات</h5>
+            <small>إضافة/تعديل/حذف وترتيب الخطوات</small>
+          </div>
+          <p-tag severity="danger" value="إلزامي"></p-tag>
+        </header>
+
+        <form [formGroup]="stepForm" class="editor" novalidate>
+          <p class="required-note"><span>*</span> حقل إلزامي</p>
+
+          <div class="grid two-cols">
+            <div class="field">
+              <label for="stepCode">رمز الخطوة (StepCode) <span class="required">*</span></label>
+              <input pInputText id="stepCode" formControlName="stepCode" placeholder="مثال: START_01" />
+            </div>
+
+            <div class="field">
+              <label for="stepNameAr">اسم الخطوة <span class="required">*</span></label>
+              <input pInputText id="stepNameAr" formControlName="stepNameAr" placeholder="مثال: تسجيل واستلام" />
+            </div>
+
+            <div class="field">
+              <label for="stepType">نوع الخطوة (StepType) <span class="required">*</span></label>
+              <p-dropdown
+                inputId="stepType"
+                [options]="stepTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="stepType"
+                appendTo="body"
+                [showClear]="false"
+                placeholder="اختر نوع الخطوة">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label for="stepOrder">الترتيب <span class="required">*</span></label>
+              <input pInputText id="stepOrder" type="number" min="0" formControlName="stepOrder" />
+            </div>
+
+            <div class="field">
+              <label for="stepSlaHours">SLA (ساعات)</label>
+              <input pInputText id="stepSlaHours" type="number" min="0" formControlName="slaHours" />
+            </div>
+
+            <div class="field toggle-field">
+              <label for="stepStart">هل هي خطوة بداية؟</label>
+              <p-inputSwitch inputId="stepStart" formControlName="isStart"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="stepEnd">هل هي خطوة نهاية؟</label>
+              <p-inputSwitch inputId="stepEnd" formControlName="isEnd"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="stepActive">مفعلة</label>
+              <p-inputSwitch inputId="stepActive" formControlName="isActive"></p-inputSwitch>
+            </div>
+
+            <div class="field span-two">
+              <label for="stepNotes">ملاحظات</label>
+              <textarea pInputTextarea id="stepNotes" rows="2" formControlName="notesAr"></textarea>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button
+              pButton
+              type="button"
+              class="p-button-outlined"
+              label="جديد"
+              icon="pi pi-plus"
+              (click)="onStartCreateStep()">
+            </button>
+            <button
+              pButton
+              type="button"
+              [label]="editingStepId ? 'حفظ التعديل' : 'إضافة خطوة'"
+              icon="pi pi-save"
+              [disabled]="!canSaveStep"
+              [loading]="savingStep"
+              (click)="onSaveStep()">
+            </button>
+          </div>
+
+          <small class="field-error" *ngIf="hasConflictingStartStep">
+            لا يمكن حفظ خطوة بداية جديدة قبل إلغاء خطوة البداية الحالية.
+          </small>
+        </form>
+
+        <p-table [value]="steps" responsiveLayout="scroll" [loading]="loadingContext">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>الاسم</th>
+              <th>النوع</th>
+              <th>الترتيب</th>
+              <th>بداية</th>
+              <th>نهاية</th>
+              <th>SLA</th>
+              <th class="action-col">إجراء</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-step>
+            <tr>
+              <td>{{ step.stepNameAr }} <small>({{ step.stepCode }})</small></td>
+              <td>{{ step.stepType }}</td>
+              <td>{{ step.stepOrder }}</td>
+              <td><p-tag [value]="step.isStart ? 'نعم' : 'لا'" [severity]="step.isStart ? 'success' : 'info'"></p-tag></td>
+              <td><p-tag [value]="step.isEnd ? 'نعم' : 'لا'" [severity]="step.isEnd ? 'warning' : 'info'"></p-tag></td>
+              <td>{{ step.slaHours ?? '-' }}</td>
+              <td class="action-col">
+                <div class="row-actions">
+                  <button pButton type="button" class="p-button-text" icon="pi pi-pencil" (click)="onEditStep(step)"></button>
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-danger"
+                    icon="pi pi-trash"
+                    [loading]="deletingStepId === step.id"
+                    (click)="onDeleteStep(step)">
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr><td colspan="7" class="empty-row">لا توجد خطوات بعد.</td></tr>
+          </ng-template>
+        </p-table>
+      </section>
+
+      <section class="card section-card" *ngIf="activeSection === 'targets'">
+        <header class="card-header">
+          <div>
+            <h5>الجهات المستهدفة</h5>
+            <small>اختيار الجهة من الشجرة التنظيمية + تحديد المؤهلين + أسلوب توزيع العمل</small>
+          </div>
+          <p-tag severity="danger" value="إلزامي"></p-tag>
+        </header>
+
+        <div class="filters-row">
+          <label for="targetStepFilter">عرض Targets حسب الخطوة</label>
+          <p-dropdown
+            inputId="targetStepFilter"
+            [options]="targetStepFilterOptions"
+            optionLabel="label"
+            optionValue="value"
+            [ngModel]="filteredTargetStepId"
+            (onChange)="onTargetStepFilterChanged($event.value)"
+            appendTo="body"
+            [showClear]="true"
+            placeholder="كل الخطوات">
+          </p-dropdown>
+        </div>
+
+        <form [formGroup]="targetForm" class="editor" novalidate>
+          <p class="required-note"><span>*</span> اختيار العقدة + تحديد المؤهلين + نمط التوزيع حقول إلزامية</p>
+
+          <div class="grid two-cols">
+            <div class="field">
+              <label for="targetRoutingStep">الخطوة <span class="required">*</span></label>
+              <p-dropdown
+                inputId="targetRoutingStep"
+                [options]="stepOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="routingStepId"
+                appendTo="body"
+                [showClear]="false"
+                placeholder="اختر الخطوة">
+              </p-dropdown>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="targetActive">مفعل</label>
+              <p-inputSwitch inputId="targetActive" formControlName="isActive"></p-inputSwitch>
+            </div>
+
+            <div class="field span-two">
+              <label>العقدة المستهدفة من الشجرة التنظيمية <span class="required">*</span></label>
+              <div class="target-node-picker">
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-sitemap"
+                  [label]="hasSelectedTargetNode ? 'تغيير الجهة المستهدفة' : 'اختيار الجهة من الشجرة التنظيمية'"
+                  (click)="onOpenTargetTreeDialog()">
+                </button>
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-outlined p-button-secondary"
+                  icon="pi pi-times"
+                  label="إزالة الاختيار"
+                  [disabled]="!hasSelectedTargetNode"
+                  (click)="onClearTargetNodeSelection()">
+                </button>
+              </div>
+              <small class="loading-hint">
+                تعتمد الشجرة على Oracle كمرجع للهيكل التنظيمي (وحدات، مناصب، مستخدمون عند التوفر).
+              </small>
+            </div>
+
+            <div class="field span-two node-selection-state" *ngIf="hasSelectedTargetNode; else targetNodeNotSelected">
+              <div class="node-selection-grid">
+                <div>
+                  <span>نوع العقدة</span>
+                  <strong>{{ selectedTargetNodeTypeLabelAr }}</strong>
+                </div>
+                <div>
+                  <span>اسم الجهة</span>
+                  <strong>{{ selectedTargetNodeLabelAr || 'غير محدد' }}</strong>
+                </div>
+                <div>
+                  <span>المؤهلون</span>
+                  <strong>{{ selectedTargetAudienceLabelAr }}</strong>
+                </div>
+                <div>
+                  <span>التوزيع</span>
+                  <strong>{{ selectedTargetDistributionLabelAr }}</strong>
+                </div>
+              </div>
+              <small *ngIf="selectedTargetNodeSecondaryLabelAr">{{ selectedTargetNodeSecondaryLabelAr }}</small>
+            </div>
+
+            <ng-template #targetNodeNotSelected>
+              <div class="field span-two info-hint">
+                لم يتم اختيار أي جهة مستهدفة بعد. استخدم زر «اختيار الجهة من الشجرة التنظيمية».
+              </div>
+            </ng-template>
+
+            <div class="field" *ngIf="selectedTargetNodeType === 'OrgUnit'">
+              <label for="targetAudienceMode">دائرة المؤهلين داخل الوحدة <span class="required">*</span></label>
+              <p-dropdown
+                inputId="targetAudienceMode"
+                [options]="orgUnitAudienceOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="audienceResolutionMode"
+                appendTo="body"
+                [showClear]="false"
+                placeholder="اختر دائرة المؤهلين">
+              </p-dropdown>
+            </div>
+
+            <div class="field info-hint" *ngIf="selectedTargetNodeType === 'Position'">
+              المؤهلون تلقائيًا: جميع شاغلي هذا المنصب.
+            </div>
+
+            <div class="field info-hint" *ngIf="selectedTargetNodeType === 'SpecificUser'">
+              المؤهلون تلقائيًا: المستخدم المحدد فقط.
+            </div>
+
+            <div class="field">
+              <label for="targetWorkDistribution">نمط توزيع العمل <span class="required">*</span></label>
+              <p-dropdown
+                inputId="targetWorkDistribution"
+                [options]="workDistributionOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="workDistributionMode"
+                appendTo="body"
+                [showClear]="false"
+                placeholder="اختر نمط التوزيع">
+              </p-dropdown>
+              <small class="field-error" *ngIf="(targetForm.get('audienceResolutionMode')?.value === 'SpecificUserOnly' || targetForm.get('audienceResolutionMode')?.value === 'OrgUnitLeaderOnly') && targetForm.get('workDistributionMode')?.value !== 'SharedInbox'">
+                عند دائرة مؤهلين أحادية، يجب أن يكون نمط التوزيع «عرض مشترك للجميع».
+              </small>
+            </div>
+
+            <div class="field span-two">
+              <label for="targetNotes">ملاحظات</label>
+              <textarea pInputTextarea id="targetNotes" rows="2" formControlName="notesAr"></textarea>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button
+              pButton
+              type="button"
+              class="p-button-outlined"
+              label="جديد"
+              icon="pi pi-plus"
+              (click)="onStartCreateTarget()">
+            </button>
+            <button
+              pButton
+              type="button"
+              [label]="editingTargetId ? 'حفظ التعديل' : 'إضافة جهة'"
+              icon="pi pi-save"
+              [disabled]="!canSaveTarget"
+              [loading]="savingTarget"
+              (click)="onSaveTarget()">
+            </button>
+          </div>
+        </form>
+
+        <p-table [value]="filteredTargets" responsiveLayout="scroll" [loading]="loadingContext">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>الخطوة</th>
+              <th>الجهة المستهدفة</th>
+              <th>المؤهلون</th>
+              <th>التوزيع</th>
+              <th>الحالة</th>
+              <th class="action-col">إجراء</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-target>
+            <tr>
+              <td>{{ getStepName(target.routingStepId) }}</td>
+              <td>{{ getTargetNodeDisplayLabel(target) }}</td>
+              <td>{{ getTargetAudienceDisplayLabel(target) }}</td>
+              <td>{{ getTargetWorkDistributionDisplayLabel(target) }}</td>
+              <td>
+                <p-tag [value]="target.isActive ? 'مفعل' : 'غير مفعل'" [severity]="target.isActive ? 'success' : 'warning'"></p-tag>
+              </td>
+              <td class="action-col">
+                <div class="row-actions">
+                  <button pButton type="button" class="p-button-text" icon="pi pi-pencil" (click)="onEditTarget(target)"></button>
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-danger"
+                    icon="pi pi-trash"
+                    [loading]="deletingTargetId === target.id"
+                    (click)="onDeleteTarget(target)">
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr><td colspan="6" class="empty-row">لا توجد جهات مستهدفة حسب الفلتر الحالي.</td></tr>
+          </ng-template>
+        </p-table>
+
+        <p-dialog
+          header="اختيار الجهة المستهدفة من الشجرة التنظيمية"
+          [(visible)]="targetTreeDialogVisible"
+          [modal]="true"
+          [draggable]="false"
+          [resizable]="false"
+          [maximizable]="true"
+          [dismissableMask]="true"
+          [style]="{ width: '78vw', maxWidth: '1080px' }"
+          [contentStyle]="{ overflow: 'hidden' }"
+          styleClass="target-tree-dialog">
+          <div class="target-tree-layout">
+            <div class="target-tree-toolbar">
+              <label for="targetTreeSearch">بحث داخل الشجرة</label>
+              <div class="target-tree-search-row">
+                <input
+                  pInputText
+                  id="targetTreeSearch"
+                  [(ngModel)]="targetTreeSearchTerm"
+                  [ngModelOptions]="{ standalone: true }"
+                  placeholder="اكتب اسم وحدة أو منصب أو مستخدم"
+                  (keydown.enter)="onSearchTargetTree()" />
+                <button pButton type="button" icon="pi pi-search" class="p-button-outlined" (click)="onSearchTargetTree()" label="بحث"></button>
+                <button pButton type="button" icon="pi pi-refresh" class="p-button-text" (click)="onResetTargetTreeSearch()" label="إعادة"></button>
+              </div>
+            </div>
+
+            <div class="target-tree-toolbar toggles">
+              <label for="targetTreeIncludeUsers">إظهار المستخدمين داخل الشجرة</label>
+              <p-inputSwitch
+                inputId="targetTreeIncludeUsers"
+                [(ngModel)]="targetTreeIncludeUsers"
+                [ngModelOptions]="{ standalone: true }"
+                (onChange)="onToggleTargetTreeIncludeUsers()">
+              </p-inputSwitch>
+            </div>
+
+            <div class="empty-state" *ngIf="targetTreeLoadError">
+              {{ targetTreeLoadError }}
+            </div>
+
+            <div class="target-tree-panel" *ngIf="!targetTreeLoadError">
+              <p-tree
+                [value]="targetTreeNodes"
+                selectionMode="single"
+                [(selection)]="targetTreeSelection"
+                [loading]="targetTreeLoading"
+                [propagateSelectionDown]="false"
+                [propagateSelectionUp]="false"
+                (onNodeExpand)="onTargetTreeNodeExpand($event)"
+                (onNodeSelect)="onTargetTreeNodeSelect($event)">
+                <ng-template pTemplate="default" let-node>
+                  <div class="target-tree-node">
+                    <div class="target-tree-node-main">
+                      <span class="target-tree-node-label">{{ node.label }}</span>
+                      <small *ngIf="node.data?.secondaryLabelAr">{{ node.data?.secondaryLabelAr }}</small>
+                    </div>
+                    <div class="target-tree-node-tags">
+                      <p-tag [value]="getTreeNodeTypeTagLabel(node.data?.nodeType)" [severity]="getTreeNodeTypeTagSeverity(node.data?.nodeType)"></p-tag>
+                      <p-tag *ngIf="node.data?.isSelectable" value="قابل للاستهداف" severity="success"></p-tag>
+                      <p-tag *ngIf="!node.data?.isSelectable" value="مرجعي فقط" severity="warning"></p-tag>
+                    </div>
+                  </div>
+                </ng-template>
+              </p-tree>
+            </div>
+
+            <div class="empty-state" *ngIf="!targetTreeLoading && !targetTreeLoadError && targetTreeNodes.length === 0">
+              لا توجد نتائج مطابقة للبحث الحالي.
+            </div>
+          </div>
+        </p-dialog>
+      </section>
+
+      <section class="card section-card" *ngIf="activeSection === 'transitions'">
+        <header class="card-header">
+          <div>
+            <h5>الانتقالات والإجراءات</h5>
+            <small>إضافة Transition بين الخطوات مع شروط وFlags</small>
+          </div>
+          <p-tag severity="danger" value="إلزامي"></p-tag>
+        </header>
+
+        <form [formGroup]="transitionForm" class="editor" novalidate>
+          <p class="required-note"><span>*</span> حقل إلزامي</p>
+
+          <div class="grid two-cols">
+            <div class="field">
+              <label for="transitionFromStep">من خطوة (FromStep) <span class="required">*</span></label>
+              <p-dropdown
+                inputId="transitionFromStep"
+                [options]="stepOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="fromStepId"
+                appendTo="body"
+                [showClear]="false"
+                placeholder="اختر خطوة البداية">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label for="transitionToStep">إلى خطوة (ToStep) <span class="required">*</span></label>
+              <p-dropdown
+                inputId="transitionToStep"
+                [options]="stepOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="toStepId"
+                appendTo="body"
+                [showClear]="false"
+                placeholder="اختر خطوة الوصول">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label for="transitionActionCode">رمز الإجراء (ActionCode) <span class="required">*</span></label>
+              <input pInputText id="transitionActionCode" formControlName="actionCode" placeholder="مثال: APPROVE" />
+            </div>
+
+            <div class="field">
+              <label for="transitionActionNameAr">اسم الإجراء بالعربية <span class="required">*</span></label>
+              <input pInputText id="transitionActionNameAr" formControlName="actionNameAr" placeholder="مثال: اعتماد" />
+            </div>
+
+            <div class="field">
+              <label for="transitionDisplayOrder">ترتيب العرض (DisplayOrder) <span class="required">*</span></label>
+              <input pInputText id="transitionDisplayOrder" type="number" min="0" formControlName="displayOrder" />
+            </div>
+
+            <div class="field span-two">
+              <label for="transitionCondition">شرط الانتقال (ConditionExpression)</label>
+              <textarea pInputTextarea id="transitionCondition" rows="2" formControlName="conditionExpression"></textarea>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="transitionRequiresComment">يتطلب تعليقًا</label>
+              <p-inputSwitch inputId="transitionRequiresComment" formControlName="requiresComment"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="transitionRequiresMandatory">يتطلب اكتمال الحقول الإلزامية</label>
+              <p-inputSwitch inputId="transitionRequiresMandatory" formControlName="requiresMandatoryFieldsCompletion"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="transitionReject">مسار رفض</label>
+              <p-inputSwitch inputId="transitionReject" formControlName="isRejectPath"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="transitionReturn">مسار إعادة</label>
+              <p-inputSwitch inputId="transitionReturn" formControlName="isReturnPath"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="transitionEscalation">مسار تصعيد</label>
+              <p-inputSwitch inputId="transitionEscalation" formControlName="isEscalationPath"></p-inputSwitch>
+            </div>
+
+            <div class="field toggle-field">
+              <label for="transitionActive">مفعل</label>
+              <p-inputSwitch inputId="transitionActive" formControlName="isActive"></p-inputSwitch>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button
+              pButton
+              type="button"
+              class="p-button-outlined"
+              label="جديد"
+              icon="pi pi-plus"
+              (click)="onStartCreateTransition()">
+            </button>
+            <button
+              pButton
+              type="button"
+              [label]="editingTransitionId ? 'حفظ التعديل' : 'إضافة انتقال'"
+              icon="pi pi-save"
+              [disabled]="!canSaveTransition"
+              [loading]="savingTransition"
+              (click)="onSaveTransition()">
+            </button>
+          </div>
+        </form>
+
+        <p-table [value]="transitions" responsiveLayout="scroll" [loading]="loadingContext">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>من</th>
+              <th>إلى</th>
+              <th>الإجراء</th>
+              <th>المسارات الخاصة</th>
+              <th class="action-col">إجراء</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-transition>
+            <tr>
+              <td>{{ getStepName(transition.fromStepId) }}</td>
+              <td>{{ getStepName(transition.toStepId) }}</td>
+              <td>{{ transition.actionNameAr }} <small>({{ transition.actionCode }})</small></td>
+              <td>
+                <p-tag *ngIf="transition.isRejectPath" severity="danger" value="رفض"></p-tag>
+                <p-tag *ngIf="transition.isReturnPath" severity="warning" value="إعادة"></p-tag>
+                <p-tag *ngIf="transition.isEscalationPath" severity="info" value="تصعيد"></p-tag>
+              </td>
+              <td class="action-col">
+                <div class="row-actions">
+                  <button pButton type="button" class="p-button-text" icon="pi pi-pencil" (click)="onEditTransition(transition)"></button>
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-danger"
+                    icon="pi pi-trash"
+                    [loading]="deletingTransitionId === transition.id"
+                    (click)="onDeleteTransition(transition)">
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr><td colspan="5" class="empty-row">لا توجد انتقالات بعد.</td></tr>
+          </ng-template>
+        </p-table>
+      </section>
+
+      <section class="card section-card" *ngIf="activeSection === 'visual'">
+        <header class="card-header">
+          <div>
+            <h5>المخطط المرئي الحي</h5>
+            <small>العقد = الخطوات، الأسهم = الانتقالات، مع تحديث مباشر بعد التعديل</small>
+          </div>
+          <p-tag severity="danger" value="إلزامي ضمن Phase 3"></p-tag>
+        </header>
+
+        <div class="actions">
+          <button
+            pButton
+            type="button"
+            icon="pi pi-sync"
+            label="تحديث المخطط"
+            [disabled]="selectedProfileId == null"
+            [loading]="loadingPreview"
+            (click)="onRefreshPreview()">
+          </button>
+          <button
+            pButton
+            type="button"
+            class="p-button-outlined"
+            icon="pi pi-check-circle"
+            label="تحديث التحقق"
+            [disabled]="selectedProfileId == null"
+            [loading]="loadingValidation"
+            (click)="onValidateProfile()">
+          </button>
+        </div>
+
+        <div *ngIf="preview as currentPreview; else emptyPreview">
+          <div class="preview-panels" *ngIf="previewPanel as panel">
+            <article class="summary summary-primary">
+              <h6>ملخص تنفيذي سريع</h6>
+              <p>{{ panel.profileSummary }}</p>
+              <div class="summary-kpis">
+                <div class="kpi">
+                  <span>عدد الخطوات</span>
+                  <strong>{{ panel.totalSteps }}</strong>
+                </div>
+                <div class="kpi">
+                  <span>عدد الانتقالات</span>
+                  <strong>{{ panel.totalTransitions }}</strong>
+                </div>
+                <div class="kpi">
+                  <span>تغطية الاستهداف</span>
+                  <strong>{{ panel.targetCoveragePercent }}%</strong>
+                </div>
+                <div class="kpi">
+                  <span>أخطاء / تحذيرات</span>
+                  <strong>{{ panel.validationErrors }} / {{ panel.validationWarnings }}</strong>
+                </div>
+              </div>
+            </article>
+
+            <article class="summary-detail-card">
+              <h6>تفاصيل التدفق</h6>
+              <div class="summary-detail-grid">
+                <div><strong>بداية الطلب:</strong> {{ panel.startStepName }}</div>
+                <div><strong>أول جهة مستهدفة:</strong> {{ panel.firstTargetSummary }}</div>
+                <div><strong>إجراءات البداية:</strong> {{ panel.firstActions.length > 0 ? panel.firstActions.join('، ') : 'لا توجد' }}</div>
+                <div><strong>نهايات المسار:</strong> {{ panel.endSteps.length > 0 ? panel.endSteps.join('، ') : 'غير محددة بعد' }}</div>
+                <div><strong>مسارات الرفض:</strong> {{ panel.rejectSteps.length > 0 ? panel.rejectSteps.join('، ') : 'لا توجد' }}</div>
+                <div><strong>مسارات الإعادة:</strong> {{ panel.returnSteps.length > 0 ? panel.returnSteps.join('، ') : 'لا توجد' }}</div>
+                <div><strong>مسارات التصعيد:</strong> {{ panel.escalationSteps.length > 0 ? panel.escalationSteps.join('، ') : 'لا توجد' }}</div>
+              </div>
+            </article>
+          </div>
+
+          <div class="preview-panels" *ngIf="!previewPanel">
+            <article class="summary summary-primary">
+              <h6>ملخص تنفيذي سريع</h6>
+              <p>{{ currentPreview.summaryAr }}</p>
+            </article>
+          </div>
+
+          <div class="empty-state" *ngIf="previewIncompleteMessages.length > 0">
+            <strong>تنبيهات اكتمال المسار:</strong>
+            <ul class="preview-alert-list">
+              <li *ngFor="let warning of previewIncompleteMessages">{{ warning }}</li>
+            </ul>
+          </div>
+
+          <div class="visual-graph-wrapper" *ngIf="hasPreviewGraph; else previewGraphFallback">
+            <svg
+              class="preview-graph"
+              [attr.viewBox]="'0 0 ' + previewGraphWidth + ' ' + previewGraphHeight"
+              [attr.width]="previewGraphWidth"
+              [attr.height]="previewGraphHeight"
+              preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <marker id="routingArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z"></path>
+                </marker>
+              </defs>
+
+              <g class="graph-edges">
+                <g *ngFor="let edge of previewGraphEdges">
+                  <path
+                    [attr.class]="edge.cssClass"
+                    [attr.d]="edge.path"
+                    marker-end="url(#routingArrowHead)">
+                  </path>
+                  <path
+                    class="preview-edge-hit"
+                    [attr.d]="edge.path"
+                    (click)="onOpenTransitionFromPreview(edge.transitionId)">
+                  </path>
+                  <text class="preview-edge-label" [attr.x]="edge.labelX" [attr.y]="edge.labelY" (click)="onOpenTransitionFromPreview(edge.transitionId)">
+                    {{ truncateText(edge.actionNameAr, 26) }}
+                  </text>
+                  <text
+                    *ngIf="edge.flagLabel.length > 0"
+                    class="preview-edge-flag"
+                    [attr.x]="edge.labelX"
+                    [attr.y]="edge.labelY + 14"
+                    (click)="onOpenTransitionFromPreview(edge.transitionId)">
+                    {{ edge.flagLabel }}
+                  </text>
+                </g>
+              </g>
+
+              <g class="graph-nodes">
+                <g
+                  *ngFor="let node of previewGraphNodes"
+                  class="preview-node-group"
+                  [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
+                  (click)="onOpenStepFromPreview(node.stepId)">
+                  <rect [attr.class]="node.cssClass" [attr.width]="node.width" [attr.height]="node.height" rx="12"></rect>
+                  <title>{{ node.title }} | {{ node.subtitle }}</title>
+
+                  <text class="preview-node-title" x="12" y="24">{{ truncateText(node.title, 28) }}</text>
+                  <text class="preview-node-type" x="12" y="46">{{ truncateText(node.stepType, 30) }}</text>
+                  <text class="preview-node-target" x="12" y="70">{{ truncateText(node.subtitle, 58) }}</text>
+
+                  <g *ngFor="let badge of node.badges; let i = index" [attr.transform]="'translate(' + (12 + (i * 48)) + ',90)'">
+                    <rect [attr.class]="'preview-node-badge ' + badge.cssClass" width="42" height="16" rx="8"></rect>
+                    <text class="preview-node-badge-text" x="21" y="12">{{ badge.label }}</text>
+                  </g>
+                </g>
+              </g>
+            </svg>
+          </div>
+
+          <ng-template #previewGraphFallback>
+            <div class="empty-state">
+              لا يمكن رسم المخطط حاليًا. تأكد من وجود خطوات وانتقالات صالحة.
+            </div>
+          </ng-template>
+
+          <p-table [value]="currentPreview.edges" responsiveLayout="scroll">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>من</th>
+                <th>إلى</th>
+                <th>الإجراء</th>
+                <th>ملخص الاستهداف</th>
+                <th>المسارات الخاصة</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-edge>
+              <tr
+                class="preview-edge-row"
+                [class.selected]="selectedPreviewTransitionId === edge.transitionId"
+                (click)="onOpenTransitionFromPreview(edge.transitionId)">
+                <td>{{ getStepName(edge.fromStepId) }}</td>
+                <td>{{ getStepName(edge.toStepId) }}</td>
+                <td>{{ edge.actionNameAr }}</td>
+                <td>{{ truncateText(getPreviewStepTargetSummary(edge.toStepId), 64) }}</td>
+                <td>
+                  <p-tag *ngIf="edge.isRejectPath" severity="danger" value="رفض"></p-tag>
+                  <p-tag *ngIf="edge.isReturnPath" severity="warning" value="إعادة"></p-tag>
+                  <p-tag *ngIf="edge.isEscalationPath" severity="info" value="تصعيد"></p-tag>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+
+        <ng-template #emptyPreview>
+          <div class="empty-state">لا توجد معاينة متاحة. اضغط "تحديث المخطط" بعد إضافة خطوات وانتقالات.</div>
+        </ng-template>
+      </section>
+
+      <section class="card section-card" *ngIf="activeSection === 'validation'">
+        <header class="card-header">
+          <div>
+            <h5>المعاينة والتحقق</h5>
+            <small>تشغيل Validation وقراءة الأخطاء والتحذيرات بالعربية</small>
+          </div>
+          <p-tag severity="danger" value="إلزامي ضمن Phase 3"></p-tag>
+        </header>
+
+        <div class="actions">
+          <button
+            pButton
+            type="button"
+            icon="pi pi-check-circle"
+            label="تشغيل التحقق"
+            [disabled]="selectedProfileId == null"
+            [loading]="loadingValidation"
+            (click)="onValidateProfile()">
+          </button>
+        </div>
+
+        <div *ngIf="validationResult as validation; else emptyValidation" class="validation-layout">
+          <p-tag
+            [value]="validation.isValid ? 'المسار صالح' : 'المسار يحتاج تصحيح'"
+            [severity]="validation.isValid ? 'success' : 'danger'">
+          </p-tag>
+
+          <div class="validation-column">
+            <h6>الأخطاء (مانعة للحفظ/التفعيل)</h6>
+            <ul *ngIf="validation.errors.length > 0; else noErrors">
+              <li *ngFor="let error of validation.errors">
+                {{ error.messageAr }}
+              </li>
+            </ul>
+            <ng-template #noErrors>
+              <div class="empty-state">لا توجد أخطاء مانعة.</div>
+            </ng-template>
+          </div>
+
+          <div class="validation-column">
+            <h6>التحذيرات (غير مانعة)</h6>
+            <ul *ngIf="validation.warnings.length > 0; else noWarnings">
+              <li *ngFor="let warning of validation.warnings">
+                {{ warning.messageAr }}
+              </li>
+            </ul>
+            <ng-template #noWarnings>
+              <div class="empty-state">لا توجد تحذيرات.</div>
+            </ng-template>
+          </div>
+        </div>
+
+        <ng-template #emptyValidation>
+          <div class="empty-state">لم يتم تنفيذ التحقق بعد.</div>
+        </ng-template>
+      </section>
+    </section>
+  </div>
+
+  <ng-template #selectRequestTypeFirst>
+    <div class="empty-state">
+      اختر Node (نوع طلب) من الشجرة في المرحلة الأولى لبدء إعداد التوجيه.
+    </div>
+  </ng-template>
+</section>

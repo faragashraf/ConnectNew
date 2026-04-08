@@ -78,6 +78,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
   activePhase: UiPhase = 1;
   groupsLoadedForCategoryId: number | null = null;
+  routingMandatoryCompletionPercent = 0;
 
   message = '';
   messageSeverity: MessageSeverity = 'success';
@@ -191,6 +192,16 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
   get overallCompletionPercent(): number {
     return Math.round((this.phase1CompletionPercent + this.phase2CompletionPercent) / 2);
+  }
+
+  onRoutingCompletionChanged(percent: number): void {
+    const normalized = Number(percent ?? 0);
+    if (!Number.isFinite(normalized)) {
+      this.routingMandatoryCompletionPercent = 0;
+      return;
+    }
+
+    this.routingMandatoryCompletionPercent = Math.max(0, Math.min(100, Math.round(normalized)));
   }
 
   onActivatePhase(phase: UiPhase): void {

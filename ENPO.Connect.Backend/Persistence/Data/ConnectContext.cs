@@ -55,6 +55,8 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<SubjectTypeAdminSetting> SubjectTypeAdminSettings { get; set; }
 
+    public virtual DbSet<SubjectTypeRequestAvailability> SubjectTypeRequestAvailabilities { get; set; }
+
     public virtual DbSet<SubjectCategoryFieldSetting> SubjectCategoryFieldSettings { get; set; }
 
     public virtual DbSet<SubjectStatusHistory> SubjectStatusHistories { get; set; }
@@ -64,6 +66,16 @@ public partial class ConnectContext : DbContext
     public virtual DbSet<SubjectTask> SubjectTasks { get; set; }
 
     public virtual DbSet<NotificationRule> NotificationRules { get; set; }
+
+    public virtual DbSet<SubjectRoutingProfile> SubjectRoutingProfiles { get; set; }
+
+    public virtual DbSet<SubjectRoutingStep> SubjectRoutingSteps { get; set; }
+
+    public virtual DbSet<SubjectRoutingTarget> SubjectRoutingTargets { get; set; }
+
+    public virtual DbSet<SubjectRoutingTransition> SubjectRoutingTransitions { get; set; }
+
+    public virtual DbSet<SubjectTypeRoutingBinding> SubjectTypeRoutingBindings { get; set; }
 
     public override int SaveChanges()
     {
@@ -703,6 +715,49 @@ public partial class ConnectContext : DbContext
             entity.HasIndex(e => e.DisplayOrder, "IX_SubjectTypeAdminSettings_DisplayOrder");
         });
 
+        modelBuilder.Entity<SubjectTypeRequestAvailability>(entity =>
+        {
+            entity.ToTable("SubjectTypeRequestAvailability");
+
+            entity.HasKey(e => e.CategoryId).HasName("PK_SubjectTypeRequestAvailability");
+
+            entity.Property(e => e.CategoryId)
+                .HasColumnName("CategoryID")
+                .ValueGeneratedNever();
+            entity.Property(e => e.AvailabilityMode)
+                .HasMaxLength(20)
+                .HasDefaultValue("Public")
+                .IsRequired();
+            entity.Property(e => e.SelectedNodeType)
+                .HasMaxLength(20);
+            entity.Property(e => e.SelectedNodeNumericId)
+                .HasColumnType("decimal(18,0)");
+            entity.Property(e => e.SelectedNodeUserId)
+                .HasMaxLength(20);
+            entity.Property(e => e.SelectionLabelAr)
+                .HasMaxLength(300);
+            entity.Property(e => e.SelectionPathAr)
+                .HasMaxLength(1000);
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+
+            entity.HasIndex(e => e.AvailabilityMode, "IX_SubjectTypeRequestAvailability_AvailabilityMode");
+            entity.HasIndex(e => new { e.SelectedNodeType, e.SelectedNodeNumericId }, "IX_SubjectTypeRequestAvailability_SelectedNodeType_SelectedNodeNumericId");
+            entity.HasIndex(e => e.SelectedNodeUserId, "IX_SubjectTypeRequestAvailability_SelectedNodeUserId");
+
+            entity.HasOne<Cdcategory>()
+                .WithMany()
+                .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_SubjectTypeRequestAvailability_CDCategory");
+        });
+
         modelBuilder.Entity<SubjectCategoryFieldSetting>(entity =>
         {
             entity.ToTable("SubjectCategoryFieldSettings");
@@ -860,6 +915,345 @@ public partial class ConnectContext : DbContext
                 e => new { e.SubjectTypeId, e.EventType, e.RecipientType, e.RecipientValue },
                 "UX_NotificationRules_SubjectType_EventType_Recipient")
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<SubjectRoutingProfile>(entity =>
+        {
+            entity.ToTable("SubjectRoutingProfiles");
+
+            entity.HasKey(e => e.Id).HasName("PK_SubjectRoutingProfiles");
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.SubjectTypeId)
+                .HasColumnName("SubjectTypeID")
+                .IsRequired();
+            entity.Property(e => e.NameAr)
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(e => e.DescriptionAr)
+                .HasMaxLength(2000);
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.DirectionMode)
+                .HasMaxLength(20)
+                .HasDefaultValue("Both")
+                .IsRequired();
+            entity.Property(e => e.StartStepId)
+                .HasColumnName("StartStepID");
+            entity.Property(e => e.VersionNo)
+                .HasDefaultValue(1)
+                .IsRequired();
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.CreatedDate)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64);
+            entity.Property(e => e.LastModifiedDate)
+                .HasColumnType("datetime2");
+
+            entity.HasIndex(e => new { e.SubjectTypeId, e.IsActive }, "IX_SubjectRoutingProfiles_SubjectType_IsActive");
+            entity.HasIndex(e => new { e.SubjectTypeId, e.NameAr }, "UX_SubjectRoutingProfiles_SubjectType_Name")
+                .IsUnique();
+
+            entity.HasOne<Cdcategory>()
+                .WithMany()
+                .HasForeignKey(e => e.SubjectTypeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_SubjectRoutingProfiles_CDCategory");
+
+            entity.HasOne(e => e.StartStep)
+                .WithMany()
+                .HasForeignKey(e => e.StartStepId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_SubjectRoutingProfiles_StartStep");
+        });
+
+        modelBuilder.Entity<SubjectRoutingStep>(entity =>
+        {
+            entity.ToTable("SubjectRoutingSteps");
+
+            entity.HasKey(e => e.Id).HasName("PK_SubjectRoutingSteps");
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.RoutingProfileId)
+                .HasColumnName("RoutingProfileID")
+                .IsRequired();
+            entity.Property(e => e.StepCode)
+                .HasMaxLength(50)
+                .IsRequired();
+            entity.Property(e => e.StepNameAr)
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(e => e.StepType)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(e => e.StepOrder)
+                .HasDefaultValue(0)
+                .IsRequired();
+            entity.Property(e => e.IsStart)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.IsEnd)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.SlaHours);
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.NotesAr)
+                .HasMaxLength(1000);
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.CreatedDate)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64);
+            entity.Property(e => e.LastModifiedDate)
+                .HasColumnType("datetime2");
+
+            entity.HasIndex(e => e.RoutingProfileId, "IX_SubjectRoutingSteps_RoutingProfileID");
+            entity.HasIndex(e => new { e.RoutingProfileId, e.StepOrder }, "IX_SubjectRoutingSteps_Profile_Order");
+            entity.HasIndex(e => new { e.RoutingProfileId, e.StepCode }, "UX_SubjectRoutingSteps_Profile_StepCode")
+                .IsUnique();
+            entity.HasIndex(e => new { e.RoutingProfileId, e.IsStart }, "UX_SubjectRoutingSteps_Profile_Start")
+                .HasFilter("[IsStart]=(1)")
+                .IsUnique();
+
+            entity.HasOne(e => e.RoutingProfile)
+                .WithMany(e => e.Steps)
+                .HasForeignKey(e => e.RoutingProfileId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_SubjectRoutingSteps_SubjectRoutingProfiles");
+        });
+
+        modelBuilder.Entity<SubjectRoutingTarget>(entity =>
+        {
+            entity.ToTable("SubjectRoutingTargets");
+
+            entity.HasKey(e => e.Id).HasName("PK_SubjectRoutingTargets");
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.RoutingStepId)
+                .HasColumnName("RoutingStepID")
+                .IsRequired();
+            entity.Property(e => e.TargetMode)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(e => e.OracleUnitTypeId)
+                .HasColumnType("decimal(18,0)")
+                .HasColumnName("OracleUnitTypeID");
+            entity.Property(e => e.OracleOrgUnitId)
+                .HasColumnType("decimal(18,0)")
+                .HasColumnName("OracleOrgUnitID");
+            entity.Property(e => e.PositionId)
+                .HasColumnType("decimal(18,0)")
+                .HasColumnName("PositionID");
+            entity.Property(e => e.PositionCode)
+                .HasMaxLength(64);
+            entity.Property(e => e.SelectedNodeType)
+                .HasMaxLength(30);
+            entity.Property(e => e.SelectedNodeNumericId)
+                .HasColumnType("decimal(18,0)");
+            entity.Property(e => e.SelectedNodeUserId)
+                .HasMaxLength(20);
+            entity.Property(e => e.AudienceResolutionMode)
+                .HasMaxLength(40);
+            entity.Property(e => e.WorkDistributionMode)
+                .HasMaxLength(40);
+            entity.Property(e => e.AllowMultipleReceivers)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.SendToLeaderOnly)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.NotesAr)
+                .HasMaxLength(1000);
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.CreatedDate)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64);
+            entity.Property(e => e.LastModifiedDate)
+                .HasColumnType("datetime2");
+
+            entity.HasIndex(e => e.RoutingStepId, "IX_SubjectRoutingTargets_RoutingStepID");
+            entity.HasIndex(e => e.OracleUnitTypeId, "IX_SubjectRoutingTargets_OracleUnitTypeID");
+            entity.HasIndex(e => e.OracleOrgUnitId, "IX_SubjectRoutingTargets_OracleOrgUnitID");
+            entity.HasIndex(e => e.PositionId, "IX_SubjectRoutingTargets_PositionID");
+            entity.HasIndex(e => new { e.SelectedNodeType, e.SelectedNodeNumericId }, "IX_SubjectRoutingTargets_SelectedNodeType_SelectedNodeNumericId");
+            entity.HasIndex(e => e.SelectedNodeUserId, "IX_SubjectRoutingTargets_SelectedNodeUserId");
+
+            entity.HasOne(e => e.RoutingStep)
+                .WithMany(e => e.Targets)
+                .HasForeignKey(e => e.RoutingStepId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_SubjectRoutingTargets_SubjectRoutingSteps");
+        });
+
+        modelBuilder.Entity<SubjectRoutingTransition>(entity =>
+        {
+            entity.ToTable("SubjectRoutingTransitions");
+
+            entity.HasKey(e => e.Id).HasName("PK_SubjectRoutingTransitions");
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.RoutingProfileId)
+                .HasColumnName("RoutingProfileID")
+                .IsRequired();
+            entity.Property(e => e.FromStepId)
+                .HasColumnName("FromStepID")
+                .IsRequired();
+            entity.Property(e => e.ToStepId)
+                .HasColumnName("ToStepID")
+                .IsRequired();
+            entity.Property(e => e.ActionCode)
+                .HasMaxLength(50)
+                .IsRequired();
+            entity.Property(e => e.ActionNameAr)
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(e => e.DisplayOrder)
+                .HasDefaultValue(0)
+                .IsRequired();
+            entity.Property(e => e.RequiresComment)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.RequiresMandatoryFieldsCompletion)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.IsRejectPath)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.IsReturnPath)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.IsEscalationPath)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.ConditionExpression)
+                .HasMaxLength(2000);
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.CreatedDate)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64);
+            entity.Property(e => e.LastModifiedDate)
+                .HasColumnType("datetime2");
+
+            entity.HasIndex(e => e.RoutingProfileId, "IX_SubjectRoutingTransitions_RoutingProfileID");
+            entity.HasIndex(e => e.FromStepId, "IX_SubjectRoutingTransitions_FromStepID");
+            entity.HasIndex(e => e.ToStepId, "IX_SubjectRoutingTransitions_ToStepID");
+            entity.HasIndex(
+                e => new { e.RoutingProfileId, e.FromStepId, e.ToStepId, e.ActionCode },
+                "UX_SubjectRoutingTransitions_Profile_From_To_Action")
+                .IsUnique();
+
+            entity.HasOne(e => e.RoutingProfile)
+                .WithMany(e => e.Transitions)
+                .HasForeignKey(e => e.RoutingProfileId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_SubjectRoutingTransitions_SubjectRoutingProfiles");
+
+            entity.HasOne(e => e.FromStep)
+                .WithMany(e => e.FromTransitions)
+                .HasForeignKey(e => e.FromStepId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_SubjectRoutingTransitions_FromStep");
+
+            entity.HasOne(e => e.ToStep)
+                .WithMany(e => e.ToTransitions)
+                .HasForeignKey(e => e.ToStepId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_SubjectRoutingTransitions_ToStep");
+        });
+
+        modelBuilder.Entity<SubjectTypeRoutingBinding>(entity =>
+        {
+            entity.ToTable("SubjectTypeRoutingBindings");
+
+            entity.HasKey(e => e.Id).HasName("PK_SubjectTypeRoutingBindings");
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.SubjectTypeId)
+                .HasColumnName("SubjectTypeID")
+                .IsRequired();
+            entity.Property(e => e.RoutingProfileId)
+                .HasColumnName("RoutingProfileID")
+                .IsRequired();
+            entity.Property(e => e.IsDefault)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.Property(e => e.AppliesToInbound)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.AppliesToOutbound)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.CreatedDate)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64);
+            entity.Property(e => e.LastModifiedDate)
+                .HasColumnType("datetime2");
+
+            entity.HasIndex(e => e.RoutingProfileId, "IX_SubjectTypeRoutingBindings_RoutingProfileID");
+            entity.HasIndex(e => new { e.SubjectTypeId, e.IsActive }, "IX_SubjectTypeRoutingBindings_SubjectType_IsActive");
+            entity.HasIndex(
+                e => new { e.SubjectTypeId, e.RoutingProfileId },
+                "UX_SubjectTypeRoutingBindings_SubjectType_Profile")
+                .IsUnique();
+            entity.HasIndex(
+                e => new { e.SubjectTypeId, e.IsDefault },
+                "UX_SubjectTypeRoutingBindings_SubjectType_Default")
+                .HasFilter("[IsDefault]=(1) AND [IsActive]=(1)")
+                .IsUnique();
+
+            entity.HasOne(e => e.RoutingProfile)
+                .WithMany(e => e.Bindings)
+                .HasForeignKey(e => e.RoutingProfileId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_SubjectTypeRoutingBindings_SubjectRoutingProfiles");
+
+            entity.HasOne<Cdcategory>()
+                .WithMany()
+                .HasForeignKey(e => e.SubjectTypeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_SubjectTypeRoutingBindings_CDCategory");
         });
 
         modelBuilder.HasSequence<int>("Seq_Categories").StartsAt(101L);

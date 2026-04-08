@@ -373,4 +373,37 @@
       </div>
     </ng-template>
   </section>
+
+  <section class="card routing-card">
+    <header class="card-header">
+      <div>
+        <h3>إدارة التوجيه الذكي (Routing)</h3>
+        <small>مرحلة الإدارة داخل ControlCenterCatalog - عربي RTL + PrimeNG</small>
+      </div>
+      <div class="routing-tags">
+        <p-tag
+          [value]="'اكتمال الإلزامي: ' + routingMandatoryCompletionPercent + '%'"
+          severity="danger">
+        </p-tag>
+        <p-tag value="اختياري: تحسينات إضافية (auto-layout/export)" severity="info"></p-tag>
+      </div>
+    </header>
+
+    <div class="context-banner" *ngIf="selectedCategoryId; else routingNoNodeSelected">
+      <strong>Request Type الحالي للتوجيه:</strong>
+      <span>{{ selectedCategoryPathLabel }}</span>
+    </div>
+
+    <app-admin-control-center-catalog-routing-workspace
+      [requestTypeId]="selectedCategoryId"
+      [requestTypeLabel]="selectedCategoryPathLabel"
+      (completionPercentChange)="onRoutingCompletionChanged($event)">
+    </app-admin-control-center-catalog-routing-workspace>
+
+    <ng-template #routingNoNodeSelected>
+      <div class="empty-state">
+        لا يمكن بدء إعداد التوجيه قبل اختيار Node (نوع طلب) من الشجرة في المرحلة الأولى.
+      </div>
+    </ng-template>
+  </section>
 </section>

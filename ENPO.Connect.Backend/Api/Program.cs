@@ -20,6 +20,7 @@ using Persistence.HelperServices;
 using Persistence.Services;
 using Persistence.Services.DynamicSubjects;
 using Persistence.Services.DynamicSubjects.AdminCatalog;
+using Persistence.Services.DynamicSubjects.AdminRouting;
 using Persistence.Services.Notifications;
 using Persistence.UnitOfWorks;
 using SignalR.Notification;
@@ -82,6 +83,8 @@ builder.Services.AddScoped<ISubjectNotificationService, SubjectNotificationServi
 builder.Services.AddScoped<IDynamicSubjectsService, DynamicSubjectsService>();
 builder.Services.AddScoped<IDynamicSubjectsAdminCatalogRepository, DynamicSubjectsAdminCatalogRepository>();
 builder.Services.AddScoped<IDynamicSubjectsAdminCatalogService, DynamicSubjectsAdminCatalogService>();
+builder.Services.AddScoped<IDynamicSubjectsAdminRoutingRepository, DynamicSubjectsAdminRoutingRepository>();
+builder.Services.AddScoped<IDynamicSubjectsAdminRoutingService, DynamicSubjectsAdminRoutingService>();
 builder.Services.AddScoped<IDynamicSubjectsRealtimePublisher, DynamicSubjectsRealtimePublisher>();
 builder.Services.AddScoped<ISubjectReferenceGenerator, SubjectReferenceGenerator>();
 builder.Services.AddHostedService<SummerPaymentAutoCancellationHostedService>();
