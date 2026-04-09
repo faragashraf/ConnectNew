@@ -11,6 +11,8 @@ export interface FieldAccessPolicyDto {
   name: string;
   isActive: boolean;
   defaultAccessMode: FieldAccessPermissionType;
+  lastModifiedDateUtc?: string;
+  lastModifiedBy?: string;
 }
 
 export interface FieldAccessPolicyRuleDto {
@@ -98,13 +100,57 @@ export interface FieldAccessPreviewResponseDto {
   requestTypeId: number;
   stageId?: number;
   actionId?: number;
+  stageLabel: string;
+  actionLabel: string;
   subjectType?: string;
   subjectId?: string;
+  contextSummaryAr?: string;
   groups: SubjectGroupDefinitionDto[];
   fields: SubjectFieldDefinitionDto[];
+  groupResolutions: FieldAccessPreviewResolutionItemDto[];
+  fieldResolutions: FieldAccessPreviewResolutionItemDto[];
   hiddenGroupsCount: number;
   hiddenFieldsCount: number;
   readOnlyFieldsCount: number;
   requiredFieldsCount: number;
   lockedFieldsCount: number;
+}
+
+export interface FieldAccessPreviewResolutionItemDto {
+  targetLevel: string;
+  targetId: number;
+  targetLabel: string;
+  groupId?: number;
+  groupLabel?: string;
+  canView: boolean;
+  isReadOnly: boolean;
+  isRequired: boolean;
+  isLocked: boolean;
+  finalStateCode: string;
+  finalStateAr: string;
+  effectiveSourceType: string;
+  effectiveSourceAr: string;
+  finalReasonAr: string;
+  appliedPolicies: FieldAccessPreviewAppliedPolicyDto[];
+}
+
+export interface FieldAccessPreviewAppliedPolicyDto {
+  sourceType: string;
+  sourceTypeAr: string;
+  permissionKind: string;
+  permissionKindAr: string;
+  targetLevel: string;
+  targetId: number;
+  stageId?: number;
+  actionId?: number;
+  ruleId?: number;
+  lockId?: number;
+  overrideId?: number;
+  permissionType?: string;
+  effect?: string;
+  lockMode?: string;
+  subjectType?: string;
+  subjectId?: string;
+  notes?: string;
+  descriptionAr: string;
 }

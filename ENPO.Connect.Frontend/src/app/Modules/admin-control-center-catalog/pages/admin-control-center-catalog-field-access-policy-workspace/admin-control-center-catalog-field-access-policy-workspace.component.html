@@ -6,6 +6,7 @@
         نوع الطلب الحالي:
         <strong>{{ requestContextLabel }}</strong>
       </p>
+      <small class="save-hint" *ngIf="!canSaveWorkspace && saveDisabledReason.length > 0">{{ saveDisabledReason }}</small>
     </div>
 
     <div class="header-actions">
@@ -18,12 +19,23 @@
         [disabled]="loadingWorkspace || !canManageWorkspace"
         (click)="onRefreshWorkspace()">
       </button>
+
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        icon="pi pi-star"
+        label="تحميل Demo Pack"
+        [disabled]="!canManageWorkspace || loadingWorkspace"
+        (click)="onApplyOverviewDemoPack()">
+      </button>
+
       <button
         pButton
         type="button"
         icon="pi pi-save"
         label="حفظ كل التغييرات"
-        [disabled]="savingWorkspace || !canManageWorkspace || !defaultPolicyReady"
+        [disabled]="!canSaveWorkspace"
         [loading]="savingWorkspace"
         (click)="onSaveWorkspace()">
       </button>
@@ -32,6 +44,10 @@
 
   <div class="message" *ngIf="message.length > 0" [ngClass]="messageSeverity">
     {{ message }}
+  </div>
+
+  <div class="dirty-banner" *ngIf="hasUnsavedChanges">
+    لديك تغييرات محلية غير محفوظة. الإضافة/التعديل داخل القواعد والأقفال لا يُطبق فعليًا إلا بعد الضغط على "حفظ كل التغييرات".
   </div>
 
   <section class="progress-card">
@@ -77,11 +93,22 @@
           <span>الحقول</span>
           <strong>{{ data.fields.length }}</strong>
         </article>
+        <article class="stat-card">
+          <span>آخر تعديل</span>
+          <strong>{{ lastModifiedLabel }}</strong>
+        </article>
       </section>
 
       <div class="overview-notes" *ngIf="workspace as data">
         <p-tag [severity]="data.policy.isActive ? 'success' : 'danger'" [value]="data.policy.isActive ? 'السياسة مفعلة' : 'السياسة غير مفعلة'"></p-tag>
         <p-tag severity="info" [value]="'الوضع الافتراضي: ' + data.policy.defaultAccessMode"></p-tag>
+        <p-tag [severity]="hasUnsavedChanges ? 'warning' : 'success'" [value]="hasUnsavedChanges ? 'يوجد تغييرات غير محفوظة' : 'كل التغييرات محفوظة'"></p-tag>
+      </div>
+
+      <div class="demo-card" *ngIf="workspace">
+        <h5>أمثلة جاهزة</h5>
+        <p>يمكنك تحميل أمثلة عملية في جميع التابات لتجربة البناء الجديد بسرعة.</p>
+        <button pButton type="button" icon="pi pi-bolt" label="تحميل حزمة أمثلة كاملة" (click)="onApplyOverviewDemoPack()"></button>
       </div>
 
       <ng-template #workspaceLoading>
@@ -102,7 +129,7 @@
         <div class="grid two-cols">
           <div class="field span-two">
             <label for="policyName">اسم السياسة <span class="required">*</span></label>
-            <input pInputText id="policyName" formControlName="policyName" placeholder="مثال: سياسة طلبات الموارد البشرية" />
+            <input pInputText id="policyName" formControlName="policyName" placeholder="مثال: سياسة الوصول - التظلمات" />
           </div>
 
           <div class="field">
@@ -122,14 +149,19 @@
             <p-inputSwitch inputId="isPolicyActive" formControlName="isPolicyActive"></p-inputSwitch>
           </div>
         </div>
+
+        <div class="actions">
+          <button pButton type="button" class="p-button-outlined" icon="pi pi-lightbulb" label="تعبئة مثال عملي" (click)="onApplyDefaultPolicyDemo()"></button>
+        </div>
       </form>
     </p-tabPanel>
 
     <p-tabPanel header="Stage/Action Rules" [disabled]="!defaultPolicyReady">
       <div class="workspace-grid">
         <form class="editor" [formGroup]="ruleForm" novalidate>
-          <h5>إضافة قاعدة جديدة</h5>
-          <p class="required-note"><span>*</span> Action لا يعمل بدون Stage</p>
+          <h5>{{ ruleEditorTitle }}</h5>
+          <p class="required-note"><span>*</span> Action لا تعمل بدون Stage. Subject Id إلزامي فقط مع OrgUnit/Position/User.</p>
+          <p class="local-note">الإضافة/التعديل هنا محلي حتى تقوم بحفظ Workspace.</p>
 
           <div class="grid two-cols">
             <div class="field">
@@ -175,7 +207,8 @@
                 optionValue="value"
                 formControlName="actionId"
                 appendTo="body"
-                [showClear]="true">
+                [showClear]="true"
+                [disabled]="isRuleActionDisabled">
               </p-dropdown>
             </div>
 
@@ -202,12 +235,16 @@
             </div>
 
             <div class="field">
-              <label>Subject Id (عند الحاجة)</label>
+              <label>
+                Subject Id
+                <span class="required" *ngIf="ruleSubjectIdRequired">*</span>
+                <span class="optional" *ngIf="!ruleSubjectIdRequired">(اختياري)</span>
+              </label>
               <input pInputText formControlName="subjectId" placeholder="مثال: 120 أو user123" />
             </div>
 
             <div class="field">
-              <label>Effect</label>
+              <label>Effect <span class="required">*</span></label>
               <p-dropdown
                 [options]="effectOptions"
                 optionLabel="label"
@@ -218,7 +255,7 @@
             </div>
 
             <div class="field">
-              <label>Priority</label>
+              <label>Priority <span class="required">*</span></label>
               <input pInputText type="number" formControlName="priority" />
             </div>
 
@@ -233,8 +270,38 @@
             </div>
           </div>
 
+          <ul class="validation-list" *ngIf="ruleValidationMessages.length > 0">
+            <li *ngFor="let issue of ruleValidationMessages; trackBy: trackByIndex">{{ issue }}</li>
+          </ul>
+
           <div class="actions">
-            <button pButton type="button" icon="pi pi-plus" label="إضافة القاعدة" (click)="onAddRule()"></button>
+            <button
+              pButton
+              type="button"
+              [icon]="isRuleEditMode ? 'pi pi-check' : 'pi pi-plus'"
+              [label]="isRuleEditMode ? 'حفظ التعديل' : 'إضافة القاعدة'"
+              [disabled]="!canSubmitRule"
+              (click)="onRulePrimaryAction()">
+            </button>
+
+            <button
+              pButton
+              type="button"
+              class="p-button-secondary p-button-outlined"
+              icon="pi pi-times"
+              label="إلغاء التعديل"
+              *ngIf="isRuleEditMode"
+              (click)="onCancelRuleEdit()">
+            </button>
+
+            <button
+              pButton
+              type="button"
+              class="p-button-outlined"
+              icon="pi pi-lightbulb"
+              label="إضافة أمثلة قواعد"
+              (click)="onSeedRuleExamples()">
+            </button>
           </div>
         </form>
 
@@ -252,11 +319,11 @@
                 <th>Subject</th>
                 <th>Priority</th>
                 <th>Active</th>
-                <th></th>
+                <th>إجراءات</th>
               </tr>
             </ng-template>
             <ng-template pTemplate="body" let-rule let-rowIndex="rowIndex">
-              <tr>
+              <tr [class.editing-row]="editingRuleIndex === rowIndex">
                 <td>{{ rule.targetLevel }} #{{ rule.targetId }}</td>
                 <td>{{ rule.stageId || '-' }} / {{ rule.actionId || '-' }}</td>
                 <td>{{ rule.permissionType }} ({{ rule.effect }})</td>
@@ -265,8 +332,21 @@
                 <td>
                   <p-tag [value]="rule.isActive ? 'نعم' : 'لا'" [severity]="rule.isActive ? 'success' : 'danger'"></p-tag>
                 </td>
-                <td>
-                  <button pButton type="button" class="p-button-text p-button-danger" icon="pi pi-trash" (click)="onRemoveRule(rowIndex)"></button>
+                <td class="row-actions">
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text"
+                    icon="pi pi-pencil"
+                    (click)="onStartEditRule(rowIndex)">
+                  </button>
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-danger"
+                    icon="pi pi-trash"
+                    (click)="onRemoveRule(rowIndex)">
+                  </button>
                 </td>
               </tr>
             </ng-template>
@@ -279,6 +359,8 @@
       <div class="workspace-grid">
         <form class="editor" [formGroup]="lockForm" novalidate>
           <h5>إضافة قفل جديد</h5>
+          <p class="required-note"><span>*</span> Action لا تعمل بدون Stage. Override Subject Id إلزامي فقط مع OrgUnit/Position/User.</p>
+          <p class="local-note">الإضافة هنا محلية حتى تحفظ Workspace.</p>
 
           <div class="grid two-cols">
             <div class="field">
@@ -324,7 +406,8 @@
                 optionValue="value"
                 formControlName="actionId"
                 appendTo="body"
-                [showClear]="true">
+                [showClear]="true"
+                [disabled]="isLockActionDisabled">
               </p-dropdown>
             </div>
 
@@ -352,7 +435,11 @@
             </div>
 
             <div class="field">
-              <label>Override Subject Id</label>
+              <label>
+                Override Subject Id
+                <span class="required" *ngIf="lockOverrideSubjectIdRequired">*</span>
+                <span class="optional" *ngIf="!lockOverrideSubjectIdRequired">(اختياري)</span>
+              </label>
               <input pInputText formControlName="allowedOverrideSubjectId" placeholder="اختياري" />
             </div>
 
@@ -367,8 +454,13 @@
             </div>
           </div>
 
+          <ul class="validation-list" *ngIf="lockValidationMessages.length > 0">
+            <li *ngFor="let issue of lockValidationMessages; trackBy: trackByIndex">{{ issue }}</li>
+          </ul>
+
           <div class="actions">
-            <button pButton type="button" icon="pi pi-plus" label="إضافة القفل" (click)="onAddLock()"></button>
+            <button pButton type="button" icon="pi pi-plus" label="إضافة القفل" [disabled]="!canAddLock" (click)="onAddLock()"></button>
+            <button pButton type="button" class="p-button-outlined" icon="pi pi-lightbulb" label="إضافة أمثلة أقفال" (click)="onSeedLockExamples()"></button>
           </div>
         </form>
 
@@ -385,7 +477,7 @@
                 <th>Lock Mode</th>
                 <th>Override</th>
                 <th>Active</th>
-                <th></th>
+                <th>إجراءات</th>
               </tr>
             </ng-template>
             <ng-template pTemplate="body" let-item let-rowIndex="rowIndex">
@@ -410,6 +502,15 @@
     <p-tabPanel header="Preview" [disabled]="!defaultPolicyReady">
       <form class="editor" [formGroup]="previewForm" novalidate>
         <p class="required-note"><span>*</span> Subject Id مطلوب فقط إذا كان Subject Type = OrgUnit/Position/User</p>
+        <p class="local-note">المعاينة تعتمد على آخر نسخة محفوظة من Workspace.</p>
+
+        <div class="scenario-actions">
+          <button pButton type="button" class="p-button-outlined" label="سيناريو RequestOwner" (click)="onApplyPreviewScenario('RequestOwner')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو CurrentCustodian" (click)="onApplyPreviewScenario('CurrentCustodian')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو User" (click)="onApplyPreviewScenario('User')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو Position" (click)="onApplyPreviewScenario('Position')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو OrgUnit" (click)="onApplyPreviewScenario('OrgUnit')"></button>
+        </div>
 
         <div class="grid two-cols">
           <div class="field">
@@ -432,7 +533,8 @@
               optionValue="value"
               formControlName="actionId"
               appendTo="body"
-              [showClear]="true">
+              [showClear]="true"
+              [disabled]="isPreviewActionDisabled">
             </p-dropdown>
           </div>
 
@@ -449,7 +551,11 @@
           </div>
 
           <div class="field">
-            <label>Subject Id</label>
+            <label>
+              Subject Id
+              <span class="required" *ngIf="previewSubjectIdRequired">*</span>
+              <span class="optional" *ngIf="!previewSubjectIdRequired">(اختياري)</span>
+            </label>
             <input pInputText formControlName="subjectId" placeholder="مثال: UserId أو PositionId" />
           </div>
 
@@ -469,48 +575,68 @@
           </div>
         </div>
 
+        <ul class="validation-list" *ngIf="previewValidationMessages.length > 0">
+          <li *ngFor="let issue of previewValidationMessages; trackBy: trackByIndex">{{ issue }}</li>
+        </ul>
+
         <div class="actions">
           <button
             pButton
             type="button"
             icon="pi pi-eye"
             label="تشغيل المعاينة"
+            [disabled]="!canRunPreview"
             [loading]="loadingPreview"
             (click)="onRunPreview()">
           </button>
         </div>
       </form>
 
+      <section class="preview-context" *ngIf="preview as data">
+        <p-tag severity="info" [value]="'المرحلة الحالية: ' + data.stageLabel"></p-tag>
+        <p-tag severity="info" [value]="'الإجراء الحالي: ' + data.actionLabel"></p-tag>
+        <p-tag severity="warning" [value]="'السياق: ' + (data.subjectType || 'المستخدم الحالي') + (data.subjectId ? ' (' + data.subjectId + ')' : '')"></p-tag>
+      </section>
+
+      <div class="context-summary" *ngIf="preview?.contextSummaryAr as contextSummary">
+        {{ contextSummary }}
+      </div>
+
       <section class="preview-summary" *ngIf="preview as data">
-        <p-tag severity="warning" [value]="'Hidden Groups: ' + data.hiddenGroupsCount"></p-tag>
-        <p-tag severity="warning" [value]="'Hidden Fields: ' + data.hiddenFieldsCount"></p-tag>
-        <p-tag severity="info" [value]="'ReadOnly Fields: ' + data.readOnlyFieldsCount"></p-tag>
-        <p-tag severity="danger" [value]="'Required Fields: ' + data.requiredFieldsCount"></p-tag>
-        <p-tag severity="danger" [value]="'Locked Fields: ' + data.lockedFieldsCount"></p-tag>
+        <p-tag severity="warning" [value]="'المجموعات المخفية: ' + data.hiddenGroupsCount"></p-tag>
+        <p-tag severity="warning" [value]="'الحقول المخفية: ' + data.hiddenFieldsCount"></p-tag>
+        <p-tag severity="info" [value]="'حقول القراءة فقط: ' + data.readOnlyFieldsCount"></p-tag>
+        <p-tag severity="danger" [value]="'الحقول الإلزامية: ' + data.requiredFieldsCount"></p-tag>
+        <p-tag severity="danger" [value]="'الحقول المقفلة: ' + data.lockedFieldsCount"></p-tag>
       </section>
 
       <div class="preview-grid" *ngIf="preview as data">
         <section class="table-card">
           <header>
-            <h5>المجموعات (كما يراها المستخدم)</h5>
+            <h5>Effective Resolution - المجموعات</h5>
           </header>
-          <p-table [value]="data.groups" responsiveLayout="scroll" [rows]="6" [paginator]="data.groups.length > 6">
+
+          <p-table [value]="previewGroupResolutions" responsiveLayout="scroll" [rows]="6" [paginator]="previewGroupResolutions.length > 6">
             <ng-template pTemplate="header">
               <tr>
                 <th>المجموعة</th>
-                <th>الظهور</th>
-                <th>التعديل</th>
-                <th>مطلوب</th>
-                <th>Lock</th>
+                <th>الحالة النهائية</th>
+                <th>المصدر الفعال</th>
+                <th>السبب</th>
+                <th>التفاصيل</th>
               </tr>
             </ng-template>
-            <ng-template pTemplate="body" let-group>
+            <ng-template pTemplate="body" let-item>
               <tr>
-                <td>{{ group.groupName }} (#{{ group.groupId }})</td>
-                <td><span [ngClass]="statusClass(group.canView)">{{ statusLabel(group.canView, 'ظاهر', 'مخفي') }}</span></td>
-                <td><span [ngClass]="statusClass(!group.isReadOnly)">{{ statusLabel(!group.isReadOnly, 'Editable', 'ReadOnly') }}</span></td>
-                <td><span [ngClass]="statusClass(group.isRequired)">{{ statusLabel(group.isRequired, 'نعم', 'لا') }}</span></td>
-                <td>{{ group.isLocked ? (group.lockReason || 'Locked') : '—' }}</td>
+                <td>{{ item.targetLabel }} (#{{ item.targetId }})</td>
+                <td>{{ item.finalStateAr }}</td>
+                <td>{{ item.effectiveSourceAr }}</td>
+                <td>{{ item.finalReasonAr }}</td>
+                <td>
+                  <div class="trace-list">
+                    <span class="trace-pill" *ngFor="let trace of item.appliedPolicies">{{ formatPreviewTrace(trace) }}</span>
+                  </div>
+                </td>
               </tr>
             </ng-template>
           </p-table>
@@ -518,7 +644,40 @@
 
         <section class="table-card">
           <header>
-            <h5>الحقول (كما يراها المستخدم)</h5>
+            <h5>Effective Resolution - الحقول</h5>
+          </header>
+
+          <p-table [value]="previewFieldResolutions" responsiveLayout="scroll" [rows]="8" [paginator]="previewFieldResolutions.length > 8">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>الحقل</th>
+                <th>المجموعة</th>
+                <th>الحالة النهائية</th>
+                <th>المصدر الفعال</th>
+                <th>السبب</th>
+                <th>التفاصيل</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-item>
+              <tr>
+                <td>{{ item.targetLabel }} (#{{ item.targetId }})</td>
+                <td>{{ item.groupLabel || '-' }}</td>
+                <td>{{ item.finalStateAr }}</td>
+                <td>{{ item.effectiveSourceAr }}</td>
+                <td>{{ item.finalReasonAr }}</td>
+                <td>
+                  <div class="trace-list">
+                    <span class="trace-pill" *ngFor="let trace of item.appliedPolicies">{{ formatPreviewTrace(trace) }}</span>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+
+        <section class="table-card">
+          <header>
+            <h5>الحقول كما يراها المستخدم</h5>
           </header>
           <p-table [value]="data.fields" responsiveLayout="scroll" [rows]="8" [paginator]="data.fields.length > 8">
             <ng-template pTemplate="header">

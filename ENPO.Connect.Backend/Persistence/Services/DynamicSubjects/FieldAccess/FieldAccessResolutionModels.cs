@@ -61,4 +61,47 @@ public sealed class FieldAccessResolvedState
     public bool IsLocked { get; set; }
 
     public string? LockReason { get; set; }
+
+    public string FinalStateCode { get; set; } = "Editable";
+
+    public string? EffectiveSourceType { get; set; }
+
+    public string? EffectiveReasonAr { get; set; }
+
+    public List<FieldAccessAppliedTrace> AppliedTraces { get; set; } = new();
+}
+
+public sealed class FieldAccessAppliedTrace
+{
+    public string SourceType { get; set; } = string.Empty;
+
+    public string PermissionKind { get; set; } = string.Empty;
+
+    public string TargetLevel { get; set; } = string.Empty;
+
+    public int TargetId { get; set; }
+
+    public int? StageId { get; set; }
+
+    public int? ActionId { get; set; }
+
+    public int? RuleId { get; set; }
+
+    public int? LockId { get; set; }
+
+    public int? OverrideId { get; set; }
+
+    public string? PermissionType { get; set; }
+
+    public string? Effect { get; set; }
+
+    public string? LockMode { get; set; }
+
+    public string? SubjectType { get; set; }
+
+    public string? SubjectId { get; set; }
+
+    public string? Notes { get; set; }
+
+    public string? DescriptionAr { get; set; }
 }

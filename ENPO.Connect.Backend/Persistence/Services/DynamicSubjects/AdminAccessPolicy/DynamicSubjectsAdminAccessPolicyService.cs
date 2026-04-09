@@ -91,8 +91,16 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
             var safeRequest = request ?? new FieldAccessPolicyWorkspaceUpsertRequestDto();
             var policyName = NormalizeNullable(safeRequest.PolicyName) ?? $"سياسة الوصول - {requestTypeId}";
             var defaultAccessMode = NormalizeAccessMode(safeRequest.DefaultAccessMode);
+            var metadata = await LoadMetadataAsync(requestTypeId, cancellationToken);
+            var routingLookups = await LoadRoutingLookupsAsync(requestTypeId, cancellationToken);
 
-            var validationErrors = ValidateUpsertRequest(safeRequest);
+            var validationErrors = ValidateUpsertRequest(
+                safeRequest,
+                requestTypeId,
+                metadata.GroupLookups.Select(item => item.Id).ToHashSet(),
+                metadata.FieldLookups.Select(item => item.Id).ToHashSet(),
+                routingLookups.Stages,
+                routingLookups.Actions);
             if (validationErrors.Count > 0)
             {
                 foreach (var error in validationErrors)
@@ -150,32 +158,18 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
             foreach (var rule in safeRequest.Rules ?? new List<FieldAccessPolicyRuleDto>())
             {
                 var targetLevel = NormalizeTargetLevel(rule.TargetLevel);
-                if (targetLevel == null || rule.TargetId <= 0)
-                {
-                    continue;
-                }
-
                 var normalizedSubjectType = NormalizeSubjectType(rule.SubjectType);
-                if (normalizedSubjectType == null)
-                {
-                    continue;
-                }
-
                 var normalizedSubjectId = NormalizeNullable(rule.SubjectId);
-                if (RequiresSubjectId(normalizedSubjectType) && normalizedSubjectId == null)
-                {
-                    continue;
-                }
 
                 await _connectContext.FieldAccessPolicyRules.AddAsync(new FieldAccessPolicyRule
                 {
                     PolicyId = policy.Id,
-                    TargetLevel = targetLevel,
+                    TargetLevel = targetLevel!,
                     TargetId = rule.TargetId,
                     StageId = NormalizePositiveInt(rule.StageId),
                     ActionId = NormalizePositiveInt(rule.ActionId),
                     PermissionType = NormalizeAccessMode(rule.PermissionType),
-                    SubjectType = normalizedSubjectType,
+                    SubjectType = normalizedSubjectType!,
                     SubjectId = normalizedSubjectId,
                     Effect = NormalizeEffect(rule.Effect),
                     Priority = rule.Priority,
@@ -191,17 +185,13 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
             foreach (var lockItem in safeRequest.Locks ?? new List<FieldAccessLockDto>())
             {
                 var targetLevel = NormalizeTargetLevel(lockItem.TargetLevel);
-                if (targetLevel == null || lockItem.TargetId <= 0)
-                {
-                    continue;
-                }
 
                 await _connectContext.FieldAccessLocks.AddAsync(new FieldAccessLock
                 {
                     RequestTypeId = requestTypeId,
                     StageId = NormalizePositiveInt(lockItem.StageId),
                     ActionId = NormalizePositiveInt(lockItem.ActionId),
-                    TargetLevel = targetLevel,
+                    TargetLevel = targetLevel!,
                     TargetId = lockItem.TargetId,
                     LockMode = NormalizeLockMode(lockItem.LockMode),
                     AllowedOverrideSubjectType = NormalizeSubjectType(lockItem.AllowedOverrideSubjectType),
@@ -258,10 +248,30 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
                 return response;
             }
 
+            var safeRequest = request ?? new FieldAccessPreviewRequestDto();
             var metadata = await LoadMetadataAsync(requestTypeId, cancellationToken);
+            var routingLookups = await LoadRoutingLookupsAsync(requestTypeId, cancellationToken);
+
+            var normalizedStageId = NormalizePositiveInt(safeRequest.StageId);
+            var normalizedActionId = NormalizePositiveInt(safeRequest.ActionId);
+            var previewValidationErrors = ValidatePreviewRequest(
+                safeRequest,
+                normalizedStageId,
+                normalizedActionId,
+                routingLookups.Stages,
+                routingLookups.Actions);
+            if (previewValidationErrors.Count > 0)
+            {
+                foreach (var error in previewValidationErrors)
+                {
+                    response.Errors.Add(error);
+                }
+
+                return response;
+            }
 
             Message? message = null;
-            var requestId = NormalizePositiveInt(request?.RequestId);
+            var requestId = NormalizePositiveInt(safeRequest.RequestId);
             if (requestId.HasValue)
             {
                 message = await _connectContext.Messages
@@ -269,23 +279,23 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
                     .FirstOrDefaultAsync(item => item.MessageId == requestId.Value, cancellationToken);
             }
 
-            var previewSubjectType = NormalizeSubjectType(request?.SubjectType);
+            var previewSubjectType = NormalizeSubjectType(safeRequest.SubjectType);
             var subjectOverride = previewSubjectType == null
                 ? null
                 : new FieldAccessSubjectContextOverride
                 {
                     SubjectType = previewSubjectType,
-                    SubjectId = NormalizeNullable(request?.SubjectId),
-                    RequestOwnerUserId = NormalizeNullable(request?.RequestOwnerUserId),
-                    CurrentCustodianUnitId = NormalizeNullable(request?.CurrentCustodianUnitId)
+                    SubjectId = NormalizeNullable(safeRequest.SubjectId),
+                    RequestOwnerUserId = NormalizeNullable(safeRequest.RequestOwnerUserId),
+                    CurrentCustodianUnitId = NormalizeNullable(safeRequest.CurrentCustodianUnitId)
                 };
 
             var resolution = await _resolutionService.ResolveAsync(new FieldAccessResolutionRequest
             {
                 RequestTypeId = requestTypeId,
                 RequestId = requestId,
-                StageId = NormalizePositiveInt(request?.StageId),
-                ActionId = NormalizePositiveInt(request?.ActionId),
+                StageId = normalizedStageId,
+                ActionId = normalizedActionId,
                 UserId = normalizedUserId,
                 Message = message,
                 Groups = metadata.Groups,
@@ -293,6 +303,7 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
                 SubjectContextOverride = subjectOverride
             }, cancellationToken);
 
+            var groupResolutionItems = new List<FieldAccessPreviewResolutionItemDto>();
             foreach (var group in metadata.Groups)
             {
                 if (!resolution.GroupStates.TryGetValue(group.GroupId, out var state))
@@ -301,8 +312,14 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
                 }
 
                 ApplyResolvedState(group, state);
+                groupResolutionItems.Add(BuildGroupResolutionItem(group, state));
             }
 
+            var groupNameMap = metadata.Groups
+                .GroupBy(item => item.GroupId)
+                .ToDictionary(group => group.Key, group => group.First().GroupName);
+
+            var fieldResolutionItems = new List<FieldAccessPreviewResolutionItemDto>();
             foreach (var field in metadata.Fields)
             {
                 if (!resolution.FieldStatesByMendSql.TryGetValue(field.MendSql, out var state))
@@ -311,17 +328,31 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
                 }
 
                 ApplyResolvedState(field, state);
+                fieldResolutionItems.Add(BuildFieldResolutionItem(field, groupNameMap, state));
             }
+
+            var stageLabel = ResolveStageLabel(normalizedStageId, routingLookups.Stages);
+            var actionLabel = ResolveActionLabel(normalizedActionId, routingLookups.Actions);
+            var contextSummaryAr = BuildPreviewContextSummaryAr(
+                stageLabel,
+                actionLabel,
+                previewSubjectType,
+                NormalizeNullable(safeRequest.SubjectId));
 
             response.Data = new FieldAccessPreviewResponseDto
             {
                 RequestTypeId = requestTypeId,
-                StageId = NormalizePositiveInt(request?.StageId),
-                ActionId = NormalizePositiveInt(request?.ActionId),
+                StageId = normalizedStageId,
+                ActionId = normalizedActionId,
+                StageLabel = stageLabel,
+                ActionLabel = actionLabel,
                 SubjectType = previewSubjectType,
-                SubjectId = NormalizeNullable(request?.SubjectId),
+                SubjectId = NormalizeNullable(safeRequest.SubjectId),
+                ContextSummaryAr = contextSummaryAr,
                 Groups = metadata.Groups,
                 Fields = metadata.Fields,
+                GroupResolutions = groupResolutionItems,
+                FieldResolutions = fieldResolutionItems,
                 HiddenGroupsCount = metadata.Groups.Count(item => item.IsHidden),
                 HiddenFieldsCount = metadata.Fields.Count(item => item.IsHidden),
                 ReadOnlyFieldsCount = metadata.Fields.Count(item => item.IsReadOnly),
@@ -382,7 +413,9 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
                 Id = policy?.Id,
                 Name = policy?.Name ?? $"سياسة الوصول - {requestTypeId}",
                 IsActive = policy?.IsActive ?? true,
-                DefaultAccessMode = policy?.DefaultAccessMode ?? "Editable"
+                DefaultAccessMode = policy?.DefaultAccessMode ?? "Editable",
+                LastModifiedDateUtc = policy?.LastModifiedDate ?? policy?.CreatedDate,
+                LastModifiedBy = policy?.LastModifiedBy ?? policy?.CreatedBy
             },
             Rules = rules.Select(MapRule).ToList(),
             Locks = locks.Select(MapLock).ToList(),
@@ -674,56 +707,399 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
         target.Required = source.IsRequired;
     }
 
-    private static List<Error> ValidateUpsertRequest(FieldAccessPolicyWorkspaceUpsertRequestDto request)
+    private static List<Error> ValidateUpsertRequest(
+        FieldAccessPolicyWorkspaceUpsertRequestDto request,
+        int requestTypeId,
+        HashSet<int> validGroupIds,
+        HashSet<int> validFieldIds,
+        IReadOnlyCollection<FieldAccessStageLookupDto> stageLookups,
+        IReadOnlyCollection<FieldAccessActionLookupDto> actionLookups)
     {
         var errors = new List<Error>();
         var safeRequest = request ?? new FieldAccessPolicyWorkspaceUpsertRequestDto();
+        var validStageIds = stageLookups.Select(item => item.Id).ToHashSet();
+        var actionById = actionLookups.ToDictionary(item => item.Id);
 
-        foreach (var rule in safeRequest.Rules ?? new List<FieldAccessPolicyRuleDto>())
+        for (var index = 0; index < (safeRequest.Rules?.Count ?? 0); index++)
         {
+            var rule = safeRequest.Rules[index];
+            var rowLabel = $"القاعدة رقم {index + 1}";
             var targetLevel = NormalizeTargetLevel(rule.TargetLevel);
             if (targetLevel == null)
             {
-                errors.Add(new Error { Code = "400", Message = "مستوى الهدف في القاعدة غير صالح." });
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: مستوى الهدف غير صالح." });
                 continue;
             }
 
             if (rule.TargetId <= 0)
             {
-                errors.Add(new Error { Code = "400", Message = "TargetId في القاعدة مطلوب." });
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: TargetId مطلوب." });
+            }
+            else if (!IsValidTarget(targetLevel, rule.TargetId, requestTypeId, validGroupIds, validFieldIds))
+            {
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: الهدف المحدد لا ينتمي لنوع الطلب الحالي." });
             }
 
-            if (NormalizeSubjectType(rule.SubjectType) == null)
+            var normalizedSubjectType = NormalizeSubjectType(rule.SubjectType);
+            if (normalizedSubjectType == null)
             {
-                errors.Add(new Error { Code = "400", Message = "نوع الجهة في القاعدة غير صالح." });
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: نوع الجهة غير صالح." });
+            }
+            else
+            {
+                var normalizedSubjectId = NormalizeNullable(rule.SubjectId);
+                if (RequiresSubjectId(normalizedSubjectType) && normalizedSubjectId == null)
+                {
+                    errors.Add(new Error { Code = "400", Message = $"{rowLabel}: SubjectId إلزامي لنوع الجهة المحدد." });
+                }
             }
 
-            if (NormalizePositiveInt(rule.ActionId).HasValue && !NormalizePositiveInt(rule.StageId).HasValue)
+            var stageId = NormalizePositiveInt(rule.StageId);
+            var actionId = NormalizePositiveInt(rule.ActionId);
+            if (actionId.HasValue && !stageId.HasValue)
             {
-                errors.Add(new Error { Code = "400", Message = "عند تحديد Action يجب تحديد Stage في القاعدة." });
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: عند تحديد Action يجب تحديد Stage." });
+            }
+
+            if (stageId.HasValue && validStageIds.Count > 0 && !validStageIds.Contains(stageId.Value))
+            {
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: Stage المحددة غير مرتبطة بمسار هذا النوع." });
+            }
+
+            if (actionId.HasValue)
+            {
+                if (!actionById.TryGetValue(actionId.Value, out var actionLookup))
+                {
+                    errors.Add(new Error { Code = "400", Message = $"{rowLabel}: Action المحددة غير مرتبطة بمسار هذا النوع." });
+                }
+                else if (stageId.HasValue && actionLookup.StageId != stageId.Value)
+                {
+                    errors.Add(new Error { Code = "400", Message = $"{rowLabel}: Action المحددة لا تتبع Stage المختارة." });
+                }
+            }
+
+            if (rule.Priority < 0 || rule.Priority > 100000)
+            {
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: Priority خارج النطاق المسموح (0-100000)." });
             }
         }
 
-        foreach (var lockItem in safeRequest.Locks ?? new List<FieldAccessLockDto>())
+        for (var index = 0; index < (safeRequest.Locks?.Count ?? 0); index++)
         {
-            if (NormalizeTargetLevel(lockItem.TargetLevel) == null)
+            var lockItem = safeRequest.Locks[index];
+            var rowLabel = $"القفل رقم {index + 1}";
+            var targetLevel = NormalizeTargetLevel(lockItem.TargetLevel);
+            if (targetLevel == null)
             {
-                errors.Add(new Error { Code = "400", Message = "مستوى الهدف في القفل غير صالح." });
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: مستوى الهدف غير صالح." });
                 continue;
             }
 
             if (lockItem.TargetId <= 0)
             {
-                errors.Add(new Error { Code = "400", Message = "TargetId في القفل مطلوب." });
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: TargetId مطلوب." });
+            }
+            else if (!IsValidTarget(targetLevel, lockItem.TargetId, requestTypeId, validGroupIds, validFieldIds))
+            {
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: الهدف المحدد لا ينتمي لنوع الطلب الحالي." });
             }
 
-            if (NormalizePositiveInt(lockItem.ActionId).HasValue && !NormalizePositiveInt(lockItem.StageId).HasValue)
+            var stageId = NormalizePositiveInt(lockItem.StageId);
+            var actionId = NormalizePositiveInt(lockItem.ActionId);
+            if (actionId.HasValue && !stageId.HasValue)
             {
-                errors.Add(new Error { Code = "400", Message = "عند تحديد Action يجب تحديد Stage في القفل." });
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: عند تحديد Action يجب تحديد Stage." });
+            }
+
+            if (stageId.HasValue && validStageIds.Count > 0 && !validStageIds.Contains(stageId.Value))
+            {
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: Stage المحددة غير مرتبطة بمسار هذا النوع." });
+            }
+
+            if (actionId.HasValue)
+            {
+                if (!actionById.TryGetValue(actionId.Value, out var actionLookup))
+                {
+                    errors.Add(new Error { Code = "400", Message = $"{rowLabel}: Action المحددة غير مرتبطة بمسار هذا النوع." });
+                }
+                else if (stageId.HasValue && actionLookup.StageId != stageId.Value)
+                {
+                    errors.Add(new Error { Code = "400", Message = $"{rowLabel}: Action المحددة لا تتبع Stage المختارة." });
+                }
+            }
+
+            var overrideSubjectType = NormalizeSubjectType(lockItem.AllowedOverrideSubjectType);
+            var overrideSubjectId = NormalizeNullable(lockItem.AllowedOverrideSubjectId);
+            if (overrideSubjectType == null && overrideSubjectId != null)
+            {
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: لا يمكن إرسال Override SubjectId بدون تحديد Override SubjectType." });
+            }
+
+            if (overrideSubjectType != null && RequiresSubjectId(overrideSubjectType) && overrideSubjectId == null)
+            {
+                errors.Add(new Error { Code = "400", Message = $"{rowLabel}: Override SubjectId إلزامي لنوع الجهة المحدد." });
             }
         }
 
         return errors;
+    }
+
+    private static List<Error> ValidatePreviewRequest(
+        FieldAccessPreviewRequestDto request,
+        int? stageId,
+        int? actionId,
+        IReadOnlyCollection<FieldAccessStageLookupDto> stageLookups,
+        IReadOnlyCollection<FieldAccessActionLookupDto> actionLookups)
+    {
+        var errors = new List<Error>();
+        var safeRequest = request ?? new FieldAccessPreviewRequestDto();
+        var validStageIds = stageLookups.Select(item => item.Id).ToHashSet();
+        var actionById = actionLookups.ToDictionary(item => item.Id);
+        var subjectType = NormalizeSubjectType(safeRequest.SubjectType);
+        var subjectId = NormalizeNullable(safeRequest.SubjectId);
+
+        if (NormalizeNullable(safeRequest.SubjectType) != null && subjectType == null)
+        {
+            errors.Add(new Error { Code = "400", Message = "نوع الجهة في المعاينة غير صالح." });
+        }
+
+        if (actionId.HasValue && !stageId.HasValue)
+        {
+            errors.Add(new Error { Code = "400", Message = "عند تحديد Action في المعاينة يجب تحديد Stage." });
+        }
+
+        if (stageId.HasValue && validStageIds.Count > 0 && !validStageIds.Contains(stageId.Value))
+        {
+            errors.Add(new Error { Code = "400", Message = "Stage المختارة غير مرتبطة بمسار هذا النوع." });
+        }
+
+        if (actionId.HasValue)
+        {
+            if (!actionById.TryGetValue(actionId.Value, out var actionLookup))
+            {
+                errors.Add(new Error { Code = "400", Message = "Action المختارة غير مرتبطة بمسار هذا النوع." });
+            }
+            else if (stageId.HasValue && actionLookup.StageId != stageId.Value)
+            {
+                errors.Add(new Error { Code = "400", Message = "Action المختارة لا تتبع Stage المحددة." });
+            }
+        }
+
+        if (subjectType != null && RequiresSubjectId(subjectType) && subjectId == null)
+        {
+            errors.Add(new Error { Code = "400", Message = "SubjectId مطلوب في المعاينة لهذا النوع من الجهة." });
+        }
+
+        if (subjectType == null && subjectId != null)
+        {
+            errors.Add(new Error { Code = "400", Message = "لا يمكن إدخال SubjectId بدون تحديد SubjectType." });
+        }
+
+        return errors;
+    }
+
+    private static FieldAccessPreviewResolutionItemDto BuildGroupResolutionItem(
+        SubjectGroupDefinitionDto group,
+        FieldAccessResolvedState state)
+    {
+        return new FieldAccessPreviewResolutionItemDto
+        {
+            TargetLevel = "Group",
+            TargetId = group.GroupId,
+            TargetLabel = group.GroupName,
+            CanView = state.CanView,
+            IsReadOnly = state.IsReadOnly,
+            IsRequired = state.IsRequired,
+            IsLocked = state.IsLocked,
+            FinalStateCode = state.FinalStateCode,
+            FinalStateAr = FinalStateLabelAr(state.FinalStateCode),
+            EffectiveSourceType = state.EffectiveSourceType ?? "DefaultPolicy",
+            EffectiveSourceAr = SourceTypeLabelAr(state.EffectiveSourceType),
+            FinalReasonAr = NormalizeNullable(state.EffectiveReasonAr) ?? "تم تطبيق السياسة الافتراضية.",
+            AppliedPolicies = (state.AppliedTraces ?? new List<FieldAccessAppliedTrace>())
+                .Select(MapAppliedPolicyTrace)
+                .ToList()
+        };
+    }
+
+    private static FieldAccessPreviewResolutionItemDto BuildFieldResolutionItem(
+        SubjectFieldDefinitionDto field,
+        IReadOnlyDictionary<int, string> groupNameMap,
+        FieldAccessResolvedState state)
+    {
+        groupNameMap.TryGetValue(field.MendGroup, out var groupName);
+        return new FieldAccessPreviewResolutionItemDto
+        {
+            TargetLevel = "Field",
+            TargetId = field.MendSql,
+            TargetLabel = NormalizeNullable(field.FieldLabel) ?? NormalizeNullable(field.FieldKey) ?? field.MendSql.ToString(),
+            GroupId = field.MendGroup,
+            GroupLabel = groupName,
+            CanView = state.CanView,
+            IsReadOnly = state.IsReadOnly,
+            IsRequired = state.IsRequired,
+            IsLocked = state.IsLocked,
+            FinalStateCode = state.FinalStateCode,
+            FinalStateAr = FinalStateLabelAr(state.FinalStateCode),
+            EffectiveSourceType = state.EffectiveSourceType ?? "DefaultPolicy",
+            EffectiveSourceAr = SourceTypeLabelAr(state.EffectiveSourceType),
+            FinalReasonAr = NormalizeNullable(state.EffectiveReasonAr) ?? "تم تطبيق السياسة الافتراضية.",
+            AppliedPolicies = (state.AppliedTraces ?? new List<FieldAccessAppliedTrace>())
+                .Select(MapAppliedPolicyTrace)
+                .ToList()
+        };
+    }
+
+    private static FieldAccessPreviewAppliedPolicyDto MapAppliedPolicyTrace(FieldAccessAppliedTrace trace)
+    {
+        return new FieldAccessPreviewAppliedPolicyDto
+        {
+            SourceType = trace.SourceType,
+            SourceTypeAr = SourceTypeLabelAr(trace.SourceType),
+            PermissionKind = trace.PermissionKind,
+            PermissionKindAr = PermissionKindLabelAr(trace.PermissionKind),
+            TargetLevel = trace.TargetLevel,
+            TargetId = trace.TargetId,
+            StageId = trace.StageId,
+            ActionId = trace.ActionId,
+            RuleId = trace.RuleId,
+            LockId = trace.LockId,
+            OverrideId = trace.OverrideId,
+            PermissionType = trace.PermissionType,
+            Effect = trace.Effect,
+            LockMode = trace.LockMode,
+            SubjectType = trace.SubjectType,
+            SubjectId = trace.SubjectId,
+            Notes = trace.Notes,
+            DescriptionAr = NormalizeNullable(trace.DescriptionAr)
+                ?? BuildAppliedTraceFallbackDescriptionAr(trace)
+        };
+    }
+
+    private static string ResolveStageLabel(int? stageId, IReadOnlyCollection<FieldAccessStageLookupDto> stages)
+    {
+        if (!stageId.HasValue)
+        {
+            return "كل المراحل";
+        }
+
+        var stage = stages.FirstOrDefault(item => item.Id == stageId.Value);
+        return stage?.Label ?? $"Stage #{stageId.Value}";
+    }
+
+    private static string ResolveActionLabel(int? actionId, IReadOnlyCollection<FieldAccessActionLookupDto> actions)
+    {
+        if (!actionId.HasValue)
+        {
+            return "كل الإجراءات";
+        }
+
+        var action = actions.FirstOrDefault(item => item.Id == actionId.Value);
+        return action?.Label ?? $"Action #{actionId.Value}";
+    }
+
+    private static string BuildPreviewContextSummaryAr(
+        string stageLabel,
+        string actionLabel,
+        string? subjectType,
+        string? subjectId)
+    {
+        var subjectText = SubjectTypeLabelAr(subjectType);
+        var normalizedSubjectId = NormalizeNullable(subjectId);
+        if (normalizedSubjectId != null)
+        {
+            subjectText = $"{subjectText} ({normalizedSubjectId})";
+        }
+
+        return $"سياق المعاينة الحالي: المرحلة \"{stageLabel}\"، الإجراء \"{actionLabel}\"، والجهة \"{subjectText}\".";
+    }
+
+    private static bool IsValidTarget(
+        string targetLevel,
+        int targetId,
+        int requestTypeId,
+        IReadOnlySet<int> validGroupIds,
+        IReadOnlySet<int> validFieldIds)
+    {
+        if (targetLevel.Equals("Request", StringComparison.OrdinalIgnoreCase))
+        {
+            return targetId == requestTypeId;
+        }
+
+        if (targetLevel.Equals("Group", StringComparison.OrdinalIgnoreCase))
+        {
+            return validGroupIds.Contains(targetId);
+        }
+
+        if (targetLevel.Equals("Field", StringComparison.OrdinalIgnoreCase))
+        {
+            return validFieldIds.Contains(targetId);
+        }
+
+        return false;
+    }
+
+    private static string FinalStateLabelAr(string? finalStateCode)
+    {
+        var normalized = NormalizeNullable(finalStateCode)?.ToLowerInvariant();
+        return normalized switch
+        {
+            "hidden" => "مخفي",
+            "readonly" => "قراءة فقط",
+            "requiredinput" => "إدخال إلزامي",
+            _ => "قابل للتعديل"
+        };
+    }
+
+    private static string SourceTypeLabelAr(string? sourceType)
+    {
+        var normalized = NormalizeNullable(sourceType)?.ToLowerInvariant();
+        return normalized switch
+        {
+            "actionrule" => "Action Rule",
+            "stagerule" => "Stage Rule",
+            "rule" => "Rule عامة",
+            "override" => "Override",
+            "lock" => "Lock",
+            _ => "السياسة الافتراضية"
+        };
+    }
+
+    private static string PermissionKindLabelAr(string? permissionKind)
+    {
+        var normalized = NormalizeNullable(permissionKind)?.ToLowerInvariant();
+        return normalized == "requirement"
+            ? "متطلب إدخال"
+            : normalized == "lock"
+                ? "قفل"
+                : "رؤية/تعديل";
+    }
+
+    private static string SubjectTypeLabelAr(string? subjectType)
+    {
+        var normalized = NormalizeSubjectType(subjectType);
+        return normalized switch
+        {
+            "OrgUnit" => "وحدة تنظيمية",
+            "Position" => "منصب",
+            "User" => "مستخدم",
+            "RequestOwner" => "منشئ الطلب",
+            "CurrentCustodian" => "الحاضن الحالي",
+            _ => "المستخدم الحالي"
+        };
+    }
+
+    private static string BuildAppliedTraceFallbackDescriptionAr(FieldAccessAppliedTrace trace)
+    {
+        var source = SourceTypeLabelAr(trace.SourceType);
+        var kind = PermissionKindLabelAr(trace.PermissionKind);
+        var target = trace.TargetLevel.Equals("Group", StringComparison.OrdinalIgnoreCase)
+            ? "المجموعة"
+            : trace.TargetLevel.Equals("Request", StringComparison.OrdinalIgnoreCase)
+                ? "نوع الطلب"
+                : "الحقل";
+        var permission = NormalizeNullable(trace.PermissionType) ?? NormalizeNullable(trace.LockMode) ?? "—";
+        return $"{source} طبق {kind} على {target} #{trace.TargetId} بالقيمة {permission}.";
     }
 
     private static bool RequiresSubjectId(string subjectType)

@@ -75,8 +75,9 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
             ApplyDefaultMode(state, policy?.DefaultAccessMode);
             ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Request", request.RequestTypeId);
             ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Group", group.GroupId);
-            ApplyLock(state, SelectBestLock(locks, subjectContext, request, "Group", group.GroupId)
-                ?? SelectBestLock(locks, subjectContext, request, "Request", request.RequestTypeId), subjectContext);
+            var selectedGroupLock = SelectBestLock(locks, subjectContext, request, "Group", group.GroupId)
+                ?? SelectBestLock(locks, subjectContext, request, "Request", request.RequestTypeId);
+            ApplyLock(state, selectedGroupLock, subjectContext);
 
             result.GroupStates[group.GroupId] = state.ToResolved();
         }
@@ -130,28 +131,96 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
         var visibilityOverride = SelectBestOverride(overrides, subjectContext, request, targetLevel, targetId, "visibility");
         if (visibilityOverride != null)
         {
-            ApplyPermission(state, visibilityOverride.OverridePermissionType, effect: "Allow", permissionKind: "visibility");
+            var description = BuildOverrideDescriptionAr(visibilityOverride, targetLevel, targetId, "visibility");
+            ApplyPermission(state, visibilityOverride.OverridePermissionType, effect: "Allow", permissionKind: "visibility", sourceType: "Override", reasonAr: description);
+            state.AppliedTraces.Add(new FieldAccessAppliedTrace
+            {
+                SourceType = "Override",
+                PermissionKind = "visibility",
+                TargetLevel = targetLevel,
+                TargetId = targetId,
+                OverrideId = visibilityOverride.Id,
+                RuleId = visibilityOverride.RuleId,
+                PermissionType = visibilityOverride.OverridePermissionType,
+                Effect = "Allow",
+                SubjectType = visibilityOverride.SubjectType,
+                SubjectId = visibilityOverride.SubjectId,
+                Notes = visibilityOverride.Reason,
+                DescriptionAr = description
+            });
         }
         else
         {
             var visibilityRule = SelectBestRule(rules, subjectContext, request, targetLevel, targetId, "visibility");
             if (visibilityRule != null)
             {
-                ApplyPermission(state, visibilityRule.PermissionType, visibilityRule.Effect, permissionKind: "visibility");
+                var sourceType = ResolveRuleSourceType(visibilityRule.StageId, visibilityRule.ActionId);
+                var description = BuildRuleDescriptionAr(visibilityRule, targetLevel, targetId, "visibility");
+                ApplyPermission(state, visibilityRule.PermissionType, visibilityRule.Effect, permissionKind: "visibility", sourceType, description);
+                state.AppliedTraces.Add(new FieldAccessAppliedTrace
+                {
+                    SourceType = sourceType,
+                    PermissionKind = "visibility",
+                    TargetLevel = targetLevel,
+                    TargetId = targetId,
+                    StageId = visibilityRule.StageId,
+                    ActionId = visibilityRule.ActionId,
+                    RuleId = visibilityRule.Id,
+                    PermissionType = visibilityRule.PermissionType,
+                    Effect = visibilityRule.Effect,
+                    SubjectType = visibilityRule.SubjectType,
+                    SubjectId = visibilityRule.SubjectId,
+                    Notes = visibilityRule.Notes,
+                    DescriptionAr = description
+                });
             }
         }
 
         var requirementOverride = SelectBestOverride(overrides, subjectContext, request, targetLevel, targetId, "requirement");
         if (requirementOverride != null)
         {
-            ApplyPermission(state, requirementOverride.OverridePermissionType, effect: "Allow", permissionKind: "requirement");
+            var description = BuildOverrideDescriptionAr(requirementOverride, targetLevel, targetId, "requirement");
+            ApplyPermission(state, requirementOverride.OverridePermissionType, effect: "Allow", permissionKind: "requirement", sourceType: "Override", reasonAr: description);
+            state.AppliedTraces.Add(new FieldAccessAppliedTrace
+            {
+                SourceType = "Override",
+                PermissionKind = "requirement",
+                TargetLevel = targetLevel,
+                TargetId = targetId,
+                OverrideId = requirementOverride.Id,
+                RuleId = requirementOverride.RuleId,
+                PermissionType = requirementOverride.OverridePermissionType,
+                Effect = "Allow",
+                SubjectType = requirementOverride.SubjectType,
+                SubjectId = requirementOverride.SubjectId,
+                Notes = requirementOverride.Reason,
+                DescriptionAr = description
+            });
         }
         else
         {
             var requirementRule = SelectBestRule(rules, subjectContext, request, targetLevel, targetId, "requirement");
             if (requirementRule != null)
             {
-                ApplyPermission(state, requirementRule.PermissionType, requirementRule.Effect, permissionKind: "requirement");
+                var sourceType = ResolveRuleSourceType(requirementRule.StageId, requirementRule.ActionId);
+                var description = BuildRuleDescriptionAr(requirementRule, targetLevel, targetId, "requirement");
+                ApplyPermission(state, requirementRule.PermissionType, requirementRule.Effect, permissionKind: "requirement", sourceType, description);
+                state.AppliedTraces.Add(new FieldAccessAppliedTrace
+                {
+                    SourceType = sourceType,
+                    PermissionKind = "requirement",
+                    TargetLevel = targetLevel,
+                    TargetId = targetId,
+                    StageId = requirementRule.StageId,
+                    ActionId = requirementRule.ActionId,
+                    RuleId = requirementRule.Id,
+                    PermissionType = requirementRule.PermissionType,
+                    Effect = requirementRule.Effect,
+                    SubjectType = requirementRule.SubjectType,
+                    SubjectId = requirementRule.SubjectId,
+                    Notes = requirementRule.Notes,
+                    DescriptionAr = description
+                });
             }
         }
     }
@@ -440,14 +509,55 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
             return;
         }
 
-        ApplyPermission(state, normalizedMode, effect: "Allow", permissionKind: "visibility");
+        var visibilityDescription = BuildDefaultPolicyDescriptionAr(defaultAccessMode, "visibility");
+        ApplyPermission(
+            state,
+            normalizedMode,
+            effect: "Allow",
+            permissionKind: "visibility",
+            sourceType: "DefaultPolicy",
+            reasonAr: visibilityDescription);
+        state.AppliedTraces.Add(new FieldAccessAppliedTrace
+        {
+            SourceType = "DefaultPolicy",
+            PermissionKind = "visibility",
+            TargetLevel = "Request",
+            TargetId = 0,
+            PermissionType = defaultAccessMode,
+            Effect = "Allow",
+            DescriptionAr = visibilityDescription
+        });
+
         if (normalizedMode == "requiredinput")
         {
-            ApplyPermission(state, normalizedMode, effect: "Allow", permissionKind: "requirement");
+            var requirementDescription = BuildDefaultPolicyDescriptionAr(defaultAccessMode, "requirement");
+            ApplyPermission(
+                state,
+                normalizedMode,
+                effect: "Allow",
+                permissionKind: "requirement",
+                sourceType: "DefaultPolicy",
+                reasonAr: requirementDescription);
+            state.AppliedTraces.Add(new FieldAccessAppliedTrace
+            {
+                SourceType = "DefaultPolicy",
+                PermissionKind = "requirement",
+                TargetLevel = "Request",
+                TargetId = 0,
+                PermissionType = defaultAccessMode,
+                Effect = "Allow",
+                DescriptionAr = requirementDescription
+            });
         }
     }
 
-    private static void ApplyPermission(MutableState state, string? permissionType, string? effect, string permissionKind)
+    private static void ApplyPermission(
+        MutableState state,
+        string? permissionType,
+        string? effect,
+        string permissionKind,
+        string sourceType,
+        string? reasonAr)
     {
         var normalizedPermission = NormalizePermission(permissionType);
         if (normalizedPermission.Length == 0)
@@ -464,6 +574,8 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
             }
 
             state.IsRequired = normalizedEffect == "deny" ? false : true;
+            state.LastRequirementSourceType = sourceType;
+            state.LastRequirementReasonAr = reasonAr;
             return;
         }
 
@@ -482,6 +594,8 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
             state.IsHidden = true;
             state.IsReadOnly = true;
             state.IsRequired = false;
+            state.LastVisibilitySourceType = sourceType;
+            state.LastVisibilityReasonAr = reasonAr;
             return;
         }
 
@@ -489,6 +603,8 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
         {
             state.IsHidden = false;
             state.IsReadOnly = true;
+            state.LastVisibilitySourceType = sourceType;
+            state.LastVisibilityReasonAr = reasonAr;
             return;
         }
 
@@ -496,6 +612,8 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
         {
             state.IsHidden = false;
             state.IsReadOnly = false;
+            state.LastVisibilitySourceType = sourceType;
+            state.LastVisibilityReasonAr = reasonAr;
         }
     }
 
@@ -509,6 +627,23 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
         state.IsLocked = true;
         state.LockReason = NormalizeNullable(lockItem.Notes)
             ?? BuildLockReason(lockItem.LockMode);
+        state.LastLockSourceType = "Lock";
+        state.LastLockReasonAr = state.LockReason;
+        state.AppliedTraces.Add(new FieldAccessAppliedTrace
+        {
+            SourceType = "Lock",
+            PermissionKind = "lock",
+            TargetLevel = lockItem.TargetLevel,
+            TargetId = lockItem.TargetId,
+            StageId = lockItem.StageId,
+            ActionId = lockItem.ActionId,
+            LockId = lockItem.Id,
+            LockMode = lockItem.LockMode,
+            SubjectType = lockItem.AllowedOverrideSubjectType,
+            SubjectId = lockItem.AllowedOverrideSubjectId,
+            Notes = lockItem.Notes,
+            DescriptionAr = BuildLockDescriptionAr(lockItem)
+        });
 
         var normalizedMode = NormalizeLockMode(lockItem.LockMode);
         if (normalizedMode == "fulllock")
@@ -540,6 +675,131 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
             "noinput" => "الهدف لا يقبل إدخال بيانات في هذه المرحلة/الإجراء.",
             _ => "الهدف للقراءة فقط في هذه المرحلة/الإجراء."
         };
+    }
+
+    private static string BuildDefaultPolicyDescriptionAr(string? defaultAccessMode, string permissionKind)
+    {
+        var permissionLabel = PermissionLabelAr(defaultAccessMode);
+        if (permissionKind == "requirement")
+        {
+            return $"تأثير Requirement من السياسة الافتراضية: {permissionLabel}.";
+        }
+
+        return $"تأثير Visibility من السياسة الافتراضية: {permissionLabel}.";
+    }
+
+    private static string BuildRuleDescriptionAr(FieldAccessPolicyRule rule, string targetLevel, int targetId, string permissionKind)
+    {
+        var scopeLabel = RuleScopeLabelAr(rule.StageId, rule.ActionId);
+        var permissionLabel = PermissionLabelAr(rule.PermissionType);
+        var effectLabel = EffectLabelAr(rule.Effect);
+        var kindLabel = permissionKind == "requirement" ? "Requirement" : "Visibility";
+        var subjectLabel = SubjectLabelAr(rule.SubjectType, rule.SubjectId);
+        return $"{scopeLabel} ({kindLabel}) على {TargetLabelAr(targetLevel)} #{targetId}: {permissionLabel} ({effectLabel}) للجهة {subjectLabel}.";
+    }
+
+    private static string BuildOverrideDescriptionAr(FieldAccessOverride item, string targetLevel, int targetId, string permissionKind)
+    {
+        var permissionLabel = PermissionLabelAr(item.OverridePermissionType);
+        var kindLabel = permissionKind == "requirement" ? "Requirement" : "Visibility";
+        var subjectLabel = SubjectLabelAr(item.SubjectType, item.SubjectId);
+        var reason = NormalizeNullable(item.Reason);
+        return reason == null
+            ? $"Override ({kindLabel}) على {TargetLabelAr(targetLevel)} #{targetId}: {permissionLabel} للجهة {subjectLabel}."
+            : $"Override ({kindLabel}) على {TargetLabelAr(targetLevel)} #{targetId}: {permissionLabel} للجهة {subjectLabel}. السبب: {reason}.";
+    }
+
+    private static string BuildLockDescriptionAr(FieldAccessLock item)
+    {
+        var modeLabel = LockModeLabelAr(item.LockMode);
+        var targetLabel = TargetLabelAr(item.TargetLevel);
+        var notes = NormalizeNullable(item.Notes);
+        return notes == null
+            ? $"Lock ({modeLabel}) مطبق على {targetLabel} #{item.TargetId}."
+            : $"Lock ({modeLabel}) مطبق على {targetLabel} #{item.TargetId}. السبب: {notes}.";
+    }
+
+    private static string ResolveRuleSourceType(int? stageId, int? actionId)
+    {
+        if (actionId.HasValue)
+        {
+            return "ActionRule";
+        }
+
+        if (stageId.HasValue)
+        {
+            return "StageRule";
+        }
+
+        return "Rule";
+    }
+
+    private static string PermissionLabelAr(string? permissionType)
+    {
+        return NormalizePermission(permissionType) switch
+        {
+            "hidden" => "مخفي",
+            "readonly" => "قراءة فقط",
+            "requiredinput" => "إدخال إلزامي",
+            _ => "قابل للتعديل"
+        };
+    }
+
+    private static string LockModeLabelAr(string? lockMode)
+    {
+        return NormalizeLockMode(lockMode) switch
+        {
+            "fulllock" => "قفل كامل",
+            "noinput" => "منع إدخال",
+            _ => "منع تعديل"
+        };
+    }
+
+    private static string EffectLabelAr(string? effect)
+    {
+        var normalized = NormalizeNullable(effect)?.ToLowerInvariant();
+        return normalized == "deny" ? "منع" : "سماح";
+    }
+
+    private static string TargetLabelAr(string? targetLevel)
+    {
+        return NormalizeLevel(targetLevel) switch
+        {
+            "request" => "نوع الطلب",
+            "group" => "المجموعة",
+            _ => "الحقل"
+        };
+    }
+
+    private static string SubjectLabelAr(string? subjectType, string? subjectId)
+    {
+        var typeLabel = NormalizeSubjectType(subjectType) switch
+        {
+            "orgunit" => "وحدة تنظيمية",
+            "position" => "منصب",
+            "user" => "مستخدم",
+            "requestowner" => "منشئ الطلب",
+            "currentcustodian" => "الحاضن الحالي",
+            _ => "جهة غير معروفة"
+        };
+
+        var normalizedSubjectId = NormalizeNullable(subjectId);
+        return normalizedSubjectId == null ? typeLabel : $"{typeLabel} ({normalizedSubjectId})";
+    }
+
+    private static string RuleScopeLabelAr(int? stageId, int? actionId)
+    {
+        if (actionId.HasValue)
+        {
+            return "Action Rule";
+        }
+
+        if (stageId.HasValue)
+        {
+            return "Stage Rule";
+        }
+
+        return "Rule عامة";
     }
 
     private async Task<SubjectContext> BuildSubjectContextAsync(
@@ -748,10 +1008,26 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
 
         public string? LockReason { get; set; }
 
+        public string? LastVisibilitySourceType { get; set; }
+
+        public string? LastVisibilityReasonAr { get; set; }
+
+        public string? LastRequirementSourceType { get; set; }
+
+        public string? LastRequirementReasonAr { get; set; }
+
+        public string? LastLockSourceType { get; set; }
+
+        public string? LastLockReasonAr { get; set; }
+
+        public List<FieldAccessAppliedTrace> AppliedTraces { get; } = new();
+
         public FieldAccessResolvedState ToResolved()
         {
             if (IsHidden)
             {
+                var sourceType = LastLockSourceType ?? LastVisibilitySourceType ?? "DefaultPolicy";
+                var reasonAr = LastLockReasonAr ?? LastVisibilityReasonAr ?? "تم تطبيق سياسة الإخفاء.";
                 return new FieldAccessResolvedState
                 {
                     CanView = false,
@@ -761,12 +1037,34 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
                     IsReadOnly = true,
                     IsRequired = false,
                     IsLocked = IsLocked,
-                    LockReason = LockReason
+                    LockReason = LockReason,
+                    FinalStateCode = "Hidden",
+                    EffectiveSourceType = sourceType,
+                    EffectiveReasonAr = reasonAr,
+                    AppliedTraces = AppliedTraces.ToList()
                 };
             }
 
             var effectiveReadOnly = IsReadOnly;
             var effectiveRequired = IsRequired && !effectiveReadOnly;
+            var finalStateCode = effectiveReadOnly
+                ? "ReadOnly"
+                : effectiveRequired
+                    ? "RequiredInput"
+                    : "Editable";
+            var source = finalStateCode switch
+            {
+                "ReadOnly" => LastLockSourceType ?? LastVisibilitySourceType ?? "DefaultPolicy",
+                "RequiredInput" => LastRequirementSourceType ?? LastVisibilitySourceType ?? "DefaultPolicy",
+                _ => LastVisibilitySourceType ?? "DefaultPolicy"
+            };
+            var reason = finalStateCode switch
+            {
+                "ReadOnly" => LastLockReasonAr ?? LastVisibilityReasonAr ?? "تم تطبيق القراءة فقط.",
+                "RequiredInput" => LastRequirementReasonAr ?? LastVisibilityReasonAr ?? "تم تطبيق الإدخال الإلزامي.",
+                _ => LastVisibilityReasonAr ?? "تم تطبيق الوضع القابل للتعديل."
+            };
+
             return new FieldAccessResolvedState
             {
                 CanView = true,
@@ -776,7 +1074,11 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
                 IsReadOnly = effectiveReadOnly,
                 IsRequired = effectiveRequired,
                 IsLocked = IsLocked,
-                LockReason = LockReason
+                LockReason = LockReason,
+                FinalStateCode = finalStateCode,
+                EffectiveSourceType = source,
+                EffectiveReasonAr = reason,
+                AppliedTraces = AppliedTraces.ToList()
             };
         }
     }

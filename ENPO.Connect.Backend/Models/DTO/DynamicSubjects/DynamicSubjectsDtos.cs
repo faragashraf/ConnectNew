@@ -1184,6 +1184,10 @@ public sealed class FieldAccessPolicyDto
     public bool IsActive { get; set; } = true;
 
     public string DefaultAccessMode { get; set; } = "Editable";
+
+    public DateTime? LastModifiedDateUtc { get; set; }
+
+    public string? LastModifiedBy { get; set; }
 }
 
 public sealed class FieldAccessPolicyRuleDto
@@ -1309,13 +1313,23 @@ public sealed class FieldAccessPreviewResponseDto
 
     public int? ActionId { get; set; }
 
+    public string StageLabel { get; set; } = "كل المراحل";
+
+    public string ActionLabel { get; set; } = "كل الإجراءات";
+
     public string? SubjectType { get; set; }
 
     public string? SubjectId { get; set; }
 
+    public string? ContextSummaryAr { get; set; }
+
     public List<SubjectGroupDefinitionDto> Groups { get; set; } = new();
 
     public List<SubjectFieldDefinitionDto> Fields { get; set; } = new();
+
+    public List<FieldAccessPreviewResolutionItemDto> GroupResolutions { get; set; } = new();
+
+    public List<FieldAccessPreviewResolutionItemDto> FieldResolutions { get; set; } = new();
 
     public int HiddenGroupsCount { get; set; }
 
@@ -1326,4 +1340,76 @@ public sealed class FieldAccessPreviewResponseDto
     public int RequiredFieldsCount { get; set; }
 
     public int LockedFieldsCount { get; set; }
+}
+
+public sealed class FieldAccessPreviewResolutionItemDto
+{
+    public string TargetLevel { get; set; } = "Field";
+
+    public int TargetId { get; set; }
+
+    public string TargetLabel { get; set; } = string.Empty;
+
+    public int? GroupId { get; set; }
+
+    public string? GroupLabel { get; set; }
+
+    public bool CanView { get; set; }
+
+    public bool IsReadOnly { get; set; }
+
+    public bool IsRequired { get; set; }
+
+    public bool IsLocked { get; set; }
+
+    public string FinalStateCode { get; set; } = "Editable";
+
+    public string FinalStateAr { get; set; } = "قابل للتعديل";
+
+    public string EffectiveSourceType { get; set; } = "DefaultPolicy";
+
+    public string EffectiveSourceAr { get; set; } = "السياسة الافتراضية";
+
+    public string FinalReasonAr { get; set; } = "تم تطبيق السياسة الافتراضية.";
+
+    public List<FieldAccessPreviewAppliedPolicyDto> AppliedPolicies { get; set; } = new();
+}
+
+public sealed class FieldAccessPreviewAppliedPolicyDto
+{
+    public string SourceType { get; set; } = string.Empty;
+
+    public string SourceTypeAr { get; set; } = string.Empty;
+
+    public string PermissionKind { get; set; } = string.Empty;
+
+    public string PermissionKindAr { get; set; } = string.Empty;
+
+    public string TargetLevel { get; set; } = string.Empty;
+
+    public int TargetId { get; set; }
+
+    public int? StageId { get; set; }
+
+    public int? ActionId { get; set; }
+
+    public int? RuleId { get; set; }
+
+    public int? LockId { get; set; }
+
+    public int? OverrideId { get; set; }
+
+    public string? PermissionType { get; set; }
+
+    public string? Effect { get; set; }
+
+    public string? LockMode { get; set; }
+
+    public string? SubjectType { get; set; }
+
+    public string? SubjectId { get; set; }
+
+    public string? Notes { get; set; }
+
+    public string DescriptionAr { get; set; } = string.Empty;
 }
