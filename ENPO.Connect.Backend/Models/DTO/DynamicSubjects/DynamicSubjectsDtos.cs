@@ -36,6 +36,22 @@ public sealed class SubjectGroupDefinitionDto
     public bool IsExtendable { get; set; }
 
     public short? GroupWithInRow { get; set; }
+
+    public bool CanView { get; set; } = true;
+
+    public bool CanEdit { get; set; } = true;
+
+    public bool CanFill { get; set; } = true;
+
+    public bool IsHidden { get; set; }
+
+    public bool IsReadOnly { get; set; }
+
+    public bool IsRequired { get; set; }
+
+    public bool IsLocked { get; set; }
+
+    public string? LockReason { get; set; }
 }
 
 public sealed class SubjectFieldDefinitionDto
@@ -91,6 +107,22 @@ public sealed class SubjectFieldDefinitionDto
     public string? DisplaySettingsJson { get; set; }
 
     public SubjectGroupDefinitionDto? Group { get; set; }
+
+    public bool CanView { get; set; } = true;
+
+    public bool CanEdit { get; set; } = true;
+
+    public bool CanFill { get; set; } = true;
+
+    public bool IsHidden { get; set; }
+
+    public bool IsReadOnly { get; set; }
+
+    public bool IsRequired { get; set; }
+
+    public bool IsLocked { get; set; }
+
+    public string? LockReason { get; set; }
 }
 
 public sealed class SubjectFormDefinitionDto
@@ -231,6 +263,10 @@ public sealed class SubjectUpsertRequestDto
 
     public string? DocumentDirection { get; set; }
 
+    public int? StageId { get; set; }
+
+    public int? ActionId { get; set; }
+
     public string? Subject { get; set; }
 
     public string? Description { get; set; }
@@ -255,6 +291,10 @@ public sealed class SubjectUpsertFormRequestDto
     public int CategoryId { get; set; }
 
     public string? DocumentDirection { get; set; }
+
+    public int? StageId { get; set; }
+
+    public int? ActionId { get; set; }
 
     public string? Subject { get; set; }
 
@@ -1110,4 +1150,180 @@ public sealed class DynamicSubjectRealtimeEventDto
     public string? ActorUserId { get; set; }
 
     public Dictionary<string, string?> Data { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
+public sealed class FieldAccessPolicyWorkspaceDto
+{
+    public int RequestTypeId { get; set; }
+
+    public string RequestTypeName { get; set; } = string.Empty;
+
+    public FieldAccessPolicyDto Policy { get; set; } = new();
+
+    public List<FieldAccessPolicyRuleDto> Rules { get; set; } = new();
+
+    public List<FieldAccessLockDto> Locks { get; set; } = new();
+
+    public List<FieldAccessLookupItemDto> Groups { get; set; } = new();
+
+    public List<FieldAccessLookupItemDto> Fields { get; set; } = new();
+
+    public List<FieldAccessStageLookupDto> Stages { get; set; } = new();
+
+    public List<FieldAccessActionLookupDto> Actions { get; set; } = new();
+
+    public DateTime GeneratedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
+public sealed class FieldAccessPolicyDto
+{
+    public int? Id { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public bool IsActive { get; set; } = true;
+
+    public string DefaultAccessMode { get; set; } = "Editable";
+}
+
+public sealed class FieldAccessPolicyRuleDto
+{
+    public int? Id { get; set; }
+
+    public string TargetLevel { get; set; } = "Field";
+
+    public int TargetId { get; set; }
+
+    public int? StageId { get; set; }
+
+    public int? ActionId { get; set; }
+
+    public string PermissionType { get; set; } = "Editable";
+
+    public string SubjectType { get; set; } = "OrgUnit";
+
+    public string? SubjectId { get; set; }
+
+    public string Effect { get; set; } = "Allow";
+
+    public int Priority { get; set; } = 100;
+
+    public bool IsActive { get; set; } = true;
+
+    public string? Notes { get; set; }
+}
+
+public sealed class FieldAccessLockDto
+{
+    public int? Id { get; set; }
+
+    public int? StageId { get; set; }
+
+    public int? ActionId { get; set; }
+
+    public string TargetLevel { get; set; } = "Field";
+
+    public int TargetId { get; set; }
+
+    public string LockMode { get; set; } = "NoEdit";
+
+    public string? AllowedOverrideSubjectType { get; set; }
+
+    public string? AllowedOverrideSubjectId { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public string? Notes { get; set; }
+}
+
+public sealed class FieldAccessLookupItemDto
+{
+    public int Id { get; set; }
+
+    public string Code { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+
+    public int? GroupId { get; set; }
+}
+
+public sealed class FieldAccessStageLookupDto
+{
+    public int Id { get; set; }
+
+    public string Code { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+
+    public int StepOrder { get; set; }
+}
+
+public sealed class FieldAccessActionLookupDto
+{
+    public int Id { get; set; }
+
+    public int StageId { get; set; }
+
+    public string Code { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+
+    public int DisplayOrder { get; set; }
+}
+
+public sealed class FieldAccessPolicyWorkspaceUpsertRequestDto
+{
+    public string? PolicyName { get; set; }
+
+    public bool IsPolicyActive { get; set; } = true;
+
+    public string DefaultAccessMode { get; set; } = "Editable";
+
+    public List<FieldAccessPolicyRuleDto> Rules { get; set; } = new();
+
+    public List<FieldAccessLockDto> Locks { get; set; } = new();
+}
+
+public sealed class FieldAccessPreviewRequestDto
+{
+    public int? StageId { get; set; }
+
+    public int? ActionId { get; set; }
+
+    public int? RequestId { get; set; }
+
+    public string? SubjectType { get; set; }
+
+    public string? SubjectId { get; set; }
+
+    public string? RequestOwnerUserId { get; set; }
+
+    public string? CurrentCustodianUnitId { get; set; }
+}
+
+public sealed class FieldAccessPreviewResponseDto
+{
+    public int RequestTypeId { get; set; }
+
+    public int? StageId { get; set; }
+
+    public int? ActionId { get; set; }
+
+    public string? SubjectType { get; set; }
+
+    public string? SubjectId { get; set; }
+
+    public List<SubjectGroupDefinitionDto> Groups { get; set; } = new();
+
+    public List<SubjectFieldDefinitionDto> Fields { get; set; } = new();
+
+    public int HiddenGroupsCount { get; set; }
+
+    public int HiddenFieldsCount { get; set; }
+
+    public int ReadOnlyFieldsCount { get; set; }
+
+    public int RequiredFieldsCount { get; set; }
+
+    public int LockedFieldsCount { get; set; }
 }

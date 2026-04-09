@@ -31,6 +31,14 @@ export interface SubjectGroupDefinitionDto {
   groupDescription?: string;
   isExtendable: boolean;
   groupWithInRow?: number;
+  canView?: boolean;
+  canEdit?: boolean;
+  canFill?: boolean;
+  isHidden?: boolean;
+  isReadOnly?: boolean;
+  isRequired?: boolean;
+  isLocked?: boolean;
+  lockReason?: string;
 }
 
 export interface SubjectFieldDefinitionDto {
@@ -60,6 +68,14 @@ export interface SubjectFieldDefinitionDto {
   isVisible: boolean;
   displaySettingsJson?: string;
   group?: SubjectGroupDefinitionDto;
+  canView?: boolean;
+  canEdit?: boolean;
+  canFill?: boolean;
+  isHidden?: boolean;
+  isReadOnly?: boolean;
+  isRequired?: boolean;
+  isLocked?: boolean;
+  lockReason?: string;
 }
 
 export interface SubjectFormDefinitionDto {
@@ -201,6 +217,8 @@ export interface EnvelopeDetailDto {
 export interface SubjectUpsertRequest {
   categoryId: number;
   documentDirection?: string;
+  stageId?: number;
+  actionId?: number;
   subject?: string;
   description?: string;
   saveAsDraft: boolean;

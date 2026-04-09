@@ -77,6 +77,14 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<SubjectTypeRoutingBinding> SubjectTypeRoutingBindings { get; set; }
 
+    public virtual DbSet<FieldAccessPolicy> FieldAccessPolicies { get; set; }
+
+    public virtual DbSet<FieldAccessPolicyRule> FieldAccessPolicyRules { get; set; }
+
+    public virtual DbSet<FieldAccessLock> FieldAccessLocks { get; set; }
+
+    public virtual DbSet<FieldAccessOverride> FieldAccessOverrides { get; set; }
+
     public override int SaveChanges()
     {
         var UserId = _httpContextAccessor.HttpContext?.User?.Claims.FirstOrDefault((Claim u) => u.Type == "UserId").Value;
@@ -1254,6 +1262,226 @@ public partial class ConnectContext : DbContext
                 .HasForeignKey(e => e.SubjectTypeId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_SubjectTypeRoutingBindings_CDCategory");
+        });
+
+        modelBuilder.Entity<FieldAccessPolicy>(entity =>
+        {
+            entity.ToTable("FieldAccessPolicies");
+
+            entity.HasKey(e => e.Id).HasName("PK_FieldAccessPolicies");
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.RequestTypeId)
+                .HasColumnName("RequestTypeID")
+                .IsRequired();
+            entity.Property(e => e.Name)
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.DefaultAccessMode)
+                .HasMaxLength(20)
+                .HasDefaultValue("Editable")
+                .IsRequired();
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.CreatedDate)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64);
+            entity.Property(e => e.LastModifiedDate)
+                .HasColumnType("datetime2");
+
+            entity.HasIndex(e => new { e.RequestTypeId, e.IsActive }, "IX_FieldAccessPolicies_RequestType_IsActive");
+            entity.HasIndex(e => e.RequestTypeId, "UX_FieldAccessPolicies_RequestType")
+                .IsUnique();
+
+            entity.HasOne<Cdcategory>()
+                .WithMany()
+                .HasForeignKey(e => e.RequestTypeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_FieldAccessPolicies_CDCategory");
+        });
+
+        modelBuilder.Entity<FieldAccessPolicyRule>(entity =>
+        {
+            entity.ToTable("FieldAccessPolicyRules");
+
+            entity.HasKey(e => e.Id).HasName("PK_FieldAccessPolicyRules");
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.PolicyId)
+                .HasColumnName("PolicyID")
+                .IsRequired();
+            entity.Property(e => e.TargetLevel)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.TargetId)
+                .IsRequired();
+            entity.Property(e => e.StageId)
+                .HasColumnName("StageID");
+            entity.Property(e => e.ActionId)
+                .HasColumnName("ActionID");
+            entity.Property(e => e.PermissionType)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.SubjectType)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(e => e.SubjectId)
+                .HasMaxLength(64);
+            entity.Property(e => e.Effect)
+                .HasMaxLength(10)
+                .HasDefaultValue("Allow")
+                .IsRequired();
+            entity.Property(e => e.Priority)
+                .HasDefaultValue(100)
+                .IsRequired();
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.Notes)
+                .HasMaxLength(500);
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.CreatedDate)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64);
+            entity.Property(e => e.LastModifiedDate)
+                .HasColumnType("datetime2");
+
+            entity.HasIndex(e => e.PolicyId, "IX_FieldAccessPolicyRules_PolicyID");
+            entity.HasIndex(e => new { e.PolicyId, e.TargetLevel, e.TargetId, e.IsActive }, "IX_FieldAccessPolicyRules_TargetScope");
+            entity.HasIndex(e => new { e.PolicyId, e.StageId, e.ActionId, e.IsActive }, "IX_FieldAccessPolicyRules_StageAction");
+            entity.HasIndex(e => new { e.PolicyId, e.SubjectType, e.SubjectId }, "IX_FieldAccessPolicyRules_Subject");
+
+            entity.HasOne(e => e.Policy)
+                .WithMany(e => e.Rules)
+                .HasForeignKey(e => e.PolicyId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_FieldAccessPolicyRules_FieldAccessPolicies");
+        });
+
+        modelBuilder.Entity<FieldAccessLock>(entity =>
+        {
+            entity.ToTable("FieldAccessLocks");
+
+            entity.HasKey(e => e.Id).HasName("PK_FieldAccessLocks");
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.RequestTypeId)
+                .HasColumnName("RequestTypeID")
+                .IsRequired();
+            entity.Property(e => e.StageId)
+                .HasColumnName("StageID");
+            entity.Property(e => e.ActionId)
+                .HasColumnName("ActionID");
+            entity.Property(e => e.TargetLevel)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.TargetId)
+                .IsRequired();
+            entity.Property(e => e.LockMode)
+                .HasMaxLength(20)
+                .HasDefaultValue("NoEdit")
+                .IsRequired();
+            entity.Property(e => e.AllowedOverrideSubjectType)
+                .HasMaxLength(30);
+            entity.Property(e => e.AllowedOverrideSubjectId)
+                .HasMaxLength(64);
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.Notes)
+                .HasMaxLength(500);
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.CreatedDate)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedBy)
+                .HasMaxLength(64);
+            entity.Property(e => e.LastModifiedDate)
+                .HasColumnType("datetime2");
+
+            entity.HasIndex(e => new { e.RequestTypeId, e.TargetLevel, e.TargetId, e.IsActive }, "IX_FieldAccessLocks_TargetScope");
+            entity.HasIndex(e => new { e.RequestTypeId, e.StageId, e.ActionId, e.IsActive }, "IX_FieldAccessLocks_StageAction");
+
+            entity.HasOne<Cdcategory>()
+                .WithMany()
+                .HasForeignKey(e => e.RequestTypeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_FieldAccessLocks_CDCategory");
+        });
+
+        modelBuilder.Entity<FieldAccessOverride>(entity =>
+        {
+            entity.ToTable("FieldAccessOverrides");
+
+            entity.HasKey(e => e.Id).HasName("PK_FieldAccessOverrides");
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.RequestId)
+                .HasColumnName("RequestID");
+            entity.Property(e => e.RequestTypeId)
+                .HasColumnName("RequestTypeID");
+            entity.Property(e => e.RuleId)
+                .HasColumnName("RuleID");
+            entity.Property(e => e.TargetLevel)
+                .HasMaxLength(20);
+            entity.Property(e => e.TargetId);
+            entity.Property(e => e.SubjectType)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(e => e.SubjectId)
+                .HasMaxLength(64);
+            entity.Property(e => e.OverridePermissionType)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.Reason)
+                .HasMaxLength(500);
+            entity.Property(e => e.GrantedBy)
+                .HasMaxLength(64)
+                .HasDefaultValue("SYSTEM")
+                .IsRequired();
+            entity.Property(e => e.GrantedAt)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.ExpiresAt)
+                .HasColumnType("datetime2");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.HasIndex(e => new { e.RequestId, e.IsActive }, "IX_FieldAccessOverrides_Request_IsActive");
+            entity.HasIndex(e => new { e.RequestTypeId, e.IsActive }, "IX_FieldAccessOverrides_RequestType_IsActive");
+            entity.HasIndex(e => new { e.TargetLevel, e.TargetId, e.IsActive }, "IX_FieldAccessOverrides_Target_IsActive");
+
+            entity.HasOne<Cdcategory>()
+                .WithMany()
+                .HasForeignKey(e => e.RequestTypeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_FieldAccessOverrides_CDCategory");
+
+            entity.HasOne(e => e.Rule)
+                .WithMany()
+                .HasForeignKey(e => e.RuleId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_FieldAccessOverrides_FieldAccessPolicyRules");
         });
 
         modelBuilder.HasSequence<int>("Seq_Categories").StartsAt(101L);

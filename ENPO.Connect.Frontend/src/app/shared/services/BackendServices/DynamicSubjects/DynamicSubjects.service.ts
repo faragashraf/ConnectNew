@@ -58,10 +58,23 @@ export class DynamicSubjectsController {
     return this.http.get<CommonResponse<SubjectCategoryTreeNodeDto[]>>(`${this.baseUrl}/CategoryTree`, { params });
   }
 
-  getFormDefinition(categoryId: number, appId?: string): Observable<CommonResponse<SubjectFormDefinitionDto>> {
+  getFormDefinition(
+    categoryId: number,
+    appId?: string,
+    context?: { stageId?: number; actionId?: number; requestId?: number }
+  ): Observable<CommonResponse<SubjectFormDefinitionDto>> {
     let params = new HttpParams();
     if (appId) {
       params = params.set('appId', appId);
+    }
+    if (context?.stageId != null) {
+      params = params.set('stageId', String(context.stageId));
+    }
+    if (context?.actionId != null) {
+      params = params.set('actionId', String(context.actionId));
+    }
+    if (context?.requestId != null) {
+      params = params.set('requestId', String(context.requestId));
     }
 
     return this.http.get<CommonResponse<SubjectFormDefinitionDto>>(`${this.baseUrl}/FormDefinition/${categoryId}`, { params });
@@ -310,6 +323,12 @@ export class DynamicSubjectsController {
     }
     formData.append('subject', request.subject ?? '');
     formData.append('description', request.description ?? '');
+    if (request.stageId != null) {
+      formData.append('stageId', String(request.stageId));
+    }
+    if (request.actionId != null) {
+      formData.append('actionId', String(request.actionId));
+    }
     formData.append('saveAsDraft', String(Boolean(request.saveAsDraft)));
     formData.append('submit', String(Boolean(request.submit)));
     if (request.envelopeId && request.envelopeId > 0) {

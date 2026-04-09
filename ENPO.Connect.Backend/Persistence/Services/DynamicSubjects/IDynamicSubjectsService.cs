@@ -17,6 +17,9 @@ public interface IDynamicSubjectsService
         int categoryId,
         string userId,
         string? appId,
+        int? stageId = null,
+        int? actionId = null,
+        int? requestId = null,
         CancellationToken cancellationToken = default);
 
     Task<CommonResponse<SubjectDetailDto>> CreateSubjectAsync(

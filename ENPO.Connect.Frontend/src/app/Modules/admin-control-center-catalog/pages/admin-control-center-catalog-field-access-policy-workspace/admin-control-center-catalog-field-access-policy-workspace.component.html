@@ -1,0 +1,549 @@
+<section class="access-workspace" dir="rtl">
+  <header class="workspace-header">
+    <div>
+      <h4>إدارة Field/Group Access Policy</h4>
+      <p>
+        نوع الطلب الحالي:
+        <strong>{{ requestContextLabel }}</strong>
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        icon="pi pi-refresh"
+        label="تحديث"
+        [disabled]="loadingWorkspace || !canManageWorkspace"
+        (click)="onRefreshWorkspace()">
+      </button>
+      <button
+        pButton
+        type="button"
+        icon="pi pi-save"
+        label="حفظ كل التغييرات"
+        [disabled]="savingWorkspace || !canManageWorkspace || !defaultPolicyReady"
+        [loading]="savingWorkspace"
+        (click)="onSaveWorkspace()">
+      </button>
+    </div>
+  </header>
+
+  <div class="message" *ngIf="message.length > 0" [ngClass]="messageSeverity">
+    {{ message }}
+  </div>
+
+  <section class="progress-card">
+    <div class="progress-row">
+      <span>اكتمال الإلزامي</span>
+      <strong>{{ mandatoryCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="mandatoryCompletionPercent"></p-progressBar>
+
+    <div class="progress-row">
+      <span>اكتمال الاختياري</span>
+      <strong>{{ optionalCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="optionalCompletionPercent"></p-progressBar>
+
+    <div class="progress-row overall">
+      <span>الاكتمال الكلي</span>
+      <strong>{{ overallCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="overallCompletionPercent"></p-progressBar>
+  </section>
+
+  <div class="empty-state" *ngIf="!canManageWorkspace">
+    اختر Request Type من شجرة الكتالوج أولًا حتى تبدأ إعداد سياسة الوصول.
+  </div>
+
+  <p-tabView *ngIf="canManageWorkspace" styleClass="access-tab-view">
+    <p-tabPanel header="Overview">
+      <section class="overview-grid" *ngIf="workspace as data; else workspaceLoading">
+        <article class="stat-card">
+          <span>عدد القواعد</span>
+          <strong>{{ rules.length }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>عدد الأقفال</span>
+          <strong>{{ locks.length }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>المجموعات</span>
+          <strong>{{ data.groups.length }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>الحقول</span>
+          <strong>{{ data.fields.length }}</strong>
+        </article>
+      </section>
+
+      <div class="overview-notes" *ngIf="workspace as data">
+        <p-tag [severity]="data.policy.isActive ? 'success' : 'danger'" [value]="data.policy.isActive ? 'السياسة مفعلة' : 'السياسة غير مفعلة'"></p-tag>
+        <p-tag severity="info" [value]="'الوضع الافتراضي: ' + data.policy.defaultAccessMode"></p-tag>
+      </div>
+
+      <ng-template #workspaceLoading>
+        <div class="loading-state" *ngIf="loadingWorkspace; else noWorkspaceData">
+          جاري تحميل إعدادات السياسة...
+        </div>
+      </ng-template>
+
+      <ng-template #noWorkspaceData>
+        <div class="empty-state">لا توجد بيانات متاحة لسياسة الوصول حتى الآن.</div>
+      </ng-template>
+    </p-tabPanel>
+
+    <p-tabPanel header="Default Policy">
+      <form class="editor" [formGroup]="policyForm" novalidate>
+        <p class="required-note"><span>*</span> الحقول المعلمة إلزامية</p>
+
+        <div class="grid two-cols">
+          <div class="field span-two">
+            <label for="policyName">اسم السياسة <span class="required">*</span></label>
+            <input pInputText id="policyName" formControlName="policyName" placeholder="مثال: سياسة طلبات الموارد البشرية" />
+          </div>
+
+          <div class="field">
+            <label for="defaultAccessMode">الوضع الافتراضي <span class="required">*</span></label>
+            <p-dropdown
+              inputId="defaultAccessMode"
+              [options]="permissionTypeOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="defaultAccessMode"
+              appendTo="body">
+            </p-dropdown>
+          </div>
+
+          <div class="field toggle-field">
+            <label for="isPolicyActive">تفعيل السياسة</label>
+            <p-inputSwitch inputId="isPolicyActive" formControlName="isPolicyActive"></p-inputSwitch>
+          </div>
+        </div>
+      </form>
+    </p-tabPanel>
+
+    <p-tabPanel header="Stage/Action Rules" [disabled]="!defaultPolicyReady">
+      <div class="workspace-grid">
+        <form class="editor" [formGroup]="ruleForm" novalidate>
+          <h5>إضافة قاعدة جديدة</h5>
+          <p class="required-note"><span>*</span> Action لا يعمل بدون Stage</p>
+
+          <div class="grid two-cols">
+            <div class="field">
+              <label>Target Level <span class="required">*</span></label>
+              <p-dropdown
+                [options]="targetLevelOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="targetLevel"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Target <span class="required">*</span></label>
+              <p-dropdown
+                [options]="ruleTargetOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="targetId"
+                appendTo="body"
+                [filter]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Stage</label>
+              <p-dropdown
+                [options]="stageOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="stageId"
+                appendTo="body"
+                [showClear]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Action</label>
+              <p-dropdown
+                [options]="ruleActionOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="actionId"
+                appendTo="body"
+                [showClear]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Permission <span class="required">*</span></label>
+              <p-dropdown
+                [options]="permissionTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="permissionType"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Subject Type <span class="required">*</span></label>
+              <p-dropdown
+                [options]="subjectTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="subjectType"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Subject Id (عند الحاجة)</label>
+              <input pInputText formControlName="subjectId" placeholder="مثال: 120 أو user123" />
+            </div>
+
+            <div class="field">
+              <label>Effect</label>
+              <p-dropdown
+                [options]="effectOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="effect"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Priority</label>
+              <input pInputText type="number" formControlName="priority" />
+            </div>
+
+            <div class="field toggle-field">
+              <label>Active</label>
+              <p-inputSwitch formControlName="isActive"></p-inputSwitch>
+            </div>
+
+            <div class="field span-two">
+              <label>ملاحظات</label>
+              <textarea pInputTextarea rows="2" formControlName="notes"></textarea>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button pButton type="button" icon="pi pi-plus" label="إضافة القاعدة" (click)="onAddRule()"></button>
+          </div>
+        </form>
+
+        <section class="table-card">
+          <header>
+            <h5>القواعد الحالية</h5>
+          </header>
+
+          <p-table [value]="rules" responsiveLayout="scroll" [rows]="8" [paginator]="rules.length > 8">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Level/Target</th>
+                <th>Stage/Action</th>
+                <th>Permission</th>
+                <th>Subject</th>
+                <th>Priority</th>
+                <th>Active</th>
+                <th></th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-rule let-rowIndex="rowIndex">
+              <tr>
+                <td>{{ rule.targetLevel }} #{{ rule.targetId }}</td>
+                <td>{{ rule.stageId || '-' }} / {{ rule.actionId || '-' }}</td>
+                <td>{{ rule.permissionType }} ({{ rule.effect }})</td>
+                <td>{{ rule.subjectType }} {{ rule.subjectId ? '(' + rule.subjectId + ')' : '' }}</td>
+                <td>{{ rule.priority }}</td>
+                <td>
+                  <p-tag [value]="rule.isActive ? 'نعم' : 'لا'" [severity]="rule.isActive ? 'success' : 'danger'"></p-tag>
+                </td>
+                <td>
+                  <button pButton type="button" class="p-button-text p-button-danger" icon="pi pi-trash" (click)="onRemoveRule(rowIndex)"></button>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="Locks" [disabled]="!defaultPolicyReady">
+      <div class="workspace-grid">
+        <form class="editor" [formGroup]="lockForm" novalidate>
+          <h5>إضافة قفل جديد</h5>
+
+          <div class="grid two-cols">
+            <div class="field">
+              <label>Target Level <span class="required">*</span></label>
+              <p-dropdown
+                [options]="targetLevelOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="targetLevel"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Target <span class="required">*</span></label>
+              <p-dropdown
+                [options]="lockTargetOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="targetId"
+                appendTo="body"
+                [filter]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Stage</label>
+              <p-dropdown
+                [options]="stageOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="stageId"
+                appendTo="body"
+                [showClear]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Action</label>
+              <p-dropdown
+                [options]="lockActionOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="actionId"
+                appendTo="body"
+                [showClear]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Lock Mode <span class="required">*</span></label>
+              <p-dropdown
+                [options]="lockModeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="lockMode"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Override Subject Type</label>
+              <p-dropdown
+                [options]="subjectTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="allowedOverrideSubjectType"
+                appendTo="body"
+                [showClear]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>Override Subject Id</label>
+              <input pInputText formControlName="allowedOverrideSubjectId" placeholder="اختياري" />
+            </div>
+
+            <div class="field toggle-field">
+              <label>Active</label>
+              <p-inputSwitch formControlName="isActive"></p-inputSwitch>
+            </div>
+
+            <div class="field span-two">
+              <label>ملاحظات</label>
+              <textarea pInputTextarea rows="2" formControlName="notes"></textarea>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button pButton type="button" icon="pi pi-plus" label="إضافة القفل" (click)="onAddLock()"></button>
+          </div>
+        </form>
+
+        <section class="table-card">
+          <header>
+            <h5>الأقفال الحالية</h5>
+          </header>
+
+          <p-table [value]="locks" responsiveLayout="scroll" [rows]="8" [paginator]="locks.length > 8">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Level/Target</th>
+                <th>Stage/Action</th>
+                <th>Lock Mode</th>
+                <th>Override</th>
+                <th>Active</th>
+                <th></th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-item let-rowIndex="rowIndex">
+              <tr>
+                <td>{{ item.targetLevel }} #{{ item.targetId }}</td>
+                <td>{{ item.stageId || '-' }} / {{ item.actionId || '-' }}</td>
+                <td>{{ item.lockMode }}</td>
+                <td>{{ item.allowedOverrideSubjectType || '-' }} {{ item.allowedOverrideSubjectId ? '(' + item.allowedOverrideSubjectId + ')' : '' }}</td>
+                <td>
+                  <p-tag [value]="item.isActive ? 'نعم' : 'لا'" [severity]="item.isActive ? 'success' : 'danger'"></p-tag>
+                </td>
+                <td>
+                  <button pButton type="button" class="p-button-text p-button-danger" icon="pi pi-trash" (click)="onRemoveLock(rowIndex)"></button>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="Preview" [disabled]="!defaultPolicyReady">
+      <form class="editor" [formGroup]="previewForm" novalidate>
+        <p class="required-note"><span>*</span> Subject Id مطلوب فقط إذا كان Subject Type = OrgUnit/Position/User</p>
+
+        <div class="grid two-cols">
+          <div class="field">
+            <label>Stage</label>
+            <p-dropdown
+              [options]="previewStageOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="stageId"
+              appendTo="body"
+              [showClear]="true">
+            </p-dropdown>
+          </div>
+
+          <div class="field">
+            <label>Action</label>
+            <p-dropdown
+              [options]="previewActionOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="actionId"
+              appendTo="body"
+              [showClear]="true">
+            </p-dropdown>
+          </div>
+
+          <div class="field">
+            <label>Subject Type</label>
+            <p-dropdown
+              [options]="subjectTypeOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="subjectType"
+              appendTo="body"
+              [showClear]="true">
+            </p-dropdown>
+          </div>
+
+          <div class="field">
+            <label>Subject Id</label>
+            <input pInputText formControlName="subjectId" placeholder="مثال: UserId أو PositionId" />
+          </div>
+
+          <div class="field">
+            <label>Request Id (اختياري)</label>
+            <input pInputText type="number" formControlName="requestId" />
+          </div>
+
+          <div class="field">
+            <label>Request Owner UserId</label>
+            <input pInputText formControlName="requestOwnerUserId" />
+          </div>
+
+          <div class="field span-two">
+            <label>Current Custodian UnitId</label>
+            <input pInputText formControlName="currentCustodianUnitId" />
+          </div>
+        </div>
+
+        <div class="actions">
+          <button
+            pButton
+            type="button"
+            icon="pi pi-eye"
+            label="تشغيل المعاينة"
+            [loading]="loadingPreview"
+            (click)="onRunPreview()">
+          </button>
+        </div>
+      </form>
+
+      <section class="preview-summary" *ngIf="preview as data">
+        <p-tag severity="warning" [value]="'Hidden Groups: ' + data.hiddenGroupsCount"></p-tag>
+        <p-tag severity="warning" [value]="'Hidden Fields: ' + data.hiddenFieldsCount"></p-tag>
+        <p-tag severity="info" [value]="'ReadOnly Fields: ' + data.readOnlyFieldsCount"></p-tag>
+        <p-tag severity="danger" [value]="'Required Fields: ' + data.requiredFieldsCount"></p-tag>
+        <p-tag severity="danger" [value]="'Locked Fields: ' + data.lockedFieldsCount"></p-tag>
+      </section>
+
+      <div class="preview-grid" *ngIf="preview as data">
+        <section class="table-card">
+          <header>
+            <h5>المجموعات (كما يراها المستخدم)</h5>
+          </header>
+          <p-table [value]="data.groups" responsiveLayout="scroll" [rows]="6" [paginator]="data.groups.length > 6">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>المجموعة</th>
+                <th>الظهور</th>
+                <th>التعديل</th>
+                <th>مطلوب</th>
+                <th>Lock</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-group>
+              <tr>
+                <td>{{ group.groupName }} (#{{ group.groupId }})</td>
+                <td><span [ngClass]="statusClass(group.canView)">{{ statusLabel(group.canView, 'ظاهر', 'مخفي') }}</span></td>
+                <td><span [ngClass]="statusClass(!group.isReadOnly)">{{ statusLabel(!group.isReadOnly, 'Editable', 'ReadOnly') }}</span></td>
+                <td><span [ngClass]="statusClass(group.isRequired)">{{ statusLabel(group.isRequired, 'نعم', 'لا') }}</span></td>
+                <td>{{ group.isLocked ? (group.lockReason || 'Locked') : '—' }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+
+        <section class="table-card">
+          <header>
+            <h5>الحقول (كما يراها المستخدم)</h5>
+          </header>
+          <p-table [value]="data.fields" responsiveLayout="scroll" [rows]="8" [paginator]="data.fields.length > 8">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>الحقل</th>
+                <th>المجموعة</th>
+                <th>الظهور</th>
+                <th>التعديل</th>
+                <th>مطلوب</th>
+                <th>Lock</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-field>
+              <tr>
+                <td>{{ field.fieldLabel || field.fieldKey }} (#{{ field.mendSql }})</td>
+                <td>#{{ field.mendGroup }}</td>
+                <td><span [ngClass]="statusClass(field.canView)">{{ statusLabel(field.canView, 'ظاهر', 'مخفي') }}</span></td>
+                <td><span [ngClass]="statusClass(!field.isReadOnly)">{{ statusLabel(!field.isReadOnly, 'Editable', 'ReadOnly') }}</span></td>
+                <td><span [ngClass]="statusClass(field.isRequired)">{{ statusLabel(field.isRequired, 'نعم', 'لا') }}</span></td>
+                <td>{{ field.isLocked ? (field.lockReason || 'Locked') : '—' }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+      </div>
+    </p-tabPanel>
+  </p-tabView>
+</section>

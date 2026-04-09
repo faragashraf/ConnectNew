@@ -476,7 +476,12 @@ public sealed partial class DynamicSubjectsService
                     normalizedUserId,
                     category.ApplicationId,
                     allowInactiveCategory: true,
-                    cancellationToken);
+                    stageId: null,
+                    actionId: null,
+                    requestId: null,
+                    includeMetadataHiddenLinks: true,
+                    preserveHiddenByAccessInPayload: true,
+                    cancellationToken: cancellationToken);
                 if (definitionResponse.Errors?.Count > 0)
                 {
                     foreach (var error in definitionResponse.Errors)
@@ -623,7 +628,12 @@ public sealed partial class DynamicSubjectsService
                 normalizedUserId,
                 category.ApplicationId,
                 allowInactiveCategory: true,
-                cancellationToken);
+                stageId: null,
+                actionId: null,
+                requestId: null,
+                includeMetadataHiddenLinks: true,
+                preserveHiddenByAccessInPayload: true,
+                cancellationToken: cancellationToken);
             if (definitionResponse.Errors?.Count > 0)
             {
                 foreach (var error in definitionResponse.Errors)
@@ -1755,7 +1765,17 @@ public sealed partial class DynamicSubjectsService
             return Task.FromResult(invalidResponse);
         }
 
-        return BuildFormDefinitionAsync(categoryId, userId, appId, allowInactiveCategory: true, cancellationToken);
+        return BuildFormDefinitionAsync(
+            categoryId,
+            userId,
+            appId,
+            allowInactiveCategory: true,
+            stageId: null,
+            actionId: null,
+            requestId: null,
+            includeMetadataHiddenLinks: true,
+            preserveHiddenByAccessInPayload: true,
+            cancellationToken: cancellationToken);
     }
 
     public async Task<CommonResponse<SubjectAdminPreviewWorkspaceDto>> GetAdminPreviewWorkspaceAsync(
@@ -1823,7 +1843,12 @@ public sealed partial class DynamicSubjectsService
                 normalizedUserId,
                 appId,
                 allowInactiveCategory: true,
-                cancellationToken);
+                stageId: null,
+                actionId: null,
+                requestId: null,
+                includeMetadataHiddenLinks: true,
+                preserveHiddenByAccessInPayload: true,
+                cancellationToken: cancellationToken);
 
             if (definitionResponse.Errors?.Count > 0)
             {
@@ -2452,9 +2477,10 @@ public sealed partial class DynamicSubjectsService
             .FirstOrDefaultAsync(cancellationToken));
 
         var linkRows = await (from link in _connectContext.CdCategoryMands.AsNoTracking()
-                              join mandGroup in _connectContext.MandGroups.AsNoTracking()
-                                  on link.MendGroup equals mandGroup.GroupId into groupJoin
-                              from mandGroup in groupJoin.DefaultIfEmpty()
+                              join adminGroup in _connectContext.AdminCatalogCategoryGroups.AsNoTracking()
+                                  on new { GroupId = link.MendGroup, CategoryId = link.MendCategory }
+                                  equals new { GroupId = adminGroup.GroupId, CategoryId = adminGroup.CategoryId } into groupJoin
+                              from adminGroup in groupJoin.DefaultIfEmpty()
                               join setting in _connectContext.SubjectCategoryFieldSettings.AsNoTracking()
                                   on link.MendSql equals setting.MendSql into settingJoin
                               from setting in settingJoin.DefaultIfEmpty()
@@ -2469,7 +2495,7 @@ public sealed partial class DynamicSubjectsService
                                   link.MendField,
                                   link.MendGroup,
                                   link.MendStat,
-                                  GroupName = mandGroup != null ? mandGroup.GroupName : null,
+                                  GroupName = adminGroup != null ? adminGroup.GroupName : null,
                                   DisplayOrder = setting != null ? setting.DisplayOrder : link.MendSql,
                                   IsVisible = setting == null || setting.IsVisible,
                                   DisplaySettingsJson = setting != null ? setting.DisplaySettingsJson : null

@@ -406,4 +406,36 @@
       </div>
     </ng-template>
   </section>
+
+  <section class="card access-policy-card">
+    <header class="card-header">
+      <div>
+        <h3>إدارة Field/Group Access Policy</h3>
+        <small>صلاحيات المجموعات والحقول حسب Stage + Action داخل نفس Workspace</small>
+      </div>
+      <div class="routing-tags">
+        <p-tag
+          [value]="'اكتمال الإلزامي: ' + fieldAccessMandatoryCompletionPercent + '%'"
+          severity="danger">
+        </p-tag>
+      </div>
+    </header>
+
+    <div class="context-banner" *ngIf="selectedCategoryId; else accessNoNodeSelected">
+      <strong>Request Type الحالي للـ Access Policy:</strong>
+      <span>{{ selectedCategoryPathLabel }}</span>
+    </div>
+
+    <app-admin-control-center-catalog-field-access-policy-workspace
+      [requestTypeId]="selectedCategoryId"
+      [requestTypeLabel]="selectedCategoryPathLabel"
+      (completionPercentChange)="onFieldAccessCompletionChanged($event)">
+    </app-admin-control-center-catalog-field-access-policy-workspace>
+
+    <ng-template #accessNoNodeSelected>
+      <div class="empty-state">
+        لا يمكن بدء إعداد صلاحيات الحقول قبل اختيار Node (نوع طلب) من الشجرة في المرحلة الأولى.
+      </div>
+    </ng-template>
+  </section>
 </section>

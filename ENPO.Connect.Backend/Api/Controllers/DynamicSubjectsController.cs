@@ -48,9 +48,19 @@ public class DynamicSubjectsController : ControllerBase
         public Task<CommonResponse<SubjectFormDefinitionDto>> GetFormDefinition(
             int categoryId,
             string? appId,
+            int? stageId,
+            int? actionId,
+            int? requestId,
             CancellationToken cancellationToken = default)
         {
-            return _dynamicSubjectsService.GetFormDefinitionAsync(categoryId, GetCurrentUserId(), appId, cancellationToken);
+            return _dynamicSubjectsService.GetFormDefinitionAsync(
+                categoryId,
+                GetCurrentUserId(),
+                appId,
+                stageId,
+                actionId,
+                requestId,
+                cancellationToken);
         }
 
         [HttpGet("Subjects")]
@@ -464,6 +474,8 @@ public class DynamicSubjectsController : ControllerBase
             {
                 CategoryId = form.CategoryId,
                 DocumentDirection = form.DocumentDirection,
+                StageId = form.StageId,
+                ActionId = form.ActionId,
                 Subject = form.Subject,
                 Description = form.Description,
                 SaveAsDraft = form.SaveAsDraft,

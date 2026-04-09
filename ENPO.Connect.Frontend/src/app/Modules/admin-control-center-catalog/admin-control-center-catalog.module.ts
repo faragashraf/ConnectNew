@@ -6,12 +6,14 @@ import { AdminControlCenterCatalogRoutingModule } from './admin-control-center-c
 import { AdminControlCenterCatalogPageComponent } from './pages/admin-control-center-catalog-page/admin-control-center-catalog-page.component';
 import { AdminControlCenterCatalogFieldLibraryPageComponent } from './pages/admin-control-center-catalog-field-library-page/admin-control-center-catalog-field-library-page.component';
 import { AdminControlCenterCatalogRoutingWorkspaceComponent } from './pages/admin-control-center-catalog-routing-workspace/admin-control-center-catalog-routing-workspace.component';
+import { AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent } from './pages/admin-control-center-catalog-field-access-policy-workspace/admin-control-center-catalog-field-access-policy-workspace.component';
 
 @NgModule({
   declarations: [
     AdminControlCenterCatalogPageComponent,
     AdminControlCenterCatalogFieldLibraryPageComponent,
-    AdminControlCenterCatalogRoutingWorkspaceComponent
+    AdminControlCenterCatalogRoutingWorkspaceComponent,
+    AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent
   ],
   imports: [
     CommonModule,

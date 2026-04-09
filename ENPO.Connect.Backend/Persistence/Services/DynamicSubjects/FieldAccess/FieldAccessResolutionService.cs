@@ -1,0 +1,783 @@
+using Microsoft.EntityFrameworkCore;
+using Models.Correspondance;
+using Persistence.Data;
+using System.Globalization;
+
+namespace Persistence.Services.DynamicSubjects.FieldAccess;
+
+public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
+{
+    private readonly ConnectContext _connectContext;
+    private readonly GPAContext _gpaContext;
+
+    public FieldAccessResolutionService(ConnectContext connectContext, GPAContext gpaContext)
+    {
+        _connectContext = connectContext;
+        _gpaContext = gpaContext;
+    }
+
+    public async Task<FieldAccessResolutionResult> ResolveAsync(
+        FieldAccessResolutionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new FieldAccessResolutionResult();
+        if (request == null || request.RequestTypeId <= 0)
+        {
+            return result;
+        }
+
+        var normalizedGroups = (request.Groups ?? Array.Empty<Models.DTO.DynamicSubjects.SubjectGroupDefinitionDto>())
+            .Where(group => group != null)
+            .GroupBy(group => group.GroupId)
+            .Select(group => group.First())
+            .ToList();
+        var normalizedFields = (request.Fields ?? Array.Empty<Models.DTO.DynamicSubjects.SubjectFieldDefinitionDto>())
+            .Where(field => field != null)
+            .ToList();
+
+        var policy = await _connectContext.FieldAccessPolicies
+            .AsNoTracking()
+            .Where(item => item.RequestTypeId == request.RequestTypeId && item.IsActive)
+            .OrderByDescending(item => item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var rules = policy == null
+            ? new List<FieldAccessPolicyRule>()
+            : await _connectContext.FieldAccessPolicyRules
+                .AsNoTracking()
+                .Where(item => item.PolicyId == policy.Id && item.IsActive)
+                .ToListAsync(cancellationToken);
+
+        var locks = await _connectContext.FieldAccessLocks
+            .AsNoTracking()
+            .Where(item => item.RequestTypeId == request.RequestTypeId && item.IsActive)
+            .ToListAsync(cancellationToken);
+
+        var overrides = await _connectContext.FieldAccessOverrides
+            .AsNoTracking()
+            .Where(item => item.IsActive)
+            .Where(item => !item.ExpiresAt.HasValue || item.ExpiresAt.Value >= DateTime.UtcNow)
+            .Where(item => (item.RequestId.HasValue && request.RequestId.HasValue && item.RequestId.Value == request.RequestId.Value)
+                || (item.RequestTypeId.HasValue && item.RequestTypeId.Value == request.RequestTypeId))
+            .ToListAsync(cancellationToken);
+
+        var subjectContext = await BuildSubjectContextAsync(request, cancellationToken);
+
+        foreach (var group in normalizedGroups)
+        {
+            var state = new MutableState
+            {
+                IsHidden = false,
+                IsReadOnly = false,
+                IsRequired = false
+            };
+
+            ApplyDefaultMode(state, policy?.DefaultAccessMode);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Request", request.RequestTypeId);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Group", group.GroupId);
+            ApplyLock(state, SelectBestLock(locks, subjectContext, request, "Group", group.GroupId)
+                ?? SelectBestLock(locks, subjectContext, request, "Request", request.RequestTypeId), subjectContext);
+
+            result.GroupStates[group.GroupId] = state.ToResolved();
+        }
+
+        foreach (var field in normalizedFields)
+        {
+            var state = new MutableState
+            {
+                IsHidden = field.IsVisible == false,
+                IsReadOnly = field.IsDisabledInit,
+                IsRequired = field.Required
+            };
+
+            ApplyDefaultMode(state, policy?.DefaultAccessMode);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Request", request.RequestTypeId);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Group", field.MendGroup);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Field", field.MendSql);
+
+            var selectedLock = SelectBestLock(locks, subjectContext, request, "Field", field.MendSql)
+                ?? SelectBestLock(locks, subjectContext, request, "Group", field.MendGroup)
+                ?? SelectBestLock(locks, subjectContext, request, "Request", request.RequestTypeId);
+            ApplyLock(state, selectedLock, subjectContext);
+
+            var resolved = state.ToResolved();
+            result.FieldStatesByMendSql[field.MendSql] = resolved;
+
+            var normalizedFieldKey = NormalizeNullable(field.FieldKey);
+            if (normalizedFieldKey != null)
+            {
+                result.FieldStatesByKey[normalizedFieldKey] = resolved;
+            }
+        }
+
+        return result;
+    }
+
+    private static void ApplyTargetPolicies(
+        MutableState state,
+        IReadOnlyCollection<FieldAccessPolicyRule> rules,
+        IReadOnlyCollection<FieldAccessOverride> overrides,
+        SubjectContext subjectContext,
+        FieldAccessResolutionRequest request,
+        string targetLevel,
+        int targetId)
+    {
+        if (targetId <= 0)
+        {
+            return;
+        }
+
+        var visibilityOverride = SelectBestOverride(overrides, subjectContext, request, targetLevel, targetId, "visibility");
+        if (visibilityOverride != null)
+        {
+            ApplyPermission(state, visibilityOverride.OverridePermissionType, effect: "Allow", permissionKind: "visibility");
+        }
+        else
+        {
+            var visibilityRule = SelectBestRule(rules, subjectContext, request, targetLevel, targetId, "visibility");
+            if (visibilityRule != null)
+            {
+                ApplyPermission(state, visibilityRule.PermissionType, visibilityRule.Effect, permissionKind: "visibility");
+            }
+        }
+
+        var requirementOverride = SelectBestOverride(overrides, subjectContext, request, targetLevel, targetId, "requirement");
+        if (requirementOverride != null)
+        {
+            ApplyPermission(state, requirementOverride.OverridePermissionType, effect: "Allow", permissionKind: "requirement");
+        }
+        else
+        {
+            var requirementRule = SelectBestRule(rules, subjectContext, request, targetLevel, targetId, "requirement");
+            if (requirementRule != null)
+            {
+                ApplyPermission(state, requirementRule.PermissionType, requirementRule.Effect, permissionKind: "requirement");
+            }
+        }
+    }
+
+    private static FieldAccessPolicyRule? SelectBestRule(
+        IReadOnlyCollection<FieldAccessPolicyRule> rules,
+        SubjectContext subjectContext,
+        FieldAccessResolutionRequest request,
+        string targetLevel,
+        int targetId,
+        string permissionKind)
+    {
+        return rules
+            .Where(rule => MatchesTarget(rule.TargetLevel, rule.TargetId, targetLevel, targetId))
+            .Where(rule => MatchesPermissionKind(rule.PermissionType, permissionKind))
+            .Where(rule => MatchesSubject(rule.SubjectType, rule.SubjectId, subjectContext))
+            .Select(rule => new
+            {
+                Rule = rule,
+                Rank = GetRuleContextRank(rule.StageId, rule.ActionId, request.StageId, request.ActionId)
+            })
+            .Where(item => item.Rank > 0)
+            .OrderByDescending(item => item.Rank)
+            .ThenByDescending(item => item.Rule.Priority)
+            .ThenByDescending(item => item.Rule.Id)
+            .Select(item => item.Rule)
+            .FirstOrDefault();
+    }
+
+    private static FieldAccessOverride? SelectBestOverride(
+        IReadOnlyCollection<FieldAccessOverride> overrides,
+        SubjectContext subjectContext,
+        FieldAccessResolutionRequest request,
+        string targetLevel,
+        int targetId,
+        string permissionKind)
+    {
+        return overrides
+            .Where(item => MatchesRequestScope(item, request))
+            .Where(item => MatchesTarget(item.TargetLevel, item.TargetId ?? 0, targetLevel, targetId))
+            .Where(item => MatchesPermissionKind(item.OverridePermissionType, permissionKind))
+            .Where(item => MatchesSubject(item.SubjectType, item.SubjectId, subjectContext))
+            .OrderByDescending(item => item.GrantedAt)
+            .ThenByDescending(item => item.Id)
+            .FirstOrDefault();
+    }
+
+    private static FieldAccessLock? SelectBestLock(
+        IReadOnlyCollection<FieldAccessLock> locks,
+        SubjectContext subjectContext,
+        FieldAccessResolutionRequest request,
+        string targetLevel,
+        int targetId)
+    {
+        if (targetId <= 0)
+        {
+            return null;
+        }
+
+        return locks
+            .Where(item => MatchesTarget(item.TargetLevel, item.TargetId, targetLevel, targetId))
+            .Select(item => new
+            {
+                Lock = item,
+                Rank = GetRuleContextRank(item.StageId, item.ActionId, request.StageId, request.ActionId)
+            })
+            .Where(item => item.Rank > 0)
+            .OrderByDescending(item => item.Rank)
+            .ThenByDescending(item => LockSeverityRank(item.Lock.LockMode))
+            .ThenByDescending(item => item.Lock.Id)
+            .Select(item => item.Lock)
+            .FirstOrDefault(item => !CanBypassLock(item, subjectContext));
+    }
+
+    private static bool MatchesRequestScope(FieldAccessOverride item, FieldAccessResolutionRequest request)
+    {
+        if (item == null)
+        {
+            return false;
+        }
+
+        if (item.RequestId.HasValue && request.RequestId.HasValue)
+        {
+            return item.RequestId.Value == request.RequestId.Value;
+        }
+
+        if (item.RequestTypeId.HasValue)
+        {
+            return item.RequestTypeId.Value == request.RequestTypeId;
+        }
+
+        return false;
+    }
+
+    private static bool MatchesTarget(string? sourceTargetLevel, int sourceTargetId, string expectedTargetLevel, int expectedTargetId)
+    {
+        if (expectedTargetId <= 0)
+        {
+            return false;
+        }
+
+        var normalizedLevel = NormalizeLevel(sourceTargetLevel);
+        var normalizedExpectedLevel = NormalizeLevel(expectedTargetLevel);
+        return normalizedLevel == normalizedExpectedLevel && sourceTargetId == expectedTargetId;
+    }
+
+    private static bool MatchesPermissionKind(string? permissionType, string permissionKind)
+    {
+        var normalizedPermission = NormalizePermission(permissionType);
+        if (permissionKind == "requirement")
+        {
+            return normalizedPermission == "requiredinput";
+        }
+
+        return normalizedPermission == "hidden"
+            || normalizedPermission == "readonly"
+            || normalizedPermission == "editable";
+    }
+
+    private static int GetRuleContextRank(int? stageId, int? actionId, int? requestedStageId, int? requestedActionId)
+    {
+        if (actionId.HasValue)
+        {
+            if (!requestedActionId.HasValue || requestedActionId.Value != actionId.Value)
+            {
+                return 0;
+            }
+
+            if (stageId.HasValue && (!requestedStageId.HasValue || requestedStageId.Value != stageId.Value))
+            {
+                return 0;
+            }
+
+            return 3;
+        }
+
+        if (stageId.HasValue)
+        {
+            return requestedStageId.HasValue && requestedStageId.Value == stageId.Value
+                ? 2
+                : 0;
+        }
+
+        return 1;
+    }
+
+    private static int LockSeverityRank(string? lockMode)
+    {
+        return NormalizeLockMode(lockMode) switch
+        {
+            "fulllock" => 3,
+            "noinput" => 2,
+            "noedit" => 1,
+            _ => 0
+        };
+    }
+
+    private static bool CanBypassLock(FieldAccessLock lockItem, SubjectContext subjectContext)
+    {
+        var subjectType = NormalizeSubjectType(lockItem.AllowedOverrideSubjectType);
+        if (subjectType == null)
+        {
+            return false;
+        }
+
+        var subjectId = NormalizeNullable(lockItem.AllowedOverrideSubjectId);
+
+        if (subjectType == "user")
+        {
+            if (subjectContext.UserId == null)
+            {
+                return false;
+            }
+
+            return subjectId == null || string.Equals(subjectContext.UserId, subjectId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (subjectType == "orgunit")
+        {
+            if (subjectId == null)
+            {
+                return false;
+            }
+
+            return subjectContext.OrgUnitIds.Contains(subjectId);
+        }
+
+        if (subjectType == "position")
+        {
+            if (subjectId == null)
+            {
+                return false;
+            }
+
+            return subjectContext.PositionIds.Contains(subjectId);
+        }
+
+        if (subjectType == "requestowner")
+        {
+            return subjectContext.IsRequestOwner;
+        }
+
+        if (subjectType == "currentcustodian")
+        {
+            if (!subjectContext.IsCurrentCustodian)
+            {
+                return false;
+            }
+
+            return subjectId == null
+                || string.Equals(subjectContext.CurrentCustodianUnitId, subjectId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private static bool MatchesSubject(string? subjectType, string? subjectId, SubjectContext context)
+    {
+        var normalizedType = NormalizeSubjectType(subjectType);
+        if (normalizedType == null)
+        {
+            return false;
+        }
+
+        var normalizedSubjectId = NormalizeNullable(subjectId);
+
+        if (normalizedType == "orgunit")
+        {
+            if (normalizedSubjectId == null)
+            {
+                return false;
+            }
+
+            return context.OrgUnitIds.Contains(normalizedSubjectId);
+        }
+
+        if (normalizedType == "position")
+        {
+            if (normalizedSubjectId == null)
+            {
+                return false;
+            }
+
+            return context.PositionIds.Contains(normalizedSubjectId);
+        }
+
+        if (normalizedType == "user")
+        {
+            if (context.UserId == null)
+            {
+                return false;
+            }
+
+            return normalizedSubjectId != null
+                && string.Equals(context.UserId, normalizedSubjectId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (normalizedType == "requestowner")
+        {
+            return context.IsRequestOwner;
+        }
+
+        if (normalizedType == "currentcustodian")
+        {
+            if (!context.IsCurrentCustodian)
+            {
+                return false;
+            }
+
+            if (normalizedSubjectId == null)
+            {
+                return true;
+            }
+
+            return string.Equals(context.CurrentCustodianUnitId, normalizedSubjectId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private static void ApplyDefaultMode(MutableState state, string? defaultAccessMode)
+    {
+        var normalizedMode = NormalizePermission(defaultAccessMode);
+        if (normalizedMode.Length == 0)
+        {
+            return;
+        }
+
+        ApplyPermission(state, normalizedMode, effect: "Allow", permissionKind: "visibility");
+        if (normalizedMode == "requiredinput")
+        {
+            ApplyPermission(state, normalizedMode, effect: "Allow", permissionKind: "requirement");
+        }
+    }
+
+    private static void ApplyPermission(MutableState state, string? permissionType, string? effect, string permissionKind)
+    {
+        var normalizedPermission = NormalizePermission(permissionType);
+        if (normalizedPermission.Length == 0)
+        {
+            return;
+        }
+
+        var normalizedEffect = NormalizeNullable(effect)?.ToLowerInvariant() ?? "allow";
+        if (permissionKind == "requirement")
+        {
+            if (normalizedPermission != "requiredinput")
+            {
+                return;
+            }
+
+            state.IsRequired = normalizedEffect == "deny" ? false : true;
+            return;
+        }
+
+        if (normalizedEffect == "deny")
+        {
+            normalizedPermission = normalizedPermission switch
+            {
+                "editable" => "readonly",
+                "readonly" => "hidden",
+                _ => normalizedPermission
+            };
+        }
+
+        if (normalizedPermission == "hidden")
+        {
+            state.IsHidden = true;
+            state.IsReadOnly = true;
+            state.IsRequired = false;
+            return;
+        }
+
+        if (normalizedPermission == "readonly")
+        {
+            state.IsHidden = false;
+            state.IsReadOnly = true;
+            return;
+        }
+
+        if (normalizedPermission == "editable")
+        {
+            state.IsHidden = false;
+            state.IsReadOnly = false;
+        }
+    }
+
+    private static void ApplyLock(MutableState state, FieldAccessLock? lockItem, SubjectContext subjectContext)
+    {
+        if (lockItem == null || CanBypassLock(lockItem, subjectContext))
+        {
+            return;
+        }
+
+        state.IsLocked = true;
+        state.LockReason = NormalizeNullable(lockItem.Notes)
+            ?? BuildLockReason(lockItem.LockMode);
+
+        var normalizedMode = NormalizeLockMode(lockItem.LockMode);
+        if (normalizedMode == "fulllock")
+        {
+            state.IsHidden = true;
+            state.IsReadOnly = true;
+            state.IsRequired = false;
+            return;
+        }
+
+        if (normalizedMode == "noinput")
+        {
+            state.IsReadOnly = true;
+            state.IsRequired = false;
+            return;
+        }
+
+        if (normalizedMode == "noedit")
+        {
+            state.IsReadOnly = true;
+        }
+    }
+
+    private static string BuildLockReason(string? lockMode)
+    {
+        return NormalizeLockMode(lockMode) switch
+        {
+            "fulllock" => "الهدف مقفل بالكامل في هذه المرحلة/الإجراء.",
+            "noinput" => "الهدف لا يقبل إدخال بيانات في هذه المرحلة/الإجراء.",
+            _ => "الهدف للقراءة فقط في هذه المرحلة/الإجراء."
+        };
+    }
+
+    private async Task<SubjectContext> BuildSubjectContextAsync(
+        FieldAccessResolutionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var overrideContext = request.SubjectContextOverride;
+        if (overrideContext != null && NormalizeSubjectType(overrideContext.SubjectType) != null)
+        {
+            return BuildSubjectContextFromOverride(overrideContext);
+        }
+
+        var normalizedUserId = NormalizeNullable(request.UserId);
+        var today = DateTime.Today;
+
+        var positions = normalizedUserId == null
+            ? new List<Models.GPA.OrgStructure.UserPosition>()
+            : await _gpaContext.UserPositions
+                .AsNoTracking()
+                .Where(position => position.UserId == normalizedUserId
+                    && position.IsActive != false
+                    && (!position.StartDate.HasValue || position.StartDate.Value <= today)
+                    && (!position.EndDate.HasValue || position.EndDate.Value >= today))
+                .ToListAsync(cancellationToken);
+
+        var unitIds = positions
+            .Select(position => position.UnitId.ToString(CultureInfo.InvariantCulture))
+            .Select(id => NormalizeNullable(id))
+            .Where(id => id != null)
+            .Select(id => id!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var positionIds = positions
+            .Select(position => position.PositionId.ToString(CultureInfo.InvariantCulture))
+            .Select(id => NormalizeNullable(id))
+            .Where(id => id != null)
+            .Select(id => id!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var message = request.Message;
+        var normalizedMessageCreatedBy = NormalizeNullable(message?.CreatedBy);
+        var messageActorId = NormalizeMessageActorId(request.UserId);
+        var normalizedMessageActorId = NormalizeNullable(messageActorId);
+        var isRequestOwner = message == null
+            ? true
+            : normalizedUserId != null
+                && (string.Equals(normalizedMessageCreatedBy, normalizedUserId, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(normalizedMessageCreatedBy, normalizedMessageActorId, StringComparison.OrdinalIgnoreCase));
+
+        var currentCustodianUnitId = NormalizeNullable(message?.CurrentResponsibleSectorId);
+        var isCurrentCustodian = currentCustodianUnitId != null
+            && unitIds.Contains(currentCustodianUnitId);
+
+        return new SubjectContext
+        {
+            UserId = normalizedUserId,
+            OrgUnitIds = unitIds,
+            PositionIds = positionIds,
+            IsRequestOwner = isRequestOwner,
+            IsCurrentCustodian = isCurrentCustodian,
+            CurrentCustodianUnitId = currentCustodianUnitId
+        };
+    }
+
+    private static SubjectContext BuildSubjectContextFromOverride(FieldAccessSubjectContextOverride overrideContext)
+    {
+        var context = new SubjectContext();
+        var normalizedType = NormalizeSubjectType(overrideContext.SubjectType);
+        var normalizedSubjectId = NormalizeNullable(overrideContext.SubjectId);
+
+        if (normalizedType == "orgunit" && normalizedSubjectId != null)
+        {
+            context.OrgUnitIds.Add(normalizedSubjectId);
+        }
+        else if (normalizedType == "position" && normalizedSubjectId != null)
+        {
+            context.PositionIds.Add(normalizedSubjectId);
+        }
+        else if (normalizedType == "user" && normalizedSubjectId != null)
+        {
+            context.UserId = normalizedSubjectId;
+        }
+        else if (normalizedType == "requestowner")
+        {
+            context.IsRequestOwner = true;
+            context.UserId = NormalizeNullable(overrideContext.RequestOwnerUserId) ?? normalizedSubjectId;
+        }
+        else if (normalizedType == "currentcustodian")
+        {
+            context.IsCurrentCustodian = true;
+            context.CurrentCustodianUnitId = NormalizeNullable(overrideContext.CurrentCustodianUnitId) ?? normalizedSubjectId;
+            if (context.CurrentCustodianUnitId != null)
+            {
+                context.OrgUnitIds.Add(context.CurrentCustodianUnitId);
+            }
+        }
+
+        var requestOwnerUserId = NormalizeNullable(overrideContext.RequestOwnerUserId);
+        if (requestOwnerUserId != null)
+        {
+            context.IsRequestOwner = true;
+            context.UserId ??= requestOwnerUserId;
+        }
+
+        var currentCustodianUnitId = NormalizeNullable(overrideContext.CurrentCustodianUnitId);
+        if (currentCustodianUnitId != null)
+        {
+            context.IsCurrentCustodian = true;
+            context.CurrentCustodianUnitId = currentCustodianUnitId;
+            context.OrgUnitIds.Add(currentCustodianUnitId);
+        }
+
+        return context;
+    }
+
+    private static string NormalizePermission(string? permissionType)
+    {
+        var normalized = NormalizeNullable(permissionType)?.ToLowerInvariant() ?? string.Empty;
+        return normalized.Replace("_", string.Empty).Replace("-", string.Empty).Replace(" ", string.Empty);
+    }
+
+    private static string NormalizeLockMode(string? lockMode)
+    {
+        var normalized = NormalizeNullable(lockMode)?.ToLowerInvariant() ?? string.Empty;
+        return normalized.Replace("_", string.Empty).Replace("-", string.Empty).Replace(" ", string.Empty);
+    }
+
+    private static string NormalizeLevel(string? level)
+    {
+        var normalized = NormalizeNullable(level)?.ToLowerInvariant() ?? string.Empty;
+        if (normalized.StartsWith("request"))
+        {
+            return "request";
+        }
+
+        if (normalized.StartsWith("group"))
+        {
+            return "group";
+        }
+
+        return "field";
+    }
+
+    private static string? NormalizeSubjectType(string? subjectType)
+    {
+        var normalized = NormalizeNullable(subjectType)?.ToLowerInvariant();
+        if (normalized == null)
+        {
+            return null;
+        }
+
+        return normalized switch
+        {
+            "orgunit" => "orgunit",
+            "position" => "position",
+            "user" => "user",
+            "requestowner" => "requestowner",
+            "currentcustodian" => "currentcustodian",
+            _ => null
+        };
+    }
+
+    private static string? NormalizeNullable(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim();
+        return normalized.Length == 0 ? null : normalized;
+    }
+
+    private static string NormalizeMessageActorId(string? userId)
+    {
+        var normalized = NormalizeNullable(userId) ?? string.Empty;
+        if (normalized.Length <= 20)
+        {
+            return normalized;
+        }
+
+        return normalized[..20];
+    }
+
+    private sealed class SubjectContext
+    {
+        public string? UserId { get; set; }
+
+        public HashSet<string> OrgUnitIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public HashSet<string> PositionIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public bool IsRequestOwner { get; set; }
+
+        public bool IsCurrentCustodian { get; set; }
+
+        public string? CurrentCustodianUnitId { get; set; }
+    }
+
+    private sealed class MutableState
+    {
+        public bool IsHidden { get; set; }
+
+        public bool IsReadOnly { get; set; }
+
+        public bool IsRequired { get; set; }
+
+        public bool IsLocked { get; set; }
+
+        public string? LockReason { get; set; }
+
+        public FieldAccessResolvedState ToResolved()
+        {
+            if (IsHidden)
+            {
+                return new FieldAccessResolvedState
+                {
+                    CanView = false,
+                    CanEdit = false,
+                    CanFill = false,
+                    IsHidden = true,
+                    IsReadOnly = true,
+                    IsRequired = false,
+                    IsLocked = IsLocked,
+                    LockReason = LockReason
+                };
+            }
+
+            var effectiveReadOnly = IsReadOnly;
+            var effectiveRequired = IsRequired && !effectiveReadOnly;
+            return new FieldAccessResolvedState
+            {
+                CanView = true,
+                CanEdit = !effectiveReadOnly,
+                CanFill = !effectiveReadOnly,
+                IsHidden = false,
+                IsReadOnly = effectiveReadOnly,
+                IsRequired = effectiveRequired,
+                IsLocked = IsLocked,
+                LockReason = LockReason
+            };
+        }
+    }
+}

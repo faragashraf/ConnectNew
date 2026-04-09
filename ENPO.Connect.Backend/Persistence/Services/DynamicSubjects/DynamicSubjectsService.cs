@@ -8,6 +8,7 @@ using Models.DTO.DynamicSubjects;
 using Models.GPA.OrgStructure;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.DynamicSubjects.FieldAccess;
 using Persistence.Services.Notifications;
 using System;
 using System.Collections.Generic;
@@ -39,6 +40,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
     private readonly ISubjectReferenceGenerator _referenceGenerator;
     private readonly IDynamicSubjectsRealtimePublisher _realtimePublisher;
     private readonly ISubjectNotificationService _subjectNotificationService;
+    private readonly IFieldAccessResolutionService _fieldAccessResolutionService;
     private readonly ILogger<DynamicSubjectsService>? _logger;
 
     public DynamicSubjectsService(
@@ -49,6 +51,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         ISubjectReferenceGenerator referenceGenerator,
         IDynamicSubjectsRealtimePublisher realtimePublisher,
         ISubjectNotificationService subjectNotificationService,
+        IFieldAccessResolutionService fieldAccessResolutionService,
         ILogger<DynamicSubjectsService>? logger = null)
     {
         _connectContext = connectContext;
@@ -58,6 +61,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         _referenceGenerator = referenceGenerator;
         _realtimePublisher = realtimePublisher;
         _subjectNotificationService = subjectNotificationService;
+        _fieldAccessResolutionService = fieldAccessResolutionService;
         _logger = logger;
     }
 
@@ -199,9 +203,22 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         int categoryId,
         string userId,
         string? appId,
+        int? stageId = null,
+        int? actionId = null,
+        int? requestId = null,
         CancellationToken cancellationToken = default)
     {
-        return await BuildFormDefinitionAsync(categoryId, userId, appId, allowInactiveCategory: false, cancellationToken);
+        return await BuildFormDefinitionAsync(
+            categoryId,
+            userId,
+            appId,
+            allowInactiveCategory: false,
+            stageId: NormalizePositiveInt(stageId),
+            actionId: NormalizePositiveInt(actionId),
+            requestId: NormalizePositiveInt(requestId),
+            includeMetadataHiddenLinks: false,
+            preserveHiddenByAccessInPayload: false,
+            cancellationToken: cancellationToken);
     }
 
     private async Task<CommonResponse<SubjectFormDefinitionDto>> BuildFormDefinitionAsync(
@@ -209,6 +226,11 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         string userId,
         string? appId,
         bool allowInactiveCategory,
+        int? stageId,
+        int? actionId,
+        int? requestId,
+        bool includeMetadataHiddenLinks,
+        bool preserveHiddenByAccessInPayload,
         CancellationToken cancellationToken)
     {
         var response = new CommonResponse<SubjectFormDefinitionDto>();
@@ -261,25 +283,27 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             var requestPolicy = TryReadRequestPolicyFromSettingsJson(settingsJson);
 
             var linkRows = await (from link in _connectContext.CdCategoryMands.AsNoTracking()
-                                  join mandGroup in _connectContext.MandGroups.AsNoTracking()
-                                       on link.MendGroup equals mandGroup.GroupId into groupJoin
-                                  from mandGroup in groupJoin.DefaultIfEmpty()
+                                  join adminGroup in _connectContext.AdminCatalogCategoryGroups.AsNoTracking()
+                                       on new { GroupId = link.MendGroup, CategoryId = link.MendCategory }
+                                       equals new { GroupId = adminGroup.GroupId, CategoryId = adminGroup.CategoryId } into groupJoin
+                                  from adminGroup in groupJoin.DefaultIfEmpty()
                                   join fieldSetting in _connectContext.SubjectCategoryFieldSettings.AsNoTracking()
                                        on link.MendSql equals fieldSetting.MendSql into fieldSettingJoin
                                   from fieldSetting in fieldSettingJoin.DefaultIfEmpty()
                                   where link.MendCategory == categoryId
                                         && !link.MendStat
-                                        && (fieldSetting == null || fieldSetting.IsVisible)
+                                        && (includeMetadataHiddenLinks || fieldSetting == null || fieldSetting.IsVisible)
                                   select new FormDefinitionLinkRow
                                   {
                                       MendSql = link.MendSql,
                                       MendCategory = link.MendCategory,
                                       MendField = link.MendField,
                                       MendGroup = link.MendGroup,
-                                      GroupName = mandGroup != null ? mandGroup.GroupName : null,
-                                      GroupDescription = mandGroup != null ? mandGroup.GroupDescription : null,
-                                      IsExtendable = mandGroup != null && mandGroup.IsExtendable == true,
-                                      GroupWithInRow = mandGroup != null ? mandGroup.GroupWithInRow : null,
+                                      GroupName = adminGroup != null ? adminGroup.GroupName : null,
+                                      GroupDescription = adminGroup != null ? adminGroup.GroupDescription : null,
+                                      IsExtendable = false,
+                                      GroupWithInRow = 12,
+                                      IsVisible = fieldSetting == null || fieldSetting.IsVisible,
                                       DisplayOrder = fieldSetting != null ? fieldSetting.DisplayOrder : link.MendSql,
                                       DisplaySettingsJson = fieldSetting != null ? fieldSetting.DisplaySettingsJson : null
                                   })
@@ -357,7 +381,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     Height = selectedMetadata.Height,
                     ApplicationId = selectedMetadata.ApplicationId,
                     DisplayOrder = linkRow.DisplayOrder,
-                    IsVisible = true,
+                    IsVisible = linkRow.IsVisible,
                     DisplaySettingsJson = linkRow.DisplaySettingsJson,
                     Group = new SubjectGroupDefinitionDto
                     {
@@ -388,6 +412,40 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     string.Join(", ", unmatchedFieldKeys.Distinct(StringComparer.OrdinalIgnoreCase).Take(20)));
             }
 
+            var groups = fieldRows
+                .Select(field => field.Group)
+                .Where(group => group != null)
+                .GroupBy(group => group!.GroupId)
+                .Select(grouping => grouping.First()!)
+                .OrderBy(group => group.GroupId)
+                .ToList();
+
+            await ApplyFieldAccessResolutionAsync(
+                category.CatId,
+                requestId,
+                NormalizePositiveInt(stageId),
+                NormalizePositiveInt(actionId),
+                normalizedUserId,
+                groups,
+                fieldRows,
+                cancellationToken);
+
+            var effectiveGroups = groups;
+            var effectiveFields = fieldRows;
+            if (!preserveHiddenByAccessInPayload)
+            {
+                effectiveGroups = groups
+                    .Where(item => item.CanView && !item.IsHidden)
+                    .ToList();
+                var visibleGroupIds = effectiveGroups
+                    .Select(item => item.GroupId)
+                    .ToHashSet();
+
+                effectiveFields = fieldRows
+                    .Where(item => item.CanView && !item.IsHidden && visibleGroupIds.Contains(item.MendGroup))
+                    .ToList();
+            }
+
             response.Data = new SubjectFormDefinitionDto
             {
                 CategoryId = category.CatId,
@@ -395,14 +453,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 ParentCategoryId = category.CatParent,
                 ApplicationId = category.ApplicationId,
                 RequestPolicy = requestPolicy,
-                Groups = fieldRows
-                    .Select(field => field.Group)
-                    .Where(group => group != null)
-                    .GroupBy(group => group!.GroupId)
-                    .Select(grouping => grouping.First()!)
-                    .OrderBy(group => group.GroupId)
-                    .ToList(),
-                Fields = fieldRows
+                Groups = effectiveGroups,
+                Fields = effectiveFields
             };
         }
         catch (Exception)
@@ -411,6 +463,108 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return response;
+    }
+
+    private async Task ApplyFieldAccessResolutionAsync(
+        int requestTypeId,
+        int? requestId,
+        int? stageId,
+        int? actionId,
+        string userId,
+        List<SubjectGroupDefinitionDto> groups,
+        List<SubjectFieldDefinitionDto> fields,
+        CancellationToken cancellationToken)
+    {
+        if (requestTypeId <= 0 || fields == null || fields.Count == 0)
+        {
+            return;
+        }
+
+        var normalizedUserId = NormalizeNullable(userId);
+        if (normalizedUserId == null)
+        {
+            return;
+        }
+
+        Message? message = null;
+        if (requestId.HasValue && requestId.Value > 0)
+        {
+            message = await _connectContext.Messages
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.MessageId == requestId.Value, cancellationToken);
+        }
+
+        var resolution = await _fieldAccessResolutionService.ResolveAsync(
+            new FieldAccessResolutionRequest
+            {
+                RequestTypeId = requestTypeId,
+                RequestId = requestId,
+                StageId = stageId,
+                ActionId = actionId,
+                UserId = normalizedUserId,
+                Message = message,
+                Groups = groups,
+                Fields = fields
+            },
+            cancellationToken);
+
+        foreach (var group in groups)
+        {
+            if (!resolution.GroupStates.TryGetValue(group.GroupId, out var state))
+            {
+                continue;
+            }
+
+            ApplyResolvedState(group, state);
+        }
+
+        foreach (var field in fields)
+        {
+            if (!resolution.FieldStatesByMendSql.TryGetValue(field.MendSql, out var state))
+            {
+                continue;
+            }
+
+            ApplyResolvedState(field, state);
+        }
+    }
+
+    private static void ApplyResolvedState(SubjectGroupDefinitionDto target, FieldAccessResolvedState source)
+    {
+        target.CanView = source.CanView;
+        target.CanEdit = source.CanEdit;
+        target.CanFill = source.CanFill;
+        target.IsHidden = source.IsHidden;
+        target.IsReadOnly = source.IsReadOnly;
+        target.IsRequired = source.IsRequired;
+        target.IsLocked = source.IsLocked;
+        target.LockReason = source.LockReason;
+    }
+
+    private static void ApplyResolvedState(SubjectFieldDefinitionDto target, FieldAccessResolvedState source)
+    {
+        target.CanView = source.CanView;
+        target.CanEdit = source.CanEdit;
+        target.CanFill = source.CanFill;
+        target.IsHidden = source.IsHidden;
+        target.IsReadOnly = source.IsReadOnly;
+        target.IsRequired = source.IsRequired;
+        target.IsLocked = source.IsLocked;
+        target.LockReason = source.LockReason;
+
+        target.IsVisible = source.CanView;
+        target.IsDisabledInit = !source.CanEdit;
+        target.Required = source.IsRequired;
+    }
+
+    private static int? NormalizePositiveInt(int? value)
+    {
+        if (!value.HasValue || value.Value <= 0)
+        {
+            return null;
+        }
+
+        return value.Value;
     }
 
     private static string NormalizeFieldKey(string? fieldKey)
@@ -501,6 +655,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         public string? GroupDescription { get; set; }
         public bool IsExtendable { get; set; }
         public short? GroupWithInRow { get; set; }
+        public bool IsVisible { get; set; }
         public int DisplayOrder { get; set; }
         public string? DisplaySettingsJson { get; set; }
     }
@@ -521,7 +676,11 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
-            var validation = await ValidateUpsertRequestAsync(request, normalizedUserId, cancellationToken);
+            var validation = await ValidateUpsertRequestAsync(
+                request,
+                normalizedUserId,
+                existingMessageId: null,
+                cancellationToken: cancellationToken);
             if (validation.Errors.Count > 0)
             {
                 foreach (var error in validation.Errors)
@@ -690,7 +849,11 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
-            var validation = await ValidateUpsertRequestAsync(request, normalizedUserId, cancellationToken);
+            var validation = await ValidateUpsertRequestAsync(
+                request,
+                normalizedUserId,
+                existingMessageId: messageId,
+                cancellationToken: cancellationToken);
             if (validation.Errors.Count > 0)
             {
                 foreach (var error in validation.Errors)
@@ -2284,6 +2447,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
     private async Task<(Cdcategory? Category, List<Error> Errors, List<string> UnitIds, string? DocumentDirection)> ValidateUpsertRequestAsync(
         SubjectUpsertRequestDto request,
         string userId,
+        int? existingMessageId,
         CancellationToken cancellationToken)
     {
         var errors = new List<Error>();
@@ -2379,11 +2543,29 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 category.CatId,
                 category.ApplicationId,
                 userId,
+                existingMessageId,
+                request?.StageId,
+                request?.ActionId,
                 normalizedDirection,
                 request?.DynamicFields,
                 requestPolicy,
                 cancellationToken);
             errors.AddRange(requiredFieldErrors);
+
+            if (errors.Count == 0)
+            {
+                var accessErrors = await ValidateDynamicFieldAccessAsync(
+                    category.CatId,
+                    category.ApplicationId,
+                    userId,
+                    existingMessageId,
+                    request?.StageId,
+                    request?.ActionId,
+                    normalizedDirection,
+                    request?.DynamicFields,
+                    cancellationToken);
+                errors.AddRange(accessErrors);
+            }
         }
 
         return (category, errors, unitIds, normalizedDirection);
@@ -2393,6 +2575,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         int categoryId,
         string? categoryApplicationId,
         string userId,
+        int? requestId,
+        int? stageId,
+        int? actionId,
         string? documentDirection,
         IReadOnlyCollection<SubjectFieldValueDto>? dynamicFields,
         RequestPolicyDefinitionDto? requestPolicy,
@@ -2404,7 +2589,12 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             userId,
             categoryApplicationId,
             allowInactiveCategory: true,
-            cancellationToken);
+            stageId: NormalizePositiveInt(stageId),
+            actionId: NormalizePositiveInt(actionId),
+            requestId: NormalizePositiveInt(requestId),
+            includeMetadataHiddenLinks: false,
+            preserveHiddenByAccessInPayload: false,
+            cancellationToken: cancellationToken);
         if (definitionResponse.Errors?.Count > 0 || definitionResponse.Data == null)
         {
             errors.Add(new Error
@@ -2478,6 +2668,129 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 {
                     Code = "400",
                     Message = $"الحقل '{label}' يتطلب قيمة تفعيل صحيحة قبل الإرسال."
+                });
+            }
+        }
+
+        return errors;
+    }
+
+    private async Task<List<Error>> ValidateDynamicFieldAccessAsync(
+        int categoryId,
+        string? categoryApplicationId,
+        string userId,
+        int? requestId,
+        int? stageId,
+        int? actionId,
+        string? documentDirection,
+        IReadOnlyCollection<SubjectFieldValueDto>? dynamicFields,
+        CancellationToken cancellationToken)
+    {
+        var errors = new List<Error>();
+        var definitionResponse = await BuildFormDefinitionAsync(
+            categoryId,
+            userId,
+            categoryApplicationId,
+            allowInactiveCategory: true,
+            stageId: NormalizePositiveInt(stageId),
+            actionId: NormalizePositiveInt(actionId),
+            requestId: NormalizePositiveInt(requestId),
+            includeMetadataHiddenLinks: true,
+            preserveHiddenByAccessInPayload: true,
+            cancellationToken: cancellationToken);
+
+        if (definitionResponse.Errors?.Count > 0 || definitionResponse.Data == null)
+        {
+            errors.Add(new Error
+            {
+                Code = "400",
+                Message = "تعذر التحقق من صلاحيات الحقول لهذا النوع. يرجى مراجعة إعدادات السياسة."
+            });
+            return errors;
+        }
+
+        var effectiveDynamicFields = BuildEffectiveDynamicFields(dynamicFields, documentDirection);
+        var definitionByKey = (definitionResponse.Data.Fields ?? new List<SubjectFieldDefinitionDto>())
+            .Where(item => !string.IsNullOrWhiteSpace(item.FieldKey))
+            .GroupBy(item => NormalizeFieldKey(item.FieldKey))
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        var existingValuesByInstance = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (requestId.HasValue && requestId.Value > 0)
+        {
+            var existingValues = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(item => item.FildRelted == requestId.Value)
+                .ToListAsync(cancellationToken);
+
+            foreach (var existing in existingValues)
+            {
+                if (string.IsNullOrWhiteSpace(existing.FildKind))
+                {
+                    continue;
+                }
+
+                existingValuesByInstance[BuildFieldInstanceKey(existing.FildKind, existing.InstanceGroupId)] = NormalizeNullable(existing.FildTxt);
+            }
+        }
+
+        foreach (var requested in effectiveDynamicFields)
+        {
+            var normalizedKey = NormalizeFieldKey(requested.FieldKey);
+            if (normalizedKey.Length == 0)
+            {
+                continue;
+            }
+
+            if (!definitionByKey.TryGetValue(normalizedKey, out var fieldDefinition))
+            {
+                continue;
+            }
+
+            var requestedInstanceKey = BuildFieldInstanceKey(requested.FieldKey, requested.InstanceGroupId);
+            var requestedValue = NormalizeNullable(requested.Value);
+            existingValuesByInstance.TryGetValue(requestedInstanceKey, out var existingValue);
+
+            var isChanged = requestId.HasValue
+                ? !string.Equals(requestedValue, existingValue, StringComparison.Ordinal)
+                : requestedValue != null;
+            if (!isChanged)
+            {
+                continue;
+            }
+
+            var fieldLabel = NormalizeNullable(fieldDefinition.FieldLabel)
+                ?? NormalizeNullable(fieldDefinition.FieldKey)
+                ?? requested.FieldKey;
+
+            if (fieldDefinition.IsHidden || !fieldDefinition.CanView)
+            {
+                errors.Add(new Error
+                {
+                    Code = "403",
+                    Message = $"لا يمكن تعديل الحقل '{fieldLabel}' لأنه مخفي في المرحلة/الإجراء الحاليين."
+                });
+                continue;
+            }
+
+            if (fieldDefinition.IsLocked)
+            {
+                var lockReason = NormalizeNullable(fieldDefinition.LockReason)
+                    ?? "الحقل مقفل في المرحلة/الإجراء الحاليين.";
+                errors.Add(new Error
+                {
+                    Code = "403",
+                    Message = $"لا يمكن تعديل الحقل '{fieldLabel}': {lockReason}"
+                });
+                continue;
+            }
+
+            if (fieldDefinition.IsReadOnly || !fieldDefinition.CanEdit)
+            {
+                errors.Add(new Error
+                {
+                    Code = "403",
+                    Message = $"لا يمكن تعديل الحقل '{fieldLabel}' لأنه للقراءة فقط في المرحلة/الإجراء الحاليين."
                 });
             }
         }
@@ -2842,6 +3155,23 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return map;
+    }
+
+    private static string BuildFieldInstanceKey(string? fieldKey, int? instanceGroupId)
+    {
+        var normalizedKey = NormalizeFieldKey(fieldKey);
+        var normalizedInstanceId = NormalizeInstanceGroupId(instanceGroupId);
+        return $"{normalizedKey}::{normalizedInstanceId}";
+    }
+
+    private static int NormalizeInstanceGroupId(int? instanceGroupId)
+    {
+        if (!instanceGroupId.HasValue || instanceGroupId.Value <= 0)
+        {
+            return 1;
+        }
+
+        return instanceGroupId.Value;
     }
 
     private static List<SubjectFieldValueDto> BuildEffectiveDynamicFields(
