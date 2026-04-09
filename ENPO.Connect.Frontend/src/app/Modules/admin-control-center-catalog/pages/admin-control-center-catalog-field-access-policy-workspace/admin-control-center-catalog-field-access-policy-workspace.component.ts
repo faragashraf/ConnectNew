@@ -663,6 +663,140 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     return `${trace.sourceTypeAr}: ${trace.descriptionAr}${stagePart}${actionPart}`;
   }
 
+  getPolicyControlError(controlName: string): string | null {
+    const control = this.policyForm.get(controlName);
+    if (!control || !control.invalid) {
+      return null;
+    }
+
+    if (control.hasError('required')) {
+      return 'هذا الحقل إلزامي.';
+    }
+
+    if (control.hasError('maxlength')) {
+      return 'تجاوزت الحد الأقصى المسموح.';
+    }
+
+    return 'القيمة المدخلة غير صحيحة.';
+  }
+
+  getRuleControlError(controlName: string): string | null {
+    const control = this.ruleForm.get(controlName);
+    if (!control || !control.invalid) {
+      return null;
+    }
+
+    if (control.hasError('required')) {
+      if (controlName === 'subjectId' && this.ruleSubjectIdRequired) {
+        return 'Subject Id إلزامي لنوع الجهة المحدد.';
+      }
+
+      return 'هذا الحقل إلزامي.';
+    }
+
+    if (control.hasError('min') || control.hasError('max')) {
+      if (controlName === 'priority') {
+        return 'Priority يجب أن تكون بين 0 و 100000.';
+      }
+
+      return 'القيمة المدخلة خارج النطاق.';
+    }
+
+    if (control.hasError('maxlength')) {
+      return 'تجاوزت الحد الأقصى المسموح.';
+    }
+
+    return 'القيمة المدخلة غير صحيحة.';
+  }
+
+  getRuleActionError(): string | null {
+    const stageId = this.normalizeNumber(this.ruleForm.get('stageId')?.value);
+    const actionId = this.normalizeNumber(this.ruleForm.get('actionId')?.value);
+    if (actionId && !stageId) {
+      return 'لا يمكن اختيار Action بدون Stage.';
+    }
+
+    if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
+      return 'Action المختارة لا تتبع Stage المحددة.';
+    }
+
+    return null;
+  }
+
+  getLockControlError(controlName: string): string | null {
+    const control = this.lockForm.get(controlName);
+    if (!control || !control.invalid) {
+      return null;
+    }
+
+    if (control.hasError('required')) {
+      if (controlName === 'allowedOverrideSubjectId' && this.lockOverrideSubjectIdRequired) {
+        return 'Override Subject Id إلزامي لنوع الجهة المحدد.';
+      }
+
+      return 'هذا الحقل إلزامي.';
+    }
+
+    if (control.hasError('min') || control.hasError('max')) {
+      return 'القيمة المدخلة خارج النطاق.';
+    }
+
+    if (control.hasError('maxlength')) {
+      return 'تجاوزت الحد الأقصى المسموح.';
+    }
+
+    return 'القيمة المدخلة غير صحيحة.';
+  }
+
+  getLockActionError(): string | null {
+    const stageId = this.normalizeNumber(this.lockForm.get('stageId')?.value);
+    const actionId = this.normalizeNumber(this.lockForm.get('actionId')?.value);
+    if (actionId && !stageId) {
+      return 'لا يمكن اختيار Action بدون Stage.';
+    }
+
+    if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
+      return 'Action المختارة لا تتبع Stage المحددة.';
+    }
+
+    return null;
+  }
+
+  getPreviewControlError(controlName: string): string | null {
+    const control = this.previewForm.get(controlName);
+    if (!control || !control.invalid) {
+      return null;
+    }
+
+    if (control.hasError('required')) {
+      if (controlName === 'subjectId' && this.previewSubjectIdRequired) {
+        return 'Subject Id مطلوب لهذا النوع من الجهة.';
+      }
+
+      return 'هذا الحقل إلزامي.';
+    }
+
+    if (control.hasError('maxlength')) {
+      return 'تجاوزت الحد الأقصى المسموح.';
+    }
+
+    return 'القيمة المدخلة غير صحيحة.';
+  }
+
+  getPreviewActionError(): string | null {
+    const stageId = this.normalizeNumber(this.previewForm.get('stageId')?.value);
+    const actionId = this.normalizeNumber(this.previewForm.get('actionId')?.value);
+    if (actionId && !stageId) {
+      return 'عند اختيار Action يجب اختيار Stage أولًا.';
+    }
+
+    if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
+      return 'Action المختارة لا تتبع Stage المحددة.';
+    }
+
+    return null;
+  }
+
   trackByIndex(index: number): number {
     return index;
   }

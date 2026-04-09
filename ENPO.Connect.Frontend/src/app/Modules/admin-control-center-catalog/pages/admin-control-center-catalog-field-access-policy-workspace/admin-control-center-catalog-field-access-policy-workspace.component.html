@@ -130,6 +130,7 @@
           <div class="field span-two">
             <label for="policyName">اسم السياسة <span class="required">*</span></label>
             <input pInputText id="policyName" formControlName="policyName" placeholder="مثال: سياسة الوصول - التظلمات" />
+            <small class="field-error" *ngIf="getPolicyControlError('policyName') as error">{{ error }}</small>
           </div>
 
           <div class="field">
@@ -185,6 +186,7 @@
                 appendTo="body"
                 [filter]="true">
               </p-dropdown>
+              <small class="field-error" *ngIf="getRuleControlError('targetId') as error">{{ error }}</small>
             </div>
 
             <div class="field">
@@ -210,6 +212,7 @@
                 [showClear]="true"
                 [disabled]="isRuleActionDisabled">
               </p-dropdown>
+              <small class="field-error" *ngIf="getRuleActionError() as error">{{ error }}</small>
             </div>
 
             <div class="field">
@@ -241,6 +244,7 @@
                 <span class="optional" *ngIf="!ruleSubjectIdRequired">(اختياري)</span>
               </label>
               <input pInputText formControlName="subjectId" placeholder="مثال: 120 أو user123" />
+              <small class="field-error" *ngIf="getRuleControlError('subjectId') as error">{{ error }}</small>
             </div>
 
             <div class="field">
@@ -257,6 +261,7 @@
             <div class="field">
               <label>Priority <span class="required">*</span></label>
               <input pInputText type="number" formControlName="priority" />
+              <small class="field-error" *ngIf="getRuleControlError('priority') as error">{{ error }}</small>
             </div>
 
             <div class="field toggle-field">
@@ -384,6 +389,7 @@
                 appendTo="body"
                 [filter]="true">
               </p-dropdown>
+              <small class="field-error" *ngIf="getLockControlError('targetId') as error">{{ error }}</small>
             </div>
 
             <div class="field">
@@ -409,6 +415,7 @@
                 [showClear]="true"
                 [disabled]="isLockActionDisabled">
               </p-dropdown>
+              <small class="field-error" *ngIf="getLockActionError() as error">{{ error }}</small>
             </div>
 
             <div class="field">
@@ -441,6 +448,7 @@
                 <span class="optional" *ngIf="!lockOverrideSubjectIdRequired">(اختياري)</span>
               </label>
               <input pInputText formControlName="allowedOverrideSubjectId" placeholder="اختياري" />
+              <small class="field-error" *ngIf="getLockControlError('allowedOverrideSubjectId') as error">{{ error }}</small>
             </div>
 
             <div class="field toggle-field">
@@ -536,6 +544,7 @@
               [showClear]="true"
               [disabled]="isPreviewActionDisabled">
             </p-dropdown>
+            <small class="field-error" *ngIf="getPreviewActionError() as error">{{ error }}</small>
           </div>
 
           <div class="field">
@@ -557,6 +566,7 @@
               <span class="optional" *ngIf="!previewSubjectIdRequired">(اختياري)</span>
             </label>
             <input pInputText formControlName="subjectId" placeholder="مثال: UserId أو PositionId" />
+            <small class="field-error" *ngIf="getPreviewControlError('subjectId') as error">{{ error }}</small>
           </div>
 
           <div class="field">
