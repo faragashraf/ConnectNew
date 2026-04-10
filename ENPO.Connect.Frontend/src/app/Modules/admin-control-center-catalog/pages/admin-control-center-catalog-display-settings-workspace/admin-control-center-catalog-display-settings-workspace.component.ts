@@ -6,9 +6,15 @@ import {
   AdminCatalogCategoryDisplaySettingsUpsertRequestDto
 } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
 import { DynamicSubjectsAdminCatalogController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
+import {
+  normalizeRequestViewMode,
+  RequestViewMode,
+  REQUEST_VIEW_MODE_STANDARD,
+  REQUEST_VIEW_MODE_OPTIONS_AR,
+  resolveRequestViewModeLabel
+} from 'src/app/shared/models/request-view-mode';
 
 type MessageSeverity = 'success' | 'warn' | 'error';
-type ViewMode = 'standard' | 'tabbed';
 
 type SelectOption<T = string> = {
   label: string;
@@ -25,14 +31,11 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
   @Input() requestTypeLabel = '';
 
   readonly settingsForm: FormGroup = this.fb.group({
-    defaultViewMode: ['standard', [Validators.required]],
+    defaultViewMode: [REQUEST_VIEW_MODE_STANDARD, [Validators.required]],
     allowRequesterOverride: [false]
   });
 
-  readonly viewModeOptions: SelectOption<ViewMode>[] = [
-    { label: 'Standard', value: 'standard' },
-    { label: 'Tabbed', value: 'tabbed' }
-  ];
+  readonly viewModeOptions: SelectOption<RequestViewMode>[] = [...REQUEST_VIEW_MODE_OPTIONS_AR];
 
   loading = false;
   saving = false;
@@ -68,7 +71,7 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
       return this.requestTypeLabel;
     }
 
-    return this.requestTypeId ? `Request Type #${this.requestTypeId}` : 'لم يتم اختيار نوع طلب';
+    return this.requestTypeId ? `نوع الطلب #${this.requestTypeId}` : 'لم يتم اختيار نوع طلب';
   }
 
   get canManageWorkspace(): boolean {
@@ -93,7 +96,7 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
 
   get saveDisabledReason(): string {
     if (!this.canManageWorkspace) {
-      return 'اختر Request Type أولًا.';
+      return 'اختر نوع الطلب أولًا.';
     }
 
     if (this.loading) {
@@ -112,9 +115,7 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
   }
 
   get activeViewModeLabel(): string {
-    return this.normalizeViewMode(this.settingsForm.get('defaultViewMode')?.value) === 'tabbed'
-      ? 'Tabbed'
-      : 'Standard';
+    return resolveRequestViewModeLabel(this.settingsForm.get('defaultViewMode')?.value);
   }
 
   get allowRequesterOverride(): boolean {
@@ -198,7 +199,7 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
   private resetForm(): void {
     this.settingsForm.reset(
       {
-        defaultViewMode: 'standard',
+        defaultViewMode: REQUEST_VIEW_MODE_STANDARD,
         allowRequesterOverride: false
       },
       { emitEvent: false }
@@ -216,9 +217,8 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
     return JSON.stringify(payload);
   }
 
-  private normalizeViewMode(value: unknown): ViewMode {
-    const normalized = String(value ?? '').trim().toLowerCase();
-    return normalized === 'tabbed' ? 'tabbed' : 'standard';
+  private normalizeViewMode(value: unknown): RequestViewMode {
+    return normalizeRequestViewMode(value);
   }
 
   private ensureSuccess<T>(response: CommonResponse<T>, fallbackMessage: string): boolean {

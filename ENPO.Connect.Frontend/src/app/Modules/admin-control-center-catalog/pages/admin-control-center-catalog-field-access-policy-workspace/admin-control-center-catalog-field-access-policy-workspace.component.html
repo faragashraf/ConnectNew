@@ -1,7 +1,7 @@
 <section class="access-workspace" dir="rtl">
   <header class="workspace-header">
     <div>
-      <h4>إدارة Field/Group Access Policy</h4>
+      <h4>إدارة سياسة وصول الحقول والمجموعات</h4>
       <p>
         نوع الطلب الحالي:
         <strong>{{ requestContextLabel }}</strong>
@@ -25,7 +25,7 @@
         type="button"
         class="p-button-outlined"
         icon="pi pi-star"
-        label="تحميل Demo Pack"
+        label="تحميل الحزمة التجريبية"
         [disabled]="!canManageWorkspace || loadingWorkspace"
         (click)="onApplyOverviewDemoPack()">
       </button>
@@ -71,11 +71,11 @@
   </section>
 
   <div class="empty-state" *ngIf="!canManageWorkspace">
-    اختر Request Type من شجرة الكتالوج أولًا حتى تبدأ إعداد سياسة الوصول.
+    اختر نوع الطلب من شجرة الكتالوج أولًا حتى تبدأ إعداد سياسة الوصول.
   </div>
 
   <p-tabView *ngIf="canManageWorkspace" styleClass="access-tab-view">
-    <p-tabPanel header="Overview">
+    <p-tabPanel header="نظرة عامة">
       <section class="overview-grid" *ngIf="workspace as data; else workspaceLoading">
         <article class="stat-card">
           <span>عدد القواعد</span>
@@ -122,7 +122,7 @@
       </ng-template>
     </p-tabPanel>
 
-    <p-tabPanel header="Default Policy">
+    <p-tabPanel header="السياسة الافتراضية">
       <form class="editor" [formGroup]="policyForm" novalidate>
         <p class="required-note"><span>*</span> الحقول المعلمة إلزامية</p>
 
@@ -157,16 +157,16 @@
       </form>
     </p-tabPanel>
 
-    <p-tabPanel header="Stage/Action Rules" [disabled]="!defaultPolicyReady">
+    <p-tabPanel header="قواعد المرحلة/الإجراء" [disabled]="!defaultPolicyReady">
       <div class="workspace-grid">
         <form class="editor" [formGroup]="ruleForm" novalidate>
           <h5>{{ ruleEditorTitle }}</h5>
-          <p class="required-note"><span>*</span> Action لا تعمل بدون Stage. Subject Id إلزامي فقط مع OrgUnit/Position/User.</p>
-          <p class="local-note">الإضافة/التعديل هنا محلي حتى تقوم بحفظ Workspace.</p>
+          <p class="required-note"><span>*</span> لا يمكن اختيار الإجراء بدون مرحلة. معرف الجهة إلزامي فقط عند اختيار وحدة تنظيمية أو منصب أو مستخدم.</p>
+          <p class="local-note">الإضافة والتعديل هنا محليان حتى تقوم بحفظ مساحة العمل.</p>
 
           <div class="grid two-cols">
             <div class="field">
-              <label>Target Level <span class="required">*</span></label>
+              <label>مستوى الهدف <span class="required">*</span></label>
               <p-dropdown
                 [options]="targetLevelOptions"
                 optionLabel="label"
@@ -177,7 +177,7 @@
             </div>
 
             <div class="field">
-              <label>Target <span class="required">*</span></label>
+              <label>الهدف <span class="required">*</span></label>
               <p-dropdown
                 [options]="ruleTargetOptions"
                 optionLabel="label"
@@ -190,7 +190,7 @@
             </div>
 
             <div class="field">
-              <label>Stage</label>
+              <label>المرحلة</label>
               <p-dropdown
                 [options]="stageOptions"
                 optionLabel="label"
@@ -202,7 +202,7 @@
             </div>
 
             <div class="field">
-              <label>Action</label>
+              <label>الإجراء</label>
               <p-dropdown
                 [options]="ruleActionOptions"
                 optionLabel="label"
@@ -216,7 +216,7 @@
             </div>
 
             <div class="field">
-              <label>Permission <span class="required">*</span></label>
+              <label>الصلاحية <span class="required">*</span></label>
               <p-dropdown
                 [options]="permissionTypeOptions"
                 optionLabel="label"
@@ -227,7 +227,7 @@
             </div>
 
             <div class="field">
-              <label>Subject Type <span class="required">*</span></label>
+              <label>نوع الجهة <span class="required">*</span></label>
               <p-dropdown
                 [options]="subjectTypeOptions"
                 optionLabel="label"
@@ -239,16 +239,16 @@
 
             <div class="field">
               <label>
-                Subject Id
+                معرف الجهة
                 <span class="required" *ngIf="ruleSubjectIdRequired">*</span>
                 <span class="optional" *ngIf="!ruleSubjectIdRequired">(اختياري)</span>
               </label>
-              <input pInputText formControlName="subjectId" placeholder="مثال: 120 أو user123" />
+              <input pInputText formControlName="subjectId" placeholder="مثال: 120 أو usr123" />
               <small class="field-error" *ngIf="getRuleControlError('subjectId') as error">{{ error }}</small>
             </div>
 
             <div class="field">
-              <label>Effect <span class="required">*</span></label>
+              <label>الأثر <span class="required">*</span></label>
               <p-dropdown
                 [options]="effectOptions"
                 optionLabel="label"
@@ -259,13 +259,13 @@
             </div>
 
             <div class="field">
-              <label>Priority <span class="required">*</span></label>
+              <label>الأولوية <span class="required">*</span></label>
               <input pInputText type="number" formControlName="priority" />
               <small class="field-error" *ngIf="getRuleControlError('priority') as error">{{ error }}</small>
             </div>
 
             <div class="field toggle-field">
-              <label>Active</label>
+              <label>نشط</label>
               <p-inputSwitch formControlName="isActive"></p-inputSwitch>
             </div>
 
@@ -318,12 +318,12 @@
           <p-table [value]="rules" responsiveLayout="scroll" [rows]="8" [paginator]="rules.length > 8">
             <ng-template pTemplate="header">
               <tr>
-                <th>Level/Target</th>
-                <th>Stage/Action</th>
-                <th>Permission</th>
-                <th>Subject</th>
-                <th>Priority</th>
-                <th>Active</th>
+                <th>المستوى/الهدف</th>
+                <th>المرحلة/الإجراء</th>
+                <th>الصلاحية</th>
+                <th>الجهة</th>
+                <th>الأولوية</th>
+                <th>نشط</th>
                 <th>إجراءات</th>
               </tr>
             </ng-template>
@@ -360,16 +360,16 @@
       </div>
     </p-tabPanel>
 
-    <p-tabPanel header="Locks" [disabled]="!defaultPolicyReady">
+    <p-tabPanel header="الأقفال" [disabled]="!defaultPolicyReady">
       <div class="workspace-grid">
         <form class="editor" [formGroup]="lockForm" novalidate>
           <h5>إضافة قفل جديد</h5>
-          <p class="required-note"><span>*</span> Action لا تعمل بدون Stage. Override Subject Id إلزامي فقط مع OrgUnit/Position/User.</p>
-          <p class="local-note">الإضافة هنا محلية حتى تحفظ Workspace.</p>
+          <p class="required-note"><span>*</span> لا يمكن اختيار الإجراء بدون مرحلة. معرف جهة الاستثناء إلزامي فقط عند اختيار وحدة تنظيمية أو منصب أو مستخدم.</p>
+          <p class="local-note">الإضافة هنا محلية حتى تحفظ مساحة العمل.</p>
 
           <div class="grid two-cols">
             <div class="field">
-              <label>Target Level <span class="required">*</span></label>
+              <label>مستوى الهدف <span class="required">*</span></label>
               <p-dropdown
                 [options]="targetLevelOptions"
                 optionLabel="label"
@@ -380,7 +380,7 @@
             </div>
 
             <div class="field">
-              <label>Target <span class="required">*</span></label>
+              <label>الهدف <span class="required">*</span></label>
               <p-dropdown
                 [options]="lockTargetOptions"
                 optionLabel="label"
@@ -393,7 +393,7 @@
             </div>
 
             <div class="field">
-              <label>Stage</label>
+              <label>المرحلة</label>
               <p-dropdown
                 [options]="stageOptions"
                 optionLabel="label"
@@ -405,7 +405,7 @@
             </div>
 
             <div class="field">
-              <label>Action</label>
+              <label>الإجراء</label>
               <p-dropdown
                 [options]="lockActionOptions"
                 optionLabel="label"
@@ -419,7 +419,7 @@
             </div>
 
             <div class="field">
-              <label>Lock Mode <span class="required">*</span></label>
+              <label>نمط القفل <span class="required">*</span></label>
               <p-dropdown
                 [options]="lockModeOptions"
                 optionLabel="label"
@@ -430,7 +430,7 @@
             </div>
 
             <div class="field">
-              <label>Override Subject Type</label>
+              <label>نوع جهة الاستثناء</label>
               <p-dropdown
                 [options]="subjectTypeOptions"
                 optionLabel="label"
@@ -443,7 +443,7 @@
 
             <div class="field">
               <label>
-                Override Subject Id
+                معرف جهة الاستثناء
                 <span class="required" *ngIf="lockOverrideSubjectIdRequired">*</span>
                 <span class="optional" *ngIf="!lockOverrideSubjectIdRequired">(اختياري)</span>
               </label>
@@ -452,7 +452,7 @@
             </div>
 
             <div class="field toggle-field">
-              <label>Active</label>
+              <label>نشط</label>
               <p-inputSwitch formControlName="isActive"></p-inputSwitch>
             </div>
 
@@ -480,11 +480,11 @@
           <p-table [value]="locks" responsiveLayout="scroll" [rows]="8" [paginator]="locks.length > 8">
             <ng-template pTemplate="header">
               <tr>
-                <th>Level/Target</th>
-                <th>Stage/Action</th>
-                <th>Lock Mode</th>
-                <th>Override</th>
-                <th>Active</th>
+                <th>المستوى/الهدف</th>
+                <th>المرحلة/الإجراء</th>
+                <th>نمط القفل</th>
+                <th>الاستثناء</th>
+                <th>نشط</th>
                 <th>إجراءات</th>
               </tr>
             </ng-template>
@@ -507,22 +507,22 @@
       </div>
     </p-tabPanel>
 
-    <p-tabPanel header="Preview" [disabled]="!defaultPolicyReady">
+    <p-tabPanel header="المعاينة" [disabled]="!defaultPolicyReady">
       <form class="editor" [formGroup]="previewForm" novalidate>
-        <p class="required-note"><span>*</span> Subject Id مطلوب فقط إذا كان Subject Type = OrgUnit/Position/User</p>
-        <p class="local-note">المعاينة تعتمد على آخر نسخة محفوظة من Workspace.</p>
+        <p class="required-note"><span>*</span> معرف الجهة مطلوب فقط إذا كان نوع الجهة وحدة تنظيمية أو منصبًا أو مستخدمًا.</p>
+        <p class="local-note">المعاينة تعتمد على آخر نسخة محفوظة من مساحة العمل.</p>
 
         <div class="scenario-actions">
-          <button pButton type="button" class="p-button-outlined" label="سيناريو RequestOwner" (click)="onApplyPreviewScenario('RequestOwner')"></button>
-          <button pButton type="button" class="p-button-outlined" label="سيناريو CurrentCustodian" (click)="onApplyPreviewScenario('CurrentCustodian')"></button>
-          <button pButton type="button" class="p-button-outlined" label="سيناريو User" (click)="onApplyPreviewScenario('User')"></button>
-          <button pButton type="button" class="p-button-outlined" label="سيناريو Position" (click)="onApplyPreviewScenario('Position')"></button>
-          <button pButton type="button" class="p-button-outlined" label="سيناريو OrgUnit" (click)="onApplyPreviewScenario('OrgUnit')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو منشئ الطلب" (click)="onApplyPreviewScenario('RequestOwner')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو الحاضن الحالي" (click)="onApplyPreviewScenario('CurrentCustodian')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو مستخدم" (click)="onApplyPreviewScenario('User')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو منصب" (click)="onApplyPreviewScenario('Position')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو وحدة تنظيمية" (click)="onApplyPreviewScenario('OrgUnit')"></button>
         </div>
 
         <div class="grid two-cols">
           <div class="field">
-            <label>Stage</label>
+            <label>المرحلة</label>
             <p-dropdown
               [options]="previewStageOptions"
               optionLabel="label"
@@ -534,7 +534,7 @@
           </div>
 
           <div class="field">
-            <label>Action</label>
+            <label>الإجراء</label>
             <p-dropdown
               [options]="previewActionOptions"
               optionLabel="label"
@@ -548,7 +548,7 @@
           </div>
 
           <div class="field">
-            <label>Subject Type</label>
+            <label>نوع الجهة</label>
             <p-dropdown
               [options]="subjectTypeOptions"
               optionLabel="label"
@@ -561,26 +561,26 @@
 
           <div class="field">
             <label>
-              Subject Id
+              معرف الجهة
               <span class="required" *ngIf="previewSubjectIdRequired">*</span>
               <span class="optional" *ngIf="!previewSubjectIdRequired">(اختياري)</span>
             </label>
-            <input pInputText formControlName="subjectId" placeholder="مثال: UserId أو PositionId" />
+            <input pInputText formControlName="subjectId" placeholder="مثال: معرف مستخدم أو معرف منصب" />
             <small class="field-error" *ngIf="getPreviewControlError('subjectId') as error">{{ error }}</small>
           </div>
 
           <div class="field">
-            <label>Request Id (اختياري)</label>
+            <label>معرف الطلب (اختياري)</label>
             <input pInputText type="number" formControlName="requestId" />
           </div>
 
           <div class="field">
-            <label>Request Owner UserId</label>
+            <label>معرف مستخدم منشئ الطلب</label>
             <input pInputText formControlName="requestOwnerUserId" />
           </div>
 
           <div class="field span-two">
-            <label>Current Custodian UnitId</label>
+            <label>معرف وحدة الحاضن الحالي</label>
             <input pInputText formControlName="currentCustodianUnitId" />
           </div>
         </div>
@@ -623,7 +623,7 @@
       <div class="preview-grid" *ngIf="preview as data">
         <section class="table-card">
           <header>
-            <h5>Effective Resolution - المجموعات</h5>
+            <h5>الحل الفعّال - المجموعات</h5>
           </header>
 
           <p-table [value]="previewGroupResolutions" responsiveLayout="scroll" [rows]="6" [paginator]="previewGroupResolutions.length > 6">
@@ -654,7 +654,7 @@
 
         <section class="table-card">
           <header>
-            <h5>Effective Resolution - الحقول</h5>
+            <h5>الحل الفعّال - الحقول</h5>
           </header>
 
           <p-table [value]="previewFieldResolutions" responsiveLayout="scroll" [rows]="8" [paginator]="previewFieldResolutions.length > 8">
@@ -697,7 +697,7 @@
                 <th>الظهور</th>
                 <th>التعديل</th>
                 <th>مطلوب</th>
-                <th>Lock</th>
+                <th>القفل</th>
               </tr>
             </ng-template>
             <ng-template pTemplate="body" let-field>
@@ -705,9 +705,9 @@
                 <td>{{ field.fieldLabel || field.fieldKey }} (#{{ field.mendSql }})</td>
                 <td>#{{ field.mendGroup }}</td>
                 <td><span [ngClass]="statusClass(field.canView)">{{ statusLabel(field.canView, 'ظاهر', 'مخفي') }}</span></td>
-                <td><span [ngClass]="statusClass(!field.isReadOnly)">{{ statusLabel(!field.isReadOnly, 'Editable', 'ReadOnly') }}</span></td>
+                <td><span [ngClass]="statusClass(!field.isReadOnly)">{{ statusLabel(!field.isReadOnly, 'قابل للتعديل', 'قراءة فقط') }}</span></td>
                 <td><span [ngClass]="statusClass(field.isRequired)">{{ statusLabel(field.isRequired, 'نعم', 'لا') }}</span></td>
-                <td>{{ field.isLocked ? (field.lockReason || 'Locked') : '—' }}</td>
+                <td>{{ field.isLocked ? (field.lockReason || 'مقفول') : '—' }}</td>
               </tr>
             </ng-template>
           </p-table>

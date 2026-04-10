@@ -44,34 +44,34 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
   ];
 
   readonly targetLevelOptions: SelectOption<FieldAccessTargetLevel>[] = [
-    { label: 'مجموعة (Group)', value: 'Group' },
-    { label: 'حقل (Field)', value: 'Field' }
+    { label: 'مجموعة', value: 'Group' },
+    { label: 'حقل', value: 'Field' }
   ];
 
   readonly permissionTypeOptions: SelectOption<string>[] = [
-    { label: 'قابل للتعديل (Editable)', value: 'Editable' },
-    { label: 'قراءة فقط (ReadOnly)', value: 'ReadOnly' },
-    { label: 'مخفي (Hidden)', value: 'Hidden' },
-    { label: 'إدخال إلزامي (RequiredInput)', value: 'RequiredInput' }
+    { label: 'قابل للتعديل', value: 'Editable' },
+    { label: 'قراءة فقط', value: 'ReadOnly' },
+    { label: 'مخفي', value: 'Hidden' },
+    { label: 'إدخال إلزامي', value: 'RequiredInput' }
   ];
 
   readonly subjectTypeOptions: SelectOption<FieldAccessSubjectType>[] = [
-    { label: 'وحدة تنظيمية (OrgUnit)', value: 'OrgUnit' },
-    { label: 'منصب (Position)', value: 'Position' },
-    { label: 'مستخدم (User)', value: 'User' },
-    { label: 'منشئ الطلب (RequestOwner)', value: 'RequestOwner' },
-    { label: 'الحاضن الحالي (CurrentCustodian)', value: 'CurrentCustodian' }
+    { label: 'وحدة تنظيمية', value: 'OrgUnit' },
+    { label: 'منصب', value: 'Position' },
+    { label: 'مستخدم', value: 'User' },
+    { label: 'منشئ الطلب', value: 'RequestOwner' },
+    { label: 'الحاضن الحالي', value: 'CurrentCustodian' }
   ];
 
   readonly effectOptions: SelectOption<string>[] = [
-    { label: 'سماح (Allow)', value: 'Allow' },
-    { label: 'منع (Deny)', value: 'Deny' }
+    { label: 'سماح', value: 'Allow' },
+    { label: 'منع', value: 'Deny' }
   ];
 
   readonly lockModeOptions: SelectOption<string>[] = [
-    { label: 'منع تعديل (NoEdit)', value: 'NoEdit' },
-    { label: 'منع إدخال (NoInput)', value: 'NoInput' },
-    { label: 'قفل كامل (FullLock)', value: 'FullLock' }
+    { label: 'منع تعديل', value: 'NoEdit' },
+    { label: 'منع إدخال', value: 'NoInput' },
+    { label: 'قفل كامل', value: 'FullLock' }
   ];
 
   readonly policyForm: FormGroup = this.fb.group({
@@ -186,7 +186,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
       return this.requestTypeLabel;
     }
 
-    return this.requestTypeId ? `Request Type #${this.requestTypeId}` : 'لم يتم اختيار نوع طلب';
+    return this.requestTypeId ? `نوع الطلب #${this.requestTypeId}` : 'لم يتم اختيار نوع طلب';
   }
 
   get canManageWorkspace(): boolean {
@@ -395,7 +395,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     this.resetRuleEditor();
     this.evaluateDirtyState();
     this.emitCompletion();
-    this.showMessage('success', 'تمت إضافة القاعدة محليًا. احفظ Workspace لتطبيقها نهائيًا.');
+    this.showMessage('success', 'تمت إضافة القاعدة محليًا. احفظ مساحة العمل لتطبيقها نهائيًا.');
   }
 
   onStartEditRule(index: number): void {
@@ -468,7 +468,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     this.resetLockEditor();
     this.evaluateDirtyState();
     this.emitCompletion();
-    this.showMessage('success', 'تمت إضافة القفل محليًا. احفظ Workspace لتطبيقه نهائيًا.');
+    this.showMessage('success', 'تمت إضافة القفل محليًا. احفظ مساحة العمل لتطبيقه نهائيًا.');
   }
 
   onRemoveLock(index: number): void {
@@ -541,7 +541,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     };
 
     if (this.hasUnsavedChanges) {
-      this.showMessage('warn', 'المعاينة تعتمد على آخر نسخة محفوظة فقط. احفظ Workspace أولًا لرؤية آخر التعديلات.');
+      this.showMessage('warn', 'المعاينة تعتمد على آخر نسخة محفوظة فقط. احفظ مساحة العمل أولًا لرؤية آخر التعديلات.');
     }
 
     this.loadingPreview = true;
@@ -570,7 +570,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const addedLocks = this.seedLockExamples(true);
     this.onApplyPreviewScenario('RequestOwner', true);
 
-    const summary = `تم تطبيق حزمة الأمثلة: Default Policy=${defaultApplied ? 'نعم' : 'لا'}، قواعد مضافة=${addedRules}، أقفال مضافة=${addedLocks}.`;
+    const summary = `تم تطبيق حزمة الأمثلة: السياسة الافتراضية=${defaultApplied ? 'نعم' : 'لا'}، قواعد مضافة=${addedRules}، أقفال مضافة=${addedLocks}.`;
     this.showMessage('success', summary);
   }
 
@@ -641,7 +641,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     this.syncPreviewActionToStage();
 
     if (!silent) {
-      this.showMessage('success', `تم تحميل سيناريو معاينة (${subjectType}).`);
+      this.showMessage('success', `تم تحميل سيناريو معاينة (${this.resolveSubjectTypeLabel(subjectType)}).`);
     }
   }
 
@@ -658,8 +658,8 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
   }
 
   formatPreviewTrace(trace: FieldAccessPreviewAppliedPolicyDto): string {
-    const stagePart = trace.stageId ? ` - Stage #${trace.stageId}` : '';
-    const actionPart = trace.actionId ? ` - Action #${trace.actionId}` : '';
+    const stagePart = trace.stageId ? ` - مرحلة #${trace.stageId}` : '';
+    const actionPart = trace.actionId ? ` - إجراء #${trace.actionId}` : '';
     return `${trace.sourceTypeAr}: ${trace.descriptionAr}${stagePart}${actionPart}`;
   }
 
@@ -688,7 +688,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
     if (control.hasError('required')) {
       if (controlName === 'subjectId' && this.ruleSubjectIdRequired) {
-        return 'Subject Id إلزامي لنوع الجهة المحدد.';
+        return 'معرف الجهة إلزامي لنوع الجهة المحدد.';
       }
 
       return 'هذا الحقل إلزامي.';
@@ -696,7 +696,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
     if (control.hasError('min') || control.hasError('max')) {
       if (controlName === 'priority') {
-        return 'Priority يجب أن تكون بين 0 و 100000.';
+        return 'الأولوية يجب أن تكون بين 0 و 100000.';
       }
 
       return 'القيمة المدخلة خارج النطاق.';
@@ -713,11 +713,11 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const stageId = this.normalizeNumber(this.ruleForm.get('stageId')?.value);
     const actionId = this.normalizeNumber(this.ruleForm.get('actionId')?.value);
     if (actionId && !stageId) {
-      return 'لا يمكن اختيار Action بدون Stage.';
+      return 'لا يمكن اختيار إجراء بدون مرحلة.';
     }
 
     if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
-      return 'Action المختارة لا تتبع Stage المحددة.';
+      return 'الإجراء المختار لا يتبع المرحلة المحددة.';
     }
 
     return null;
@@ -731,7 +731,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
     if (control.hasError('required')) {
       if (controlName === 'allowedOverrideSubjectId' && this.lockOverrideSubjectIdRequired) {
-        return 'Override Subject Id إلزامي لنوع الجهة المحدد.';
+        return 'معرف جهة الاستثناء إلزامي لنوع الجهة المحدد.';
       }
 
       return 'هذا الحقل إلزامي.';
@@ -752,11 +752,11 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const stageId = this.normalizeNumber(this.lockForm.get('stageId')?.value);
     const actionId = this.normalizeNumber(this.lockForm.get('actionId')?.value);
     if (actionId && !stageId) {
-      return 'لا يمكن اختيار Action بدون Stage.';
+      return 'لا يمكن اختيار إجراء بدون مرحلة.';
     }
 
     if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
-      return 'Action المختارة لا تتبع Stage المحددة.';
+      return 'الإجراء المختار لا يتبع المرحلة المحددة.';
     }
 
     return null;
@@ -770,7 +770,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
     if (control.hasError('required')) {
       if (controlName === 'subjectId' && this.previewSubjectIdRequired) {
-        return 'Subject Id مطلوب لهذا النوع من الجهة.';
+        return 'معرف الجهة مطلوب لهذا النوع من الجهة.';
       }
 
       return 'هذا الحقل إلزامي.';
@@ -787,11 +787,11 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const stageId = this.normalizeNumber(this.previewForm.get('stageId')?.value);
     const actionId = this.normalizeNumber(this.previewForm.get('actionId')?.value);
     if (actionId && !stageId) {
-      return 'عند اختيار Action يجب اختيار Stage أولًا.';
+      return 'عند اختيار إجراء يجب اختيار مرحلة أولًا.';
     }
 
     if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
-      return 'Action المختارة لا تتبع Stage المحددة.';
+      return 'الإجراء المختار لا يتبع المرحلة المحددة.';
     }
 
     return null;
@@ -855,7 +855,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     this.loadingWorkspace = true;
     this.accessPolicyController.getWorkspace(this.requestTypeId).subscribe({
       next: response => {
-        if (!this.ensureSuccess(response, 'تعذر تحميل إعدادات Field Access Policy.')) {
+        if (!this.ensureSuccess(response, 'تعذر تحميل إعدادات سياسة الوصول للحقول.')) {
           return;
         }
 
@@ -866,7 +866,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
         this.patchFormsFromWorkspace();
         this.emitCompletion();
       },
-      error: () => this.showMessage('error', 'حدث خطأ أثناء تحميل Field Access Policy.'),
+      error: () => this.showMessage('error', 'حدث خطأ أثناء تحميل سياسة الوصول للحقول.'),
       complete: () => {
         this.loadingWorkspace = false;
       }
@@ -1106,31 +1106,31 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const priority = Number(this.ruleForm.get('priority')?.value ?? NaN);
 
     if (targetLevel !== 'Field' && targetLevel !== 'Group') {
-      messages.push('اختر Target Level صالح (Field أو Group).');
+      messages.push('اختر مستوى هدف صالحًا (حقل أو مجموعة).');
     }
 
     if (!targetId) {
-      messages.push('اختيار Target إلزامي.');
+      messages.push('اختيار الهدف إلزامي.');
     } else if (!this.isTargetBelongsToLevel(targetLevel, targetId)) {
-      messages.push('Target المختار غير صالح لمستوى الهدف الحالي.');
+      messages.push('الهدف المختار غير صالح لمستوى الهدف الحالي.');
     }
 
     if (!subjectType) {
-      messages.push('اختيار Subject Type إلزامي.');
+      messages.push('اختيار نوع الجهة إلزامي.');
     } else if (this.requiresSubjectId(subjectType) && !subjectId) {
-      messages.push('Subject Id إلزامي لنوع الجهة المختار.');
+      messages.push('معرف الجهة إلزامي لنوع الجهة المختار.');
     }
 
     if (actionId && !stageId) {
-      messages.push('لا يمكن تحديد Action بدون Stage.');
+      messages.push('لا يمكن تحديد إجراء بدون مرحلة.');
     }
 
     if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
-      messages.push('Action المختارة لا تتبع Stage المحددة.');
+      messages.push('الإجراء المختار لا يتبع المرحلة المحددة.');
     }
 
     if (!Number.isFinite(priority) || priority < 0 || priority > 100000) {
-      messages.push('Priority يجب أن تكون بين 0 و 100000.');
+      messages.push('الأولوية يجب أن تكون بين 0 و 100000.');
     }
 
     return messages;
@@ -1152,29 +1152,29 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const overrideSubjectId = this.normalizeString(this.lockForm.get('allowedOverrideSubjectId')?.value);
 
     if (targetLevel !== 'Field' && targetLevel !== 'Group') {
-      messages.push('اختر Target Level صالح (Field أو Group).');
+      messages.push('اختر مستوى هدف صالحًا (حقل أو مجموعة).');
     }
 
     if (!targetId) {
-      messages.push('اختيار Target إلزامي.');
+      messages.push('اختيار الهدف إلزامي.');
     } else if (!this.isTargetBelongsToLevel(targetLevel, targetId)) {
-      messages.push('Target المختار غير صالح لمستوى الهدف الحالي.');
+      messages.push('الهدف المختار غير صالح لمستوى الهدف الحالي.');
     }
 
     if (actionId && !stageId) {
-      messages.push('لا يمكن تحديد Action بدون Stage.');
+      messages.push('لا يمكن تحديد إجراء بدون مرحلة.');
     }
 
     if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
-      messages.push('Action المختارة لا تتبع Stage المحددة.');
+      messages.push('الإجراء المختار لا يتبع المرحلة المحددة.');
     }
 
     if (!overrideSubjectType && overrideSubjectId) {
-      messages.push('لا يمكن إدخال Override Subject Id بدون اختيار Override Subject Type.');
+      messages.push('لا يمكن إدخال معرف جهة الاستثناء بدون اختيار نوع جهة الاستثناء.');
     }
 
     if (overrideSubjectType && this.requiresSubjectId(overrideSubjectType) && !overrideSubjectId) {
-      messages.push('Override Subject Id إلزامي لنوع الجهة المختار.');
+      messages.push('معرف جهة الاستثناء إلزامي لنوع الجهة المختار.');
     }
 
     return messages;
@@ -1194,19 +1194,19 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const subjectId = this.normalizeString(this.previewForm.get('subjectId')?.value);
 
     if (actionId && !stageId) {
-      messages.push('عند اختيار Action في المعاينة يجب اختيار Stage أولًا.');
+      messages.push('عند اختيار إجراء في المعاينة يجب اختيار مرحلة أولًا.');
     }
 
     if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
-      messages.push('Action المختارة لا تتبع Stage المحددة.');
+      messages.push('الإجراء المختار لا يتبع المرحلة المحددة.');
     }
 
     if (!subjectType && subjectId) {
-      messages.push('لا يمكن إدخال Subject Id بدون اختيار Subject Type.');
+      messages.push('لا يمكن إدخال معرف الجهة بدون اختيار نوع الجهة.');
     }
 
     if (subjectType && this.requiresSubjectId(subjectType) && !subjectId) {
-      messages.push('Subject Id مطلوب لهذا النوع من الجهة في المعاينة.');
+      messages.push('معرف الجهة مطلوب لهذا النوع من الجهة في المعاينة.');
     }
 
     return messages;
@@ -1220,15 +1220,15 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     }
 
     if (this.isRuleEditMode) {
-      messages.push('يوجد تعديل قاعدة مفتوح. احفظ التعديل أو ألغه قبل حفظ Workspace.');
+      messages.push('يوجد تعديل قاعدة مفتوح. احفظ التعديل أو ألغِه قبل حفظ مساحة العمل.');
     }
 
     if (this.rules.length === 0) {
-      messages.push('يجب إضافة قاعدة واحدة على الأقل قبل حفظ Workspace.');
+      messages.push('يجب إضافة قاعدة واحدة على الأقل قبل حفظ مساحة العمل.');
     }
 
     if (this.locks.length === 0) {
-      messages.push('يجب إضافة قفل واحد على الأقل قبل حفظ Workspace.');
+      messages.push('يجب إضافة قفل واحد على الأقل قبل حفظ مساحة العمل.');
     }
 
     const ruleIssues = this.rules
@@ -1250,11 +1250,11 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const prefix = `القاعدة #${rowNumber}`;
 
     if (item.targetLevel !== 'Field' && item.targetLevel !== 'Group') {
-      messages.push(`${prefix}: Target Level غير صالح.`);
+      messages.push(`${prefix}: مستوى الهدف غير صالح.`);
     }
 
     if (!item.targetId || item.targetId <= 0) {
-      messages.push(`${prefix}: TargetId مطلوب.`);
+      messages.push(`${prefix}: معرف الهدف مطلوب.`);
     } else if (!this.isTargetBelongsToLevel(item.targetLevel, item.targetId)) {
       messages.push(`${prefix}: الهدف غير متوافق مع المستوى.`);
     }
@@ -1262,23 +1262,23 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const stageId = this.normalizeNumber(item.stageId);
     const actionId = this.normalizeNumber(item.actionId);
     if (actionId && !stageId) {
-      messages.push(`${prefix}: لا يمكن تحديد Action بدون Stage.`);
+      messages.push(`${prefix}: لا يمكن تحديد إجراء بدون مرحلة.`);
     }
 
     if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
-      messages.push(`${prefix}: Action لا تتبع Stage.`);
+      messages.push(`${prefix}: الإجراء لا يتبع المرحلة.`);
     }
 
     const subjectType = this.normalizeString(item.subjectType);
     const subjectId = this.normalizeString(item.subjectId);
     if (!subjectType) {
-      messages.push(`${prefix}: SubjectType مطلوبة.`);
+      messages.push(`${prefix}: نوع الجهة مطلوب.`);
     } else if (this.requiresSubjectId(subjectType) && !subjectId) {
-      messages.push(`${prefix}: SubjectId مطلوبة لهذا النوع.`);
+      messages.push(`${prefix}: معرف الجهة مطلوب لهذا النوع.`);
     }
 
     if (item.priority < 0 || item.priority > 100000) {
-      messages.push(`${prefix}: Priority خارج النطاق.`);
+      messages.push(`${prefix}: الأولوية خارج النطاق.`);
     }
 
     return messages;
@@ -1289,11 +1289,11 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const prefix = `القفل #${rowNumber}`;
 
     if (item.targetLevel !== 'Field' && item.targetLevel !== 'Group') {
-      messages.push(`${prefix}: Target Level غير صالح.`);
+      messages.push(`${prefix}: مستوى الهدف غير صالح.`);
     }
 
     if (!item.targetId || item.targetId <= 0) {
-      messages.push(`${prefix}: TargetId مطلوب.`);
+      messages.push(`${prefix}: معرف الهدف مطلوب.`);
     } else if (!this.isTargetBelongsToLevel(item.targetLevel, item.targetId)) {
       messages.push(`${prefix}: الهدف غير متوافق مع المستوى.`);
     }
@@ -1301,21 +1301,21 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     const stageId = this.normalizeNumber(item.stageId);
     const actionId = this.normalizeNumber(item.actionId);
     if (actionId && !stageId) {
-      messages.push(`${prefix}: لا يمكن تحديد Action بدون Stage.`);
+      messages.push(`${prefix}: لا يمكن تحديد إجراء بدون مرحلة.`);
     }
 
     if (actionId && stageId && !this.isActionBelongsToStage(actionId, stageId)) {
-      messages.push(`${prefix}: Action لا تتبع Stage.`);
+      messages.push(`${prefix}: الإجراء لا يتبع المرحلة.`);
     }
 
     const overrideSubjectType = this.normalizeString(item.allowedOverrideSubjectType);
     const overrideSubjectId = this.normalizeString(item.allowedOverrideSubjectId);
     if (!overrideSubjectType && overrideSubjectId) {
-      messages.push(`${prefix}: لا يمكن استخدام Override SubjectId بدون SubjectType.`);
+      messages.push(`${prefix}: لا يمكن استخدام معرف جهة الاستثناء بدون نوع جهة الاستثناء.`);
     }
 
     if (overrideSubjectType && this.requiresSubjectId(overrideSubjectType) && !overrideSubjectId) {
-      messages.push(`${prefix}: Override SubjectId مطلوبة.`);
+      messages.push(`${prefix}: معرف جهة الاستثناء مطلوب.`);
     }
 
     return messages;
@@ -1479,7 +1479,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
         effect: 'Deny',
         priority: 450,
         isActive: true,
-        notes: 'مثال: Deny على Editable لتخفيض الصلاحية وفق الأولوية.'
+        notes: 'مثال: منع على قابل للتعديل لتخفيض الصلاحية وفق الأولوية.'
       });
     }
 
@@ -1606,6 +1606,27 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
   private requiresSubjectId(subjectTypeRaw: unknown): boolean {
     const subjectType = String(subjectTypeRaw ?? '').trim();
     return subjectType === 'OrgUnit' || subjectType === 'Position' || subjectType === 'User';
+  }
+
+  private resolveSubjectTypeLabel(subjectTypeRaw: unknown): string {
+    const subjectType = String(subjectTypeRaw ?? '').trim();
+    if (subjectType === 'OrgUnit') {
+      return 'وحدة تنظيمية';
+    }
+    if (subjectType === 'Position') {
+      return 'منصب';
+    }
+    if (subjectType === 'User') {
+      return 'مستخدم';
+    }
+    if (subjectType === 'RequestOwner') {
+      return 'منشئ الطلب';
+    }
+    if (subjectType === 'CurrentCustodian') {
+      return 'الحاضن الحالي';
+    }
+
+    return 'غير محدد';
   }
 
   private ensureSuccess<T>(response: CommonResponse<T>, fallbackMessage: string): boolean {

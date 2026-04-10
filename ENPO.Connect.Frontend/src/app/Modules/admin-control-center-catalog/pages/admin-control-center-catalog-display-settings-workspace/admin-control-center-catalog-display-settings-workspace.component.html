@@ -41,15 +41,15 @@
   </div>
 
   <div class="empty-state" *ngIf="!canManageWorkspace">
-    اختر Request Type من شجرة الكتالوج أولًا لإدارة إعدادات العرض.
+    اختر نوع الطلب من شجرة الكتالوج أولًا لإدارة إعدادات العرض.
   </div>
 
   <form class="editor" [formGroup]="settingsForm" *ngIf="canManageWorkspace && !loading" novalidate>
-    <p class="required-note"><span>*</span> سيتم تطبيق هذه الإعدادات على runtime وpreview لنوع الطلب المحدد.</p>
+    <p class="required-note"><span>*</span> سيتم تطبيق هذه الإعدادات على شاشة التشغيل والمعاينة لنوع الطلب المحدد.</p>
 
     <div class="grid two-cols">
       <div class="field">
-        <label for="defaultViewMode">Default View Mode <span class="required">*</span></label>
+        <label for="defaultViewMode">وضع العرض الافتراضي <span class="required">*</span></label>
         <p-dropdown
           inputId="defaultViewMode"
           [options]="viewModeOptions"
@@ -62,7 +62,7 @@
       </div>
 
       <div class="field toggle-field">
-        <label for="allowRequesterOverride">Allow Requester Override</label>
+        <label for="allowRequesterOverride">السماح للمستخدم بتغيير الوضع</label>
         <p-inputSwitch inputId="allowRequesterOverride" formControlName="allowRequesterOverride"></p-inputSwitch>
       </div>
     </div>
@@ -79,10 +79,10 @@
     </div>
 
     <small class="hint" *ngIf="!allowRequesterOverride">
-      عند إلغاء السماح، runtime سيطبق الوضع الافتراضي فقط ولن يظهر Selector للمستخدم.
+      عند إلغاء السماح، سيتم تطبيق الوضع الافتراضي فقط ولن يظهر مُحدد الوضع للمستخدم.
     </small>
     <small class="hint" *ngIf="allowRequesterOverride">
-      عند السماح، سيظهر Selector للمستخدم في runtime وتبدأ القيمة من الوضع الافتراضي.
+      عند السماح، سيظهر مُحدد الوضع للمستخدم أثناء التشغيل وتبدأ القيمة من الوضع الافتراضي.
     </small>
   </form>
 </section>

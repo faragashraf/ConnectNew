@@ -1,10 +1,10 @@
 <section class="request-preview-page" dir="rtl">
   <header class="page-header">
     <div>
-      <p class="eyebrow">ControlCenterCatalog - Runtime-Aware Request Preview</p>
-      <h2>Runtime-Aware Request Preview</h2>
+      <p class="eyebrow">لوحة الكتالوج - معاينة تشغيلية للطلب</p>
+      <h2>المعاينة التشغيلية الفعالة للطلب</h2>
       <p>
-        ترجمة تشغيلية مباشرة للإعدادات الحالية لإظهار الحالة الفعلية للـ Request Type والحقول أثناء runtime.
+        ترجمة تشغيلية مباشرة للإعدادات الحالية لإظهار الحالة الفعلية لنوع الطلب والحقول أثناء التشغيل.
       </p>
     </div>
 
@@ -33,7 +33,7 @@
   <section class="card selector-card">
     <div class="selector-row">
       <div class="field">
-        <label for="requestTypeSelect">Request Type</label>
+        <label for="requestTypeSelect">نوع الطلب</label>
         <p-dropdown
           inputId="requestTypeSelect"
           [options]="requestTypeOptions"
@@ -78,20 +78,20 @@
 
     <div class="selector-row view-mode-row" *ngIf="selectedRequestType as selectedType">
       <div class="field">
-        <label>Default View Mode</label>
+        <label>وضع العرض الافتراضي</label>
         <p-tag severity="info" [value]="selectedRequestTypeDefaultViewModeLabel"></p-tag>
       </div>
 
       <div class="field">
-        <label>Allow Requester Override</label>
+        <label>السماح للمستخدم بتغيير الوضع</label>
         <p-tag
           [severity]="selectedRequestTypeAllowRequesterOverride ? 'success' : 'warning'"
-          [value]="selectedRequestTypeAllowRequesterOverride ? 'Enabled' : 'Disabled'">
+          [value]="selectedRequestTypeAllowRequesterOverride ? 'مفعل' : 'غير مفعل'">
         </p-tag>
       </div>
 
       <div class="field" *ngIf="selectedType.allowRequesterOverride">
-        <label for="previewViewMode">Preview Active View Mode</label>
+        <label for="previewViewMode">وضع العرض النشط في المعاينة</label>
         <p-dropdown
           inputId="previewViewMode"
           [options]="viewModeOptions"
@@ -105,7 +105,7 @@
       </div>
 
       <div class="field" *ngIf="!selectedType.allowRequesterOverride">
-        <label>Preview Active View Mode</label>
+        <label>وضع العرض النشط في المعاينة</label>
         <p-tag severity="secondary" [value]="activePreviewViewModeLabel"></p-tag>
       </div>
     </div>
@@ -115,26 +115,26 @@
     <section class="card context-card">
       <header class="card-header">
         <div>
-          <h3>User Runtime Context</h3>
+          <h3>سياق المستخدم أثناء التشغيل</h3>
           <small>السياق الذي تم بناء نتيجة المعاينة عليه</small>
         </div>
         <p-tag
           [severity]="data.isUserContextResolved ? 'success' : 'warning'"
-          [value]="data.isUserContextResolved ? 'Context Resolved' : 'Context Incomplete'">
+          [value]="data.isUserContextResolved ? 'السياق مكتمل' : 'السياق غير مكتمل'">
         </p-tag>
       </header>
 
       <div class="context-grid">
         <div>
-          <span>UserId</span>
+          <span>معرّف المستخدم</span>
           <strong>{{ data.evaluatedForUserId || '-' }}</strong>
         </div>
         <div>
-          <span>Unit Memberships</span>
+          <span>العضويات الوحدوية</span>
           <strong>{{ userUnitsLabel }}</strong>
         </div>
         <div>
-          <span>Position Memberships</span>
+          <span>العضويات الوظيفية</span>
           <strong>{{ userPositionsLabel }}</strong>
         </div>
       </div>
@@ -158,15 +158,15 @@
         <strong>{{ optionalFieldsCount }}</strong>
       </article>
       <article class="stat-card diagnostics">
-        <span>إجمالي Diagnostics</span>
+        <span>إجمالي التشخيصات</span>
         <strong>{{ data.diagnosticsSummary.totalCount }}</strong>
       </article>
       <article class="stat-card warning">
-        <span>Warnings</span>
+        <span>التحذيرات</span>
         <strong>{{ data.diagnosticsSummary.warningCount }}</strong>
       </article>
       <article class="stat-card conflict">
-        <span>Conflicts</span>
+        <span>التعارضات</span>
         <strong>{{ data.diagnosticsSummary.conflictCount }}</strong>
       </article>
     </section>
@@ -174,10 +174,10 @@
     <section class="card availability-card">
       <header class="card-header">
         <div>
-          <h3>Runtime Availability</h3>
+          <h3>الإتاحة أثناء التشغيل</h3>
           <small>{{ data.requestTypeName }} (#{{ data.requestTypeId }})</small>
         </div>
-        <p-tag [severity]="data.isAvailable ? 'success' : 'danger'" [value]="data.isAvailable ? 'Available' : 'Not Available'"></p-tag>
+        <p-tag [severity]="data.isAvailable ? 'success' : 'danger'" [value]="data.isAvailable ? 'متاح' : 'غير متاح'"></p-tag>
       </header>
 
       <ul class="reason-list" *ngIf="data.availabilityReasons.length > 0">
@@ -188,15 +188,15 @@
     <section class="card diagnostics-card" *ngIf="data.diagnosticsSummary.totalCount > 0">
       <header class="card-header">
         <div>
-          <h3>Request Diagnostics</h3>
+          <h3>تشخيصات الطلب</h3>
           <small>تشخيصات على مستوى نوع الطلب والسياق الحالي</small>
         </div>
-        <p-tag severity="info" [value]="data.diagnosticsSummary.requestLevelCount + ' Request Message(s)'"></p-tag>
+        <p-tag severity="info" [value]="data.diagnosticsSummary.requestLevelCount + ' رسالة طلب'"></p-tag>
       </header>
 
       <div class="diagnostic-sections">
         <article class="diagnostic-block info" *ngIf="requestInfoDiagnostics.length > 0">
-          <h4>Info</h4>
+          <h4>معلومات</h4>
           <ul class="reason-list">
             <li *ngFor="let item of requestInfoDiagnostics; trackBy: trackByDiagnostic">
               {{ item.message }}
@@ -206,7 +206,7 @@
         </article>
 
         <article class="diagnostic-block warning" *ngIf="requestWarningDiagnostics.length > 0">
-          <h4>Warnings</h4>
+          <h4>تحذيرات</h4>
           <ul class="reason-list warning">
             <li *ngFor="let item of requestWarningDiagnostics; trackBy: trackByDiagnostic">
               {{ item.message }}
@@ -216,7 +216,7 @@
         </article>
 
         <article class="diagnostic-block conflict" *ngIf="requestConflictDiagnostics.length > 0">
-          <h4>Conflicts</h4>
+          <h4>تعارضات</h4>
           <ul class="reason-list conflict">
             <li *ngFor="let item of requestConflictDiagnostics; trackBy: trackByDiagnostic">
               {{ item.message }}
@@ -230,10 +230,10 @@
     <section class="card warnings-card" *ngIf="requestWarningsCount > 0">
       <header class="card-header">
         <div>
-          <h3>Warnings</h3>
-          <small>gaps تم اكتشافها من الترجمة التشغيلية الحالية</small>
+          <h3>تحذيرات</h3>
+          <small>فجوات تم اكتشافها من الترجمة التشغيلية الحالية</small>
         </div>
-        <p-tag severity="warning" [value]="requestWarningsCount + ' Warning(s)'"></p-tag>
+        <p-tag severity="warning" [value]="requestWarningsCount + ' تحذير'"></p-tag>
       </header>
 
       <ul class="reason-list warning">
@@ -244,10 +244,10 @@
     <section class="card conflicts-card" *ngIf="requestConflictsCount > 0">
       <header class="card-header">
         <div>
-          <h3>Conflicts</h3>
+          <h3>تعارضات</h3>
           <small>تعارضات إعدادات تؤثر على تفسير النتيجة الحالية</small>
         </div>
-        <p-tag severity="danger" [value]="requestConflictsCount + ' Conflict(s)'"></p-tag>
+        <p-tag severity="danger" [value]="requestConflictsCount + ' تعارض'"></p-tag>
       </header>
 
       <ul class="reason-list conflict">
@@ -258,10 +258,10 @@
     <section class="card fields-card">
       <header class="card-header">
         <div>
-          <h3>Runtime Fields</h3>
-          <small>Visible/Hidden + Required/Optional + reasons</small>
+          <h3>حقول التشغيل</h3>
+          <small>مرئي/مخفي + إلزامي/اختياري + الأسباب</small>
         </div>
-        <p-tag severity="info" [value]="data.fields.length + ' Field(s)'"></p-tag>
+        <p-tag severity="info" [value]="data.fields.length + ' حقل'"></p-tag>
       </header>
 
       <p-table
@@ -273,11 +273,11 @@
         dataKey="fieldId">
         <ng-template pTemplate="header">
           <tr>
-            <th>Field</th>
-            <th>Visibility</th>
-            <th>Required</th>
-            <th>Reasons</th>
-            <th>Diagnostics</th>
+            <th>الحقل</th>
+            <th>الإظهار</th>
+            <th>الإلزام</th>
+            <th>الأسباب</th>
+            <th>التشخيص</th>
           </tr>
         </ng-template>
 
@@ -291,13 +291,13 @@
             <td>
               <p-tag
                 [severity]="field.isVisible ? 'success' : 'warning'"
-                [value]="field.isVisible ? 'Visible' : 'Hidden'">
+                [value]="field.isVisible ? 'مرئي' : 'مخفي'">
               </p-tag>
             </td>
             <td>
               <p-tag
                 [severity]="field.isRequired ? 'danger' : 'info'"
-                [value]="field.isRequired ? 'Required' : 'Optional'">
+                [value]="field.isRequired ? 'إلزامي' : 'اختياري'">
               </p-tag>
             </td>
             <td>
@@ -307,9 +307,9 @@
             </td>
             <td>
               <div class="field-diagnostics">
-                <p-tag severity="info" [value]="resolveFieldInfoCount(field) + ' Info'"></p-tag>
-                <p-tag severity="warning" [value]="field.warnings.length + ' Warn'"></p-tag>
-                <p-tag severity="danger" [value]="field.conflicts.length + ' Conflict'"></p-tag>
+                <p-tag severity="info" [value]="resolveFieldInfoCount(field) + ' معلومات'"></p-tag>
+                <p-tag severity="warning" [value]="field.warnings.length + ' تحذير'"></p-tag>
+                <p-tag severity="danger" [value]="field.conflicts.length + ' تعارض'"></p-tag>
 
                 <ul class="reason-list warning inline" *ngIf="field.warnings.length > 0">
                   <li *ngFor="let warning of field.warnings; trackBy: trackByString">{{ warning }}</li>
@@ -333,7 +333,7 @@
 
   <ng-template #noPreview>
     <section class="empty-state card" *ngIf="!loadingPreview">
-      اختر نوع طلب لعرض Effective Request Preview.
+      اختر نوع طلب لعرض المعاينة التشغيلية الفعالة.
     </section>
   </ng-template>
 </section>

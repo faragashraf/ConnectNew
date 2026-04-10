@@ -1,4 +1,11 @@
 import { Component, OnInit } from '@angular/core';
+import {
+  normalizeRequestViewMode,
+  RequestViewMode,
+  REQUEST_VIEW_MODE_OPTIONS_AR,
+  REQUEST_VIEW_MODE_STANDARD,
+  resolveRequestViewModeLabel
+} from 'src/app/shared/models/request-view-mode';
 import { CommonResponse } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { DynamicSubjectsAdminCatalogController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
 import {
@@ -8,7 +15,6 @@ import {
 } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
 
 type MessageSeverity = 'success' | 'warn' | 'error';
-type ViewMode = 'standard' | 'tabbed';
 
 type RequestTypeOption = {
   label: string;
@@ -16,7 +22,7 @@ type RequestTypeOption = {
   pathLabel: string;
   isActive: boolean;
   applicationId?: string;
-  defaultViewMode: ViewMode;
+  defaultViewMode: RequestViewMode;
   allowRequesterOverride: boolean;
 };
 
@@ -28,12 +34,9 @@ type RequestTypeOption = {
 export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
   requestTypeOptions: RequestTypeOption[] = [];
   selectedRequestTypeId: number | null = null;
-  previewSelectedViewMode: ViewMode = 'standard';
+  previewSelectedViewMode: RequestViewMode = REQUEST_VIEW_MODE_STANDARD;
 
-  readonly viewModeOptions: Array<{ label: string; value: ViewMode }> = [
-    { label: 'Standard', value: 'standard' },
-    { label: 'Tabbed', value: 'tabbed' }
-  ];
+  readonly viewModeOptions: Array<{ label: string; value: RequestViewMode }> = [...REQUEST_VIEW_MODE_OPTIONS_AR];
 
   preview: AdminControlCenterRequestPreviewDto | null = null;
 
@@ -67,7 +70,7 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
       return '-';
     }
 
-    return selected.defaultViewMode === 'tabbed' ? 'Tabbed' : 'Standard';
+    return resolveRequestViewModeLabel(selected.defaultViewMode);
   }
 
   get selectedRequestTypeAllowRequesterOverride(): boolean {
@@ -75,7 +78,7 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
   }
 
   get activePreviewViewModeLabel(): string {
-    return this.previewSelectedViewMode === 'tabbed' ? 'Tabbed' : 'Standard';
+    return resolveRequestViewModeLabel(this.previewSelectedViewMode);
   }
 
   get visibleFieldsCount(): number {
@@ -149,7 +152,7 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
     this.loadPreview();
   }
 
-  onPreviewViewModeChange(nextMode: ViewMode | null | undefined): void {
+  onPreviewViewModeChange(nextMode: RequestViewMode | null | undefined): void {
     this.previewSelectedViewMode = this.normalizeViewMode(nextMode);
   }
 
@@ -214,7 +217,7 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
 
     this.adminCatalogController.getRequestPreview(requestTypeId).subscribe({
       next: response => {
-        if (!this.ensureSuccess(response, 'تعذر تحميل Effective Request Preview.')) {
+        if (!this.ensureSuccess(response, 'تعذر تحميل المعاينة التشغيلية الفعالة للطلب.')) {
           this.preview = null;
           return;
         }
@@ -222,7 +225,7 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
         this.preview = response.data ?? null;
       },
       error: () => {
-        this.showMessage('error', 'حدث خطأ أثناء تحميل Effective Request Preview.');
+        this.showMessage('error', 'حدث خطأ أثناء تحميل المعاينة التشغيلية الفعالة للطلب.');
         this.preview = null;
       },
       complete: () => {
@@ -241,7 +244,7 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
           continue;
         }
 
-        const nodeName = this.normalizeText(node.categoryName) ?? `Node ${categoryId}`;
+        const nodeName = this.normalizeText(node.categoryName) ?? `عقدة ${categoryId}`;
         const pathLabel = ancestorPath.length > 0 ? `${ancestorPath} / ${nodeName}` : nodeName;
 
         options.push({
@@ -300,15 +303,14 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
   private initializePreviewViewModeForSelection(): void {
     const selected = this.selectedRequestType;
     if (!selected) {
-      this.previewSelectedViewMode = 'standard';
+      this.previewSelectedViewMode = REQUEST_VIEW_MODE_STANDARD;
       return;
     }
 
     this.previewSelectedViewMode = this.normalizeViewMode(selected.defaultViewMode);
   }
 
-  private normalizeViewMode(value: unknown): ViewMode {
-    const normalized = String(value ?? '').trim().toLowerCase();
-    return normalized === 'tabbed' ? 'tabbed' : 'standard';
+  private normalizeViewMode(value: unknown): RequestViewMode {
+    return normalizeRequestViewMode(value);
   }
 }

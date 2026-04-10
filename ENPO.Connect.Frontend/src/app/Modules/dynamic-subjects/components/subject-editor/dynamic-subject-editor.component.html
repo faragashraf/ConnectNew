@@ -1,10 +1,10 @@
-<section class="editor">
+<section class="editor" dir="rtl">
   <header class="header">
     <div>
-      <h2>{{ isRuntimeRegistrationMvpMode ? 'تجربة تسجيل الطلبات Runtime-Driven' : (isEditMode ? 'تعديل موضوع/طلب' : 'إنشاء موضوع/طلب') }}</h2>
+      <h2>{{ isRuntimeRegistrationMvpMode ? 'تجربة تسجيل الطلبات المعتمدة على التشغيل' : (isEditMode ? 'تعديل موضوع/طلب' : 'إنشاء موضوع/طلب') }}</h2>
       <p>
         {{ isRuntimeRegistrationMvpMode
-          ? 'اختر نوع الطلب المتاح لك لعرض الحقول الديناميكية الفعلية (Visible / Required / Hidden) حسب سياق المستخدم الحالي.'
+          ? 'اختر نوع الطلب المتاح لك لعرض الحقول الديناميكية الفعلية (مرئي / إلزامي / مخفي) حسب سياق المستخدم الحالي.'
           : 'يمكنك الحفظ كمسودة أو الإرسال الآن مع متابعة التحديثات المباشرة.' }}
       </p>
       <p class="direction-chip">اتجاه الطلب الحالي: <strong>{{ currentDocumentDirectionLabel }}</strong></p>
@@ -17,34 +17,34 @@
 
   <section class="runtime-bridge" *ngIf="runtimeBridgeContext as runtimeBridge">
     <header>
-      <h3>وضع التشغيل من Admin Control Center</h3>
+      <h3>وضع التشغيل من لوحة التحكم المركزية</h3>
       <span [class.blocked]="runtimeBridge.issues.length > 0">
         {{ runtimeBridge.issues.length > 0 ? 'يتطلب استكمال' : 'مفعل' }}
       </span>
     </header>
     <div class="runtime-grid">
       <article>
-        <span>Category Id</span>
+        <span>معرّف النوع</span>
         <strong>{{ runtimeBridge.categoryId || '-' }}</strong>
       </article>
       <article>
-        <span>Document Direction</span>
+        <span>اتجاه الطلب</span>
         <strong>{{ runtimeBridge.documentDirection || '-' }}</strong>
       </article>
       <article>
-        <span>Create Config Route Key</span>
+        <span>مفتاح مسار الإنشاء</span>
         <strong>{{ runtimeBridge.createConfigRouteKey || '-' }}</strong>
       </article>
       <article>
-        <span>Route Prefix</span>
+        <span>بادئة المسار</span>
         <strong>{{ runtimeBridge.routeKeyPrefix || '-' }}</strong>
       </article>
       <article>
-        <span>Parent Tree Path</span>
+        <span>مسار الشجرة الأم</span>
         <strong>{{ runtimeCanonicalCategoryLink?.categoryPathLabel || '-' }}</strong>
       </article>
       <article>
-        <span>Parent Category Id</span>
+        <span>معرّف النوع الأم</span>
         <strong>{{ runtimeCanonicalCategoryLink?.parentCategoryId || '-' }}</strong>
       </article>
     </div>
@@ -71,13 +71,13 @@
 
   <ng-container *ngIf="!loading">
     <section class="runtime-mvp-banner" *ngIf="isRuntimeRegistrationMvpMode">
-      <h3>نقطة تجربة عملية للتسجيل Runtime</h3>
-      <p>تعتمد هذه الشاشة على صلاحيات المستخدم الحالي مباشرة، بدون `SYSTEM_PREVIEW` وبدون أي Mock Data.</p>
+      <h3>نقطة تجربة عملية للتسجيل أثناء التشغيل</h3>
+      <p>تعتمد هذه الشاشة على صلاحيات المستخدم الحالي مباشرة، بدون `SYSTEM_PREVIEW` وبدون أي بيانات تجريبية.</p>
     </section>
 
     <section class="runtime-empty-state" *ngIf="showRequestTypesEmptyState">
       <h3>لا توجد أنواع طلبات متاحة لهذا المستخدم</h3>
-      <p>تحقق من العضوية/الوحدة الحالية أو إعدادات Access/Availability لنوع الطلب ثم أعد المحاولة.</p>
+      <p>تحقق من العضوية/الوحدة الحالية أو إعدادات الوصول والإتاحة لنوع الطلب ثم أعد المحاولة.</p>
       <button type="button" (click)="reloadRequestTypes()" [disabled]="loadingCategoryOptions">تحديث الأنواع المتاحة</button>
     </section>
 
@@ -144,11 +144,11 @@
         <div class="panel-header panel-header-inline">
           <div class="panel-title-block">
             <h3>الحقول الديناميكية</h3>
-            <p class="panel-subtitle">عرض حي للجروبات والحقول حسب إعدادات Runtime الفعلية.</p>
+            <p class="panel-subtitle">عرض حي للجروبات والحقول حسب إعدادات التشغيل الفعلية.</p>
           </div>
           <div class="panel-header-actions">
             <div class="display-mode-switch" *ngIf="shouldShowDisplayModeSelector">
-              <span class="display-mode-label">Display Mode</span>
+              <span class="display-mode-label">وضع العرض</span>
               <p-selectButton
                 [options]="formDisplayModeOptions"
                 optionLabel="label"
@@ -237,7 +237,7 @@
       </section>
 
       <section class="panel runtime-field-inspector" *ngIf="shouldRenderRuntimeDiagnostics">
-        <h3>نتيجة Runtime الحالية (تشخيص)</h3>
+        <h3>نتيجة التشغيل الحالية (تشخيص)</h3>
         <p class="runtime-inspector-caption">
           النوع المحدد: <strong>{{ selectedCategoryDisplayName || ('#' + selectedCategoryId) }}</strong>
         </p>
@@ -250,7 +250,7 @@
                 <span class="field-label">{{ field.fieldLabel }}</span>
                 <small class="field-key">{{ field.fieldKey }}</small>
                 <span class="field-badge" [class.required]="field.required" [class.optional]="!field.required">
-                  {{ field.required ? 'Required' : 'Optional' }}
+                  {{ field.required ? 'إلزامي' : 'اختياري' }}
                 </span>
               </li>
             </ul>
@@ -265,11 +265,11 @@
               <li *ngFor="let field of runtimeHiddenFieldRows">
                 <span class="field-label">{{ field.fieldLabel }}</span>
                 <small class="field-key">{{ field.fieldKey }}</small>
-                <span class="field-badge hidden">Hidden</span>
+                <span class="field-badge hidden">مخفي</span>
               </li>
             </ul>
             <p class="empty-text" *ngIf="runtimeHiddenFieldRows.length === 0">
-              لا توجد حقول مخفية وفق إعدادات Runtime الحالية.
+              لا توجد حقول مخفية وفق إعدادات التشغيل الحالية.
             </p>
           </article>
         </div>

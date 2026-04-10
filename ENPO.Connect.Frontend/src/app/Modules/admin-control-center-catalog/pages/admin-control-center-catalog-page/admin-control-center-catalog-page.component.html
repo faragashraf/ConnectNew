@@ -1,7 +1,7 @@
 <section class="catalog-page" dir="rtl">
   <header class="page-header">
     <div>
-      <p class="eyebrow">Progressive Replacement - ControlCenterCatalog</p>
+      <p class="eyebrow">الاستبدال التدريجي - لوحة الكتالوج</p>
       <h2>لوحة إدارة الكتالوج</h2>
       <p>
         المرحلة الحالية تغطي التطبيقات والشجرة ثم إدارة الجروبات المرتبطة بالنود المختارة، مع حفظ فعلي في قاعدة البيانات.
@@ -19,7 +19,7 @@
         type="button"
         class="p-button-text phase-next-link"
         icon="pi pi-eye"
-        label="Effective Request Preview"
+        label="المعاينة التشغيلية الفعالة للطلب"
         routerLink="/Admin/ControlCenterCatalog/request-preview">
       </button>
     </div>
@@ -55,7 +55,7 @@
       type="button"
       [class.active]="activePhase === 1"
       class="p-button-outlined"
-      label="المرحلة 1: Applications + Tree"
+      label="المرحلة 1: التطبيقات + الشجرة"
       (click)="onActivatePhase(1)">
     </button>
     <button
@@ -64,7 +64,7 @@
       [class.active]="activePhase === 2"
       [disabled]="selectedCategoryId == null"
       class="p-button-outlined"
-      label="المرحلة 2: Groups"
+      label="المرحلة 2: المجموعات"
       (click)="onActivatePhase(2)">
     </button>
   </div>
@@ -73,7 +73,7 @@
     <header class="card-header">
       <div>
         <h3>المرحلة الأولى: إدارة التطبيقات والشجرة</h3>
-        <small>List / Select / Create / Update / Delete</small>
+        <small>عرض / اختيار / إنشاء / تعديل / حذف</small>
       </div>
       <p-tag [value]="'اكتمال المرحلة: ' + phase1CompletionPercent + '%'" severity="info"></p-tag>
     </header>
@@ -82,8 +82,8 @@
       <section class="card applications-card">
         <header class="card-header">
           <div>
-            <h4>Applications</h4>
-            <small>جدول Applications</small>
+            <h4>التطبيقات</h4>
+            <small>جدول التطبيقات</small>
           </div>
           <div class="header-actions">
             <button pButton type="button" class="p-button-text" icon="pi pi-refresh" (click)="onRefreshApplications()"></button>
@@ -99,8 +99,8 @@
           responsiveLayout="scroll">
           <ng-template pTemplate="header">
             <tr>
-              <th>Application ID</th>
-              <th>Application Name</th>
+              <th>معرف التطبيق</th>
+              <th>اسم التطبيق</th>
               <th>الحالة</th>
               <th class="action-col">إجراء</th>
             </tr>
@@ -142,7 +142,7 @@
           <h5>{{ editingApplicationId ? 'تعديل تطبيق' : 'إضافة تطبيق جديد' }}</h5>
           <p class="required-note"><span>*</span> حقل إلزامي</p>
 
-          <label for="applicationId">Application ID <span class="required">*</span></label>
+          <label for="applicationId">معرف التطبيق <span class="required">*</span></label>
           <input
             pInputText
             id="applicationId"
@@ -150,7 +150,7 @@
             [readonly]="editingApplicationId != null"
             placeholder="مثال: 60" />
 
-          <label for="applicationName">Application Name <span class="required">*</span></label>
+          <label for="applicationName">اسم التطبيق <span class="required">*</span></label>
           <input
             pInputText
             id="applicationName"
@@ -174,8 +174,8 @@
       <section class="card category-card">
         <header class="card-header">
           <div>
-            <h4>CDCategory Tree</h4>
-            <small>Tree load / Parent picker / Create / Update / Delete</small>
+            <h4>شجرة أنواع الطلب</h4>
+            <small>تحميل الشجرة / اختيار الأصل / إنشاء / تعديل / حذف</small>
           </div>
           <p-tag
             *ngIf="selectedApplication as selectedApp"
@@ -187,7 +187,7 @@
         <div *ngIf="selectedApplicationId; else selectApplicationFirst" class="category-layout">
           <div class="tree-pane">
             <div class="tree-toolbar">
-              <button pButton type="button" class="p-button-outlined" label="Node جديدة" (click)="onStartCreateCategory()"></button>
+              <button pButton type="button" class="p-button-outlined" label="عقدة جديدة" (click)="onStartCreateCategory()"></button>
               <button pButton type="button" class="p-button-text" label="تعديل المحدد" (click)="onStartEditSelectedCategory()"></button>
               <button
                 pButton
@@ -209,7 +209,7 @@
           </div>
 
           <form class="editor" [formGroup]="categoryForm" novalidate>
-            <h5>{{ editingCategoryId ? 'تعديل Node' : 'إضافة Node جديدة' }}</h5>
+            <h5>{{ editingCategoryId ? 'تعديل عقدة' : 'إضافة عقدة جديدة' }}</h5>
             <p class="required-note"><span>*</span> حقل إلزامي</p>
 
             <label for="categoryName">اسم العنصر <span class="required">*</span></label>
@@ -219,7 +219,7 @@
               formControlName="categoryName"
               placeholder="اسم الفئة" />
 
-            <label for="parentDisplay">Parent</label>
+            <label for="parentDisplay">العقدة الأم</label>
             <div class="parent-picker-row">
               <input pInputText id="parentDisplay" [value]="parentDisplayLabel" readonly />
               <button
@@ -227,7 +227,7 @@
                 type="button"
                 class="p-button-outlined"
                 icon="pi pi-sitemap"
-                label="اختيار Parent"
+                label="اختيار العقدة الأم"
                 (click)="openParentPicker(parentPicker, $event)">
               </button>
             </div>
@@ -239,7 +239,7 @@
                   type="button"
                   class="p-button-text"
                   icon="pi pi-home"
-                  label="اختيار الجذر (بدون Parent)"
+                  label="اختيار الجذر (بدون عقدة أم)"
                   (click)="onChooseRootParent(parentPicker)">
                 </button>
 
@@ -257,7 +257,7 @@
             <button
               pButton
               type="button"
-              [label]="editingCategoryId ? 'حفظ تعديل Node' : 'إضافة Node'"
+              [label]="editingCategoryId ? 'حفظ تعديل العقدة' : 'إضافة عقدة'"
               [disabled]="!canSaveCategory"
               [loading]="savingCategory"
               (click)="onSaveCategory()">
@@ -278,7 +278,7 @@
     <header class="card-header">
       <div>
         <h3>المرحلة الثانية: إدارة الجروبات للنود المختارة</h3>
-        <small>Main Group / Sub Group مع hierarchy آمن</small>
+        <small>مجموعة رئيسية / مجموعة فرعية مع تسلسل هرمي آمن</small>
       </div>
       <p-tag [value]="'اكتمال المرحلة: ' + phase2CompletionPercent + '%'" severity="info"></p-tag>
     </header>
@@ -293,11 +293,11 @@
         <section class="card groups-tree-card">
           <header class="card-header">
             <div>
-              <h4>Groups Tree</h4>
-              <small>List / Select / Edit / Delete</small>
+              <h4>شجرة المجموعات</h4>
+              <small>عرض / اختيار / تعديل / حذف</small>
             </div>
             <div class="header-actions">
-              <button pButton type="button" class="p-button-outlined" label="Group جديدة" (click)="onStartCreateGroup()"></button>
+              <button pButton type="button" class="p-button-outlined" label="مجموعة جديدة" (click)="onStartCreateGroup()"></button>
               <button pButton type="button" class="p-button-text" label="تعديل المحدد" (click)="onStartEditSelectedGroup()"></button>
               <button
                 pButton
@@ -320,10 +320,10 @@
 
         <section class="card groups-editor-card">
           <form class="editor" [formGroup]="groupForm" novalidate>
-            <h5>{{ editingGroupId ? 'تعديل Group' : 'إضافة Group جديدة' }}</h5>
+            <h5>{{ editingGroupId ? 'تعديل مجموعة' : 'إضافة مجموعة جديدة' }}</h5>
             <p class="required-note"><span>*</span> حقل إلزامي</p>
 
-            <label for="groupName">اسم Group <span class="required">*</span></label>
+            <label for="groupName">اسم المجموعة <span class="required">*</span></label>
             <input
               pInputText
               id="groupName"
@@ -338,7 +338,7 @@
               rows="3"
               placeholder="وصف مختصر"></textarea>
 
-            <label for="groupParent">Parent Group</label>
+            <label for="groupParent">المجموعة الأم</label>
             <p-dropdown
               inputId="groupParent"
               [options]="groupParentOptions"
@@ -347,10 +347,10 @@
               formControlName="parentGroupId"
               appendTo="body"
               [showClear]="true"
-              placeholder="Main Group (بدون Parent)">
+              placeholder="مجموعة رئيسية (بدون مجموعة أم)">
             </p-dropdown>
 
-            <label for="displayOrder">Display Order <span class="required">*</span></label>
+            <label for="displayOrder">ترتيب العرض <span class="required">*</span></label>
             <input
               pInputText
               id="displayOrder"
@@ -365,7 +365,7 @@
             <button
               pButton
               type="button"
-              [label]="editingGroupId ? 'حفظ تعديل Group' : 'إضافة Group'"
+              [label]="editingGroupId ? 'حفظ تعديل المجموعة' : 'إضافة مجموعة'"
               [disabled]="!canSaveGroup"
               [loading]="savingGroup"
               (click)="onSaveGroup()">
@@ -377,7 +377,7 @@
 
     <ng-template #selectNodeFirst>
       <div class="empty-state">
-        اختر Node من الشجرة في المرحلة الأولى. سيتم الانتقال تلقائيًا لهذه المرحلة عند اختيار النود.
+        اختر عقدة من الشجرة في المرحلة الأولى. سيتم الانتقال تلقائيًا لهذه المرحلة عند اختيار العقدة.
       </div>
     </ng-template>
   </section>
@@ -385,20 +385,20 @@
   <section class="card routing-card">
     <header class="card-header">
       <div>
-        <h3>إدارة التوجيه الذكي (Routing)</h3>
-        <small>مرحلة الإدارة داخل ControlCenterCatalog - عربي RTL + PrimeNG</small>
+        <h3>إدارة التوجيه الذكي</h3>
+        <small>مرحلة الإدارة داخل لوحة الكتالوج بواجهة عربية واتجاه من اليمين إلى اليسار</small>
       </div>
       <div class="routing-tags">
         <p-tag
           [value]="'اكتمال الإلزامي: ' + routingMandatoryCompletionPercent + '%'"
           severity="danger">
         </p-tag>
-        <p-tag value="اختياري: تحسينات إضافية (auto-layout/export)" severity="info"></p-tag>
+        <p-tag value="اختياري: تحسينات إضافية (تخطيط تلقائي/تصدير)" severity="info"></p-tag>
       </div>
     </header>
 
     <div class="context-banner" *ngIf="selectedCategoryId; else routingNoNodeSelected">
-      <strong>Request Type الحالي للتوجيه:</strong>
+      <strong>نوع الطلب الحالي للتوجيه:</strong>
       <span>{{ selectedCategoryPathLabel }}</span>
     </div>
 
@@ -410,7 +410,7 @@
 
     <ng-template #routingNoNodeSelected>
       <div class="empty-state">
-        لا يمكن بدء إعداد التوجيه قبل اختيار Node (نوع طلب) من الشجرة في المرحلة الأولى.
+        لا يمكن بدء إعداد التوجيه قبل اختيار عقدة (نوع طلب) من الشجرة في المرحلة الأولى.
       </div>
     </ng-template>
   </section>
@@ -418,8 +418,8 @@
   <section class="card access-policy-card">
     <header class="card-header">
       <div>
-        <h3>إدارة Field/Group Access Policy</h3>
-        <small>صلاحيات المجموعات والحقول حسب Stage + Action داخل نفس Workspace</small>
+        <h3>إدارة سياسة وصول الحقول والمجموعات</h3>
+        <small>صلاحيات المجموعات والحقول حسب المرحلة والإجراء داخل نفس مساحة العمل</small>
       </div>
       <div class="routing-tags">
         <p-tag
@@ -430,7 +430,7 @@
     </header>
 
     <div class="context-banner" *ngIf="selectedCategoryId; else accessNoNodeSelected">
-      <strong>Request Type الحالي للـ Access Policy:</strong>
+      <strong>نوع الطلب الحالي لسياسة الوصول:</strong>
       <span>{{ selectedCategoryPathLabel }}</span>
     </div>
 
@@ -442,7 +442,7 @@
 
     <ng-template #accessNoNodeSelected>
       <div class="empty-state">
-        لا يمكن بدء إعداد صلاحيات الحقول قبل اختيار Node (نوع طلب) من الشجرة في المرحلة الأولى.
+        لا يمكن بدء إعداد صلاحيات الحقول قبل اختيار عقدة (نوع طلب) من الشجرة في المرحلة الأولى.
       </div>
     </ng-template>
   </section>
@@ -450,13 +450,13 @@
   <section class="card display-settings-card">
     <header class="card-header">
       <div>
-        <h3>إعدادات طريقة العرض (Standard / Tabbed)</h3>
+        <h3>إعدادات طريقة العرض (قياسي / مبوب)</h3>
         <small>التحكم في الوضع الافتراضي وإمكانية التغيير للمستخدم النهائي</small>
       </div>
     </header>
 
     <div class="context-banner" *ngIf="selectedCategoryId; else displaySettingsNoNodeSelected">
-      <strong>Request Type الحالي لإعدادات العرض:</strong>
+      <strong>نوع الطلب الحالي لإعدادات العرض:</strong>
       <span>{{ selectedCategoryPathLabel }}</span>
     </div>
 
@@ -467,7 +467,7 @@
 
     <ng-template #displaySettingsNoNodeSelected>
       <div class="empty-state">
-        لا يمكن إعداد طريقة العرض قبل اختيار Node (نوع طلب) من الشجرة في المرحلة الأولى.
+        لا يمكن إعداد طريقة العرض قبل اختيار عقدة (نوع طلب) من الشجرة في المرحلة الأولى.
       </div>
     </ng-template>
   </section>

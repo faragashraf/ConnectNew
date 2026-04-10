@@ -35,6 +35,12 @@ import {
 import {
   DynamicSubjectsAdminCatalogController
 } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
+import {
+  normalizeRequestViewMode,
+  RequestViewMode,
+  REQUEST_VIEW_MODE_OPTIONS_AR,
+  REQUEST_VIEW_MODE_STANDARD
+} from 'src/app/shared/models/request-view-mode';
 
 interface RuntimeFieldInspectorRow {
   fieldKey: string;
@@ -63,7 +69,7 @@ interface RuntimeGroupRenderNode {
   children: RuntimeGroupRenderNode[];
 }
 
-type RuntimeFormDisplayMode = 'standard' | 'tabbed';
+type RuntimeFormDisplayMode = RequestViewMode;
 
 @Component({
   selector: 'app-dynamic-subject-editor',
@@ -93,12 +99,9 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private rawFormDefinition: SubjectFormDefinitionDto | null = null;
   formDefinition: SubjectFormDefinitionDto | null = null;
   renderGroupTree: RuntimeGroupRenderNode[] = [];
-  readonly formDisplayModeOptions: Array<{ label: string; value: RuntimeFormDisplayMode }> = [
-    { label: 'Standard', value: 'standard' },
-    { label: 'Tabbed', value: 'tabbed' }
-  ];
+  readonly formDisplayModeOptions: Array<{ label: string; value: RuntimeFormDisplayMode }> = [...REQUEST_VIEW_MODE_OPTIONS_AR];
   allowRequesterOverride = false;
-  currentDisplayMode: RuntimeFormDisplayMode = 'standard';
+  currentDisplayMode: RuntimeFormDisplayMode = REQUEST_VIEW_MODE_STANDARD;
   rootGroupTabIndex = 0;
   categoryOptions: Array<{ id: number; name: string }> = [];
   pendingFiles: FileParameter[] = [];
@@ -728,12 +731,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private normalizeRuntimeDisplayMode(value: unknown): RuntimeFormDisplayMode {
-    const normalized = String(value ?? '').trim().toLowerCase();
-    if (normalized === 'tabbed') {
-      return 'tabbed';
-    }
-
-    return 'standard';
+    return normalizeRequestViewMode(value);
   }
 
   private get hasDirectionCapability(): boolean {
@@ -2051,7 +2049,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.formDefinition = null;
     this.activeRequestPolicy = null;
     this.allowRequesterOverride = false;
-    this.currentDisplayMode = 'standard';
+    this.currentDisplayMode = REQUEST_VIEW_MODE_STANDARD;
     this.rootGroupTabIndex = 0;
     this.directionSelectionMode = 'selectable';
     this.fixedDocumentDirection = null;
