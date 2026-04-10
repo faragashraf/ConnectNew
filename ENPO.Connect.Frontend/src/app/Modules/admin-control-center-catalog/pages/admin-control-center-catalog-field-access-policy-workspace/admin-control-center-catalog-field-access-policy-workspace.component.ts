@@ -1,6 +1,12 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
+import {
+  FieldAccessNotesContext,
+  FieldAccessPolicyNotesGenerator,
+  LockNotesInput,
+  RuleNotesInput
+} from './field-access-policy-notes-generator.helper';
 import { CommonResponse } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { DynamicSubjectsAdminAccessPolicyController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminAccessPolicy/DynamicSubjectsAdminAccessPolicy.service';
 import {
@@ -125,17 +131,28 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
   loadingWorkspace = false;
   savingWorkspace = false;
+  savingLockUpdate = false;
   loadingPreview = false;
 
   hasUnsavedChanges = false;
   editingRuleIndex: number | null = null;
+  editingLockIndex: number | null = null;
 
   message = '';
   messageSeverity: MessageSeverity = 'success';
+  ruleNotesManuallyEdited = false;
+  lockNotesManuallyEdited = false;
+  ruleSuggestedNotes = '';
+  lockSuggestedNotes = '';
 
   private readonly subscriptions: Subscription[] = [];
+  private readonly notesGenerator = new FieldAccessPolicyNotesGenerator();
   private persistedSnapshot = '';
   private suppressDirtyTracking = false;
+  private previousLockTargetLevel = 'Field';
+  private previousLockOverrideSubjectType: string | undefined;
+  private applyingRuleSuggestedNotes = false;
+  private applyingLockSuggestedNotes = false;
 
   constructor(
     private readonly fb: FormBuilder,
@@ -145,17 +162,25 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
       this.policyForm.valueChanges.subscribe(() => this.evaluateDirtyState()),
       this.ruleForm.get('subjectType')!.valueChanges.subscribe(() => this.applyRuleSubjectValidators()),
       this.previewForm.get('subjectType')!.valueChanges.subscribe(() => this.applyPreviewSubjectValidators()),
-      this.lockForm.get('allowedOverrideSubjectType')!.valueChanges.subscribe(() => this.applyLockOverrideSubjectValidators()),
+      this.lockForm.get('allowedOverrideSubjectType')!.valueChanges.subscribe(value => this.onLockOverrideSubjectTypeChange(value)),
       this.ruleForm.get('stageId')!.valueChanges.subscribe(() => this.syncRuleActionToStage()),
       this.lockForm.get('stageId')!.valueChanges.subscribe(() => this.syncLockActionToStage()),
       this.previewForm.get('stageId')!.valueChanges.subscribe(() => this.syncPreviewActionToStage()),
       this.ruleForm.get('targetLevel')!.valueChanges.subscribe(() => this.syncRuleTargetToLevel()),
-      this.lockForm.get('targetLevel')!.valueChanges.subscribe(() => this.syncLockTargetToLevel())
+      this.lockForm.get('targetLevel')!.valueChanges.subscribe(value => this.onLockTargetLevelChange(value)),
+      this.ruleForm.valueChanges.subscribe(() => this.refreshRuleSuggestedNotes()),
+      this.lockForm.valueChanges.subscribe(() => this.refreshLockSuggestedNotes()),
+      this.ruleForm.get('notes')!.valueChanges.subscribe(value => this.onRuleNotesControlChanged(value)),
+      this.lockForm.get('notes')!.valueChanges.subscribe(value => this.onLockNotesControlChanged(value))
     );
 
     this.applyRuleSubjectValidators();
     this.applyPreviewSubjectValidators();
     this.applyLockOverrideSubjectValidators();
+    this.previousLockTargetLevel = String(this.lockForm.get('targetLevel')?.value ?? 'Field');
+    this.previousLockOverrideSubjectType = this.normalizeString(this.lockForm.get('allowedOverrideSubjectType')?.value);
+    this.syncRuleSuggestedNotesAfterFormPatch();
+    this.syncLockSuggestedNotesAfterFormPatch();
   }
 
   ngOnDestroy(): void {
@@ -172,6 +197,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
       this.activeTab = 'overview';
       this.hasUnsavedChanges = false;
       this.editingRuleIndex = null;
+      this.editingLockIndex = null;
       this.persistedSnapshot = '';
       this.emitCompletion();
 
@@ -271,12 +297,24 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     return this.editingRuleIndex != null;
   }
 
+  get isLockEditMode(): boolean {
+    return this.editingLockIndex != null;
+  }
+
   get ruleEditorTitle(): string {
     if (this.isRuleEditMode && this.editingRuleIndex != null) {
       return `تعديل القاعدة #${this.editingRuleIndex + 1}`;
     }
 
     return 'إضافة قاعدة جديدة';
+  }
+
+  get lockEditorTitle(): string {
+    if (this.isLockEditMode && this.editingLockIndex != null) {
+      return `تعديل القفل #${this.editingLockIndex + 1}`;
+    }
+
+    return 'إضافة قفل جديد';
   }
 
   get ruleSubjectIdRequired(): boolean {
@@ -319,8 +357,12 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     return this.ruleValidationMessages.length === 0;
   }
 
+  get canSubmitLock(): boolean {
+    return this.lockValidationMessages.length === 0 && !this.savingLockUpdate && !this.savingWorkspace;
+  }
+
   get canAddLock(): boolean {
-    return this.lockValidationMessages.length === 0;
+    return this.canSubmitLock;
   }
 
   get canRunPreview(): boolean {
@@ -335,12 +377,17 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     return this.canManageWorkspace
       && this.hasUnsavedChanges
       && this.workspaceValidationMessages.length === 0
-      && !this.savingWorkspace;
+      && !this.savingWorkspace
+      && !this.savingLockUpdate;
   }
 
   get saveDisabledReason(): string {
     if (this.savingWorkspace) {
       return 'جاري الحفظ الآن...';
+    }
+
+    if (this.savingLockUpdate) {
+      return 'جاري تحديث القفل الآن...';
     }
 
     if (!this.canManageWorkspace) {
@@ -424,6 +471,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
     this.applyRuleSubjectValidators();
     this.syncRuleActionToStage();
+    this.syncRuleSuggestedNotesAfterFormPatch();
     this.showMessage('warn', 'أنت الآن في وضع تعديل قاعدة.');
   }
 
@@ -434,6 +482,12 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
     this.resetRuleEditor();
     this.showMessage('warn', 'تم إلغاء التعديل والعودة إلى وضع الإضافة.');
+  }
+
+  onRegenerateRuleNotes(): void {
+    this.ruleNotesManuallyEdited = false;
+    this.refreshRuleSuggestedNotes();
+    this.showMessage('success', 'تمت إعادة توليد وصف القاعدة حسب الاختيارات الحالية.');
   }
 
   onRemoveRule(index: number): void {
@@ -456,9 +510,68 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     this.showMessage('success', 'تم حذف القاعدة محليًا.');
   }
 
-  onAddLock(): void {
+  onLockPrimaryAction(): void {
     this.lockForm.markAllAsTouched();
-    if (!this.canAddLock) {
+    if (!this.canSubmitLock) {
+      this.showMessage('warn', this.lockValidationMessages[0] ?? 'يرجى استكمال بيانات القفل.');
+      return;
+    }
+
+    if (this.isLockEditMode) {
+      this.onUpdateLock();
+      return;
+    }
+
+    this.onAddLock();
+  }
+
+  onStartEditLock(index: number): void {
+    if (index < 0 || index >= this.locks.length) {
+      return;
+    }
+
+    const item = this.locks[index];
+    this.editingLockIndex = index;
+    this.lockForm.patchValue(
+      {
+        targetLevel: item.targetLevel,
+        targetId: item.targetId,
+        stageId: item.stageId ?? null,
+        actionId: item.actionId ?? null,
+        lockMode: item.lockMode,
+        allowedOverrideSubjectType: item.allowedOverrideSubjectType ?? null,
+        allowedOverrideSubjectId: item.allowedOverrideSubjectId ?? '',
+        isActive: item.isActive,
+        notes: item.notes ?? ''
+      },
+      { emitEvent: false }
+    );
+
+    this.previousLockTargetLevel = String(item.targetLevel ?? 'Field');
+    this.previousLockOverrideSubjectType = this.normalizeString(item.allowedOverrideSubjectType);
+    this.applyLockOverrideSubjectValidators();
+    this.syncLockActionToStage();
+    this.syncLockSuggestedNotesAfterFormPatch();
+    this.showMessage('warn', 'أنت الآن في وضع تعديل القفل.');
+  }
+
+  onCancelLockEdit(): void {
+    if (!this.isLockEditMode) {
+      return;
+    }
+
+    this.resetLockEditor();
+    this.showMessage('warn', 'تم إلغاء التعديل والعودة إلى وضع الإضافة.');
+  }
+
+  onRegenerateLockNotes(): void {
+    this.lockNotesManuallyEdited = false;
+    this.refreshLockSuggestedNotes();
+    this.showMessage('success', 'تمت إعادة توليد وصف القفل حسب الاختيارات الحالية.');
+  }
+
+  onAddLock(): void {
+    if (!this.canSubmitLock) {
       this.showMessage('warn', this.lockValidationMessages[0] ?? 'يرجى استكمال بيانات القفل.');
       return;
     }
@@ -477,6 +590,15 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     }
 
     this.locks = this.locks.filter((_, idx) => idx !== index);
+
+    if (this.editingLockIndex != null) {
+      if (this.editingLockIndex === index) {
+        this.resetLockEditor();
+      } else if (this.editingLockIndex > index) {
+        this.editingLockIndex = this.editingLockIndex - 1;
+      }
+    }
+
     this.evaluateDirtyState();
     this.emitCompletion();
     this.showMessage('success', 'تم حذف القفل محليًا.');
@@ -488,13 +610,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
       return;
     }
 
-    const payload: FieldAccessPolicyWorkspaceUpsertRequestDto = {
-      policyName: this.normalizeString(this.policyForm.get('policyName')?.value),
-      isPolicyActive: this.policyForm.get('isPolicyActive')?.value === true,
-      defaultAccessMode: String(this.policyForm.get('defaultAccessMode')?.value ?? 'Editable'),
-      rules: [...this.rules],
-      locks: [...this.locks]
-    };
+    const payload = this.buildWorkspaceUpsertPayload();
 
     this.savingWorkspace = true;
     this.accessPolicyController.upsertWorkspace(this.requestTypeId, payload).subscribe({
@@ -816,6 +932,55 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     this.showMessage('success', 'تم تحديث القاعدة محليًا.');
   }
 
+  private onUpdateLock(): void {
+    if (this.editingLockIndex == null || this.editingLockIndex < 0 || this.editingLockIndex >= this.locks.length) {
+      this.resetLockEditor();
+      return;
+    }
+
+    if (!this.requestTypeId || this.requestTypeId <= 0) {
+      this.showMessage('warn', 'اختر نوع الطلب أولًا قبل تحديث القفل.');
+      return;
+    }
+
+    const existing = this.locks[this.editingLockIndex];
+    const updatedLock = this.buildLockFromForm(existing.id);
+    const updatedLocks = this.locks.map((item, index) => (index === this.editingLockIndex ? updatedLock : item));
+    const payload = this.buildWorkspaceUpsertPayload(updatedLocks);
+
+    this.savingLockUpdate = true;
+    this.accessPolicyController.upsertWorkspace(this.requestTypeId, payload).subscribe({
+      next: response => {
+        if (!this.ensureSuccess(response, 'تعذر تحديث القفل.')) {
+          return;
+        }
+
+        this.workspace = response.data ?? null;
+        this.rules = [...(this.workspace?.rules ?? [])];
+        this.locks = [...(this.workspace?.locks ?? [])];
+        this.preview = null;
+        this.policyForm.patchValue(
+          {
+            policyName: this.workspace?.policy?.name ?? this.policyForm.get('policyName')?.value,
+            isPolicyActive: this.workspace?.policy?.isActive ?? this.policyForm.get('isPolicyActive')?.value,
+            defaultAccessMode: this.workspace?.policy?.defaultAccessMode ?? this.policyForm.get('defaultAccessMode')?.value
+          },
+          { emitEvent: false }
+        );
+
+        this.resetLockEditor();
+        this.persistedSnapshot = this.buildWorkspaceSnapshot();
+        this.hasUnsavedChanges = false;
+        this.emitCompletion();
+        this.showMessage('success', 'تم تحديث القفل بنجاح.');
+      },
+      error: () => this.showMessage('error', 'حدث خطأ أثناء تحديث القفل.'),
+      complete: () => {
+        this.savingLockUpdate = false;
+      }
+    });
+  }
+
   private buildRuleFromForm(existingId?: number): FieldAccessPolicyRuleDto {
     return {
       id: existingId,
@@ -833,8 +998,9 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     };
   }
 
-  private buildLockFromForm(): FieldAccessLockDto {
+  private buildLockFromForm(existingId?: number): FieldAccessLockDto {
     return {
+      id: existingId,
       targetLevel: String(this.lockForm.get('targetLevel')?.value ?? 'Field'),
       targetId: this.normalizeNumber(this.lockForm.get('targetId')?.value) ?? 0,
       stageId: this.normalizeNumber(this.lockForm.get('stageId')?.value),
@@ -844,6 +1010,16 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
       allowedOverrideSubjectId: this.normalizeString(this.lockForm.get('allowedOverrideSubjectId')?.value),
       isActive: this.lockForm.get('isActive')?.value === true,
       notes: this.normalizeString(this.lockForm.get('notes')?.value)
+    };
+  }
+
+  private buildWorkspaceUpsertPayload(locksOverride?: FieldAccessLockDto[]): FieldAccessPolicyWorkspaceUpsertRequestDto {
+    return {
+      policyName: this.normalizeString(this.policyForm.get('policyName')?.value),
+      isPolicyActive: this.policyForm.get('isPolicyActive')?.value === true,
+      defaultAccessMode: String(this.policyForm.get('defaultAccessMode')?.value ?? 'Editable'),
+      rules: [...this.rules],
+      locks: [...(locksOverride ?? this.locks)]
     };
   }
 
@@ -933,6 +1109,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
     this.applyRuleSubjectValidators();
     this.syncRuleActionToStage();
+    this.syncRuleSuggestedNotesAfterFormPatch();
 
     if (showModeMessage) {
       this.showMessage('warn', 'تمت العودة إلى وضع إضافة قاعدة جديدة.');
@@ -940,6 +1117,7 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
   }
 
   private resetLockEditor(emitMessage = false): void {
+    this.editingLockIndex = null;
     this.lockForm.reset(
       {
         targetLevel: 'Field',
@@ -955,8 +1133,11 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
       { emitEvent: false }
     );
 
+    this.previousLockTargetLevel = 'Field';
+    this.previousLockOverrideSubjectType = undefined;
     this.applyLockOverrideSubjectValidators();
     this.syncLockActionToStage();
+    this.syncLockSuggestedNotesAfterFormPatch();
 
     if (emitMessage) {
       this.showMessage('warn', 'تمت إعادة تعيين نموذج القفل.');
@@ -1009,6 +1190,32 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     }
 
     subjectIdControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private onLockTargetLevelChange(nextValue: unknown): void {
+    const normalizedLevel = String(nextValue ?? 'Field');
+    const didChange = normalizedLevel !== this.previousLockTargetLevel;
+    this.previousLockTargetLevel = normalizedLevel;
+
+    if (!didChange) {
+      return;
+    }
+
+    this.lockForm.get('targetId')?.patchValue(null, { emitEvent: false });
+  }
+
+  private onLockOverrideSubjectTypeChange(nextValue: unknown): void {
+    const normalizedType = this.normalizeString(nextValue);
+    const didChange = (normalizedType ?? '') !== (this.previousLockOverrideSubjectType ?? '');
+    this.previousLockOverrideSubjectType = normalizedType;
+
+    this.applyLockOverrideSubjectValidators();
+
+    if (!didChange) {
+      return;
+    }
+
+    this.lockForm.get('allowedOverrideSubjectId')?.patchValue('', { emitEvent: false });
   }
 
   private syncRuleActionToStage(): void {
@@ -1074,18 +1281,6 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
     if (!this.isTargetBelongsToLevel(targetLevel, targetId)) {
       this.ruleForm.get('targetId')?.patchValue(null, { emitEvent: false });
-    }
-  }
-
-  private syncLockTargetToLevel(): void {
-    const targetLevel = String(this.lockForm.get('targetLevel')?.value ?? 'Field');
-    const targetId = this.normalizeNumber(this.lockForm.get('targetId')?.value);
-    if (!targetId) {
-      return;
-    }
-
-    if (!this.isTargetBelongsToLevel(targetLevel, targetId)) {
-      this.lockForm.get('targetId')?.patchValue(null, { emitEvent: false });
     }
   }
 
@@ -1221,6 +1416,10 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
 
     if (this.isRuleEditMode) {
       messages.push('يوجد تعديل قاعدة مفتوح. احفظ التعديل أو ألغِه قبل حفظ مساحة العمل.');
+    }
+
+    if (this.isLockEditMode) {
+      messages.push('يوجد تعديل قفل مفتوح. حدّث القفل أو ألغِ التعديل قبل حفظ مساحة العمل.');
     }
 
     if (this.rules.length === 0) {
@@ -1608,7 +1807,34 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     return subjectType === 'OrgUnit' || subjectType === 'Position' || subjectType === 'User';
   }
 
-  private resolveSubjectTypeLabel(subjectTypeRaw: unknown): string {
+  resolveTargetLevelLabel(targetLevelRaw: unknown): string {
+    const targetLevel = String(targetLevelRaw ?? '').trim();
+    if (targetLevel === 'Group') {
+      return 'مجموعة';
+    }
+    if (targetLevel === 'Field') {
+      return 'حقل';
+    }
+
+    return 'غير محدد';
+  }
+
+  resolveLockModeLabel(lockModeRaw: unknown): string {
+    const lockMode = String(lockModeRaw ?? '').trim();
+    if (lockMode === 'NoEdit') {
+      return 'منع تعديل';
+    }
+    if (lockMode === 'NoInput') {
+      return 'منع إدخال';
+    }
+    if (lockMode === 'FullLock') {
+      return 'قفل كامل';
+    }
+
+    return 'غير محدد';
+  }
+
+  resolveSubjectTypeLabel(subjectTypeRaw: unknown): string {
     const subjectType = String(subjectTypeRaw ?? '').trim();
     if (subjectType === 'OrgUnit') {
       return 'وحدة تنظيمية';
@@ -1627,6 +1853,154 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
     }
 
     return 'غير محدد';
+  }
+
+  private onRuleNotesControlChanged(value: unknown): void {
+    if (this.applyingRuleSuggestedNotes) {
+      return;
+    }
+
+    this.ruleNotesManuallyEdited = this.normalizeNotesValue(value) !== this.normalizeNotesValue(this.ruleSuggestedNotes);
+  }
+
+  private onLockNotesControlChanged(value: unknown): void {
+    if (this.applyingLockSuggestedNotes) {
+      return;
+    }
+
+    this.lockNotesManuallyEdited = this.normalizeNotesValue(value) !== this.normalizeNotesValue(this.lockSuggestedNotes);
+  }
+
+  private syncRuleSuggestedNotesAfterFormPatch(): void {
+    const notesControl = this.ruleForm.get('notes');
+    if (!notesControl) {
+      return;
+    }
+
+    this.ruleSuggestedNotes = this.notesGenerator.buildRuleNotes(this.buildRuleNotesInput(), this.buildNotesContext());
+    const currentNotes = this.normalizeNotesValue(notesControl.value);
+    const suggestedNotes = this.normalizeNotesValue(this.ruleSuggestedNotes);
+
+    if (currentNotes.length === 0) {
+      this.applyRuleSuggestedNotes(this.ruleSuggestedNotes);
+      this.ruleNotesManuallyEdited = false;
+      return;
+    }
+
+    this.ruleNotesManuallyEdited = currentNotes !== suggestedNotes;
+  }
+
+  private syncLockSuggestedNotesAfterFormPatch(): void {
+    const notesControl = this.lockForm.get('notes');
+    if (!notesControl) {
+      return;
+    }
+
+    this.lockSuggestedNotes = this.notesGenerator.buildLockNotes(this.buildLockNotesInput(), this.buildNotesContext());
+    const currentNotes = this.normalizeNotesValue(notesControl.value);
+    const suggestedNotes = this.normalizeNotesValue(this.lockSuggestedNotes);
+
+    if (currentNotes.length === 0) {
+      this.applyLockSuggestedNotes(this.lockSuggestedNotes);
+      this.lockNotesManuallyEdited = false;
+      return;
+    }
+
+    this.lockNotesManuallyEdited = currentNotes !== suggestedNotes;
+  }
+
+  private refreshRuleSuggestedNotes(): void {
+    this.ruleSuggestedNotes = this.notesGenerator.buildRuleNotes(this.buildRuleNotesInput(), this.buildNotesContext());
+    if (!this.ruleNotesManuallyEdited) {
+      this.applyRuleSuggestedNotes(this.ruleSuggestedNotes);
+    }
+  }
+
+  private refreshLockSuggestedNotes(): void {
+    this.lockSuggestedNotes = this.notesGenerator.buildLockNotes(this.buildLockNotesInput(), this.buildNotesContext());
+    if (!this.lockNotesManuallyEdited) {
+      this.applyLockSuggestedNotes(this.lockSuggestedNotes);
+    }
+  }
+
+  private applyRuleSuggestedNotes(value: string): void {
+    const notesControl = this.ruleForm.get('notes');
+    if (!notesControl) {
+      return;
+    }
+
+    if (this.normalizeNotesValue(notesControl.value) === this.normalizeNotesValue(value)) {
+      return;
+    }
+
+    this.applyingRuleSuggestedNotes = true;
+    notesControl.patchValue(value, { emitEvent: false });
+    this.applyingRuleSuggestedNotes = false;
+  }
+
+  private applyLockSuggestedNotes(value: string): void {
+    const notesControl = this.lockForm.get('notes');
+    if (!notesControl) {
+      return;
+    }
+
+    if (this.normalizeNotesValue(notesControl.value) === this.normalizeNotesValue(value)) {
+      return;
+    }
+
+    this.applyingLockSuggestedNotes = true;
+    notesControl.patchValue(value, { emitEvent: false });
+    this.applyingLockSuggestedNotes = false;
+  }
+
+  private buildRuleNotesInput(): RuleNotesInput {
+    const priorityRaw = Number(this.ruleForm.get('priority')?.value ?? NaN);
+    return {
+      targetLevel: this.normalizeString(this.ruleForm.get('targetLevel')?.value),
+      targetId: this.normalizeNumber(this.ruleForm.get('targetId')?.value),
+      stageId: this.normalizeNumber(this.ruleForm.get('stageId')?.value),
+      actionId: this.normalizeNumber(this.ruleForm.get('actionId')?.value),
+      permissionType: this.normalizeString(this.ruleForm.get('permissionType')?.value),
+      subjectType: this.normalizeString(this.ruleForm.get('subjectType')?.value),
+      subjectId: this.normalizeString(this.ruleForm.get('subjectId')?.value),
+      effect: this.normalizeString(this.ruleForm.get('effect')?.value),
+      priority: Number.isFinite(priorityRaw) ? priorityRaw : undefined,
+      isActive: this.ruleForm.get('isActive')?.value === true
+    };
+  }
+
+  private buildLockNotesInput(): LockNotesInput {
+    return {
+      targetLevel: this.normalizeString(this.lockForm.get('targetLevel')?.value),
+      targetId: this.normalizeNumber(this.lockForm.get('targetId')?.value),
+      stageId: this.normalizeNumber(this.lockForm.get('stageId')?.value),
+      actionId: this.normalizeNumber(this.lockForm.get('actionId')?.value),
+      lockMode: this.normalizeString(this.lockForm.get('lockMode')?.value),
+      allowedOverrideSubjectType: this.normalizeString(this.lockForm.get('allowedOverrideSubjectType')?.value),
+      allowedOverrideSubjectId: this.normalizeString(this.lockForm.get('allowedOverrideSubjectId')?.value),
+      isActive: this.lockForm.get('isActive')?.value === true
+    };
+  }
+
+  private buildNotesContext(): FieldAccessNotesContext {
+    const groups = this.workspace?.groups ?? [];
+    const fields = this.workspace?.fields ?? [];
+    const stages = this.workspace?.stages ?? [];
+    const actions = this.workspace?.actions ?? [];
+
+    return {
+      targetLevelOptions: this.targetLevelOptions.map(item => ({ label: item.label, value: item.value })),
+      permissionTypeOptions: this.permissionTypeOptions.map(item => ({ label: item.label, value: item.value })),
+      subjectTypeOptions: this.subjectTypeOptions.map(item => ({ label: item.label, value: item.value })),
+      effectOptions: this.effectOptions.map(item => ({ label: item.label, value: item.value })),
+      lockModeOptions: this.lockModeOptions.map(item => ({ label: item.label, value: item.value })),
+      targets: [
+        ...groups.map(item => ({ id: item.id, label: item.label, targetLevel: 'Group' })),
+        ...fields.map(item => ({ id: item.id, label: item.label, targetLevel: 'Field' }))
+      ],
+      stages: stages.map(item => ({ id: item.id, label: item.label })),
+      actions: actions.map(item => ({ id: item.id, stageId: item.stageId, label: item.label }))
+    };
   }
 
   private ensureSuccess<T>(response: CommonResponse<T>, fallbackMessage: string): boolean {
@@ -1694,6 +2068,12 @@ export class AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent implem
   private normalizeString(value: unknown): string | undefined {
     const normalized = String(value ?? '').trim();
     return normalized.length > 0 ? normalized : undefined;
+  }
+
+  private normalizeNotesValue(value: unknown): string {
+    return String(value ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   private normalizeNumber(value: unknown): number | undefined {

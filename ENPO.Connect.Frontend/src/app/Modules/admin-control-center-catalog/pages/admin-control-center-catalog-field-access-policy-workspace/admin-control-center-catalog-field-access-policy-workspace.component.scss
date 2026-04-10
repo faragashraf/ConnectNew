@@ -156,6 +156,22 @@
   font-weight: 700;
 }
 
+.notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.notes-hint {
+  color: #0f766e;
+  font-size: 0.72rem;
+}
+
+.notes-hint.is-manual {
+  color: #9a3412;
+}
+
 .field-error {
   color: #b91c1c;
   font-size: 0.73rem;

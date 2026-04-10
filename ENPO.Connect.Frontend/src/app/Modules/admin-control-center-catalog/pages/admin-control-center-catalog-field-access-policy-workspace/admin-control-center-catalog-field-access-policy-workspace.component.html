@@ -270,8 +270,20 @@
             </div>
 
             <div class="field span-two">
-              <label>ملاحظات</label>
+              <div class="notes-header">
+                <label>ملاحظات</label>
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-text p-button-sm"
+                  icon="pi pi-sync"
+                  label="إعادة توليد الوصف"
+                  (click)="onRegenerateRuleNotes()">
+                </button>
+              </div>
               <textarea pInputTextarea rows="2" formControlName="notes"></textarea>
+              <small class="notes-hint" *ngIf="!ruleNotesManuallyEdited">الوصف المقترح يتحدث تلقائيًا مع تغيّر الاختيارات.</small>
+              <small class="notes-hint is-manual" *ngIf="ruleNotesManuallyEdited">تم تعديل النص يدويًا؛ لن يتم استبداله تلقائيًا.</small>
             </div>
           </div>
 
@@ -363,9 +375,13 @@
     <p-tabPanel header="الأقفال" [disabled]="!defaultPolicyReady">
       <div class="workspace-grid">
         <form class="editor" [formGroup]="lockForm" novalidate>
-          <h5>إضافة قفل جديد</h5>
+          <h5>{{ lockEditorTitle }}</h5>
           <p class="required-note"><span>*</span> لا يمكن اختيار الإجراء بدون مرحلة. معرف جهة الاستثناء إلزامي فقط عند اختيار وحدة تنظيمية أو منصب أو مستخدم.</p>
-          <p class="local-note">الإضافة هنا محلية حتى تحفظ مساحة العمل.</p>
+          <p class="local-note">
+            {{ isLockEditMode
+              ? 'في وضع التعديل، سيتم تحديث القفل مباشرة ثم الرجوع إلى وضع الإضافة.'
+              : 'الإضافة هنا محلية حتى تحفظ مساحة العمل.' }}
+          </p>
 
           <div class="grid two-cols">
             <div class="field">
@@ -457,8 +473,20 @@
             </div>
 
             <div class="field span-two">
-              <label>ملاحظات</label>
+              <div class="notes-header">
+                <label>ملاحظات</label>
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-text p-button-sm"
+                  icon="pi pi-sync"
+                  label="إعادة توليد الوصف"
+                  (click)="onRegenerateLockNotes()">
+                </button>
+              </div>
               <textarea pInputTextarea rows="2" formControlName="notes"></textarea>
+              <small class="notes-hint" *ngIf="!lockNotesManuallyEdited">الوصف المقترح يتحدث تلقائيًا مع تغيّر الاختيارات.</small>
+              <small class="notes-hint is-manual" *ngIf="lockNotesManuallyEdited">تم تعديل النص يدويًا؛ لن يتم استبداله تلقائيًا.</small>
             </div>
           </div>
 
@@ -467,7 +495,25 @@
           </ul>
 
           <div class="actions">
-            <button pButton type="button" icon="pi pi-plus" label="إضافة القفل" [disabled]="!canAddLock" (click)="onAddLock()"></button>
+            <button
+              pButton
+              type="button"
+              [icon]="isLockEditMode ? 'pi pi-check' : 'pi pi-plus'"
+              [label]="isLockEditMode ? 'تحديث القفل' : 'إضافة القفل'"
+              [disabled]="!canSubmitLock"
+              [loading]="savingLockUpdate"
+              (click)="onLockPrimaryAction()">
+            </button>
+            <button
+              pButton
+              type="button"
+              class="p-button-secondary p-button-outlined"
+              icon="pi pi-times"
+              label="إلغاء التعديل"
+              *ngIf="isLockEditMode"
+              [disabled]="savingLockUpdate"
+              (click)="onCancelLockEdit()">
+            </button>
             <button pButton type="button" class="p-button-outlined" icon="pi pi-lightbulb" label="إضافة أمثلة أقفال" (click)="onSeedLockExamples()"></button>
           </div>
         </form>
@@ -489,16 +535,31 @@
               </tr>
             </ng-template>
             <ng-template pTemplate="body" let-item let-rowIndex="rowIndex">
-              <tr>
-                <td>{{ item.targetLevel }} #{{ item.targetId }}</td>
+              <tr [class.editing-row]="editingLockIndex === rowIndex">
+                <td>{{ resolveTargetLevelLabel(item.targetLevel) }} #{{ item.targetId }}</td>
                 <td>{{ item.stageId || '-' }} / {{ item.actionId || '-' }}</td>
-                <td>{{ item.lockMode }}</td>
-                <td>{{ item.allowedOverrideSubjectType || '-' }} {{ item.allowedOverrideSubjectId ? '(' + item.allowedOverrideSubjectId + ')' : '' }}</td>
+                <td>{{ resolveLockModeLabel(item.lockMode) }}</td>
+                <td>{{ item.allowedOverrideSubjectType ? resolveSubjectTypeLabel(item.allowedOverrideSubjectType) : '-' }} {{ item.allowedOverrideSubjectId ? '(' + item.allowedOverrideSubjectId + ')' : '' }}</td>
                 <td>
                   <p-tag [value]="item.isActive ? 'نعم' : 'لا'" [severity]="item.isActive ? 'success' : 'danger'"></p-tag>
                 </td>
-                <td>
-                  <button pButton type="button" class="p-button-text p-button-danger" icon="pi pi-trash" (click)="onRemoveLock(rowIndex)"></button>
+                <td class="row-actions">
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text"
+                    icon="pi pi-pencil"
+                    [disabled]="savingLockUpdate || savingWorkspace"
+                    (click)="onStartEditLock(rowIndex)">
+                  </button>
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-danger"
+                    icon="pi pi-trash"
+                    [disabled]="savingLockUpdate || savingWorkspace"
+                    (click)="onRemoveLock(rowIndex)">
+                  </button>
                 </td>
               </tr>
             </ng-template>
