@@ -29,6 +29,12 @@ import {
   AdminControlCenterRuntimeBridgeContext,
   AdminControlCenterRuntimeBridgeService
 } from '../../services/admin-control-center-runtime-bridge.service';
+import {
+  AdminCatalogGroupTreeNodeDto
+} from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
+import {
+  DynamicSubjectsAdminCatalogController
+} from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
 
 interface RuntimeFieldInspectorRow {
   fieldKey: string;
@@ -39,6 +45,12 @@ interface RuntimeFieldInspectorRow {
 interface RuntimeGroupHierarchyMeta {
   parentGroupId: number | null;
   displayOrder: number;
+  hierarchyOrder?: number;
+}
+
+interface RuntimeCanonicalGroupMeta extends RuntimeGroupHierarchyMeta {
+  groupName: string;
+  groupDescription?: string;
 }
 
 interface RuntimeGroupRenderNode {
@@ -96,6 +108,10 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private fixedDocumentDirection: string | null = null;
   private suppressDirectionRebuild = false;
   private lastResolvedDirectionKey: string | null = null;
+  private canonicalGroupHierarchyCategoryId: number | null = null;
+  private canonicalGroupHierarchyRequestToken = 0;
+  private canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+  private readonly canonicalGroupHierarchyCache = new Map<number, Map<number, RuntimeCanonicalGroupMeta>>();
   runtimeBridgeContext: AdminControlCenterRuntimeBridgeContext | null = null;
   runtimeCanonicalCategoryLink: AdminControlCenterCanonicalCategoryLink | null = null;
   private runtimeBridgeNoticeShown = false;
@@ -116,7 +132,8 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     private readonly previewFoundation: CentralAdminPreviewFoundationService,
     private readonly genericFormService: GenericFormsService,
     private readonly appNotification: AppNotificationService,
-    private readonly runtimeBridgeService: AdminControlCenterRuntimeBridgeService
+    private readonly runtimeBridgeService: AdminControlCenterRuntimeBridgeService,
+    private readonly adminCatalogController: DynamicSubjectsAdminCatalogController
   ) {
     this.editorForm = this.fb.group({
       categoryId: [0, Validators.required],
@@ -595,6 +612,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     initialValues?: SubjectFieldValueDto[]
   ): void {
     this.refreshTreeRuntimeMetadata(categoryId);
+    this.loadCanonicalGroupHierarchy(categoryId);
 
     if (!this.isEditMode && this.allowedCategoryIds.size > 0 && !this.allowedCategoryIds.has(categoryId)) {
       this.appNotification.error('غير مسموح بعرض هذا النوع.');
@@ -742,7 +760,8 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
   private rebuildResolvedDynamicDefinition(
     initialValues: SubjectFieldValueDto[],
-    preserveCurrentValues: boolean
+    preserveCurrentValues: boolean,
+    forceRebuild: boolean = false
   ): void {
     if (!this.rawFormDefinition) {
       this.clearLoadedDefinitionState();
@@ -750,7 +769,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     }
 
     const direction = this.resolveDocumentDirectionForForm();
-    if (preserveCurrentValues && this.lastResolvedDirectionKey === direction) {
+    if (!forceRebuild && preserveCurrentValues && this.lastResolvedDirectionKey === direction) {
       return;
     }
 
@@ -762,6 +781,113 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.rebuildDynamicControls(resolvedDefinition, values);
     this.applyPendingDynamicFieldValueBindings();
     this.lastResolvedDirectionKey = direction;
+  }
+
+  private loadCanonicalGroupHierarchy(categoryId: number): void {
+    const normalizedCategoryId = this.normalizePositiveInt(categoryId);
+    if (!normalizedCategoryId) {
+      this.canonicalGroupHierarchyCategoryId = null;
+      this.canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+      return;
+    }
+
+    this.canonicalGroupHierarchyCategoryId = normalizedCategoryId;
+    const cached = this.canonicalGroupHierarchyCache.get(normalizedCategoryId);
+    if (cached) {
+      this.canonicalGroupHierarchyByGroupId = this.cloneCanonicalGroupHierarchyMap(cached);
+      return;
+    }
+
+    this.canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+    const requestToken = ++this.canonicalGroupHierarchyRequestToken;
+    this.adminCatalogController.getGroupsByCategory(normalizedCategoryId).subscribe({
+      next: response => {
+        if (requestToken !== this.canonicalGroupHierarchyRequestToken
+          || this.canonicalGroupHierarchyCategoryId !== normalizedCategoryId) {
+          return;
+        }
+
+        const hierarchyMap = this.buildCanonicalGroupHierarchyMap(response?.data ?? []);
+        this.canonicalGroupHierarchyByGroupId = hierarchyMap;
+        this.canonicalGroupHierarchyCache.set(normalizedCategoryId, this.cloneCanonicalGroupHierarchyMap(hierarchyMap));
+        this.rebuildDynamicDefinitionFromCanonicalHierarchy(normalizedCategoryId);
+      },
+      error: () => {
+        if (requestToken !== this.canonicalGroupHierarchyRequestToken
+          || this.canonicalGroupHierarchyCategoryId !== normalizedCategoryId) {
+          return;
+        }
+
+        this.canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+      }
+    });
+  }
+
+  private rebuildDynamicDefinitionFromCanonicalHierarchy(categoryId: number): void {
+    if (!this.rawFormDefinition || Number(this.rawFormDefinition.categoryId ?? 0) !== Number(categoryId ?? 0)) {
+      return;
+    }
+
+    if (Number(this.rawFormDefinition.fields?.length ?? 0) === 0) {
+      return;
+    }
+
+    this.rebuildResolvedDynamicDefinition(this.buildDynamicFieldValues(), true, true);
+  }
+
+  private buildCanonicalGroupHierarchyMap(nodes: ReadonlyArray<AdminCatalogGroupTreeNodeDto>): Map<number, RuntimeCanonicalGroupMeta> {
+    const result = new Map<number, RuntimeCanonicalGroupMeta>();
+    let sequence = 0;
+
+    const walk = (items: ReadonlyArray<AdminCatalogGroupTreeNodeDto>, parentGroupId: number | null): void => {
+      const sorted = [...(items ?? [])]
+        .sort((left, right) => {
+          const orderDiff = Number(left.displayOrder ?? 0) - Number(right.displayOrder ?? 0);
+          if (orderDiff !== 0) {
+            return orderDiff;
+          }
+
+          return Number(left.groupId ?? 0) - Number(right.groupId ?? 0);
+        });
+
+      sorted.forEach(item => {
+        const groupId = Number(item.groupId ?? 0);
+        if (!Number.isFinite(groupId) || groupId <= 0) {
+          return;
+        }
+
+        sequence++;
+        const parentCandidate = this.normalizePositiveInt(item.parentGroupId) ?? parentGroupId ?? null;
+        result.set(groupId, {
+          parentGroupId: parentCandidate && parentCandidate !== groupId ? parentCandidate : null,
+          displayOrder: Number(item.displayOrder ?? sequence) || sequence,
+          hierarchyOrder: sequence,
+          groupName: String(item.groupName ?? '').trim(),
+          groupDescription: String(item.groupDescription ?? '').trim() || undefined
+        });
+
+        walk(item.children ?? [], groupId);
+      });
+    };
+
+    walk(nodes ?? [], null);
+    return result;
+  }
+
+  private cloneCanonicalGroupHierarchyMap(source: Map<number, RuntimeCanonicalGroupMeta>): Map<number, RuntimeCanonicalGroupMeta> {
+    const cloned = new Map<number, RuntimeCanonicalGroupMeta>();
+    source.forEach((value, key) => {
+      cloned.set(key, { ...value });
+    });
+    return cloned;
+  }
+
+  private getActiveCanonicalGroupHierarchyMap(categoryId: number): Map<number, RuntimeCanonicalGroupMeta> {
+    if (!categoryId || this.canonicalGroupHierarchyCategoryId !== categoryId) {
+      return new Map<number, RuntimeCanonicalGroupMeta>();
+    }
+
+    return this.canonicalGroupHierarchyByGroupId;
   }
 
   private resolveDefinitionByPolicy(
@@ -1104,6 +1230,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const canonicalHierarchyMap = this.getActiveCanonicalGroupHierarchyMap(Number(definition.categoryId ?? 0));
     const definitionGroups = definition.groups ?? [];
     const definitionGroupById = new Map<number, SubjectGroupDefinitionDto>();
     definitionGroups.forEach(group => {
@@ -1113,6 +1240,27 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       }
 
       definitionGroupById.set(groupId, group);
+    });
+
+    canonicalHierarchyMap.forEach((groupMeta, groupId) => {
+      const current = definitionGroupById.get(groupId);
+      if (!current) {
+        definitionGroupById.set(groupId, {
+          groupId,
+          groupName: groupMeta.groupName,
+          groupDescription: groupMeta.groupDescription,
+          isExtendable: false,
+          groupWithInRow: 12
+        });
+        return;
+      }
+
+      if (!String(current.groupName ?? '').trim() && String(groupMeta.groupName ?? '').trim()) {
+        current.groupName = groupMeta.groupName;
+      }
+      if (!String(current.groupDescription ?? '').trim() && String(groupMeta.groupDescription ?? '').trim()) {
+        current.groupDescription = groupMeta.groupDescription;
+      }
     });
 
     fieldsToRender.forEach(field => {
@@ -1177,7 +1325,8 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
         .sort((left, right) => this.compareFieldsByDisplayOrder(left, right));
       const groupDefinition = definitionGroupById.get(groupId) ?? groupFields[0]?.group;
       const groupName = this.resolveRuntimeGroupDisplayName(groupId, groupDefinition, groupFields[0]);
-      const groupDescription = String(groupDefinition?.groupDescription ?? groupFields[0]?.group?.groupDescription ?? '').trim() || undefined;
+      const canonicalDescription = canonicalHierarchyMap.get(groupId)?.groupDescription;
+      const groupDescription = String(canonicalDescription ?? groupDefinition?.groupDescription ?? groupFields[0]?.group?.groupDescription ?? '').trim() || undefined;
       const formArrayName = groupFields.length > 0 ? `dynamic_subject_group_${groupId}` : null;
       const mappedGroupFields: CdCategoryMandDto[] = [];
 
@@ -1314,6 +1463,12 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       return leftOrder - rightOrder;
     }
 
+    const leftHierarchyOrder = Number(hierarchy.get(leftGroupId)?.hierarchyOrder ?? Number.MAX_SAFE_INTEGER);
+    const rightHierarchyOrder = Number(hierarchy.get(rightGroupId)?.hierarchyOrder ?? Number.MAX_SAFE_INTEGER);
+    if (leftHierarchyOrder !== rightHierarchyOrder) {
+      return leftHierarchyOrder - rightHierarchyOrder;
+    }
+
     return leftGroupId - rightGroupId;
   }
 
@@ -1322,6 +1477,16 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     fields: SubjectFieldDefinitionDto[]
   ): Map<number, RuntimeGroupHierarchyMeta> {
     const hierarchy = new Map<number, RuntimeGroupHierarchyMeta>();
+    const categoryId = Number(this.rawFormDefinition?.categoryId ?? 0);
+    const canonicalHierarchy = this.getActiveCanonicalGroupHierarchyMap(categoryId);
+
+    canonicalHierarchy.forEach((canonicalItem, groupId) => {
+      hierarchy.set(groupId, {
+        parentGroupId: canonicalItem.parentGroupId,
+        displayOrder: canonicalItem.displayOrder,
+        hierarchyOrder: canonicalItem.hierarchyOrder
+      });
+    });
 
     definitionGroups.forEach((group, index) => {
       const groupId = Number(group.groupId ?? 0);
@@ -1329,9 +1494,12 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
         return;
       }
 
+      const current = hierarchy.get(groupId);
+      const parentFromMetadata = this.readParentGroupIdFromGroupMetadata(group);
       hierarchy.set(groupId, {
-        parentGroupId: this.readParentGroupIdFromGroupMetadata(group),
-        displayOrder: this.resolveRuntimeGroupDisplayOrder(group, index + 1)
+        parentGroupId: current?.parentGroupId ?? parentFromMetadata,
+        displayOrder: current?.displayOrder ?? this.resolveRuntimeGroupDisplayOrder(group, index + 1),
+        hierarchyOrder: current?.hierarchyOrder
       });
     });
 
@@ -1492,7 +1660,9 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     groupDefinition?: SubjectGroupDefinitionDto,
     fallbackField?: SubjectFieldDefinitionDto
   ): string {
-    const resolvedName = String(groupDefinition?.groupName ?? fallbackField?.group?.groupName ?? '').trim();
+    const categoryId = Number(this.rawFormDefinition?.categoryId ?? 0);
+    const canonicalName = this.getActiveCanonicalGroupHierarchyMap(categoryId).get(groupId)?.groupName;
+    const resolvedName = String(canonicalName ?? groupDefinition?.groupName ?? fallbackField?.group?.groupName ?? '').trim();
     if (!resolvedName) {
       return `مجموعة ${groupId}`;
     }
