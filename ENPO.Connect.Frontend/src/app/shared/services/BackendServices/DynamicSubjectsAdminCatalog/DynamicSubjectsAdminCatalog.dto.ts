@@ -231,3 +231,20 @@ export interface AdminCatalogFieldLookupsDto {
 }
 
 export type AdminCatalogFieldStatusFilter = 'all' | 'active' | 'inactive';
+
+export interface AdminControlCenterRequestPreviewFieldDto {
+  fieldId: number;
+  fieldName: string;
+  isVisible: boolean;
+  isRequired: boolean;
+  reasons: string[];
+}
+
+export interface AdminControlCenterRequestPreviewDto {
+  requestTypeId: number;
+  requestTypeName: string;
+  isAvailable: boolean;
+  availabilityReasons: string[];
+  fields: AdminControlCenterRequestPreviewFieldDto[];
+  warnings: string[];
+}

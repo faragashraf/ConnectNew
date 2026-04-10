@@ -1,0 +1,226 @@
+import { Component, OnInit } from '@angular/core';
+import { CommonResponse } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
+import { DynamicSubjectsAdminCatalogController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
+import {
+  AdminCatalogCategoryTreeNodeDto,
+  AdminControlCenterRequestPreviewDto
+} from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
+
+type MessageSeverity = 'success' | 'warn' | 'error';
+
+type RequestTypeOption = {
+  label: string;
+  value: number;
+  pathLabel: string;
+  isActive: boolean;
+  applicationId?: string;
+};
+
+@Component({
+  selector: 'app-admin-control-center-request-preview-page',
+  templateUrl: './admin-control-center-request-preview-page.component.html',
+  styleUrls: ['./admin-control-center-request-preview-page.component.scss']
+})
+export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
+  requestTypeOptions: RequestTypeOption[] = [];
+  selectedRequestTypeId: number | null = null;
+
+  preview: AdminControlCenterRequestPreviewDto | null = null;
+
+  loadingRequestTypes = false;
+  loadingPreview = false;
+
+  message = '';
+  messageSeverity: MessageSeverity = 'success';
+
+  constructor(private readonly adminCatalogController: DynamicSubjectsAdminCatalogController) {}
+
+  ngOnInit(): void {
+    this.loadRequestTypes();
+  }
+
+  get selectedRequestType(): RequestTypeOption | null {
+    if (!this.selectedRequestTypeId) {
+      return null;
+    }
+
+    return this.requestTypeOptions.find(item => item.value === this.selectedRequestTypeId) ?? null;
+  }
+
+  get canLoadPreview(): boolean {
+    return this.selectedRequestTypeId != null && this.selectedRequestTypeId > 0 && !this.loadingPreview;
+  }
+
+  get visibleFieldsCount(): number {
+    return (this.preview?.fields ?? []).filter(item => item.isVisible).length;
+  }
+
+  get hiddenFieldsCount(): number {
+    return (this.preview?.fields ?? []).filter(item => !item.isVisible).length;
+  }
+
+  get requiredFieldsCount(): number {
+    return (this.preview?.fields ?? []).filter(item => item.isRequired).length;
+  }
+
+  get optionalFieldsCount(): number {
+    return (this.preview?.fields ?? []).filter(item => !item.isRequired).length;
+  }
+
+  onRefreshRequestTypes(): void {
+    this.loadRequestTypes();
+  }
+
+  onRequestTypeChange(requestTypeId: number | null): void {
+    this.selectedRequestTypeId = this.normalizeNumber(requestTypeId);
+    this.preview = null;
+    this.message = '';
+
+    if (!this.selectedRequestTypeId) {
+      return;
+    }
+
+    this.loadPreview();
+  }
+
+  onRefreshPreview(): void {
+    this.loadPreview();
+  }
+
+  trackByFieldId(_index: number, item: { fieldId: number }): number {
+    return item.fieldId;
+  }
+
+  trackByString(_index: number, item: string): string {
+    return item;
+  }
+
+  private loadRequestTypes(): void {
+    this.loadingRequestTypes = true;
+
+    this.adminCatalogController.getCategoryTree().subscribe({
+      next: response => {
+        if (!this.ensureSuccess(response, 'تعذر تحميل قائمة أنواع الطلبات.')) {
+          this.requestTypeOptions = [];
+          this.preview = null;
+          return;
+        }
+
+        const options = this.flattenRequestTypeTree(response.data ?? []);
+        this.requestTypeOptions = options;
+
+        const selectedStillExists = this.selectedRequestTypeId
+          ? options.some(item => item.value === this.selectedRequestTypeId)
+          : false;
+
+        if (!selectedStillExists) {
+          this.selectedRequestTypeId = options.length > 0 ? options[0].value : null;
+        }
+
+        if (this.selectedRequestTypeId) {
+          this.loadPreview();
+        }
+      },
+      error: () => {
+        this.showMessage('error', 'حدث خطأ أثناء تحميل أنواع الطلبات.');
+        this.requestTypeOptions = [];
+        this.preview = null;
+      },
+      complete: () => {
+        this.loadingRequestTypes = false;
+      }
+    });
+  }
+
+  private loadPreview(): void {
+    const requestTypeId = this.normalizeNumber(this.selectedRequestTypeId);
+    if (!requestTypeId || requestTypeId <= 0) {
+      return;
+    }
+
+    this.loadingPreview = true;
+    this.preview = null;
+
+    this.adminCatalogController.getRequestPreview(requestTypeId).subscribe({
+      next: response => {
+        if (!this.ensureSuccess(response, 'تعذر تحميل Effective Request Preview.')) {
+          this.preview = null;
+          return;
+        }
+
+        this.preview = response.data ?? null;
+      },
+      error: () => {
+        this.showMessage('error', 'حدث خطأ أثناء تحميل Effective Request Preview.');
+        this.preview = null;
+      },
+      complete: () => {
+        this.loadingPreview = false;
+      }
+    });
+  }
+
+  private flattenRequestTypeTree(nodes: AdminCatalogCategoryTreeNodeDto[]): RequestTypeOption[] {
+    const options: RequestTypeOption[] = [];
+
+    const walk = (items: AdminCatalogCategoryTreeNodeDto[], ancestorPath: string): void => {
+      for (const node of items ?? []) {
+        const categoryId = this.normalizeNumber(node.categoryId);
+        if (!categoryId || categoryId <= 0) {
+          continue;
+        }
+
+        const nodeName = this.normalizeText(node.categoryName) ?? `Node ${categoryId}`;
+        const pathLabel = ancestorPath.length > 0 ? `${ancestorPath} / ${nodeName}` : nodeName;
+
+        options.push({
+          label: `${pathLabel} (#${categoryId})`,
+          value: categoryId,
+          pathLabel,
+          isActive: node.isActive === true,
+          applicationId: this.normalizeText(node.applicationId) ?? undefined
+        });
+
+        walk(node.children ?? [], pathLabel);
+      }
+    };
+
+    walk(nodes ?? [], '');
+
+    return options.sort((left, right) => left.label.localeCompare(right.label, 'ar'));
+  }
+
+  private ensureSuccess<T>(response: CommonResponse<T>, fallbackMessage: string): response is CommonResponse<T> {
+    if (!response) {
+      this.showMessage('error', fallbackMessage);
+      return false;
+    }
+
+    if (response.isSuccess && (response.errors?.length ?? 0) === 0) {
+      return true;
+    }
+
+    const firstError = response.errors?.find(error => this.normalizeText(error.message) != null);
+    this.showMessage('error', this.normalizeText(firstError?.message) ?? fallbackMessage);
+    return false;
+  }
+
+  private showMessage(severity: MessageSeverity, message: string): void {
+    this.messageSeverity = severity;
+    this.message = message;
+  }
+
+  private normalizeText(value: unknown): string | null {
+    const normalized = String(value ?? '').trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private normalizeNumber(value: unknown): number | null {
+    if (value == null || value === '') {
+      return null;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+  }
+}

@@ -1,0 +1,194 @@
+<section class="request-preview-page" dir="rtl">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">ControlCenterCatalog - Effective Request Preview MVP</p>
+      <h2>Effective Request Preview</h2>
+      <p>
+        ترجمة تشغيلية مباشرة للإعدادات الحالية لإظهار الحالة الفعلية للـ Request Type والحقول أثناء runtime.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        label="العودة للكتالوج"
+        routerLink="/Admin/ControlCenterCatalog">
+      </button>
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        label="مكتبة الحقول"
+        routerLink="/Admin/ControlCenterCatalog/field-library">
+      </button>
+    </div>
+  </header>
+
+  <div class="message" *ngIf="message.length > 0" [ngClass]="messageSeverity">
+    {{ message }}
+  </div>
+
+  <section class="card selector-card">
+    <div class="selector-row">
+      <div class="field">
+        <label for="requestTypeSelect">Request Type</label>
+        <p-dropdown
+          inputId="requestTypeSelect"
+          [options]="requestTypeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [(ngModel)]="selectedRequestTypeId"
+          appendTo="body"
+          [filter]="true"
+          [showClear]="true"
+          placeholder="اختر نوع الطلب"
+          (onChange)="onRequestTypeChange($event.value)">
+        </p-dropdown>
+      </div>
+
+      <div class="actions">
+        <button
+          pButton
+          type="button"
+          class="p-button-text"
+          icon="pi pi-refresh"
+          label="تحديث الأنواع"
+          [disabled]="loadingRequestTypes"
+          (click)="onRefreshRequestTypes()">
+        </button>
+        <button
+          pButton
+          type="button"
+          icon="pi pi-sync"
+          label="تحديث المعاينة"
+          [disabled]="!canLoadPreview"
+          [loading]="loadingPreview"
+          (click)="onRefreshPreview()">
+        </button>
+      </div>
+    </div>
+
+    <small *ngIf="selectedRequestType as selectedType">
+      النوع الحالي: {{ selectedType.pathLabel }}
+      <span *ngIf="selectedType.applicationId"> | التطبيق: {{ selectedType.applicationId }}</span>
+      <span> | الحالة: {{ selectedType.isActive ? 'مفعل' : 'غير مفعل' }}</span>
+    </small>
+  </section>
+
+  <ng-container *ngIf="preview as data; else noPreview">
+    <section class="stats-grid">
+      <article class="stat-card">
+        <span>الحقول المرئية</span>
+        <strong>{{ visibleFieldsCount }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>الحقول المخفية</span>
+        <strong>{{ hiddenFieldsCount }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>الحقول الإلزامية</span>
+        <strong>{{ requiredFieldsCount }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>الحقول الاختيارية</span>
+        <strong>{{ optionalFieldsCount }}</strong>
+      </article>
+    </section>
+
+    <section class="card availability-card">
+      <header class="card-header">
+        <div>
+          <h3>Runtime Availability</h3>
+          <small>{{ data.requestTypeName }} (#{{ data.requestTypeId }})</small>
+        </div>
+        <p-tag [severity]="data.isAvailable ? 'success' : 'danger'" [value]="data.isAvailable ? 'Available' : 'Not Available'"></p-tag>
+      </header>
+
+      <ul class="reason-list" *ngIf="data.availabilityReasons.length > 0">
+        <li *ngFor="let reason of data.availabilityReasons; trackBy: trackByString">{{ reason }}</li>
+      </ul>
+    </section>
+
+    <section class="card warnings-card" *ngIf="data.warnings.length > 0">
+      <header class="card-header">
+        <div>
+          <h3>Warnings</h3>
+          <small>gaps تم اكتشافها من الترجمة التشغيلية الحالية</small>
+        </div>
+        <p-tag severity="warning" [value]="data.warnings.length + ' Warning(s)'"></p-tag>
+      </header>
+
+      <ul class="reason-list warning">
+        <li *ngFor="let warning of data.warnings; trackBy: trackByString">{{ warning }}</li>
+      </ul>
+    </section>
+
+    <section class="card fields-card">
+      <header class="card-header">
+        <div>
+          <h3>Runtime Fields</h3>
+          <small>Visible/Hidden + Required/Optional + reasons</small>
+        </div>
+        <p-tag severity="info" [value]="data.fields.length + ' Field(s)'"></p-tag>
+      </header>
+
+      <p-table
+        [value]="data.fields"
+        [loading]="loadingPreview"
+        [rows]="10"
+        [paginator]="data.fields.length > 10"
+        responsiveLayout="scroll"
+        dataKey="fieldId">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Field</th>
+            <th>Visibility</th>
+            <th>Required</th>
+            <th>Reasons</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-field>
+          <tr>
+            <td>
+              <strong>{{ field.fieldName }}</strong>
+              <br />
+              <small>#{{ field.fieldId }}</small>
+            </td>
+            <td>
+              <p-tag
+                [severity]="field.isVisible ? 'success' : 'warning'"
+                [value]="field.isVisible ? 'Visible' : 'Hidden'">
+              </p-tag>
+            </td>
+            <td>
+              <p-tag
+                [severity]="field.isRequired ? 'danger' : 'info'"
+                [value]="field.isRequired ? 'Required' : 'Optional'">
+              </p-tag>
+            </td>
+            <td>
+              <ul class="reason-list inline" *ngIf="field.reasons.length > 0">
+                <li *ngFor="let reason of field.reasons; trackBy: trackByString">{{ reason }}</li>
+              </ul>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="4" class="empty-row">لا توجد حقول مرتبطة بنوع الطلب الحالي.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </section>
+  </ng-container>
+
+  <ng-template #noPreview>
+    <section class="empty-state card" *ngIf="!loadingPreview">
+      اختر نوع طلب لعرض Effective Request Preview.
+    </section>
+  </ng-template>
+</section>

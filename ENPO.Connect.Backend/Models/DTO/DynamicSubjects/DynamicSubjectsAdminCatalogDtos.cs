@@ -404,3 +404,31 @@ public sealed class AdminCatalogFieldStatusOptionDto
 
     public string Label { get; set; } = string.Empty;
 }
+
+public sealed class AdminControlCenterRequestPreviewDto
+{
+    public int RequestTypeId { get; set; }
+
+    public string RequestTypeName { get; set; } = string.Empty;
+
+    public bool IsAvailable { get; set; }
+
+    public List<string> AvailabilityReasons { get; set; } = new();
+
+    public List<AdminControlCenterRequestPreviewFieldDto> Fields { get; set; } = new();
+
+    public List<string> Warnings { get; set; } = new();
+}
+
+public sealed class AdminControlCenterRequestPreviewFieldDto
+{
+    public int FieldId { get; set; }
+
+    public string FieldName { get; set; } = string.Empty;
+
+    public bool IsVisible { get; set; }
+
+    public bool IsRequired { get; set; }
+
+    public List<string> Reasons { get; set; } = new();
+}

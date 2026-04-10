@@ -85,6 +85,7 @@ builder.Services.AddScoped<ISubjectNotificationService, SubjectNotificationServi
 builder.Services.AddScoped<IDynamicSubjectsService, DynamicSubjectsService>();
 builder.Services.AddScoped<IDynamicSubjectsAdminCatalogRepository, DynamicSubjectsAdminCatalogRepository>();
 builder.Services.AddScoped<IDynamicSubjectsAdminCatalogService, DynamicSubjectsAdminCatalogService>();
+builder.Services.AddScoped<IAdminControlCenterRequestPreviewResolver, AdminControlCenterRequestPreviewResolver>();
 builder.Services.AddScoped<IDynamicSubjectsAdminRoutingRepository, DynamicSubjectsAdminRoutingRepository>();
 builder.Services.AddScoped<IDynamicSubjectsAdminRoutingService, DynamicSubjectsAdminRoutingService>();
 builder.Services.AddScoped<IDynamicSubjectsAdminAccessPolicyService, DynamicSubjectsAdminAccessPolicyService>();

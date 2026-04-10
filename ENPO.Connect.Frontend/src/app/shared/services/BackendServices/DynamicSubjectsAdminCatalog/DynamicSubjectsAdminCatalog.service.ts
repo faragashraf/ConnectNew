@@ -13,6 +13,7 @@ import {
   AdminCatalogDeleteResultDto,
   AdminCatalogCategoryDto,
   AdminCatalogCategoryTreeNodeDto,
+  AdminControlCenterRequestPreviewDto,
   AdminCatalogCategoryUpdateRequestDto,
   AdminCatalogFieldCreateRequestDto,
   AdminCatalogFieldDeleteDiagnosticsDto,
@@ -171,6 +172,12 @@ export class DynamicSubjectsAdminCatalogController {
   deleteField(applicationId: string, fieldKey: string): Observable<CommonResponse<AdminCatalogDeleteResultDto>> {
     return this.http.delete<CommonResponse<AdminCatalogDeleteResultDto>>(
       `${this.baseUrl}/FieldLibrary/${encodeURIComponent(applicationId)}/${encodeURIComponent(fieldKey)}`
+    );
+  }
+
+  getRequestPreview(requestTypeId: number): Observable<CommonResponse<AdminControlCenterRequestPreviewDto>> {
+    return this.http.get<CommonResponse<AdminControlCenterRequestPreviewDto>>(
+      `${environment.ConnectApiURL}/api/admin/control-center/request-preview/${requestTypeId}`
     );
   }
 }
