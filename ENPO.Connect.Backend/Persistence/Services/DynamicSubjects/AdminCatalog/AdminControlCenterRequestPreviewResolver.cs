@@ -302,6 +302,8 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                      .ThenBy(item => item.MendSql))
         {
             safeResolution.FieldStatesByMendSql.TryGetValue(field.MendSql, out var state);
+            var resolvedIsVisible = state?.CanView ?? field.IsVisible;
+            var resolvedIsRequired = state?.IsRequired ?? field.Required;
 
             var reasons = new List<string>();
             if (state != null)
@@ -317,6 +319,24 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
 
                 AddIfNotEmpty(reasons, state.EffectiveReasonAr);
                 AddIfNotEmpty(reasons, state.LockReason);
+
+                if (!resolvedIsVisible)
+                {
+                    reasons.Add("Field hidden بسبب access policy (CanView=false).");
+                }
+                else if (!field.IsVisible && resolvedIsVisible)
+                {
+                    reasons.Add("Field visible بسبب access policy (CanView=true).");
+                }
+
+                if (!field.Required && resolvedIsRequired)
+                {
+                    reasons.Add("Field required بسبب access policy (IsRequired=true).");
+                }
+                else if (field.Required && !resolvedIsRequired)
+                {
+                    reasons.Add("Field optional بسبب access policy (IsRequired=false).");
+                }
             }
             else
             {
@@ -334,8 +354,8 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                 FieldName = NormalizeNullable(field.FieldLabel)
                     ?? NormalizeNullable(field.FieldKey)
                     ?? $"Field #{field.MendSql}",
-                IsVisible = state?.CanView ?? field.IsVisible,
-                IsRequired = state?.IsRequired ?? field.Required,
+                IsVisible = resolvedIsVisible,
+                IsRequired = resolvedIsRequired,
                 Reasons = DistinctInOrder(reasons)
             });
         }
