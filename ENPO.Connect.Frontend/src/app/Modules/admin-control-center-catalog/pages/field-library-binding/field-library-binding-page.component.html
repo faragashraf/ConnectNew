@@ -50,69 +50,6 @@
     <main class="workspace">
       <section class="card">
         <header class="card-head">
-          <h3>إعدادات الربط الأساسية</h3>
-          <div class="card-actions">
-            <button
-              pButton
-              type="button"
-              class="p-button-sm p-button-outlined"
-              label="إعادة التحميل من قاعدة البيانات"
-              icon="pi pi-refresh"
-              [loading]="loadingLibrary"
-              [disabled]="loadingLibrary || savingToBackend"
-              (click)="onReloadFromBackend()">
-            </button>
-            <button
-              pButton
-              type="button"
-              class="p-button-sm"
-              label="حفظ في قاعدة البيانات"
-              icon="pi pi-save"
-              [loading]="savingToBackend"
-              [disabled]="savingToBackend || loadingLibrary || !backendWorkspaceLoaded"
-              (click)="onSaveToBackend()">
-            </button>
-          </div>
-        </header>
-
-        <form class="setup-grid" [formGroup]="setupForm" novalidate>
-          <article class="field">
-            <label for="libraryVersion">إصدار المكتبة <span>*</span></label>
-            <p-dropdown
-              appendTo="body"
-              inputId="libraryVersion"
-              [options]="getOptions('libraryVersion')"
-              optionLabel="label"
-              optionValue="value"
-              [showClear]="false"
-              formControlName="libraryVersion">
-            </p-dropdown>
-            <small class="error" *ngIf="controlHasError('libraryVersion')">{{ controlErrorMessage('libraryVersion') }}</small>
-          </article>
-
-          <article class="field">
-            <label for="bindingStrategy">استراتيجية الربط <span>*</span></label>
-            <p-dropdown
-              appendTo="body"
-              inputId="bindingStrategy"
-              [options]="getOptions('bindingStrategy')"
-              optionLabel="label"
-              optionValue="value"
-              [showClear]="false"
-              formControlName="bindingStrategy">
-            </p-dropdown>
-            <small class="error" *ngIf="controlHasError('bindingStrategy')">{{ controlErrorMessage('bindingStrategy') }}</small>
-          </article>
-
-          <article class="field field-wide">
-            <label for="bindingNotes">ملاحظات</label>
-            <textarea pInputTextarea id="bindingNotes" rows="3" formControlName="bindingNotes"></textarea>
-          </article>
-        </form>
-      </section>
-
-      <section class="card">
-        <header class="card-head">
           <h3>سياسة الرقم المرجعي</h3>
           <small>إدارة فعلية مرتبطة بجدول سياسة الرقم المرجعي</small>
         </header>

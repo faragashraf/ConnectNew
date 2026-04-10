@@ -105,24 +105,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     { label: 'عرض بعلامات تبويب', value: 'Tabbed' }
   ];
 
-  readonly setupFieldOptions: Readonly<Record<string, Array<{ label: string; value: string }>>> = {
-    libraryVersion: [
-      { label: 'افتراضي', value: 'default' },
-      { label: 'امتثال', value: 'compliance' },
-      { label: 'تشغيلي', value: 'operations' }
-    ],
-    bindingStrategy: [
-      { label: 'صارم', value: 'strict' },
-      { label: 'مرن', value: 'flexible' }
-    ]
-  };
-
-  readonly setupForm: FormGroup = this.fb.group({
-    libraryVersion: [null, [Validators.required]],
-    bindingStrategy: [null, [Validators.required]],
-    bindingNotes: ['', [Validators.maxLength(1000)]]
-  });
-
   readonly referencePolicyForm: FormGroup = this.fb.group({
     referencePolicyEnabled: [true],
     referenceMode: ['default', [Validators.required]],
@@ -193,7 +175,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   ngOnInit(): void {
     this.referenceComponents = [this.createReferenceComponent('sequence')];
     this.vm = { context: { categoryId: null, applicationId: null } };
-    this.step = { requiredCompleted: 0, requiredTotal: 3, isCompleted: false };
+    this.step = { requiredCompleted: 0, requiredTotal: 1, isCompleted: false };
 
     this.subscriptions.add(
       combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(([pathParams, queryParams]) => {
@@ -201,18 +183,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         this.routeApplicationId = this.readRouteApplicationId(queryParams) ?? this.readRouteApplicationId(pathParams);
         this.syncContextFromInputsOrRoute();
       })
-    );
-
-    this.subscriptions.add(
-      this.setupForm.valueChanges
-        .pipe(auditTime(80))
-        .subscribe(() => {
-          if (this.syncingFromStore) {
-            return;
-          }
-
-          this.evaluateBindings(true, true);
-        })
     );
 
     this.subscriptions.add(
@@ -349,36 +319,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
 
     return options;
-  }
-
-  getOptions(fieldKey: string): Array<{ label: string; value: string }> {
-    return [...(this.setupFieldOptions[fieldKey] ?? [])];
-  }
-
-  controlHasError(controlName: string): boolean {
-    const control = this.setupForm.get(controlName);
-    if (!control) {
-      return false;
-    }
-
-    return control.invalid && (control.dirty || control.touched);
-  }
-
-  controlErrorMessage(controlName: string): string {
-    const control = this.setupForm.get(controlName);
-    if (!control) {
-      return 'قيمة غير صحيحة.';
-    }
-
-    if (control.hasError('required')) {
-      return 'هذا الحقل إلزامي.';
-    }
-
-    if (control.hasError('maxlength')) {
-      return 'القيمة أطول من الحد المسموح.';
-    }
-
-    return 'قيمة غير صحيحة.';
   }
 
   onAddFromLibrary(item: ReusableFieldLibraryItem): void {
@@ -581,12 +521,11 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   async onSaveToBackend(): Promise<void> {
-    this.setupForm.markAllAsTouched();
     this.referencePolicyForm.markAllAsTouched();
     this.presentationForm.markAllAsTouched();
     this.evaluateBindings(true, false);
 
-    if (this.setupForm.invalid || this.referencePolicyForm.invalid || this.presentationForm.invalid || !this.validation.isValid) {
+    if (this.referencePolicyForm.invalid || this.presentationForm.invalid || !this.validation.isValid) {
       this.stepMessageSeverity = 'warn';
       this.stepMessage = 'لا يمكن الحفظ قبل استكمال المدخلات الإلزامية ومعالجة المشكلات المانعة.';
       return;
@@ -624,16 +563,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     } finally {
       this.savingToBackend = false;
     }
-  }
-
-  async onReloadFromBackend(): Promise<void> {
-    if (!this.currentCategoryId) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'يجب اختيار تصنيف صالح أولًا لإعادة التحميل.';
-      return;
-    }
-
-    await this.loadBackendWorkspace(this.currentCategoryId, this.currentApplicationId);
   }
 
   onSaveDraft(): void {
@@ -766,7 +695,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.subjectTypeAdmin = subjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
       this.patchReferencePolicyFormFromAdminType(this.subjectTypeAdmin);
       this.patchPresentationFormFromAdminType(this.subjectTypeAdmin);
-      this.patchSetupFormDefaultsIfMissing();
       this.patchPresentationFormDefaultsIfMissing();
 
       this.backendWorkspaceLoaded = true;
@@ -1135,18 +1063,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }));
   }
 
-  private patchSetupFormFromStep(values: Record<string, unknown>): void {
-    const nextValue = {
-      libraryVersion: this.normalizeNullable(values['libraryVersion']),
-      bindingStrategy: this.normalizeNullable(values['bindingStrategy']),
-      bindingNotes: String(values['bindingNotes'] ?? '').trim()
-    };
-
-    this.syncingFromStore = true;
-    this.setupForm.patchValue(nextValue, { emitEvent: false });
-    this.syncingFromStore = false;
-  }
-
   private patchReferencePolicyFormFromStep(values: Record<string, unknown>): void {
     const nextValue = {
       referencePolicyEnabled: values['referencePolicyEnabled'] !== false,
@@ -1205,18 +1121,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     this.syncingFromStore = true;
     this.presentationForm.patchValue(nextValue, { emitEvent: false });
-    this.syncingFromStore = false;
-  }
-
-  private patchSetupFormDefaultsIfMissing(): void {
-    const current = this.setupForm.getRawValue();
-    const patch = {
-      libraryVersion: this.normalizeNullable(current['libraryVersion']) ?? 'default',
-      bindingStrategy: this.normalizeNullable(current['bindingStrategy']) ?? 'strict'
-    };
-
-    this.syncingFromStore = true;
-    this.setupForm.patchValue(patch, { emitEvent: false });
     this.syncingFromStore = false;
   }
 
@@ -1719,7 +1623,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.resetWorkspaceForNewContext();
     const draftValues = this.readDraftFromLocalStorage();
     if (draftValues) {
-      this.patchSetupFormFromStep(draftValues);
       this.patchReferencePolicyFormFromStep(draftValues);
       this.patchPresentationFormFromStep(draftValues);
       this.patchBindingsFromStep(draftValues);
@@ -1728,7 +1631,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.stepMessage = 'تم تحميل مسودة محلية غير محفوظة في قاعدة البيانات.';
       this.evaluateBindings(true, false);
     } else {
-      this.patchSetupFormDefaultsIfMissing();
       this.patchPresentationFormDefaultsIfMissing();
       this.evaluateBindings(false);
     }
@@ -1762,29 +1664,20 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   private refreshStepState(syncToken: 'valid' | 'draft' = this.validation.isValid ? 'valid' : 'draft'): void {
-    const setupValue = this.setupForm.getRawValue();
-    const requiredCompleted = [
-      this.normalizeNullable(setupValue['libraryVersion']) != null,
-      this.normalizeNullable(setupValue['bindingStrategy']) != null,
-      syncToken === 'valid'
-    ].filter(Boolean).length;
+    const requiredCompleted = syncToken === 'valid' ? 1 : 0;
 
     this.step = {
       requiredCompleted,
-      requiredTotal: 3,
-      isCompleted: requiredCompleted === 3
+      requiredTotal: 1,
+      isCompleted: requiredCompleted === 1
     };
   }
 
   private buildDraftStepValues(syncToken: 'valid' | 'draft'): Record<string, unknown> {
-    const setupValue = this.setupForm.getRawValue();
     const referenceValue = this.referencePolicyForm.getRawValue();
     const presentationValue = this.presentationForm.getRawValue();
 
     return {
-      libraryVersion: setupValue['libraryVersion'],
-      bindingStrategy: setupValue['bindingStrategy'],
-      bindingNotes: setupValue['bindingNotes'],
       bindingPayload: this.bindingEngine.serializeBindingsPayload(this.bindings),
       bindingValidationToken: syncToken === 'valid' ? 'valid' : null,
       referencePolicyEnabled: referenceValue['referencePolicyEnabled'] === true,
@@ -1855,11 +1748,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.reusableFields = [];
 
     this.syncingFromStore = true;
-    this.setupForm.patchValue({
-      libraryVersion: 'default',
-      bindingStrategy: 'strict',
-      bindingNotes: ''
-    }, { emitEvent: false });
     this.referencePolicyForm.patchValue({
       referencePolicyEnabled: true,
       referenceMode: 'default',
