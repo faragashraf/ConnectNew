@@ -472,9 +472,10 @@ public sealed partial class DynamicSubjectsService
             {
                 var links = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
                 var definitionResponse = await BuildFormDefinitionAsync(
-                    categoryId,
-                    normalizedUserId,
-                    category.ApplicationId,
+                    categoryId: categoryId,
+                    userId: normalizedUserId,
+                    appId: category.ApplicationId,
+                    documentDirection: null,
                     allowInactiveCategory: true,
                     stageId: null,
                     actionId: null,
@@ -624,9 +625,10 @@ public sealed partial class DynamicSubjectsService
 
             var links = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
             var definitionResponse = await BuildFormDefinitionAsync(
-                categoryId,
-                normalizedUserId,
-                category.ApplicationId,
+                categoryId: categoryId,
+                userId: normalizedUserId,
+                appId: category.ApplicationId,
+                documentDirection: normalizedDirection,
                 allowInactiveCategory: true,
                 stageId: null,
                 actionId: null,
@@ -1776,9 +1778,10 @@ public sealed partial class DynamicSubjectsService
         }
 
         return BuildFormDefinitionAsync(
-            categoryId,
-            userId,
-            appId,
+            categoryId: categoryId,
+            userId: userId,
+            appId: appId,
+            documentDirection: null,
             allowInactiveCategory: true,
             stageId: null,
             actionId: null,
@@ -1849,9 +1852,10 @@ public sealed partial class DynamicSubjectsService
 
             var links = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
             var definitionResponse = await BuildFormDefinitionAsync(
-                categoryId,
-                normalizedUserId,
-                appId,
+                categoryId: categoryId,
+                userId: normalizedUserId,
+                appId: appId,
+                documentDirection: requestedDirection,
                 allowInactiveCategory: true,
                 stageId: null,
                 actionId: null,

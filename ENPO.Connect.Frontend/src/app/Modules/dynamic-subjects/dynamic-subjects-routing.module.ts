@@ -19,6 +19,14 @@ const routes: Routes = [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       { path: 'dashboard', component: DynamicSubjectDashboardComponent, data: { configRouteKey: 'DynamicSubjects/Dashboard' } },
       { path: 'subjects', component: DynamicSubjectListComponent, data: { configRouteKey: 'DynamicSubjects/SubjectsList' } },
+      {
+        path: 'runtime-registration',
+        component: DynamicSubjectEditorComponent,
+        data: {
+          configRouteKey: 'DynamicSubjects/SubjectEditor',
+          runtimeRegistrationMvp: true
+        }
+      },
       { path: 'subjects/new', component: DynamicSubjectEditorComponent, data: { configRouteKey: 'DynamicSubjects/SubjectEditor' } },
       { path: 'subjects/:id/edit', component: DynamicSubjectEditorComponent, data: { configRouteKey: 'DynamicSubjects/SubjectEditor' } },
       { path: 'subjects/:id', component: DynamicSubjectDetailComponent, data: { configRouteKey: 'DynamicSubjects/SubjectDetail' } },

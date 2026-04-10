@@ -145,6 +145,51 @@
   color: #92400e;
 }
 
+.runtime-mvp-banner {
+  border: 1px solid #bae6fd;
+  background: #f0f9ff;
+  border-radius: 12px;
+  padding: 0.75rem;
+  margin-bottom: 0.8rem;
+}
+
+.runtime-mvp-banner h3 {
+  margin: 0 0 0.35rem;
+  color: #0c4a6e;
+}
+
+.runtime-mvp-banner p {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.86rem;
+}
+
+.runtime-empty-state {
+  border: 1px dashed #f59e0b;
+  background: #fffbeb;
+  border-radius: 12px;
+  padding: 0.9rem;
+  margin-bottom: 0.9rem;
+}
+
+.runtime-empty-state h3 {
+  margin: 0 0 0.45rem;
+  color: #92400e;
+}
+
+.runtime-empty-state p {
+  margin: 0 0 0.7rem;
+  color: #78350f;
+}
+
+.runtime-empty-state button {
+  border: 1px solid #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 8px;
+  padding: 0.35rem 0.7rem;
+}
+
 .main-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -210,6 +255,87 @@
 
 .panel h3 {
   margin: 0 0 0.6rem;
+}
+
+.runtime-field-inspector {
+  background: #f8fbff;
+  border-color: #bfdbfe;
+}
+
+.runtime-inspector-caption {
+  margin: 0 0 0.65rem;
+  color: #334155;
+  font-size: 0.84rem;
+}
+
+.runtime-inspector-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.runtime-inspector-grid article {
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0.65rem;
+}
+
+.runtime-inspector-grid h4 {
+  margin: 0 0 0.5rem;
+  color: #1e3a8a;
+  font-size: 0.86rem;
+}
+
+.runtime-field-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.runtime-field-list li {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 0.42rem 0.5rem;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.field-label {
+  color: #0f172a;
+  font-size: 0.83rem;
+}
+
+.field-key {
+  color: #475569;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.field-badge {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem;
+  font-size: 0.69rem;
+  font-weight: 600;
+}
+
+.field-badge.required {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.field-badge.optional {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.field-badge.hidden {
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .groups-wrap {
@@ -343,6 +469,10 @@
   }
 
   .runtime-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .runtime-inspector-grid {
     grid-template-columns: 1fr;
   }
 

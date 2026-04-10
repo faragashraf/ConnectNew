@@ -31,6 +31,12 @@ import {
   AdminControlCenterRuntimeBridgeService
 } from '../../services/admin-control-center-runtime-bridge.service';
 
+interface RuntimeFieldInspectorRow {
+  fieldKey: string;
+  fieldLabel: string;
+  required: boolean;
+}
+
 @Component({
   selector: 'app-dynamic-subject-editor',
   templateUrl: './dynamic-subject-editor.component.html',
@@ -50,8 +56,10 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   tasksArray: FormArray;
 
   loading = false;
+  loadingCategoryOptions = false;
   saving = false;
   isEditMode = false;
+  isRuntimeRegistrationMvpMode = false;
   messageId = 0;
   private rawFormDefinition: SubjectFormDefinitionDto | null = null;
   formDefinition: SubjectFormDefinitionDto | null = null;
@@ -109,6 +117,12 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    const routeId = Number(this.route.snapshot.paramMap.get('id') ?? 0);
+    this.isEditMode = routeId > 0;
+    this.messageId = routeId;
+    const routePath = String(this.route.snapshot.routeConfig?.path ?? '').trim().toLowerCase();
+    this.isRuntimeRegistrationMvpMode = Boolean(this.route.snapshot.data?.['runtimeRegistrationMvp']) || routePath === 'runtime-registration';
+
     this.initializeScreenConfig();
     this.loadCategoryOptions();
     this.loadEnvelopeOptions();
@@ -121,10 +135,6 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
         this.reloadFormDefinitionForDirectionChange();
       })
     );
-
-    const routeId = Number(this.route.snapshot.paramMap.get('id') ?? 0);
-    this.isEditMode = routeId > 0;
-    this.messageId = routeId;
 
     if (this.isEditMode) {
       this.realtimeService.joinSubjectGroup(routeId);
@@ -210,6 +220,42 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     return this.currentDocumentDirectionLabel;
   }
 
+  get selectedCategoryId(): number {
+    return Number(this.editorForm.get('categoryId')?.value ?? 0);
+  }
+
+  get selectedCategoryDisplayName(): string {
+    const categoryId = this.selectedCategoryId;
+    if (categoryId <= 0) {
+      return '';
+    }
+
+    return this.categoryOptions.find(item => Number(item.id) === categoryId)?.name ?? `#${categoryId}`;
+  }
+
+  get hasAvailableRequestTypes(): boolean {
+    return this.categoryOptions.length > 0;
+  }
+
+  get showRequestTypesEmptyState(): boolean {
+    return this.isRuntimeRegistrationMvpMode
+      && !this.loadingCategoryOptions
+      && !this.isEditMode
+      && !this.hasAvailableRequestTypes;
+  }
+
+  get canShowRuntimeFieldInspector(): boolean {
+    return this.isRuntimeRegistrationMvpMode && !this.isEditMode && this.selectedCategoryId > 0;
+  }
+
+  get runtimeVisibleFieldRows(): RuntimeFieldInspectorRow[] {
+    return this.buildRuntimeFieldInspectorRows(true);
+  }
+
+  get runtimeHiddenFieldRows(): RuntimeFieldInspectorRow[] {
+    return this.buildRuntimeFieldInspectorRows(false);
+  }
+
   trackByGroup = (_index: number, group: DynamicGroupRenderItem): number => group.groupId;
 
   getGroupDisplayName(group: DynamicGroupRenderItem): string {
@@ -237,6 +283,10 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
   onDynamicFieldGenericEvent(_event: unknown): void {
     // reserved for future cross-field interactions
+  }
+
+  reloadRequestTypes(): void {
+    this.loadCategoryOptions();
   }
 
   private initializeScreenConfig(): void {
@@ -272,7 +322,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     }
 
     const routePath = String(this.route.snapshot.routeConfig?.path ?? '').trim().toLowerCase();
-    if (routePath === 'subjects/new' || routePath === 'subjects/:id/edit') {
+    if (routePath === 'subjects/new' || routePath === 'subjects/:id/edit' || routePath === 'runtime-registration') {
       return DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
     }
 
@@ -325,11 +375,14 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
   onCategoryChanged(): void {
     const categoryId = Number(this.editorForm.get('categoryId')?.value ?? 0);
-    if (categoryId > 0) {
-      this.loadFormDefinition(categoryId);
-      this.realtimeService.joinCategoryGroup(categoryId);
-      this.executeConfigRequests('onCategoryChanged', { categoryId });
+    if (categoryId <= 0) {
+      this.clearLoadedDefinitionState();
+      return;
     }
+
+    this.loadFormDefinition(categoryId);
+    this.realtimeService.joinCategoryGroup(categoryId);
+    this.executeConfigRequests('onCategoryChanged', { categoryId });
   }
 
   addStakeholder(): void {
@@ -1276,10 +1329,12 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private loadCategoryOptions(): void {
+    this.loadingCategoryOptions = true;
     this.dynamicSubjectsController.getCategoryTree(this.dynamicSubjectAccess.getApplicationId()).subscribe({
       next: response => {
         if (response?.errors?.length) {
           this.categoryOptions = [];
+          this.allowedCategoryIds = new Set<number>();
           this.appNotification.showApiErrors(response.errors, 'تعذر تحميل أنواع الموضوعات والطلبات.');
           return;
         }
@@ -1287,10 +1342,21 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
         const scopedTree = this.dynamicSubjectAccess.filterByTopParent(response?.data ?? []);
         this.allowedCategoryIds = this.dynamicSubjectAccess.collectCategoryIds(scopedTree);
         this.categoryOptions = this.flattenCategoryTree(scopedTree);
+
+        const selectedCategoryId = this.selectedCategoryId;
+        if (!this.isEditMode && selectedCategoryId > 0 && !this.allowedCategoryIds.has(selectedCategoryId)) {
+          this.editorForm.patchValue({ categoryId: 0 }, { emitEvent: false });
+          this.clearLoadedDefinitionState();
+        }
       },
       error: () => {
         this.categoryOptions = [];
+        this.allowedCategoryIds = new Set<number>();
+        this.loadingCategoryOptions = false;
         this.appNotification.error('حدث خطأ أثناء تحميل أنواع الموضوعات والطلبات.');
+      },
+      complete: () => {
+        this.loadingCategoryOptions = false;
       }
     });
   }
@@ -1696,6 +1762,31 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     }
 
     return payload;
+  }
+
+  private buildRuntimeFieldInspectorRows(visible: boolean): RuntimeFieldInspectorRow[] {
+    const fields = [...(this.formDefinition?.fields ?? [])]
+      .sort((left, right) => {
+        const orderDiff = Number(left.displayOrder ?? 0) - Number(right.displayOrder ?? 0);
+        if (orderDiff !== 0) {
+          return orderDiff;
+        }
+
+        return Number(left.mendSql ?? 0) - Number(right.mendSql ?? 0);
+      });
+
+    return fields
+      .filter(field => (field.isVisible !== false) === visible)
+      .map(field => {
+        const fieldKey = String(field.fieldKey ?? '').trim();
+        const fieldLabel = String(field.fieldLabel ?? '').trim() || fieldKey;
+
+        return {
+          fieldKey,
+          fieldLabel,
+          required: Boolean(field.required || field.requiredTrue)
+        };
+      });
   }
 
   private buildStakeholdersPayload(): Array<{ stockholderId: number; partyType: string; requiredResponse: boolean; status?: number; dueDate?: string; notes?: string }> {

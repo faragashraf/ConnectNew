@@ -1,8 +1,12 @@
 <section class="editor">
   <header class="header">
     <div>
-      <h2>{{ isEditMode ? 'تعديل موضوع/طلب' : 'إنشاء موضوع/طلب' }}</h2>
-      <p>يمكنك الحفظ كمسودة أو الإرسال الآن مع متابعة التحديثات المباشرة.</p>
+      <h2>{{ isRuntimeRegistrationMvpMode ? 'تجربة تسجيل الطلبات Runtime-Driven' : (isEditMode ? 'تعديل موضوع/طلب' : 'إنشاء موضوع/طلب') }}</h2>
+      <p>
+        {{ isRuntimeRegistrationMvpMode
+          ? 'اختر نوع الطلب المتاح لك لعرض الحقول الديناميكية الفعلية (Visible / Required / Hidden) حسب سياق المستخدم الحالي.'
+          : 'يمكنك الحفظ كمسودة أو الإرسال الآن مع متابعة التحديثات المباشرة.' }}
+      </p>
       <p class="direction-chip">اتجاه الطلب الحالي: <strong>{{ currentDocumentDirectionLabel }}</strong></p>
     </div>
     <div class="actions">
@@ -66,155 +70,208 @@
   <div class="loading" *ngIf="loading">جاري تحميل البيانات...</div>
 
   <ng-container *ngIf="!loading">
-    <form [formGroup]="editorForm" class="main-form">
-      <div class="field">
-        <label>نوع الموضوع/الطلب *</label>
-        <p-dropdown
-          formControlName="categoryId"
-          [options]="categoryOptions"
-          optionLabel="name"
-          optionValue="id"
-          appendTo="body"
-          [filter]="true"
-          [showClear]="!isEditMode"
-          [disabled]="isEditMode"
-          placeholder="اختر النوع"
-          (onChange)="onCategoryChanged()">
-        </p-dropdown>
-        <small class="error" *ngIf="shouldShowEditorError('categoryId')">{{ getEditorErrorMessage('categoryId') }}</small>
-      </div>
+    <section class="runtime-mvp-banner" *ngIf="isRuntimeRegistrationMvpMode">
+      <h3>نقطة تجربة عملية للتسجيل Runtime</h3>
+      <p>تعتمد هذه الشاشة على صلاحيات المستخدم الحالي مباشرة، بدون `SYSTEM_PREVIEW` وبدون أي Mock Data.</p>
+    </section>
 
-      <div class="field" *ngIf="showDocumentDirectionSelector">
-        <label>اتجاه الطلب</label>
-        <select formControlName="documentDirection">
-          <option value="">اختر الاتجاه</option>
-          <option *ngFor="let option of documentDirectionOptions" [value]="option.value">
-            {{ option.label }}
-          </option>
-        </select>
-        <small class="hint">يمكنك اختيار الاتجاه لأن هذا النوع مضبوط على اتجاه مرن.</small>
-        <small class="error" *ngIf="shouldShowEditorError('documentDirection')">{{ getEditorErrorMessage('documentDirection') }}</small>
-      </div>
+    <section class="runtime-empty-state" *ngIf="showRequestTypesEmptyState">
+      <h3>لا توجد أنواع طلبات متاحة لهذا المستخدم</h3>
+      <p>تحقق من العضوية/الوحدة الحالية أو إعدادات Access/Availability لنوع الطلب ثم أعد المحاولة.</p>
+      <button type="button" (click)="reloadRequestTypes()" [disabled]="loadingCategoryOptions">تحديث الأنواع المتاحة</button>
+    </section>
 
-      <div class="field" *ngIf="showDocumentDirectionReadonly">
-        <label>اتجاه الطلب</label>
-        <div class="readonly-value">{{ directionReadOnlyValue }}</div>
-        <small class="hint">هذا النوع مضبوط على اتجاه ثابت ولا يمكن تغييره أثناء التسجيل.</small>
-      </div>
+    <ng-container *ngIf="!showRequestTypesEmptyState">
+      <form [formGroup]="editorForm" class="main-form">
+        <div class="field">
+          <label>نوع الموضوع/الطلب *</label>
+          <p-dropdown
+            formControlName="categoryId"
+            [options]="categoryOptions"
+            optionLabel="name"
+            optionValue="id"
+            appendTo="body"
+            [filter]="true"
+            [showClear]="!isEditMode"
+            [disabled]="isEditMode"
+            placeholder="اختر النوع"
+            (onChange)="onCategoryChanged()">
+          </p-dropdown>
+          <small class="hint" *ngIf="loadingCategoryOptions">جاري تحميل الأنواع المتاحة حسب سياق المستخدم...</small>
+          <small class="error" *ngIf="shouldShowEditorError('categoryId')">{{ getEditorErrorMessage('categoryId') }}</small>
+        </div>
 
-      <div class="field">
-        <label>عنوان الموضوع/الطلب</label>
-        <input type="text" formControlName="subject" />
-      </div>
+        <div class="field" *ngIf="showDocumentDirectionSelector">
+          <label>اتجاه الطلب</label>
+          <select formControlName="documentDirection">
+            <option value="">اختر الاتجاه</option>
+            <option *ngFor="let option of documentDirectionOptions" [value]="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+          <small class="hint">يمكنك اختيار الاتجاه لأن هذا النوع مضبوط على اتجاه مرن.</small>
+          <small class="error" *ngIf="shouldShowEditorError('documentDirection')">{{ getEditorErrorMessage('documentDirection') }}</small>
+        </div>
 
-      <div class="field field-wide">
-        <label>الوصف</label>
-        <textarea rows="3" formControlName="description"></textarea>
-      </div>
+        <div class="field" *ngIf="showDocumentDirectionReadonly">
+          <label>اتجاه الطلب</label>
+          <div class="readonly-value">{{ directionReadOnlyValue }}</div>
+          <small class="hint">هذا النوع مضبوط على اتجاه ثابت ولا يمكن تغييره أثناء التسجيل.</small>
+        </div>
 
-      <div class="field">
-        <label>الظرف المرتبط</label>
-        <select formControlName="envelopeId">
-          <option [ngValue]="null">بدون ربط</option>
-          <option *ngFor="let envelope of availableEnvelopes" [ngValue]="envelope.envelopeId">
-            {{ envelope.envelopeRef }} - {{ envelope.incomingDate | date:'shortDate' }}
-          </option>
-        </select>
-      </div>
-    </form>
+        <div class="field">
+          <label>عنوان الموضوع/الطلب</label>
+          <input type="text" formControlName="subject" />
+        </div>
 
-    <section class="panel">
-      <h3>الحقول الديناميكية</h3>
-      <div class="groups-wrap" *ngIf="dynamicControls && renderGroups.length > 0" [formGroup]="dynamicControls">
-        <section class="group-card" *ngFor="let group of renderGroups; trackBy: trackByGroup">
-          <header class="group-header">
-            <h3>{{ getGroupDisplayName(group) }}</h3>
-            <span>{{ group.fields.length }} حقل</span>
-          </header>
+        <div class="field field-wide">
+          <label>الوصف</label>
+          <textarea rows="3" formControlName="description"></textarea>
+        </div>
 
-          <div [formArrayName]="group.formArrayName" class="form-array">
-            <div *ngFor="let mandFiled of getFormArrayControls(group.formArrayName); let i = index" [formGroupName]="i" style="display: contents;">
-              <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" style="display: contents;">
-                <app-generic-form-array
-                  [controlFullName]="ctrlName"
-                  [index]="i"
-                  [filtered_CategoryMand]="group.fields"
-                  [isDivDisabled]="false"
-                  [ticketForm]="dynamicControls"
-                  [mandFileds]="getFormArrayInstance(group.formArrayName)!"
-                  [tree]="unitTree"
-                  [showTreeButton]="true"
-                  (genericEvent)="onDynamicFieldGenericEvent($event)">
-                </app-generic-form-array>
+        <div class="field">
+          <label>الظرف المرتبط</label>
+          <select formControlName="envelopeId">
+            <option [ngValue]="null">بدون ربط</option>
+            <option *ngFor="let envelope of availableEnvelopes" [ngValue]="envelope.envelopeId">
+              {{ envelope.envelopeRef }} - {{ envelope.incomingDate | date:'shortDate' }}
+            </option>
+          </select>
+        </div>
+      </form>
+
+      <section class="panel runtime-field-inspector" *ngIf="canShowRuntimeFieldInspector">
+        <h3>نتيجة Runtime الحالية</h3>
+        <p class="runtime-inspector-caption">
+          النوع المحدد: <strong>{{ selectedCategoryDisplayName || ('#' + selectedCategoryId) }}</strong>
+        </p>
+
+        <div class="runtime-inspector-grid">
+          <article>
+            <h4>الحقول الظاهرة</h4>
+            <ul class="runtime-field-list" *ngIf="runtimeVisibleFieldRows.length > 0">
+              <li *ngFor="let field of runtimeVisibleFieldRows">
+                <span class="field-label">{{ field.fieldLabel }}</span>
+                <small class="field-key">{{ field.fieldKey }}</small>
+                <span class="field-badge" [class.required]="field.required" [class.optional]="!field.required">
+                  {{ field.required ? 'Required' : 'Optional' }}
+                </span>
+              </li>
+            </ul>
+            <p class="empty-text" *ngIf="runtimeVisibleFieldRows.length === 0">
+              لا توجد حقول مرئية لهذا النوع في السياق الحالي.
+            </p>
+          </article>
+
+          <article>
+            <h4>الحقول المخفية</h4>
+            <ul class="runtime-field-list" *ngIf="runtimeHiddenFieldRows.length > 0">
+              <li *ngFor="let field of runtimeHiddenFieldRows">
+                <span class="field-label">{{ field.fieldLabel }}</span>
+                <small class="field-key">{{ field.fieldKey }}</small>
+                <span class="field-badge hidden">Hidden</span>
+              </li>
+            </ul>
+            <p class="empty-text" *ngIf="runtimeHiddenFieldRows.length === 0">
+              لا توجد حقول مخفية وفق إعدادات Runtime الحالية.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>الحقول الديناميكية</h3>
+        <div class="groups-wrap" *ngIf="dynamicControls && renderGroups.length > 0" [formGroup]="dynamicControls">
+          <section class="group-card" *ngFor="let group of renderGroups; trackBy: trackByGroup">
+            <header class="group-header">
+              <h3>{{ getGroupDisplayName(group) }}</h3>
+              <span>{{ group.fields.length }} حقل</span>
+            </header>
+
+            <div [formArrayName]="group.formArrayName" class="form-array">
+              <div *ngFor="let mandFiled of getFormArrayControls(group.formArrayName); let i = index" [formGroupName]="i" style="display: contents;">
+                <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" style="display: contents;">
+                  <app-generic-form-array
+                    [controlFullName]="ctrlName"
+                    [index]="i"
+                    [filtered_CategoryMand]="group.fields"
+                    [isDivDisabled]="false"
+                    [ticketForm]="dynamicControls"
+                    [mandFileds]="getFormArrayInstance(group.formArrayName)!"
+                    [tree]="unitTree"
+                    [showTreeButton]="true"
+                    (genericEvent)="onDynamicFieldGenericEvent($event)">
+                  </app-generic-form-array>
+                </div>
               </div>
             </div>
+          </section>
+        </div>
+        <p class="empty-text" *ngIf="!renderGroups || renderGroups.length === 0">
+          لا توجد حقول ديناميكية مهيأة لهذا النوع.
+        </p>
+      </section>
+
+      <section class="panel" *ngIf="!isRuntimeRegistrationMvpMode">
+        <div class="panel-header">
+          <h3>الجهات المعنية / أصحاب العلاقة</h3>
+          <button type="button" (click)="addStakeholder()">إضافة جهة</button>
+        </div>
+        <div *ngFor="let group of stakeholdersControls; let i = index">
+          <div [formGroup]="group" class="row-item">
+            <input type="number" placeholder="رقم الجهة / الوحدة" formControlName="stockholderId" />
+            <select formControlName="partyType">
+              <option value="Viewer">مشاهد</option>
+              <option value="Assignee">مكلف</option>
+            </select>
+            <label class="checkbox"><input type="checkbox" formControlName="requiredResponse" /> يتطلب رد</label>
+            <input type="date" formControlName="dueDate" />
+            <input type="text" placeholder="ملاحظات" formControlName="notes" />
+            <button type="button" class="danger" (click)="removeStakeholder(i)">حذف</button>
           </div>
-        </section>
-      </div>
-      <p class="empty-text" *ngIf="!renderGroups || renderGroups.length === 0">
-        لا توجد حقول ديناميكية مهيأة لهذا النوع.
-      </p>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <h3>الجهات المعنية / أصحاب العلاقة</h3>
-        <button type="button" (click)="addStakeholder()">إضافة جهة</button>
-      </div>
-      <div *ngFor="let group of stakeholdersControls; let i = index">
-        <div [formGroup]="group" class="row-item">
-          <input type="number" placeholder="رقم الجهة / الوحدة" formControlName="stockholderId" />
-          <select formControlName="partyType">
-            <option value="Viewer">مشاهد</option>
-            <option value="Assignee">مكلف</option>
-          </select>
-          <label class="checkbox"><input type="checkbox" formControlName="requiredResponse" /> يتطلب رد</label>
-          <input type="date" formControlName="dueDate" />
-          <input type="text" placeholder="ملاحظات" formControlName="notes" />
-          <button type="button" class="danger" (click)="removeStakeholder(i)">حذف</button>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="panel">
-      <div class="panel-header">
-        <h3>المهام / الإجراءات</h3>
-        <button type="button" (click)="addTask()">إضافة مهمة</button>
-      </div>
-      <div *ngFor="let group of tasksControls; let i = index">
-        <div [formGroup]="group" class="row-item">
-          <input type="text" placeholder="عنوان المهمة" formControlName="actionTitle" />
-          <input type="text" placeholder="الوصف" formControlName="actionDescription" />
-          <input type="text" placeholder="رقم المستخدم المكلف" formControlName="assignedToUserId" />
-          <input type="text" placeholder="رقم الوحدة المكلفة" formControlName="assignedUnitId" />
-          <input type="date" formControlName="dueDateUtc" />
-          <select formControlName="status">
-            <option [ngValue]="0">مفتوحة</option>
-            <option [ngValue]="1">منتهية</option>
-          </select>
-          <button type="button" class="danger" (click)="removeTask(i)">حذف</button>
+      <section class="panel" *ngIf="!isRuntimeRegistrationMvpMode">
+        <div class="panel-header">
+          <h3>المهام / الإجراءات</h3>
+          <button type="button" (click)="addTask()">إضافة مهمة</button>
         </div>
-      </div>
-    </section>
+        <div *ngFor="let group of tasksControls; let i = index">
+          <div [formGroup]="group" class="row-item">
+            <input type="text" placeholder="عنوان المهمة" formControlName="actionTitle" />
+            <input type="text" placeholder="الوصف" formControlName="actionDescription" />
+            <input type="text" placeholder="رقم المستخدم المكلف" formControlName="assignedToUserId" />
+            <input type="text" placeholder="رقم الوحدة المكلفة" formControlName="assignedUnitId" />
+            <input type="date" formControlName="dueDateUtc" />
+            <select formControlName="status">
+              <option [ngValue]="0">مفتوحة</option>
+              <option [ngValue]="1">منتهية</option>
+            </select>
+            <button type="button" class="danger" (click)="removeTask(i)">حذف</button>
+          </div>
+        </div>
+      </section>
 
-    <section class="panel">
-      <h3>المرفقات</h3>
-      <div class="attachments-existing" *ngIf="existingAttachments.length > 0">
-        <h4>المرفقات الحالية</h4>
-        <ul>
-          <li *ngFor="let attachment of existingAttachments">
-            <span>{{ attachment.fileName }}</span>
-            <button type="button" class="danger" (click)="removeExistingAttachment(attachment.attachmentId)">حذف</button>
-          </li>
+      <section class="panel" *ngIf="!isRuntimeRegistrationMvpMode">
+        <h3>المرفقات</h3>
+        <div class="attachments-existing" *ngIf="existingAttachments.length > 0">
+          <h4>المرفقات الحالية</h4>
+          <ul>
+            <li *ngFor="let attachment of existingAttachments">
+              <span>{{ attachment.fileName }}</span>
+              <button type="button" class="danger" (click)="removeExistingAttachment(attachment.attachmentId)">حذف</button>
+            </li>
+          </ul>
+        </div>
+        <label class="upload-label">
+          <input type="file" multiple (change)="onFilesChanged($event)" />
+          <span>اختر ملفات جديدة</span>
+        </label>
+        <ul class="pending-list" *ngIf="pendingFiles.length > 0">
+          <li *ngFor="let file of pendingFiles">{{ file.fileName }}</li>
         </ul>
-      </div>
-      <label class="upload-label">
-        <input type="file" multiple (change)="onFilesChanged($event)" />
-        <span>اختر ملفات جديدة</span>
-      </label>
-      <ul class="pending-list" *ngIf="pendingFiles.length > 0">
-        <li *ngFor="let file of pendingFiles">{{ file.fileName }}</li>
-      </ul>
-    </section>
+      </section>
+    </ng-container>
   </ng-container>
 </section>
