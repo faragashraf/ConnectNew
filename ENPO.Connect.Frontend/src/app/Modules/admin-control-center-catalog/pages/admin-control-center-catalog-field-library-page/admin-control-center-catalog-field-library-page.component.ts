@@ -32,6 +32,8 @@ type AdvancedDataRow = {
   styleUrls: ['./admin-control-center-catalog-field-library-page.component.scss']
 })
 export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnInit, OnDestroy {
+  private static readonly CATALOG_CONTEXT_STORAGE_KEY = 'connect:control-center-catalog:context:v1';
+
   readonly fieldForm: FormGroup = this.fb.group({
     applicationId: ['', [Validators.required, Validators.maxLength(10)]],
     fieldKey: ['', [Validators.required, Validators.maxLength(50)]],
@@ -112,8 +114,13 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
   ngOnInit(): void {
     this.subscriptions.add(
       this.route.queryParamMap.subscribe(params => {
-        this.contextCategoryId = this.readCategoryIdFromParams(params);
-        this.contextApplicationId = this.readApplicationIdFromParams(params);
+        const routeCategoryId = this.readCategoryIdFromParams(params);
+        const routeApplicationId = this.readApplicationIdFromParams(params);
+        const cachedContext = this.readCatalogContextCache();
+
+        this.contextCategoryId = routeCategoryId ?? cachedContext.categoryId;
+        this.contextApplicationId = routeApplicationId ?? cachedContext.applicationId;
+        this.persistCatalogContextCache(this.contextCategoryId, this.contextApplicationId);
 
         if (!this.normalizeText(this.selectedApplicationFilter) && this.contextApplicationId) {
           this.selectedApplicationFilter = this.contextApplicationId;
@@ -199,6 +206,10 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       categoryId: this.contextCategoryId ?? null,
       applicationId: applicationId ?? null
     };
+  }
+
+  get canNavigateToFieldBinding(): boolean {
+    return this.contextCategoryId != null && this.contextCategoryId > 0;
   }
 
   get areMandatoryFieldsCompleted(): boolean {
@@ -1144,5 +1155,37 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     }
 
     return Math.trunc(candidate);
+  }
+
+  private readCatalogContextCache(): { categoryId: number | null; applicationId: string | null } {
+    const raw = localStorage.getItem(AdminControlCenterCatalogFieldLibraryPageComponent.CATALOG_CONTEXT_STORAGE_KEY);
+    if (!raw) {
+      return { categoryId: null, applicationId: null };
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { categoryId?: unknown; applicationId?: unknown };
+      return {
+        categoryId: this.toPositiveInt(parsed?.categoryId),
+        applicationId: this.normalizeText(parsed?.applicationId)
+      };
+    } catch {
+      return { categoryId: null, applicationId: null };
+    }
+  }
+
+  private persistCatalogContextCache(categoryId: number | null, applicationId: string | null): void {
+    const normalizedCategoryId = this.toPositiveInt(categoryId);
+    const normalizedApplicationId = this.normalizeText(applicationId);
+    if (!normalizedCategoryId && !normalizedApplicationId) {
+      return;
+    }
+
+    const payload = {
+      categoryId: normalizedCategoryId,
+      applicationId: normalizedApplicationId
+    };
+
+    localStorage.setItem(AdminControlCenterCatalogFieldLibraryPageComponent.CATALOG_CONTEXT_STORAGE_KEY, JSON.stringify(payload));
   }
 }

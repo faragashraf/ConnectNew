@@ -29,6 +29,8 @@ type ParentGroupOption = { label: string; value: number | null };
   styleUrls: ['./admin-control-center-catalog-page.component.scss']
 })
 export class AdminControlCenterCatalogPageComponent implements OnInit {
+  private static readonly CATALOG_CONTEXT_STORAGE_KEY = 'connect:control-center-catalog:context:v1';
+
   readonly applicationForm: FormGroup = this.fb.group({
     applicationId: ['', [Validators.required, Validators.maxLength(10)]],
     applicationName: ['', [Validators.required, Validators.maxLength(200)]],
@@ -227,6 +229,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   onSelectApplication(application: AdminCatalogApplicationDto): void {
     this.selectedApplicationId = application.applicationId;
     this.activePhase = 1;
+    this.persistCatalogContextCache(null, this.selectedApplicationId);
 
     this.clearTreeState();
     this.clearGroupsState();
@@ -471,6 +474,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     }
 
     this.activePhase = 2;
+    this.persistCatalogContextCache(selected.categoryId, this.selectedApplicationId);
     this.prepareNewGroup();
     this.selectedGroupNode = null;
     this.editingGroupId = null;
@@ -771,8 +775,11 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
         const targetCategoryId = preferredCategoryId ?? this.selectedCategoryId ?? this.editingCategoryId;
         if (targetCategoryId && this.categoryTreeNodeIndex.has(targetCategoryId)) {
           this.selectedCategoryNode = this.categoryTreeNodeIndex.get(targetCategoryId) ?? null;
+          const selectedCategory = this.selectedCategory;
+          this.persistCatalogContextCache(selectedCategory?.categoryId ?? null, this.selectedApplicationId);
         } else {
           this.selectedCategoryNode = null;
+          this.persistCatalogContextCache(null, this.selectedApplicationId);
           this.activePhase = 1;
           this.clearGroupsState();
         }
@@ -1142,5 +1149,20 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   private normalizeString(value: unknown): string | null {
     const normalized = String(value ?? '').trim();
     return normalized.length > 0 ? normalized : null;
+  }
+
+  private persistCatalogContextCache(categoryId: number | null, applicationId: string | null): void {
+    const normalizedCategoryId = this.toPositiveInt(categoryId);
+    const normalizedApplicationId = this.normalizeString(applicationId);
+    if (!normalizedCategoryId && !normalizedApplicationId) {
+      return;
+    }
+
+    const payload = {
+      categoryId: normalizedCategoryId,
+      applicationId: normalizedApplicationId
+    };
+
+    localStorage.setItem(AdminControlCenterCatalogPageComponent.CATALOG_CONTEXT_STORAGE_KEY, JSON.stringify(payload));
   }
 }

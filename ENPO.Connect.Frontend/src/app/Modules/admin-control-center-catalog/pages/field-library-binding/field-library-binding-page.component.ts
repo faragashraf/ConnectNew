@@ -57,6 +57,8 @@ type FieldBindingStepVm = {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDestroy {
+  private static readonly CATALOG_CONTEXT_STORAGE_KEY = 'connect:control-center-catalog:context:v1';
+
   @Input() requestTypeId: number | null = null;
   @Input() applicationId: string | null = null;
 
@@ -1691,9 +1693,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private syncContextFromInputsOrRoute(): void {
     const inputCategoryId = this.toPositiveInt(this.requestTypeId);
     const inputApplicationId = this.normalizeNullable(this.applicationId);
+    const cachedContext = this.readCatalogContextCache();
 
-    const nextCategoryId = inputCategoryId ?? this.routeCategoryId;
-    const nextApplicationId = inputApplicationId ?? this.routeApplicationId;
+    const nextCategoryId = inputCategoryId ?? this.routeCategoryId ?? cachedContext.categoryId;
+    const nextApplicationId = inputApplicationId ?? this.routeApplicationId ?? cachedContext.applicationId;
     const contextChanged = nextCategoryId !== this.currentCategoryId || nextApplicationId !== this.currentApplicationId;
 
     this.vm = {
@@ -1710,6 +1713,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     this.currentCategoryId = nextCategoryId;
     this.currentApplicationId = nextApplicationId;
+    this.persistCatalogContextCache(nextCategoryId, nextApplicationId);
+    this.syncRouteContext(nextCategoryId, nextApplicationId);
 
     this.resetWorkspaceForNewContext();
     const draftValues = this.readDraftFromLocalStorage();
@@ -1735,6 +1740,25 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     this.stepMessageSeverity = 'warn';
     this.stepMessage = 'اختر نوع الطلب أولًا من لوحة الكتالوج لبدء الربط.';
+  }
+
+  private syncRouteContext(categoryId: number | null, applicationId: string | null): void {
+    const routeQueryCategoryId = this.readRouteCategoryId(this.route.snapshot.queryParamMap);
+    const routeQueryApplicationId = this.readRouteApplicationId(this.route.snapshot.queryParamMap);
+
+    if (routeQueryCategoryId === categoryId && routeQueryApplicationId === applicationId) {
+      return;
+    }
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      replaceUrl: true,
+      queryParamsHandling: 'merge',
+      queryParams: {
+        categoryId: categoryId ?? null,
+        applicationId: applicationId ?? null
+      }
+    });
   }
 
   private refreshStepState(syncToken: 'valid' | 'draft' = this.validation.isValid ? 'valid' : 'draft'): void {
@@ -1910,6 +1934,38 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
   private normalizeFieldKey(value: unknown): string {
     return (String(value ?? '').trim()).toLowerCase();
+  }
+
+  private readCatalogContextCache(): { categoryId: number | null; applicationId: string | null } {
+    const raw = localStorage.getItem(FieldLibraryBindingPageComponent.CATALOG_CONTEXT_STORAGE_KEY);
+    if (!raw) {
+      return { categoryId: null, applicationId: null };
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { categoryId?: unknown; applicationId?: unknown };
+      return {
+        categoryId: this.toPositiveInt(parsed?.categoryId),
+        applicationId: this.normalizeNullable(parsed?.applicationId)
+      };
+    } catch {
+      return { categoryId: null, applicationId: null };
+    }
+  }
+
+  private persistCatalogContextCache(categoryId: number | null, applicationId: string | null): void {
+    const normalizedCategoryId = this.toPositiveInt(categoryId);
+    const normalizedApplicationId = this.normalizeNullable(applicationId);
+    if (!normalizedCategoryId && !normalizedApplicationId) {
+      return;
+    }
+
+    const payload = {
+      categoryId: normalizedCategoryId,
+      applicationId: normalizedApplicationId
+    };
+
+    localStorage.setItem(FieldLibraryBindingPageComponent.CATALOG_CONTEXT_STORAGE_KEY, JSON.stringify(payload));
   }
 
   private toErrorMessage(error: unknown, fallbackMessage: string): string {

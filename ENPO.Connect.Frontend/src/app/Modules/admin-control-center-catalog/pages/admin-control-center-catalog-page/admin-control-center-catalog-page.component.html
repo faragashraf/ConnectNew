@@ -22,6 +22,7 @@
         icon="pi pi-link"
         label="إدارة ربط مكتبة الحقول"
         [routerLink]="['/Admin/ControlCenterCatalog/field-library-binding']"
+        [disabled]="selectedCategoryId == null || selectedApplicationId == null"
         [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
       </button>
       <button
