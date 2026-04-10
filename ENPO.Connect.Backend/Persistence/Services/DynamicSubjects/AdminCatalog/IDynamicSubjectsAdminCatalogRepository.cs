@@ -28,6 +28,18 @@ public interface IDynamicSubjectsAdminCatalogRepository
 
     Task<Cdcategory?> FindCategoryAsync(int categoryId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyDictionary<int, SubjectTypeAdminSetting>> ListCategoryAdminSettingsAsync(
+        IReadOnlyCollection<int> categoryIds,
+        CancellationToken cancellationToken = default);
+
+    Task<SubjectTypeAdminSetting?> FindCategoryAdminSettingAsync(
+        int categoryId,
+        CancellationToken cancellationToken = default);
+
+    Task AddCategoryAdminSettingAsync(
+        SubjectTypeAdminSetting setting,
+        CancellationToken cancellationToken = default);
+
     Task<int> CountActiveChildCategoriesAsync(int categoryId, CancellationToken cancellationToken = default);
 
     Task<int> CountCategoryFieldLinksAsync(int categoryId, CancellationToken cancellationToken = default);

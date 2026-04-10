@@ -46,6 +46,17 @@ public interface IDynamicSubjectsAdminCatalogService
         string userId,
         CancellationToken cancellationToken = default);
 
+    Task<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>> GetCategoryDisplaySettingsAsync(
+        int categoryId,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>> UpsertCategoryDisplaySettingsAsync(
+        int categoryId,
+        AdminCatalogCategoryDisplaySettingsUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
     Task<CommonResponse<AdminCatalogCategoryDeleteDiagnosticsDto>> DiagnoseCategoryDeleteAsync(
         int categoryId,
         string userId,

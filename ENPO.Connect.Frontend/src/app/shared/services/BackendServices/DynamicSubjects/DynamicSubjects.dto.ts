@@ -89,6 +89,8 @@ export interface SubjectFormDefinitionDto {
   groups: SubjectGroupDefinitionDto[];
   fields: SubjectFieldDefinitionDto[];
   requestPolicy?: RequestPolicyDefinitionDto;
+  defaultViewMode?: 'standard' | 'tabbed' | string;
+  allowRequesterOverride?: boolean;
   defaultDisplayMode?: RequestTypeDisplayMode;
   allowUserToChangeDisplayMode?: boolean;
 }
@@ -436,7 +438,7 @@ export interface RequestPolicyDefinitionDto {
   workflowPolicy: RequestWorkflowPolicyDto;
 }
 
-export type RequestTypeDisplayMode = 'Standard' | 'Tabbed' | string;
+export type RequestTypeDisplayMode = 'standard' | 'tabbed' | 'Standard' | 'Tabbed' | string;
 
 export interface SubjectTypeAdminDto {
   categoryId: number;
@@ -467,6 +469,8 @@ export interface SubjectTypeAdminDto {
   lastModifiedBy?: string;
   lastModifiedAtUtc?: string;
   requestPolicy?: RequestPolicyDefinitionDto;
+  defaultViewMode?: 'standard' | 'tabbed' | string;
+  allowRequesterOverride?: boolean;
   defaultDisplayMode?: RequestTypeDisplayMode;
   allowUserToChangeDisplayMode?: boolean;
 }
@@ -483,6 +487,8 @@ export interface SubjectTypeAdminUpsertRequestDto {
   sequencePaddingLength?: number;
   sequenceResetScope?: 'none' | 'yearly' | 'monthly' | string;
   requestPolicy?: RequestPolicyDefinitionDto;
+  defaultViewMode?: 'standard' | 'tabbed' | string;
+  allowRequesterOverride?: boolean;
   defaultDisplayMode?: RequestTypeDisplayMode;
   allowUserToChangeDisplayMode?: boolean;
 }

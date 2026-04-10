@@ -75,6 +75,40 @@
       <span *ngIf="selectedType.applicationId"> | التطبيق: {{ selectedType.applicationId }}</span>
       <span> | الحالة: {{ selectedType.isActive ? 'مفعل' : 'غير مفعل' }}</span>
     </small>
+
+    <div class="selector-row view-mode-row" *ngIf="selectedRequestType as selectedType">
+      <div class="field">
+        <label>Default View Mode</label>
+        <p-tag severity="info" [value]="selectedRequestTypeDefaultViewModeLabel"></p-tag>
+      </div>
+
+      <div class="field">
+        <label>Allow Requester Override</label>
+        <p-tag
+          [severity]="selectedRequestTypeAllowRequesterOverride ? 'success' : 'warning'"
+          [value]="selectedRequestTypeAllowRequesterOverride ? 'Enabled' : 'Disabled'">
+        </p-tag>
+      </div>
+
+      <div class="field" *ngIf="selectedType.allowRequesterOverride">
+        <label for="previewViewMode">Preview Active View Mode</label>
+        <p-dropdown
+          inputId="previewViewMode"
+          [options]="viewModeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [ngModel]="previewSelectedViewMode"
+          [ngModelOptions]="{ standalone: true }"
+          appendTo="body"
+          (onChange)="onPreviewViewModeChange($event.value)">
+        </p-dropdown>
+      </div>
+
+      <div class="field" *ngIf="!selectedType.allowRequesterOverride">
+        <label>Preview Active View Mode</label>
+        <p-tag severity="secondary" [value]="activePreviewViewModeLabel"></p-tag>
+      </div>
+    </div>
   </section>
 
   <ng-container *ngIf="preview as data; else noPreview">

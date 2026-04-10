@@ -3,6 +3,7 @@ using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Persistence.Services.DynamicSubjects.AdminCatalog;
 
@@ -23,6 +24,8 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
     private const int FieldMinMaxValueMaxLength = 30;
     private const int FieldPlaceholderMaxLength = 150;
     private const int FieldDefaultValueMaxLength = 100;
+    private const string DefaultViewModeValue = "standard";
+    private const string TabbedViewModeValue = "tabbed";
 
     private static readonly IReadOnlyList<string> DefaultFieldTypes = new List<string>
     {
@@ -344,7 +347,13 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
 
             var normalizedAppId = NormalizeNullable(appId);
             var categories = await _repository.ListCategoriesAsync(normalizedAppId, cancellationToken);
-            response.Data = BuildCategoryTree(categories);
+            var categoryIds = categories
+                .Select(item => item.CatId)
+                .Where(item => item > 0)
+                .Distinct()
+                .ToList();
+            var settingsMap = await _repository.ListCategoryAdminSettingsAsync(categoryIds, cancellationToken);
+            response.Data = BuildCategoryTree(categories, settingsMap);
         }
         catch (Exception)
         {
@@ -437,6 +446,11 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             }
 
             var nextCategoryId = await _repository.GenerateNextCategoryIdAsync(cancellationToken);
+            var hasDisplaySettingsRequest = NormalizeNullable(safeRequest.DefaultViewMode) != null
+                || safeRequest.AllowRequesterOverride.HasValue;
+            var targetDisplaySettings = BuildDisplaySettingsState(
+                safeRequest.DefaultViewMode,
+                safeRequest.AllowRequesterOverride);
             var category = new Cdcategory
             {
                 CatId = nextCategoryId,
@@ -455,11 +469,29 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
                 CatIntervalCount = 0,
                 ApplicationId = applicationId
             };
+            SubjectTypeAdminSetting? categorySetting = null;
+            if (hasDisplaySettingsRequest)
+            {
+                categorySetting = new SubjectTypeAdminSetting
+                {
+                    CategoryId = nextCategoryId,
+                    DisplayOrder = 0,
+                    DefaultViewMode = targetDisplaySettings.DefaultViewMode,
+                    AllowRequesterOverride = targetDisplaySettings.AllowRequesterOverride,
+                    SettingsJson = MergeDisplaySettingsIntoSettingsJson(null, targetDisplaySettings),
+                    LastModifiedBy = normalizedUserId,
+                    LastModifiedAtUtc = DateTime.UtcNow
+                };
+            }
 
             await _repository.AddCategoryAsync(category, cancellationToken);
+            if (categorySetting != null)
+            {
+                await _repository.AddCategoryAdminSettingAsync(categorySetting, cancellationToken);
+            }
             await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
 
-            response.Data = MapCategory(category);
+            response.Data = MapCategory(category, categorySetting);
         }
         catch (Exception)
         {
@@ -497,6 +529,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
                 response.Errors.Add(new Error { Code = "404", Message = "العنصر غير موجود." });
                 return response;
             }
+            var categorySetting = await _repository.FindCategoryAdminSettingAsync(categoryId, cancellationToken);
 
             var safeRequest = request ?? new AdminCatalogCategoryUpdateRequestDto();
             if (safeRequest.ParentCategoryId < 0)
@@ -571,8 +604,161 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             category.CatStatus = !safeRequest.IsActive;
             category.StampDate = DateTime.Now;
 
+            var hasDefaultViewModeUpdate = NormalizeNullable(safeRequest.DefaultViewMode) != null;
+            var hasAllowRequesterOverrideUpdate = safeRequest.AllowRequesterOverride.HasValue;
+            if (hasDefaultViewModeUpdate || hasAllowRequesterOverrideUpdate)
+            {
+                var currentSettings = ResolveDisplaySettingsState(categorySetting);
+                var targetSettings = BuildDisplaySettingsState(
+                    hasDefaultViewModeUpdate ? safeRequest.DefaultViewMode : currentSettings.DefaultViewMode,
+                    hasAllowRequesterOverrideUpdate ? safeRequest.AllowRequesterOverride : currentSettings.AllowRequesterOverride);
+
+                if (categorySetting == null)
+                {
+                    categorySetting = new SubjectTypeAdminSetting
+                    {
+                        CategoryId = categoryId,
+                        DisplayOrder = 0,
+                        LastModifiedBy = normalizedUserId,
+                        LastModifiedAtUtc = DateTime.UtcNow
+                    };
+                    await _repository.AddCategoryAdminSettingAsync(categorySetting, cancellationToken);
+                }
+
+                categorySetting.DefaultViewMode = targetSettings.DefaultViewMode;
+                categorySetting.AllowRequesterOverride = targetSettings.AllowRequesterOverride;
+                categorySetting.SettingsJson = MergeDisplaySettingsIntoSettingsJson(categorySetting.SettingsJson, targetSettings);
+                categorySetting.LastModifiedBy = normalizedUserId;
+                categorySetting.LastModifiedAtUtc = DateTime.UtcNow;
+            }
+
             await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
-            response.Data = MapCategory(category);
+            response.Data = MapCategory(category, categorySetting);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>> GetCategoryDisplaySettingsAsync(
+        int categoryId,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<AdminCatalogCategoryDisplaySettingsDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "العنصر المطلوب غير صالح." });
+                return response;
+            }
+
+            var category = await _repository.FindCategoryAsync(categoryId, cancellationToken);
+            if (category == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "العنصر غير موجود." });
+                return response;
+            }
+
+            var categorySetting = await _repository.FindCategoryAdminSettingAsync(categoryId, cancellationToken);
+            var state = ResolveDisplaySettingsState(categorySetting);
+            response.Data = new AdminCatalogCategoryDisplaySettingsDto
+            {
+                CategoryId = categoryId,
+                DefaultViewMode = state.DefaultViewMode,
+                AllowRequesterOverride = state.AllowRequesterOverride,
+                LastModifiedBy = categorySetting?.LastModifiedBy,
+                LastModifiedAtUtc = categorySetting?.LastModifiedAtUtc
+            };
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>> UpsertCategoryDisplaySettingsAsync(
+        int categoryId,
+        AdminCatalogCategoryDisplaySettingsUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<AdminCatalogCategoryDisplaySettingsDto>();
+        try
+        {
+            var normalizedUserId = NormalizeUser(userId);
+            if (normalizedUserId.Length == 0)
+            {
+                response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
+                return response;
+            }
+
+            if (categoryId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "العنصر المطلوب غير صالح." });
+                return response;
+            }
+
+            var category = await _repository.FindCategoryAsync(categoryId, cancellationToken);
+            if (category == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "العنصر غير موجود." });
+                return response;
+            }
+
+            var safeRequest = request ?? new AdminCatalogCategoryDisplaySettingsUpsertRequestDto();
+            var categorySetting = await _repository.FindCategoryAdminSettingAsync(categoryId, cancellationToken);
+            var currentSettings = ResolveDisplaySettingsState(categorySetting);
+            var targetSettings = BuildDisplaySettingsState(
+                safeRequest.DefaultViewMode ?? currentSettings.DefaultViewMode,
+                safeRequest.AllowRequesterOverride ?? currentSettings.AllowRequesterOverride);
+
+            if (categorySetting == null)
+            {
+                categorySetting = new SubjectTypeAdminSetting
+                {
+                    CategoryId = categoryId,
+                    DisplayOrder = 0,
+                    DefaultViewMode = targetSettings.DefaultViewMode,
+                    AllowRequesterOverride = targetSettings.AllowRequesterOverride,
+                    SettingsJson = MergeDisplaySettingsIntoSettingsJson(null, targetSettings),
+                    LastModifiedBy = normalizedUserId,
+                    LastModifiedAtUtc = DateTime.UtcNow
+                };
+                await _repository.AddCategoryAdminSettingAsync(categorySetting, cancellationToken);
+            }
+            else
+            {
+                categorySetting.DefaultViewMode = targetSettings.DefaultViewMode;
+                categorySetting.AllowRequesterOverride = targetSettings.AllowRequesterOverride;
+                categorySetting.SettingsJson = MergeDisplaySettingsIntoSettingsJson(categorySetting.SettingsJson, targetSettings);
+                categorySetting.LastModifiedBy = normalizedUserId;
+                categorySetting.LastModifiedAtUtc = DateTime.UtcNow;
+            }
+
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
+
+            response.Data = new AdminCatalogCategoryDisplaySettingsDto
+            {
+                CategoryId = categoryId,
+                DefaultViewMode = targetSettings.DefaultViewMode,
+                AllowRequesterOverride = targetSettings.AllowRequesterOverride,
+                LastModifiedBy = categorySetting.LastModifiedBy,
+                LastModifiedAtUtc = categorySetting.LastModifiedAtUtc
+            };
         }
         catch (Exception)
         {
@@ -2060,15 +2246,20 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
         };
     }
 
-    private static AdminCatalogCategoryDto MapCategory(Cdcategory category)
+    private static AdminCatalogCategoryDto MapCategory(
+        Cdcategory category,
+        SubjectTypeAdminSetting? categorySetting = null)
     {
+        var displaySettings = ResolveDisplaySettingsState(categorySetting);
         return new AdminCatalogCategoryDto
         {
             CategoryId = category.CatId,
             ParentCategoryId = category.CatParent,
             CategoryName = category.CatName,
             ApplicationId = category.ApplicationId,
-            IsActive = !category.CatStatus
+            IsActive = !category.CatStatus,
+            DefaultViewMode = displaySettings.DefaultViewMode,
+            AllowRequesterOverride = displaySettings.AllowRequesterOverride
         };
     }
 
@@ -2087,17 +2278,27 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
         };
     }
 
-    private static IReadOnlyList<AdminCatalogCategoryTreeNodeDto> BuildCategoryTree(IReadOnlyList<Cdcategory> categories)
+    private static IReadOnlyList<AdminCatalogCategoryTreeNodeDto> BuildCategoryTree(
+        IReadOnlyList<Cdcategory> categories,
+        IReadOnlyDictionary<int, SubjectTypeAdminSetting> settingsMap)
     {
+        var safeSettingsMap = settingsMap ?? new Dictionary<int, SubjectTypeAdminSetting>();
         var nodeMap = categories.ToDictionary(
             keySelector: item => item.CatId,
-            elementSelector: item => new CategoryTreeBuilderNode
+            elementSelector: item =>
             {
-                CategoryId = item.CatId,
-                ParentCategoryId = item.CatParent,
-                CategoryName = item.CatName,
-                ApplicationId = item.ApplicationId,
-                IsActive = !item.CatStatus
+                safeSettingsMap.TryGetValue(item.CatId, out var setting);
+                var displaySettings = ResolveDisplaySettingsState(setting);
+                return new CategoryTreeBuilderNode
+                {
+                    CategoryId = item.CatId,
+                    ParentCategoryId = item.CatParent,
+                    CategoryName = item.CatName,
+                    ApplicationId = item.ApplicationId,
+                    IsActive = !item.CatStatus,
+                    DefaultViewMode = displaySettings.DefaultViewMode,
+                    AllowRequesterOverride = displaySettings.AllowRequesterOverride
+                };
             });
 
         var rootNodes = new List<CategoryTreeBuilderNode>();
@@ -2214,8 +2415,170 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             CategoryName = node.CategoryName,
             ApplicationId = node.ApplicationId,
             IsActive = node.IsActive,
+            DefaultViewMode = node.DefaultViewMode,
+            AllowRequesterOverride = node.AllowRequesterOverride,
             Children = node.Children.Select(MapTreeNode).ToList()
         };
+    }
+
+    private static CategoryDisplaySettingsState BuildDisplaySettingsState(
+        string? defaultViewMode,
+        bool? allowRequesterOverride)
+    {
+        return new CategoryDisplaySettingsState
+        {
+            DefaultViewMode = NormalizeViewMode(defaultViewMode),
+            AllowRequesterOverride = allowRequesterOverride == true
+        };
+    }
+
+    private static CategoryDisplaySettingsState ResolveDisplaySettingsState(SubjectTypeAdminSetting? setting)
+    {
+        if (setting == null)
+        {
+            return new CategoryDisplaySettingsState();
+        }
+
+        var fromJson = ResolveDisplaySettingsFromSettingsJson(setting.SettingsJson);
+        var normalizedColumnViewMode = NormalizeNullable(setting.DefaultViewMode);
+
+        return new CategoryDisplaySettingsState
+        {
+            DefaultViewMode = normalizedColumnViewMode == null
+                ? fromJson.DefaultViewMode
+                : NormalizeViewMode(setting.DefaultViewMode),
+            AllowRequesterOverride = setting.AllowRequesterOverride
+        };
+    }
+
+    private static CategoryDisplaySettingsState ResolveDisplaySettingsFromSettingsJson(string? settingsJson)
+    {
+        var result = new CategoryDisplaySettingsState();
+        var payload = NormalizeNullable(settingsJson);
+        if (payload == null)
+        {
+            return result;
+        }
+
+        try
+        {
+            var rootNode = JsonNode.Parse(payload) as JsonObject;
+            if (rootNode == null)
+            {
+                return result;
+            }
+
+            var nestedPresentationObject = rootNode["presentationSettings"] as JsonObject;
+            var defaultViewModeCandidate =
+                ReadStringFromJsonNode(rootNode["defaultViewMode"])
+                ?? ReadStringFromJsonNode(rootNode["defaultDisplayMode"])
+                ?? ReadStringFromJsonNode(nestedPresentationObject?["defaultViewMode"])
+                ?? ReadStringFromJsonNode(nestedPresentationObject?["defaultDisplayMode"]);
+            var allowRequesterOverrideCandidate =
+                ReadBooleanFromJsonNode(rootNode["allowRequesterOverride"])
+                ?? ReadBooleanFromJsonNode(rootNode["allowUserToChangeDisplayMode"])
+                ?? ReadBooleanFromJsonNode(nestedPresentationObject?["allowRequesterOverride"])
+                ?? ReadBooleanFromJsonNode(nestedPresentationObject?["allowUserToChangeDisplayMode"]);
+
+            result.DefaultViewMode = NormalizeViewMode(defaultViewModeCandidate);
+            if (allowRequesterOverrideCandidate.HasValue)
+            {
+                result.AllowRequesterOverride = allowRequesterOverrideCandidate.Value;
+            }
+        }
+        catch
+        {
+            // Keep defaults.
+        }
+
+        return result;
+    }
+
+    private static string? MergeDisplaySettingsIntoSettingsJson(
+        string? settingsJson,
+        CategoryDisplaySettingsState state)
+    {
+        JsonObject root;
+        var payload = NormalizeNullable(settingsJson);
+        if (payload == null)
+        {
+            root = new JsonObject();
+        }
+        else
+        {
+            try
+            {
+                root = JsonNode.Parse(payload) as JsonObject ?? new JsonObject();
+            }
+            catch
+            {
+                root = new JsonObject();
+            }
+        }
+
+        var normalizedDefaultViewMode = NormalizeViewMode(state.DefaultViewMode);
+        root["defaultViewMode"] = normalizedDefaultViewMode;
+        root["allowRequesterOverride"] = state.AllowRequesterOverride;
+        root["defaultDisplayMode"] = normalizedDefaultViewMode == TabbedViewModeValue ? "Tabbed" : "Standard";
+        root["allowUserToChangeDisplayMode"] = state.AllowRequesterOverride;
+
+        root.Remove("presentationSettings");
+
+        return root.Count == 0
+            ? null
+            : root.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+    }
+
+    private static string NormalizeViewMode(string? value)
+    {
+        var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+        return normalized == TabbedViewModeValue
+            ? TabbedViewModeValue
+            : DefaultViewModeValue;
+    }
+
+    private static string? ReadStringFromJsonNode(JsonNode? node)
+    {
+        if (node is not JsonValue value)
+        {
+            return null;
+        }
+
+        return value.TryGetValue<string>(out var parsed)
+            ? NormalizeNullable(parsed)
+            : null;
+    }
+
+    private static bool? ReadBooleanFromJsonNode(JsonNode? node)
+    {
+        if (node is not JsonValue value)
+        {
+            return null;
+        }
+
+        if (value.TryGetValue<bool>(out var parsedBool))
+        {
+            return parsedBool;
+        }
+
+        if (value.TryGetValue<string>(out var parsedString))
+        {
+            var normalized = NormalizeNullable(parsedString)?.ToLowerInvariant();
+            return normalized switch
+            {
+                "true" => true,
+                "1" => true,
+                "yes" => true,
+                "y" => true,
+                "false" => false,
+                "0" => false,
+                "no" => false,
+                "n" => false,
+                _ => null
+            };
+        }
+
+        return null;
     }
 
     private static AdminCatalogGroupTreeNodeDto MapGroupTreeNode(GroupTreeBuilderNode node)
@@ -2310,6 +2673,13 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
         public string? Mask { get; init; }
     }
 
+    private sealed class CategoryDisplaySettingsState
+    {
+        public string DefaultViewMode { get; set; } = "standard";
+
+        public bool AllowRequesterOverride { get; set; }
+    }
+
     private sealed class CategoryTreeBuilderNode
     {
         public int CategoryId { get; init; }
@@ -2321,6 +2691,10 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
         public string? ApplicationId { get; init; }
 
         public bool IsActive { get; init; }
+
+        public string DefaultViewMode { get; init; } = "standard";
+
+        public bool AllowRequesterOverride { get; init; }
 
         public List<CategoryTreeBuilderNode> Children { get; } = new();
     }

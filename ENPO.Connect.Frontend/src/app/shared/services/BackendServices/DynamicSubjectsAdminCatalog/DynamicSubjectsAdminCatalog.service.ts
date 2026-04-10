@@ -8,6 +8,8 @@ import {
   AdminCatalogApplicationDeleteDiagnosticsDto,
   AdminCatalogApplicationDto,
   AdminCatalogApplicationUpdateRequestDto,
+  AdminCatalogCategoryDisplaySettingsDto,
+  AdminCatalogCategoryDisplaySettingsUpsertRequestDto,
   AdminCatalogCategoryCreateRequestDto,
   AdminCatalogCategoryDeleteDiagnosticsDto,
   AdminCatalogDeleteResultDto,
@@ -82,6 +84,22 @@ export class DynamicSubjectsAdminCatalogController {
     request: AdminCatalogCategoryUpdateRequestDto
   ): Observable<CommonResponse<AdminCatalogCategoryDto>> {
     return this.http.put<CommonResponse<AdminCatalogCategoryDto>>(`${this.baseUrl}/Categories/${categoryId}`, request);
+  }
+
+  getCategoryDisplaySettings(categoryId: number): Observable<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>> {
+    return this.http.get<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>>(
+      `${this.baseUrl}/Categories/${categoryId}/DisplaySettings`
+    );
+  }
+
+  upsertCategoryDisplaySettings(
+    categoryId: number,
+    request: AdminCatalogCategoryDisplaySettingsUpsertRequestDto
+  ): Observable<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>> {
+    return this.http.put<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>>(
+      `${this.baseUrl}/Categories/${categoryId}/DisplaySettings`,
+      request
+    );
   }
 
   diagnoseCategoryDelete(categoryId: number): Observable<CommonResponse<AdminCatalogCategoryDeleteDiagnosticsDto>> {

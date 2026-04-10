@@ -147,6 +147,10 @@ public sealed class SubjectFormDefinitionDto
 
     public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
 
+    public string DefaultViewMode { get; set; } = "standard";
+
+    public bool AllowRequesterOverride { get; set; }
+
     public string DefaultDisplayMode { get; set; } = "Standard";
 
     public bool AllowUserToChangeDisplayMode { get; set; }
@@ -818,6 +822,10 @@ public sealed class SubjectTypeAdminDto
 
     public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
 
+    public string DefaultViewMode { get; set; } = "standard";
+
+    public bool AllowRequesterOverride { get; set; }
+
     public string DefaultDisplayMode { get; set; } = "Standard";
 
     public bool AllowUserToChangeDisplayMode { get; set; }
@@ -846,6 +854,10 @@ public sealed class SubjectTypeAdminUpsertRequestDto
     public string SequenceResetScope { get; set; } = "none";
 
     public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
+
+    public string? DefaultViewMode { get; set; }
+
+    public bool? AllowRequesterOverride { get; set; }
 
     public string? DefaultDisplayMode { get; set; }
 

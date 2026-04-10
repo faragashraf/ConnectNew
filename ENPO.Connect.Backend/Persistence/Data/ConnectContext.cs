@@ -749,6 +749,13 @@ public partial class ConnectContext : DbContext
                 .HasColumnName("CategoryID")
                 .ValueGeneratedNever();
             entity.Property(e => e.DisplayOrder).HasDefaultValue(0);
+            entity.Property(e => e.DefaultViewMode)
+                .HasMaxLength(20)
+                .HasDefaultValue("standard")
+                .IsRequired();
+            entity.Property(e => e.AllowRequesterOverride)
+                .HasDefaultValue(false)
+                .IsRequired();
             entity.Property(e => e.SettingsJson);
             entity.Property(e => e.LastModifiedBy)
                 .HasMaxLength(64)

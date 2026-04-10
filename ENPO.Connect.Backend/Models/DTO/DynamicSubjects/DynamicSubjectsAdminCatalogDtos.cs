@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Models.DTO.DynamicSubjects;
@@ -38,6 +39,10 @@ public sealed class AdminCatalogCategoryDto
     public string? ApplicationId { get; set; }
 
     public bool IsActive { get; set; }
+
+    public string DefaultViewMode { get; set; } = "standard";
+
+    public bool AllowRequesterOverride { get; set; }
 }
 
 public sealed class AdminCatalogCategoryTreeNodeDto
@@ -52,6 +57,10 @@ public sealed class AdminCatalogCategoryTreeNodeDto
 
     public bool IsActive { get; set; }
 
+    public string DefaultViewMode { get; set; } = "standard";
+
+    public bool AllowRequesterOverride { get; set; }
+
     public IReadOnlyList<AdminCatalogCategoryTreeNodeDto> Children { get; set; }
         = new List<AdminCatalogCategoryTreeNodeDto>();
 }
@@ -65,6 +74,10 @@ public sealed class AdminCatalogCategoryCreateRequestDto
     public int ParentCategoryId { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    public string? DefaultViewMode { get; set; }
+
+    public bool? AllowRequesterOverride { get; set; }
 }
 
 public sealed class AdminCatalogCategoryUpdateRequestDto
@@ -74,6 +87,30 @@ public sealed class AdminCatalogCategoryUpdateRequestDto
     public int ParentCategoryId { get; set; }
 
     public bool IsActive { get; set; }
+
+    public string? DefaultViewMode { get; set; }
+
+    public bool? AllowRequesterOverride { get; set; }
+}
+
+public sealed class AdminCatalogCategoryDisplaySettingsDto
+{
+    public int CategoryId { get; set; }
+
+    public string DefaultViewMode { get; set; } = "standard";
+
+    public bool AllowRequesterOverride { get; set; }
+
+    public string? LastModifiedBy { get; set; }
+
+    public DateTime? LastModifiedAtUtc { get; set; }
+}
+
+public sealed class AdminCatalogCategoryDisplaySettingsUpsertRequestDto
+{
+    public string? DefaultViewMode { get; set; }
+
+    public bool? AllowRequesterOverride { get; set; }
 }
 
 public sealed class AdminCatalogApplicationDeleteDiagnosticsDto

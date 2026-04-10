@@ -446,4 +446,29 @@
       </div>
     </ng-template>
   </section>
+
+  <section class="card display-settings-card">
+    <header class="card-header">
+      <div>
+        <h3>إعدادات طريقة العرض (Standard / Tabbed)</h3>
+        <small>التحكم في الوضع الافتراضي وإمكانية التغيير للمستخدم النهائي</small>
+      </div>
+    </header>
+
+    <div class="context-banner" *ngIf="selectedCategoryId; else displaySettingsNoNodeSelected">
+      <strong>Request Type الحالي لإعدادات العرض:</strong>
+      <span>{{ selectedCategoryPathLabel }}</span>
+    </div>
+
+    <app-admin-control-center-catalog-display-settings-workspace
+      [requestTypeId]="selectedCategoryId"
+      [requestTypeLabel]="selectedCategoryPathLabel">
+    </app-admin-control-center-catalog-display-settings-workspace>
+
+    <ng-template #displaySettingsNoNodeSelected>
+      <div class="empty-state">
+        لا يمكن إعداد طريقة العرض قبل اختيار Node (نوع طلب) من الشجرة في المرحلة الأولى.
+      </div>
+    </ng-template>
+  </section>
 </section>

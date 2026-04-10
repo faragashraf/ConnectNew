@@ -141,6 +141,45 @@ public sealed class DynamicSubjectsAdminCatalogRepository : IDynamicSubjectsAdmi
             .FirstOrDefaultAsync(item => item.CatId == categoryId, cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<int, SubjectTypeAdminSetting>> ListCategoryAdminSettingsAsync(
+        IReadOnlyCollection<int> categoryIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = (categoryIds ?? Array.Empty<int>())
+            .Where(item => item > 0)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<int, SubjectTypeAdminSetting>();
+        }
+
+        return await _connectContext.SubjectTypeAdminSettings
+            .AsNoTracking()
+            .Where(item => ids.Contains(item.CategoryId))
+            .ToDictionaryAsync(item => item.CategoryId, cancellationToken);
+    }
+
+    public async Task<SubjectTypeAdminSetting?> FindCategoryAdminSettingAsync(
+        int categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        if (categoryId <= 0)
+        {
+            return null;
+        }
+
+        return await _connectContext.SubjectTypeAdminSettings
+            .FirstOrDefaultAsync(item => item.CategoryId == categoryId, cancellationToken);
+    }
+
+    public Task AddCategoryAdminSettingAsync(
+        SubjectTypeAdminSetting setting,
+        CancellationToken cancellationToken = default)
+    {
+        return _connectContext.SubjectTypeAdminSettings.AddAsync(setting, cancellationToken).AsTask();
+    }
+
     public async Task<int> CountActiveChildCategoriesAsync(int categoryId, CancellationToken cancellationToken = default)
     {
         if (categoryId <= 0)

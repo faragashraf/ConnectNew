@@ -8,6 +8,7 @@ import {
 } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
 
 type MessageSeverity = 'success' | 'warn' | 'error';
+type ViewMode = 'standard' | 'tabbed';
 
 type RequestTypeOption = {
   label: string;
@@ -15,6 +16,8 @@ type RequestTypeOption = {
   pathLabel: string;
   isActive: boolean;
   applicationId?: string;
+  defaultViewMode: ViewMode;
+  allowRequesterOverride: boolean;
 };
 
 @Component({
@@ -25,6 +28,12 @@ type RequestTypeOption = {
 export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
   requestTypeOptions: RequestTypeOption[] = [];
   selectedRequestTypeId: number | null = null;
+  previewSelectedViewMode: ViewMode = 'standard';
+
+  readonly viewModeOptions: Array<{ label: string; value: ViewMode }> = [
+    { label: 'Standard', value: 'standard' },
+    { label: 'Tabbed', value: 'tabbed' }
+  ];
 
   preview: AdminControlCenterRequestPreviewDto | null = null;
 
@@ -50,6 +59,23 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
 
   get canLoadPreview(): boolean {
     return this.selectedRequestTypeId != null && this.selectedRequestTypeId > 0 && !this.loadingPreview;
+  }
+
+  get selectedRequestTypeDefaultViewModeLabel(): string {
+    const selected = this.selectedRequestType;
+    if (!selected) {
+      return '-';
+    }
+
+    return selected.defaultViewMode === 'tabbed' ? 'Tabbed' : 'Standard';
+  }
+
+  get selectedRequestTypeAllowRequesterOverride(): boolean {
+    return this.selectedRequestType?.allowRequesterOverride === true;
+  }
+
+  get activePreviewViewModeLabel(): string {
+    return this.previewSelectedViewMode === 'tabbed' ? 'Tabbed' : 'Standard';
   }
 
   get visibleFieldsCount(): number {
@@ -110,6 +136,7 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
     this.selectedRequestTypeId = this.normalizeNumber(requestTypeId);
     this.preview = null;
     this.message = '';
+    this.initializePreviewViewModeForSelection();
 
     if (!this.selectedRequestTypeId) {
       return;
@@ -120,6 +147,10 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
 
   onRefreshPreview(): void {
     this.loadPreview();
+  }
+
+  onPreviewViewModeChange(nextMode: ViewMode | null | undefined): void {
+    this.previewSelectedViewMode = this.normalizeViewMode(nextMode);
   }
 
   trackByFieldId(_index: number, item: { fieldId: number }): number {
@@ -155,6 +186,7 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
         if (!selectedStillExists) {
           this.selectedRequestTypeId = options.length > 0 ? options[0].value : null;
         }
+        this.initializePreviewViewModeForSelection();
 
         if (this.selectedRequestTypeId) {
           this.loadPreview();
@@ -217,7 +249,9 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
           value: categoryId,
           pathLabel,
           isActive: node.isActive === true,
-          applicationId: this.normalizeText(node.applicationId) ?? undefined
+          applicationId: this.normalizeText(node.applicationId) ?? undefined,
+          defaultViewMode: this.normalizeViewMode(node.defaultViewMode),
+          allowRequesterOverride: node.allowRequesterOverride === true
         });
 
         walk(node.children ?? [], pathLabel);
@@ -261,5 +295,20 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
 
     const parsed = Number(value);
     return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+  }
+
+  private initializePreviewViewModeForSelection(): void {
+    const selected = this.selectedRequestType;
+    if (!selected) {
+      this.previewSelectedViewMode = 'standard';
+      return;
+    }
+
+    this.previewSelectedViewMode = this.normalizeViewMode(selected.defaultViewMode);
+  }
+
+  private normalizeViewMode(value: unknown): ViewMode {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return normalized === 'tabbed' ? 'tabbed' : 'standard';
   }
 }

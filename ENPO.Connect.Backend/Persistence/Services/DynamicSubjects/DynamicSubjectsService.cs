@@ -28,6 +28,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
     private const string TopicDirectionFieldKey = "TOPICDIRECTION";
     private const string TopicDirectionIncomingValue = "2";
     private const string TopicDirectionOutgoingValue = "1";
+    private const string DefaultViewModeValue = "standard";
+    private const string TabbedViewModeValue = "tabbed";
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -324,13 +326,12 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 }
             }
 
-            var settingsJson = await _connectContext.SubjectTypeAdminSettings
+            var categorySetting = await _connectContext.SubjectTypeAdminSettings
                 .AsNoTracking()
-                .Where(item => item.CategoryId == category.CatId)
-                .Select(item => item.SettingsJson)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefaultAsync(item => item.CategoryId == category.CatId, cancellationToken);
+            var settingsJson = categorySetting?.SettingsJson;
             var requestPolicy = TryReadRequestPolicyFromSettingsJson(settingsJson);
-            var presentationSettings = ResolvePresentationSettingsFromSettingsJson(settingsJson);
+            var presentationSettings = ResolvePresentationSettings(categorySetting);
 
             var adminGroups = await _connectContext.AdminCatalogCategoryGroups
                 .AsNoTracking()
@@ -553,6 +554,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 ParentCategoryId = category.CatParent,
                 ApplicationId = category.ApplicationId,
                 RequestPolicy = requestPolicy,
+                DefaultViewMode = presentationSettings.DefaultViewMode,
+                AllowRequesterOverride = presentationSettings.AllowRequesterOverride,
                 DefaultDisplayMode = presentationSettings.DefaultDisplayMode,
                 AllowUserToChangeDisplayMode = presentationSettings.AllowUserToChangeDisplayMode,
                 Groups = effectiveGroups,
@@ -2368,6 +2371,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 {
                     CategoryId = categoryId,
                     DisplayOrder = await ResolveNextCategoryDisplayOrderAsync(category.CatParent, cancellationToken),
+                    DefaultViewMode = DefaultViewModeValue,
+                    AllowRequesterOverride = false,
                     SettingsJson = null,
                     LastModifiedBy = normalizedUserId,
                     LastModifiedAtUtc = DateTime.UtcNow
@@ -2375,17 +2380,22 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 await _connectContext.SubjectTypeAdminSettings.AddAsync(categorySetting, cancellationToken);
             }
 
-            var currentPresentationSettings = ResolvePresentationSettingsFromSettingsJson(categorySetting.SettingsJson);
-            var hasRequestedDefaultDisplayMode = NormalizeNullable(safeRequest.DefaultDisplayMode) != null;
-            var hasRequestedAllowUserChange = safeRequest.AllowUserToChangeDisplayMode.HasValue;
+            var currentPresentationSettings = ResolvePresentationSettings(categorySetting);
+            var requestedDefaultViewMode = NormalizeNullable(safeRequest.DefaultViewMode)
+                ?? NormalizeNullable(safeRequest.DefaultDisplayMode);
+            var hasRequestedDefaultViewMode = requestedDefaultViewMode != null;
+            var requestedAllowRequesterOverride = safeRequest.AllowRequesterOverride
+                ?? safeRequest.AllowUserToChangeDisplayMode;
+            var hasRequestedAllowRequesterOverride = safeRequest.AllowRequesterOverride.HasValue
+                || safeRequest.AllowUserToChangeDisplayMode.HasValue;
             var targetPresentationSettings = new RequestTypePresentationSettingsState
             {
-                DefaultDisplayMode = hasRequestedDefaultDisplayMode
-                    ? NormalizeDisplayMode(safeRequest.DefaultDisplayMode)
-                    : currentPresentationSettings.DefaultDisplayMode,
-                AllowUserToChangeDisplayMode = hasRequestedAllowUserChange
-                    ? safeRequest.AllowUserToChangeDisplayMode == true
-                    : currentPresentationSettings.AllowUserToChangeDisplayMode
+                DefaultViewMode = hasRequestedDefaultViewMode
+                    ? NormalizeViewMode(requestedDefaultViewMode)
+                    : currentPresentationSettings.DefaultViewMode,
+                AllowRequesterOverride = hasRequestedAllowRequesterOverride
+                    ? requestedAllowRequesterOverride == true
+                    : currentPresentationSettings.AllowRequesterOverride
             };
 
             var prefix = (safeRequest.ReferencePrefix ?? string.Empty).Trim();
@@ -2512,6 +2522,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             categorySetting.SettingsJson = MergePresentationSettingsIntoSettingsJson(
                 categorySetting.SettingsJson,
                 targetPresentationSettings);
+            categorySetting.DefaultViewMode = targetPresentationSettings.DefaultViewMode;
+            categorySetting.AllowRequesterOverride = targetPresentationSettings.AllowRequesterOverride;
 
             categorySetting.SettingsJson = MergeDirectionLifecycleIntoSettingsJson(
                 categorySetting.SettingsJson,
@@ -2548,6 +2560,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     ["isActive"] = safeRequest.IsActive ? "true" : "false",
                     ["referencePolicyEnabled"] = safeRequest.ReferencePolicyEnabled ? "true" : "false",
                     ["referencePrefix"] = policy.Prefix,
+                    ["defaultViewMode"] = targetPresentationSettings.DefaultViewMode,
+                    ["allowRequesterOverride"] = targetPresentationSettings.AllowRequesterOverride ? "true" : "false",
                     ["defaultDisplayMode"] = targetPresentationSettings.DefaultDisplayMode,
                     ["allowUserToChangeDisplayMode"] = targetPresentationSettings.AllowUserToChangeDisplayMode ? "true" : "false",
                     ["requestPolicyVersion"] = normalizedRequestPolicy?.Version.ToString(CultureInfo.InvariantCulture),
@@ -3365,7 +3379,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         SubjectTypeAdminSetting? settings)
     {
         var requestPolicy = TryReadRequestPolicyFromSettingsJson(settings?.SettingsJson);
-        var presentationSettings = ResolvePresentationSettingsFromSettingsJson(settings?.SettingsJson);
+        var presentationSettings = ResolvePresentationSettings(settings);
         return new SubjectTypeAdminDto
         {
             CategoryId = category.CatId,
@@ -3396,6 +3410,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             LastModifiedBy = policy?.LastModifiedBy ?? policy?.CreatedBy,
             LastModifiedAtUtc = policy?.LastModifiedAtUtc ?? policy?.CreatedAtUtc,
             RequestPolicy = requestPolicy,
+            DefaultViewMode = presentationSettings.DefaultViewMode,
+            AllowRequesterOverride = presentationSettings.AllowRequesterOverride,
             DefaultDisplayMode = presentationSettings.DefaultDisplayMode,
             AllowUserToChangeDisplayMode = presentationSettings.AllowUserToChangeDisplayMode
         };
@@ -4739,9 +4755,32 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
     private sealed class RequestTypePresentationSettingsState
     {
-        public string DefaultDisplayMode { get; set; } = "Standard";
+        public string DefaultViewMode { get; set; } = DefaultViewModeValue;
 
-        public bool AllowUserToChangeDisplayMode { get; set; }
+        public bool AllowRequesterOverride { get; set; }
+
+        public string DefaultDisplayMode => ToLegacyDisplayMode(DefaultViewMode);
+
+        public bool AllowUserToChangeDisplayMode => AllowRequesterOverride;
+    }
+
+    private static RequestTypePresentationSettingsState ResolvePresentationSettings(SubjectTypeAdminSetting? setting)
+    {
+        if (setting == null)
+        {
+            return new RequestTypePresentationSettingsState();
+        }
+
+        var fromSettingsJson = ResolvePresentationSettingsFromSettingsJson(setting.SettingsJson);
+        var normalizedColumnViewMode = NormalizeNullable(setting.DefaultViewMode);
+
+        return new RequestTypePresentationSettingsState
+        {
+            DefaultViewMode = normalizedColumnViewMode == null
+                ? fromSettingsJson.DefaultViewMode
+                : NormalizeViewMode(setting.DefaultViewMode),
+            AllowRequesterOverride = setting.AllowRequesterOverride
+        };
     }
 
     private static RequestTypePresentationSettingsState ResolvePresentationSettingsFromSettingsJson(string? settingsJson)
@@ -4762,17 +4801,21 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             }
 
             var nestedPresentationObject = rootObject["presentationSettings"] as JsonObject;
-            var defaultDisplayModeCandidate =
-                ReadStringFromJsonNode(rootObject["defaultDisplayMode"])
+            var defaultViewModeCandidate =
+                ReadStringFromJsonNode(rootObject["defaultViewMode"])
+                ?? ReadStringFromJsonNode(rootObject["defaultDisplayMode"])
+                ?? ReadStringFromJsonNode(nestedPresentationObject?["defaultViewMode"])
                 ?? ReadStringFromJsonNode(nestedPresentationObject?["defaultDisplayMode"]);
-            var allowUserToChangeCandidate =
-                ReadBooleanFromJsonNode(rootObject["allowUserToChangeDisplayMode"])
+            var allowRequesterOverrideCandidate =
+                ReadBooleanFromJsonNode(rootObject["allowRequesterOverride"])
+                ?? ReadBooleanFromJsonNode(rootObject["allowUserToChangeDisplayMode"])
+                ?? ReadBooleanFromJsonNode(nestedPresentationObject?["allowRequesterOverride"])
                 ?? ReadBooleanFromJsonNode(nestedPresentationObject?["allowUserToChangeDisplayMode"]);
 
-            result.DefaultDisplayMode = NormalizeDisplayMode(defaultDisplayModeCandidate);
-            if (allowUserToChangeCandidate.HasValue)
+            result.DefaultViewMode = NormalizeViewMode(defaultViewModeCandidate);
+            if (allowRequesterOverrideCandidate.HasValue)
             {
-                result.AllowUserToChangeDisplayMode = allowUserToChangeCandidate.Value;
+                result.AllowRequesterOverride = allowRequesterOverrideCandidate.Value;
             }
         }
         catch
@@ -4806,7 +4849,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         var effectiveSettings = presentationSettings ?? new RequestTypePresentationSettingsState();
-        root["defaultDisplayMode"] = NormalizeDisplayMode(effectiveSettings.DefaultDisplayMode);
+        root["defaultViewMode"] = NormalizeViewMode(effectiveSettings.DefaultViewMode);
+        root["allowRequesterOverride"] = effectiveSettings.AllowRequesterOverride;
+        root["defaultDisplayMode"] = effectiveSettings.DefaultDisplayMode;
         root["allowUserToChangeDisplayMode"] = effectiveSettings.AllowUserToChangeDisplayMode;
         root.Remove("presentationSettings");
 
@@ -4818,15 +4863,19 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         return root.ToJsonString(SerializerOptions);
     }
 
-    private static string NormalizeDisplayMode(string? value)
+    private static string NormalizeViewMode(string? value)
     {
         var normalized = NormalizeNullable(value)?.ToLowerInvariant();
-        if (normalized == "tabbed")
-        {
-            return "Tabbed";
-        }
+        return normalized == TabbedViewModeValue
+            ? TabbedViewModeValue
+            : DefaultViewModeValue;
+    }
 
-        return "Standard";
+    private static string ToLegacyDisplayMode(string? normalizedViewMode)
+    {
+        return NormalizeViewMode(normalizedViewMode) == TabbedViewModeValue
+            ? "Tabbed"
+            : "Standard";
     }
 
     private static string? ReadStringFromJsonNode(JsonNode? node)

@@ -2002,6 +2002,18 @@ namespace Persistence.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(0);
 
+                    b.Property<bool>("AllowRequesterOverride")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("DefaultViewMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("standard");
+
                     b.Property<DateTime>("LastModifiedAtUtc")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")

@@ -21,6 +21,8 @@ export interface AdminCatalogCategoryDto {
   categoryName: string;
   applicationId?: string;
   isActive: boolean;
+  defaultViewMode: 'standard' | 'tabbed' | string;
+  allowRequesterOverride: boolean;
 }
 
 export interface AdminCatalogCategoryTreeNodeDto {
@@ -29,6 +31,8 @@ export interface AdminCatalogCategoryTreeNodeDto {
   categoryName: string;
   applicationId?: string;
   isActive: boolean;
+  defaultViewMode: 'standard' | 'tabbed' | string;
+  allowRequesterOverride: boolean;
   children: AdminCatalogCategoryTreeNodeDto[];
 }
 
@@ -37,12 +41,29 @@ export interface AdminCatalogCategoryCreateRequestDto {
   categoryName: string;
   parentCategoryId: number;
   isActive: boolean;
+  defaultViewMode?: 'standard' | 'tabbed' | string;
+  allowRequesterOverride?: boolean;
 }
 
 export interface AdminCatalogCategoryUpdateRequestDto {
   categoryName: string;
   parentCategoryId: number;
   isActive: boolean;
+  defaultViewMode?: 'standard' | 'tabbed' | string;
+  allowRequesterOverride?: boolean;
+}
+
+export interface AdminCatalogCategoryDisplaySettingsDto {
+  categoryId: number;
+  defaultViewMode: 'standard' | 'tabbed' | string;
+  allowRequesterOverride: boolean;
+  lastModifiedBy?: string;
+  lastModifiedAtUtc?: string;
+}
+
+export interface AdminCatalogCategoryDisplaySettingsUpsertRequestDto {
+  defaultViewMode?: 'standard' | 'tabbed' | string;
+  allowRequesterOverride?: boolean;
 }
 
 export interface AdminCatalogApplicationDeleteDiagnosticsDto {

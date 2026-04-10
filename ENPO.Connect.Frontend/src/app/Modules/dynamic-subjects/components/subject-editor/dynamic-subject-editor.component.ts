@@ -97,7 +97,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     { label: 'Standard', value: 'standard' },
     { label: 'Tabbed', value: 'tabbed' }
   ];
-  allowUserToChangeDisplayMode = false;
+  allowRequesterOverride = false;
   currentDisplayMode: RuntimeFormDisplayMode = 'standard';
   rootGroupTabIndex = 0;
   categoryOptions: Array<{ id: number; name: string }> = [];
@@ -294,7 +294,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   get shouldShowDisplayModeSelector(): boolean {
-    return this.allowUserToChangeDisplayMode;
+    return this.allowRequesterOverride;
   }
 
   get isTabbedDisplayModeActive(): boolean {
@@ -719,8 +719,10 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private applyPresentationSettingsFromDefinition(definition: SubjectFormDefinitionDto | null): void {
-    const defaultDisplayMode = this.normalizeRuntimeDisplayMode(definition?.defaultDisplayMode);
-    this.allowUserToChangeDisplayMode = definition?.allowUserToChangeDisplayMode === true;
+    const defaultDisplayMode = this.normalizeRuntimeDisplayMode(
+      definition?.defaultViewMode ?? definition?.defaultDisplayMode
+    );
+    this.allowRequesterOverride = (definition?.allowRequesterOverride ?? definition?.allowUserToChangeDisplayMode) === true;
     this.currentDisplayMode = defaultDisplayMode;
     this.rootGroupTabIndex = 0;
   }
@@ -2048,7 +2050,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.rawFormDefinition = null;
     this.formDefinition = null;
     this.activeRequestPolicy = null;
-    this.allowUserToChangeDisplayMode = false;
+    this.allowRequesterOverride = false;
     this.currentDisplayMode = 'standard';
     this.rootGroupTabIndex = 0;
     this.directionSelectionMode = 'selectable';

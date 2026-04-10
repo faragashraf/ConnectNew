@@ -84,6 +84,23 @@ public class DynamicSubjectsAdminCatalogController : ControllerBase
         return _adminCatalogService.UpdateCategoryAsync(categoryId, request, GetCurrentUserId(), cancellationToken);
     }
 
+    [HttpGet("Categories/{categoryId:int}/DisplaySettings")]
+    public Task<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>> GetCategoryDisplaySettings(
+        int categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.GetCategoryDisplaySettingsAsync(categoryId, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpPut("Categories/{categoryId:int}/DisplaySettings")]
+    public Task<CommonResponse<AdminCatalogCategoryDisplaySettingsDto>> UpsertCategoryDisplaySettings(
+        int categoryId,
+        [FromBody] AdminCatalogCategoryDisplaySettingsUpsertRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _adminCatalogService.UpsertCategoryDisplaySettingsAsync(categoryId, request, GetCurrentUserId(), cancellationToken);
+    }
+
     [HttpGet("Categories/{categoryId:int}/DeleteDiagnostics")]
     public Task<CommonResponse<AdminCatalogCategoryDeleteDiagnosticsDto>> DiagnoseCategoryDelete(
         int categoryId,

@@ -1,0 +1,88 @@
+<section class="display-settings-workspace" dir="rtl">
+  <header class="workspace-header">
+    <div>
+      <h4>إعدادات طريقة عرض الطلب</h4>
+      <p>
+        نوع الطلب الحالي:
+        <strong>{{ requestContextLabel }}</strong>
+      </p>
+      <small class="save-hint" *ngIf="!canSave && saveDisabledReason.length > 0">{{ saveDisabledReason }}</small>
+    </div>
+
+    <div class="header-actions">
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        icon="pi pi-refresh"
+        label="تحديث"
+        [disabled]="!canManageWorkspace || loading"
+        (click)="onRefresh()">
+      </button>
+
+      <button
+        pButton
+        type="button"
+        icon="pi pi-save"
+        label="حفظ الإعدادات"
+        [disabled]="!canSave"
+        [loading]="saving"
+        (click)="onSave()">
+      </button>
+    </div>
+  </header>
+
+  <div class="message" *ngIf="message.length > 0" [ngClass]="messageSeverity">
+    {{ message }}
+  </div>
+
+  <div class="loading-state" *ngIf="canManageWorkspace && loading">
+    جاري تحميل إعدادات العرض...
+  </div>
+
+  <div class="empty-state" *ngIf="!canManageWorkspace">
+    اختر Request Type من شجرة الكتالوج أولًا لإدارة إعدادات العرض.
+  </div>
+
+  <form class="editor" [formGroup]="settingsForm" *ngIf="canManageWorkspace && !loading" novalidate>
+    <p class="required-note"><span>*</span> سيتم تطبيق هذه الإعدادات على runtime وpreview لنوع الطلب المحدد.</p>
+
+    <div class="grid two-cols">
+      <div class="field">
+        <label for="defaultViewMode">Default View Mode <span class="required">*</span></label>
+        <p-dropdown
+          inputId="defaultViewMode"
+          [options]="viewModeOptions"
+          optionLabel="label"
+          optionValue="value"
+          formControlName="defaultViewMode"
+          appendTo="body"
+          [showClear]="false">
+        </p-dropdown>
+      </div>
+
+      <div class="field toggle-field">
+        <label for="allowRequesterOverride">Allow Requester Override</label>
+        <p-inputSwitch inputId="allowRequesterOverride" formControlName="allowRequesterOverride"></p-inputSwitch>
+      </div>
+    </div>
+
+    <div class="runtime-preview-card">
+      <article>
+        <span>الوضع الافتراضي الفعال</span>
+        <strong>{{ activeViewModeLabel }}</strong>
+      </article>
+      <article>
+        <span>إمكانية التغيير من المستخدم</span>
+        <strong>{{ allowRequesterOverride ? 'مسموح' : 'غير مسموح' }}</strong>
+      </article>
+    </div>
+
+    <small class="hint" *ngIf="!allowRequesterOverride">
+      عند إلغاء السماح، runtime سيطبق الوضع الافتراضي فقط ولن يظهر Selector للمستخدم.
+    </small>
+    <small class="hint" *ngIf="allowRequesterOverride">
+      عند السماح، سيظهر Selector للمستخدم في runtime وتبدأ القيمة من الوضع الافتراضي.
+    </small>
+  </form>
+</section>
