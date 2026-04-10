@@ -10,6 +10,7 @@ import {
   SubjectAdminFieldDto,
   SubjectAdminFieldUpsertRequestDto,
   SubjectAdminGroupDto,
+  SubjectReferencePolicyComponentDto,
   SubjectCategoryFieldLinkAdminDto,
   SubjectCategoryFieldLinkUpsertItemDto,
   SubjectTypeAdminDto,
@@ -237,23 +238,26 @@ export class AdminControlCenterLegacyMetadataPersistenceService {
       const prefixFromStep = this.normalizeString(context.structureValues['subjectPrefix']);
       const referencePolicyEnabled = this.toBoolean(context.bindingValues['referencePolicyEnabled'])
         ?? targetType.referencePolicyEnabled;
+      const referenceMode = this.normalizeReferenceMode(context.bindingValues['referenceMode'])
+        ?? this.normalizeReferenceMode(targetType.referenceMode)
+        ?? 'default';
       const referencePrefix = this.normalizeString(context.bindingValues['referencePrefix'])
         ?? prefixFromStep
         ?? targetType.referencePrefix
-        ?? `SUBJ${categoryId}`;
-      const referenceSeparator = this.normalizeString(context.bindingValues['referenceSeparator'])
-        ?? targetType.referenceSeparator
+        ?? '';
+      const referenceSeparator = this.normalizeReferenceSeparator(context.bindingValues['referenceSeparator'])
+        ?? this.normalizeReferenceSeparator(targetType.referenceSeparator)
         ?? '-';
-      const includeYear = this.toBoolean(context.bindingValues['referenceIncludeYear'])
-        ?? targetType.includeYear;
-      const useSequence = this.toBoolean(context.bindingValues['referenceUseSequence'])
-        ?? targetType.useSequence;
-      const sequenceName = this.normalizeString(context.bindingValues['referenceSequenceName'])
-        ?? targetType.sequenceName
-        ?? undefined;
-      const sequencePaddingLength = this.toNonNegativeInt(context.bindingValues['referenceSequencePaddingLength'])
-        ?? this.toNonNegativeInt(targetType.sequencePaddingLength)
-        ?? 0;
+      const referenceStartingValue = this.toPositiveInt(context.bindingValues['referenceStartingValue'])
+        ?? this.toPositiveInt(targetType.referenceStartingValue)
+        ?? 1;
+      const referenceComponents = this.normalizeReferenceComponents(
+        context.bindingValues['referenceComponents'],
+        targetType.referenceComponents
+      );
+      const sequencePaddingLength = this.toPositiveInt(context.bindingValues['referenceSequencePaddingLength'])
+        ?? this.toPositiveInt(targetType.sequencePaddingLength)
+        ?? 6;
       const sequenceResetScope = this.normalizeSequenceResetScope(context.bindingValues['referenceSequenceResetScope'])
         ?? this.normalizeSequenceResetScope(targetType.sequenceResetScope)
         ?? 'none';
@@ -261,12 +265,15 @@ export class AdminControlCenterLegacyMetadataPersistenceService {
       const subjectTypeRequest: SubjectTypeAdminUpsertRequestDto = {
         isActive: true,
         referencePolicyEnabled,
+        referenceMode,
         referencePrefix,
         referenceSeparator,
-        sourceFieldKeys,
-        includeYear,
-        useSequence,
-        sequenceName,
+        referenceStartingValue,
+        referenceComponents: referenceMode === 'custom' ? referenceComponents : [],
+        sourceFieldKeys: referenceMode === 'custom' ? undefined : sourceFieldKeys,
+        includeYear: false,
+        useSequence: true,
+        sequenceName: undefined,
         sequencePaddingLength,
         sequenceResetScope,
         requestPolicy: policyBuild
@@ -984,6 +991,71 @@ export class AdminControlCenterLegacyMetadataPersistenceService {
     }
 
     return Math.trunc(numeric);
+  }
+
+  private normalizeReferenceMode(value: unknown): 'default' | 'custom' | null {
+    const normalized = this.normalizeFieldKey(value);
+    if (!normalized) {
+      return null;
+    }
+
+    return normalized === 'custom' ? 'custom' : 'default';
+  }
+
+  private normalizeReferenceSeparator(value: unknown): '-' | '/' | '_' | '' | null {
+    if (value == null) {
+      return null;
+    }
+
+    const normalized = String(value ?? '').trim();
+    if (normalized.length === 0) {
+      return '';
+    }
+
+    if (normalized === '-' || normalized === '/' || normalized === '_') {
+      return normalized;
+    }
+
+    if (normalized.toLowerCase() === 'none') {
+      return '';
+    }
+
+    return '-';
+  }
+
+  private normalizeReferenceComponents(
+    fromContext: unknown,
+    fromTarget: ReadonlyArray<SubjectReferencePolicyComponentDto> | undefined
+  ): SubjectReferencePolicyComponentDto[] {
+    const source = Array.isArray(fromContext)
+      ? fromContext
+      : (Array.isArray(fromTarget) ? fromTarget : []);
+    const normalized: SubjectReferencePolicyComponentDto[] = [];
+
+    for (const item of source) {
+      const candidate = item as SubjectReferencePolicyComponentDto;
+      const type = this.normalizeFieldKey(candidate?.type);
+      const normalizedType = (
+        type === 'field'
+        || type === 'year'
+        || type === 'month'
+        || type === 'day'
+        || type === 'sequence'
+      ) ? type : 'static_text';
+
+      if (normalizedType === 'sequence') {
+        continue;
+      }
+
+      normalized.push({
+        type: normalizedType,
+        value: normalizedType === 'static_text' ? this.normalizeString(candidate?.value) ?? undefined : undefined,
+        fieldKey: normalizedType === 'field' ? this.normalizeString(candidate?.fieldKey) ?? undefined : undefined
+      });
+    }
+
+    normalized.push({ type: 'sequence' });
+    return normalized;
   }
 
   private normalizeSequenceResetScope(value: unknown): 'none' | 'yearly' | 'monthly' | null {

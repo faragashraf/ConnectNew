@@ -764,6 +764,15 @@ public sealed class RequestWorkflowPolicyDto
     public string? DefaultTargetUnitId { get; set; }
 }
 
+public sealed class SubjectReferencePolicyComponentDto
+{
+    public string Type { get; set; } = "static_text";
+
+    public string? Value { get; set; }
+
+    public string? FieldKey { get; set; }
+}
+
 public sealed class SubjectTypeAdminDto
 {
     public int CategoryId { get; set; }
@@ -800,9 +809,15 @@ public sealed class SubjectTypeAdminDto
 
     public bool ReferencePolicyEnabled { get; set; }
 
+    public string ReferenceMode { get; set; } = "default";
+
     public string? ReferencePrefix { get; set; }
 
     public string? ReferenceSeparator { get; set; }
+
+    public long ReferenceStartingValue { get; set; } = 1;
+
+    public IReadOnlyList<SubjectReferencePolicyComponentDto> ReferenceComponents { get; set; } = new List<SubjectReferencePolicyComponentDto>();
 
     public string? SourceFieldKeys { get; set; }
 
@@ -837,9 +852,15 @@ public sealed class SubjectTypeAdminUpsertRequestDto
 
     public bool ReferencePolicyEnabled { get; set; } = true;
 
+    public string ReferenceMode { get; set; } = "default";
+
     public string? ReferencePrefix { get; set; }
 
     public string? ReferenceSeparator { get; set; } = "-";
+
+    public long ReferenceStartingValue { get; set; } = 1;
+
+    public List<SubjectReferencePolicyComponentDto>? ReferenceComponents { get; set; }
 
     public string? SourceFieldKeys { get; set; }
 

@@ -8,6 +8,8 @@ public partial class SubjectReferencePolicy
 
     public int CategoryId { get; set; }
 
+    public string Mode { get; set; } = "default";
+
     public string Prefix { get; set; } = null!;
 
     public string Separator { get; set; } = "-";
@@ -23,6 +25,10 @@ public partial class SubjectReferencePolicy
     public int SequencePaddingLength { get; set; }
 
     public string SequenceResetScope { get; set; } = "none";
+
+    public long StartingValue { get; set; } = 1;
+
+    public string? ComponentsJson { get; set; }
 
     public bool IsActive { get; set; }
 

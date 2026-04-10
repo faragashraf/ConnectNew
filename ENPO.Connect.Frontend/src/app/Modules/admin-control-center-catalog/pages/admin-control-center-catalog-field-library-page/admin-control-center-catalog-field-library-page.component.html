@@ -8,7 +8,15 @@
       </p>
     </div>
     <div class="header-actions">
-      <button pButton type="button" class="p-button-outlined" label="Effective Request Preview" routerLink="/Admin/ControlCenterCatalog/request-preview"></button>
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        label="إدارة ربط مكتبة الحقول"
+        [routerLink]="['/Admin/ControlCenterCatalog/field-library-binding']"
+        [queryParams]="{ applicationId: selectedApplicationFilter || null }">
+      </button>
+      <button pButton type="button" class="p-button-outlined" label="المعاينة التشغيلية الفعالة للطلب" routerLink="/Admin/ControlCenterCatalog/request-preview"></button>
       <button pButton type="button" class="p-button-outlined" label="العودة لمراحل التطبيقات/الشجرة/الجروبات" routerLink="/Admin/ControlCenterCatalog"></button>
     </div>
   </header>

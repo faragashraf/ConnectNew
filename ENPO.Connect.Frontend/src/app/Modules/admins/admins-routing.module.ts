@@ -171,7 +171,7 @@ const routes: Routes =
       children: [
         { path: '', redirectTo: '/Admin/ControlCenter/scope-definition', pathMatch: 'full' },
         { path: 'subject-types', redirectTo: '/Admin/ControlCenter/scope-definition', pathMatch: 'full' },
-        { path: 'fields-library', redirectTo: '/Admin/ControlCenter/field-library-binding', pathMatch: 'full' },
+        { path: 'fields-library', redirectTo: '/Admin/ControlCenterCatalog/field-library-binding', pathMatch: 'full' },
         { path: 'application-configuration', redirectTo: '/Admin/ControlCenter/workflow-routing', pathMatch: 'full' },
         { path: 'preview-workspace', redirectTo: '/Admin/ControlCenter/preview-simulation', pathMatch: 'full' },
         { path: '**', redirectTo: '/Admin/ControlCenter/scope-definition' }

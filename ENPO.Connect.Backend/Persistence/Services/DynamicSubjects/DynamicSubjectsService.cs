@@ -915,6 +915,18 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 detail: detail,
                 cancellationToken: cancellationToken);
         }
+        catch (ReferenceNumberGenerationException ex)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = ex.Message });
+        }
+        catch (DbUpdateException ex) when (IsRequestReferenceUniqueConstraintViolation(ex))
+        {
+            response.Errors.Add(new Error
+            {
+                Code = "409",
+                Message = "تعذر إنشاء الطلب لأن الرقم المرجعي الناتج مكرر. يرجى مراجعة سياسة الرقم المرجعي ثم إعادة المحاولة."
+            });
+        }
         catch (Exception ex)
         {
             var details = ex.InnerException?.Message ?? ex.Message;
@@ -2399,27 +2411,34 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     : currentPresentationSettings.AllowRequesterOverride
             };
 
-            var prefix = (safeRequest.ReferencePrefix ?? string.Empty).Trim();
-            if (prefix.Length == 0)
+            var requestedReferenceMode = NormalizeNullable(safeRequest.ReferenceMode)
+                ?? ((safeRequest.ReferenceComponents?.Count ?? 0) > 0 ? "custom" : "default");
+            var referenceMode = NormalizeReferenceMode(requestedReferenceMode);
+            if (referenceMode == null)
             {
-                prefix = $"SUBJ{categoryId}";
-            }
-
-            if (prefix.Length > 40)
-            {
-                response.Errors.Add(new Error { Code = "400", Message = "بادئة المرجع يجب ألا تزيد عن 40 حرفًا." });
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "وضع سياسة الرقم المرجعي غير صالح. القيم المدعومة: default أو custom."
+                });
                 return response;
             }
 
-            var separator = (safeRequest.ReferenceSeparator ?? "-").Trim();
-            if (separator.Length == 0)
+            var prefix = NormalizeNullable(safeRequest.ReferencePrefix) ?? string.Empty;
+            if (prefix.Length > 40)
             {
-                separator = "-";
+                response.Errors.Add(new Error { Code = "400", Message = "بادئة الرقم المرجعي يجب ألا تزيد عن 40 حرفًا." });
+                return response;
             }
 
-            if (separator.Length > 10)
+            var separator = NormalizeReferenceSeparator(safeRequest.ReferenceSeparator);
+            if (separator == null)
             {
-                response.Errors.Add(new Error { Code = "400", Message = "فاصل المرجع يجب ألا يزيد عن 10 أحرف." });
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "فاصل الرقم المرجعي غير صالح. القيم المدعومة: - أو / أو _ أو بدون."
+                });
                 return response;
             }
 
@@ -2431,44 +2450,148 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             }
 
             var sequenceName = NormalizeNullable(safeRequest.SequenceName);
-            if (safeRequest.UseSequence && sequenceName == null)
-            {
-                sequenceName = "Seq_Tickets";
-            }
-
             if (sequenceName != null && sequenceName.Length > 80)
             {
                 response.Errors.Add(new Error { Code = "400", Message = "اسم التسلسل يجب ألا يزيد عن 80 حرفًا." });
                 return response;
             }
 
-            var sequencePaddingLength = safeRequest.SequencePaddingLength;
-            if (sequencePaddingLength < 0 || sequencePaddingLength > 12)
+            var sequencePaddingLength = safeRequest.SequencePaddingLength <= 0
+                ? 6
+                : safeRequest.SequencePaddingLength;
+            if (sequencePaddingLength < 1 || sequencePaddingLength > 12)
             {
-                response.Errors.Add(new Error { Code = "400", Message = "Sequence padding يجب أن يكون بين 0 و 12." });
+                response.Errors.Add(new Error { Code = "400", Message = "طول المسلسل يجب أن يكون بين 1 و 12." });
                 return response;
             }
 
             var sequenceResetScope = NormalizeSequenceResetScope(safeRequest.SequenceResetScope);
             if (sequenceResetScope == null)
             {
-                response.Errors.Add(new Error { Code = "400", Message = "Reset scope غير صالح. القيم المدعومة: none أو yearly أو monthly." });
+                response.Errors.Add(new Error { Code = "400", Message = "سياسة إعادة ضبط المسلسل غير صالحة. القيم المدعومة: none أو yearly أو monthly." });
                 return response;
             }
+
+            var startingValue = safeRequest.ReferenceStartingValue <= 0
+                ? 1
+                : safeRequest.ReferenceStartingValue;
+            if (startingValue > int.MaxValue)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "قيمة بداية المسلسل كبيرة جدًا." });
+                return response;
+            }
+
+            var normalizedComponents = NormalizeReferenceComponents(safeRequest.ReferenceComponents);
+            if (referenceMode == "custom" && normalizedComponents.Any(component => !component.IsTypeValid))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "نوع أحد مكونات الرقم المرجعي غير مدعوم."
+                });
+                return response;
+            }
+
+            if (referenceMode == "custom")
+            {
+                if (normalizedComponents.Count == 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن حفظ الترقيم المخصص بدون مكونات." });
+                    return response;
+                }
+
+                var sequenceCount = normalizedComponents.Count(component => component.Type == "sequence");
+                if (sequenceCount == 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن حفظ الترقيم المخصص بدون مكوّن المسلسل." });
+                    return response;
+                }
+
+                if (sequenceCount > 1)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يُسمح بإضافة المسلسل أكثر من مرة داخل الترقيم المخصص." });
+                    return response;
+                }
+
+                if (!string.Equals(normalizedComponents[^1].Type, "sequence", StringComparison.Ordinal))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "يجب أن يكون المسلسل هو آخر جزء في الترقيم المخصص." });
+                    return response;
+                }
+
+                var staticTextWithoutValue = normalizedComponents
+                    .FirstOrDefault(component => component.Type == "static_text" && NormalizeNullable(component.Value) == null);
+                if (staticTextWithoutValue != null)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "جزء النص الثابت لا يمكن أن يكون فارغًا." });
+                    return response;
+                }
+
+                var fieldWithoutKey = normalizedComponents
+                    .FirstOrDefault(component => component.Type == "field" && NormalizeFieldKey(component.FieldKey).Length == 0);
+                if (fieldWithoutKey != null)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "يجب اختيار حقل صالح لأي جزء من نوع حقل." });
+                    return response;
+                }
+
+                var requiredByFieldKey = await LoadReferenceRequiredFieldMapAsync(categoryId, cancellationToken);
+                var requiredFieldKeySet = new HashSet<string>(
+                    requiredByFieldKey
+                        .Where(item => item.Value.IsRequired)
+                        .Select(item => item.Key),
+                    StringComparer.OrdinalIgnoreCase);
+                var fieldComponentKeys = normalizedComponents
+                    .Where(component => component.Type == "field")
+                    .Select(component => NormalizeFieldKey(component.FieldKey))
+                    .Where(key => key.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                foreach (var fieldKey in fieldComponentKeys)
+                {
+                    if (!requiredByFieldKey.TryGetValue(fieldKey, out var metadata))
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "400",
+                            Message = $"الحقل '{fieldKey}' غير مرتبط بالنوع الحالي ولا يمكن استخدامه داخل الرقم المرجعي."
+                        });
+                        return response;
+                    }
+
+                    if (!requiredFieldKeySet.Contains(fieldKey))
+                    {
+                        var label = NormalizeNullable(metadata.Label) ?? fieldKey;
+                        response.Errors.Add(new Error
+                        {
+                            Code = "400",
+                            Message = $"الحقل '{label}' غير إلزامي عند الإنشاء ولا يمكن استخدامه داخل الرقم المرجعي."
+                        });
+                        return response;
+                    }
+                }
+            }
+
+            var componentsJson = referenceMode == "custom"
+                ? SerializeReferenceComponents(normalizedComponents)
+                : null;
 
             if (policy == null)
             {
                 policy = new SubjectReferencePolicy
                 {
                     CategoryId = categoryId,
+                    Mode = referenceMode,
                     Prefix = prefix,
                     Separator = separator,
-                    SourceFieldKeys = sourceFieldKeys,
+                    SourceFieldKeys = referenceMode == "custom" ? null : sourceFieldKeys,
                     IncludeYear = safeRequest.IncludeYear,
-                    UseSequence = safeRequest.UseSequence,
+                    UseSequence = true,
                     SequenceName = sequenceName,
                     SequencePaddingLength = sequencePaddingLength,
                     SequenceResetScope = sequenceResetScope,
+                    StartingValue = startingValue,
+                    ComponentsJson = componentsJson,
                     IsActive = safeRequest.ReferencePolicyEnabled,
                     CreatedBy = auditActorId,
                     CreatedAtUtc = DateTime.UtcNow,
@@ -2479,14 +2602,17 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             }
             else
             {
+                policy.Mode = referenceMode;
                 policy.Prefix = prefix;
                 policy.Separator = separator;
-                policy.SourceFieldKeys = sourceFieldKeys;
+                policy.SourceFieldKeys = referenceMode == "custom" ? null : sourceFieldKeys;
                 policy.IncludeYear = safeRequest.IncludeYear;
-                policy.UseSequence = safeRequest.UseSequence;
+                policy.UseSequence = true;
                 policy.SequenceName = sequenceName;
                 policy.SequencePaddingLength = sequencePaddingLength;
                 policy.SequenceResetScope = sequenceResetScope;
+                policy.StartingValue = startingValue;
+                policy.ComponentsJson = componentsJson;
                 policy.IsActive = safeRequest.ReferencePolicyEnabled;
                 policy.LastModifiedBy = auditActorId;
                 policy.LastModifiedAtUtc = DateTime.UtcNow;
@@ -3381,6 +3507,16 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
     {
         var requestPolicy = TryReadRequestPolicyFromSettingsJson(settings?.SettingsJson);
         var presentationSettings = ResolvePresentationSettings(settings);
+        var referenceMode = NormalizeReferenceMode(policy?.Mode) ?? "default";
+        var referenceComponents = referenceMode == "custom"
+            ? ParseReferenceComponents(policy?.ComponentsJson)
+            : new List<SubjectReferencePolicyComponentDto>();
+        var referenceStartingValue = policy != null && policy.StartingValue > 0
+            ? policy.StartingValue
+            : 1;
+        var sequencePaddingLength = policy != null && policy.SequencePaddingLength > 0
+            ? policy.SequencePaddingLength
+            : 6;
         return new SubjectTypeAdminDto
         {
             CategoryId = category.CatId,
@@ -3400,13 +3536,16 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             SettingsJson = settings?.SettingsJson,
             ReferencePolicyId = policy?.PolicyId,
             ReferencePolicyEnabled = policy?.IsActive == true,
-            ReferencePrefix = policy?.Prefix,
-            ReferenceSeparator = policy?.Separator,
+            ReferenceMode = referenceMode,
+            ReferencePrefix = policy?.Prefix ?? string.Empty,
+            ReferenceSeparator = NormalizeReferenceSeparator(policy?.Separator) ?? "-",
+            ReferenceStartingValue = referenceStartingValue,
+            ReferenceComponents = referenceComponents,
             SourceFieldKeys = policy?.SourceFieldKeys,
             IncludeYear = policy?.IncludeYear ?? true,
             UseSequence = policy?.UseSequence ?? true,
             SequenceName = policy?.SequenceName,
-            SequencePaddingLength = policy?.SequencePaddingLength ?? 0,
+            SequencePaddingLength = sequencePaddingLength,
             SequenceResetScope = NormalizeSequenceResetScope(policy?.SequenceResetScope) ?? "none",
             LastModifiedBy = policy?.LastModifiedBy ?? policy?.CreatedBy,
             LastModifiedAtUtc = policy?.LastModifiedAtUtc ?? policy?.CreatedAtUtc,
@@ -5260,6 +5399,183 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return null;
+    }
+
+    private sealed class NormalizedReferenceComponent
+    {
+        public string Type { get; init; } = "static_text";
+
+        public string? Value { get; init; }
+
+        public string? FieldKey { get; init; }
+
+        public bool IsTypeValid { get; init; }
+    }
+
+    private async Task<Dictionary<string, (bool IsRequired, string? Label)>> LoadReferenceRequiredFieldMapAsync(
+        int categoryId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await (
+            from link in _connectContext.AdminCatalogCategoryFieldBindings.AsNoTracking()
+            join mend in _connectContext.Cdmends.AsNoTracking()
+                on (link.MendField ?? string.Empty).ToLower() equals (mend.CdmendTxt ?? string.Empty).ToLower() into mendJoin
+            from mend in mendJoin.DefaultIfEmpty()
+            where link.CategoryId == categoryId
+                  && !link.MendStat
+            select new
+            {
+                FieldKey = link.MendField,
+                Label = mend != null ? mend.CDMendLbl : null,
+                IsRequired = mend != null && ((mend.Required ?? false) || (mend.RequiredTrue ?? false))
+            })
+            .ToListAsync(cancellationToken);
+
+        var map = new Dictionary<string, (bool IsRequired, string? Label)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            var key = NormalizeFieldKey(row.FieldKey);
+            if (key.Length == 0 || map.ContainsKey(key))
+            {
+                continue;
+            }
+
+            map[key] = (row.IsRequired, NormalizeNullable(row.Label));
+        }
+
+        return map;
+    }
+
+    private static string? NormalizeReferenceMode(string? value)
+    {
+        var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+        if (normalized == null || normalized == "default" || normalized == "standard")
+        {
+            return "default";
+        }
+
+        if (normalized == "custom")
+        {
+            return "custom";
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeReferenceSeparator(string? value)
+    {
+        if (value == null)
+        {
+            return "-";
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        if (string.Equals(normalized, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        return normalized switch
+        {
+            "-" => "-",
+            "/" => "/",
+            "_" => "_",
+            "" => "",
+            _ => null
+        };
+    }
+
+    private static string? NormalizeReferenceComponentType(string? value)
+    {
+        var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+        return normalized switch
+        {
+            "static_text" or "static" or "text" => "static_text",
+            "field" => "field",
+            "year" => "year",
+            "month" => "month",
+            "day" => "day",
+            "sequence" or "seq" => "sequence",
+            _ => null
+        };
+    }
+
+    private static List<NormalizedReferenceComponent> NormalizeReferenceComponents(
+        IReadOnlyCollection<SubjectReferencePolicyComponentDto>? components)
+    {
+        var normalized = new List<NormalizedReferenceComponent>();
+        foreach (var component in components ?? Array.Empty<SubjectReferencePolicyComponentDto>())
+        {
+            var resolvedType = NormalizeReferenceComponentType(component?.Type);
+            normalized.Add(new NormalizedReferenceComponent
+            {
+                Type = resolvedType ?? "invalid",
+                Value = NormalizeNullable(component?.Value),
+                FieldKey = NormalizeNullable(component?.FieldKey) ?? NormalizeNullable(component?.Value),
+                IsTypeValid = resolvedType != null
+            });
+        }
+
+        return normalized;
+    }
+
+    private static string SerializeReferenceComponents(IReadOnlyCollection<NormalizedReferenceComponent> components)
+    {
+        var payload = (components ?? Array.Empty<NormalizedReferenceComponent>())
+            .Select(component => new SubjectReferencePolicyComponentDto
+            {
+                Type = component.Type,
+                Value = component.Type == "static_text" ? component.Value : null,
+                FieldKey = component.Type == "field" ? NormalizeNullable(component.FieldKey) : null
+            })
+            .ToList();
+        return JsonSerializer.Serialize(payload, SerializerOptions);
+    }
+
+    private static IReadOnlyList<SubjectReferencePolicyComponentDto> ParseReferenceComponents(string? rawComponentsJson)
+    {
+        var payload = NormalizeNullable(rawComponentsJson);
+        if (payload == null)
+        {
+            return new List<SubjectReferencePolicyComponentDto>();
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<SubjectReferencePolicyComponentDto>>(payload, SerializerOptions)
+                ?? new List<SubjectReferencePolicyComponentDto>();
+            return NormalizeReferenceComponents(parsed)
+                .Where(component => component.IsTypeValid)
+                .Select(component => new SubjectReferencePolicyComponentDto
+                {
+                    Type = component.Type,
+                    Value = component.Type == "static_text" ? component.Value : null,
+                    FieldKey = component.Type == "field" ? NormalizeNullable(component.FieldKey) : null
+                })
+                .ToList();
+        }
+        catch
+        {
+            return new List<SubjectReferencePolicyComponentDto>();
+        }
+    }
+
+    private static bool IsRequestReferenceUniqueConstraintViolation(DbUpdateException exception)
+    {
+        var details = exception.InnerException?.Message ?? exception.Message ?? string.Empty;
+        if (details.Length == 0)
+        {
+            return false;
+        }
+
+        return details.Contains("UX_Messages_RequestRef", StringComparison.OrdinalIgnoreCase)
+            || (details.Contains("unique", StringComparison.OrdinalIgnoreCase)
+                && details.Contains("requestref", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string? NormalizeSequenceResetScope(string? value)

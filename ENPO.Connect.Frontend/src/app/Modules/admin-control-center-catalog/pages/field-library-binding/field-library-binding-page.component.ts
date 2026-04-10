@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, firstValueFrom } from 'rxjs';
 import { auditTime } from 'rxjs/operators';
 import {
@@ -8,6 +8,7 @@ import {
   SubjectAdminFieldDto,
   SubjectAdminFieldUpsertRequestDto,
   SubjectAdminGroupDto,
+  SubjectReferencePolicyComponentDto,
   SubjectCategoryFieldLinkAdminDto,
   SubjectCategoryFieldLinkUpsertItemDto,
   SubjectTypeAdminDto,
@@ -21,15 +22,33 @@ import {
   FieldLibraryBindingValidationResult,
   ReusableFieldLibraryItem
 } from '../../domain/models/field-library-binding.models';
-import {
-  ControlCenterStepViewModel,
-  ControlCenterViewModel
-} from '../../domain/models/admin-control-center.view-models';
 import { FieldLibraryBindingEngine } from '../../domain/field-library-binding/field-library-binding.engine';
-import { AdminControlCenterFacade } from '../../facades/admin-control-center.facade';
 
 type SequenceResetScope = 'none' | 'yearly' | 'monthly';
 type FormDisplayMode = 'Standard' | 'Tabbed';
+type ReferenceMode = 'default' | 'custom';
+type ReferenceSeparator = '-' | '/' | '_' | '';
+type ReferenceComponentType = 'static_text' | 'field' | 'year' | 'month' | 'day' | 'sequence';
+
+interface ReferenceComponentVm {
+  id: string;
+  type: ReferenceComponentType;
+  value?: string;
+  fieldKey?: string;
+}
+
+type FieldBindingContextVm = {
+  context: {
+    categoryId: number | null;
+    applicationId: string | null;
+  };
+};
+
+type FieldBindingStepVm = {
+  requiredCompleted: number;
+  requiredTotal: number;
+  isCompleted: boolean;
+};
 
 @Component({
   selector: 'app-field-library-binding-page',
@@ -37,28 +56,64 @@ type FormDisplayMode = 'Standard' | 'Tabbed';
   styleUrls: ['./field-library-binding-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
-  readonly stepKey = 'field-library-binding' as const;
+export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDestroy {
+  @Input() requestTypeId: number | null = null;
+  @Input() applicationId: string | null = null;
+
+  readonly stepKey = 'field-library-binding';
 
   readonly fieldTypeOptions = [
-    { label: 'InputText', value: 'InputText' },
-    { label: 'Textarea', value: 'Textarea' },
-    { label: 'Dropdown', value: 'Dropdown' },
-    { label: 'Number', value: 'Number' },
-    { label: 'Date', value: 'Date' },
-    { label: 'Checkbox', value: 'Checkbox' }
+    { label: 'نص قصير', value: 'InputText' },
+    { label: 'نص طويل', value: 'Textarea' },
+    { label: 'قائمة اختيار', value: 'Dropdown' },
+    { label: 'رقم', value: 'Number' },
+    { label: 'تاريخ', value: 'Date' },
+    { label: 'اختيار نعم/لا', value: 'Checkbox' }
   ];
 
   readonly sequenceResetScopeOptions: Array<{ label: string; value: SequenceResetScope }> = [
-    { label: 'بدون Reset', value: 'none' },
+    { label: 'بدون إعادة ضبط', value: 'none' },
     { label: 'سنوي', value: 'yearly' },
     { label: 'شهري', value: 'monthly' }
   ];
 
-  readonly displayModeOptions: Array<{ label: string; value: FormDisplayMode }> = [
-    { label: 'Standard', value: 'Standard' },
-    { label: 'Tabbed', value: 'Tabbed' }
+  readonly referenceModeOptions: Array<{ label: string; value: ReferenceMode }> = [
+    { label: 'ترقيم افتراضي', value: 'default' },
+    { label: 'ترقيم مخصص', value: 'custom' }
   ];
+
+  readonly referenceSeparatorOptions: Array<{ label: string; value: ReferenceSeparator }> = [
+    { label: '-', value: '-' },
+    { label: '/', value: '/' },
+    { label: '_', value: '_' },
+    { label: 'بدون', value: '' }
+  ];
+
+  readonly referenceComponentTypeOptions: Array<{ label: string; value: ReferenceComponentType }> = [
+    { label: 'نص ثابت', value: 'static_text' },
+    { label: 'قيمة حقل', value: 'field' },
+    { label: 'السنة', value: 'year' },
+    { label: 'الشهر', value: 'month' },
+    { label: 'اليوم', value: 'day' },
+    { label: 'المسلسل', value: 'sequence' }
+  ];
+
+  readonly displayModeOptions: Array<{ label: string; value: FormDisplayMode }> = [
+    { label: 'عرض قياسي', value: 'Standard' },
+    { label: 'عرض بعلامات تبويب', value: 'Tabbed' }
+  ];
+
+  readonly setupFieldOptions: Readonly<Record<string, Array<{ label: string; value: string }>>> = {
+    libraryVersion: [
+      { label: 'افتراضي', value: 'default' },
+      { label: 'امتثال', value: 'compliance' },
+      { label: 'تشغيلي', value: 'operations' }
+    ],
+    bindingStrategy: [
+      { label: 'صارم', value: 'strict' },
+      { label: 'مرن', value: 'flexible' }
+    ]
+  };
 
   readonly setupForm: FormGroup = this.fb.group({
     libraryVersion: [null, [Validators.required]],
@@ -69,12 +124,11 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
   readonly referencePolicyForm: FormGroup = this.fb.group({
     referencePolicyEnabled: [true],
+    referenceMode: ['default', [Validators.required]],
     referencePrefix: ['', [Validators.maxLength(40)]],
-    referenceSeparator: ['-', [Validators.maxLength(10)]],
-    referenceIncludeYear: [true],
-    referenceUseSequence: [true],
-    referenceSequenceName: ['', [Validators.maxLength(80)]],
-    referenceSequencePaddingLength: [0, [Validators.min(0), Validators.max(12)]],
+    referenceSeparator: ['-', [Validators.required]],
+    referenceStartingValue: [1, [Validators.required, Validators.min(1), Validators.max(2147483647)]],
+    referenceSequencePaddingLength: [6, [Validators.required, Validators.min(1), Validators.max(12)]],
     referenceSequenceResetScope: ['none']
   });
 
@@ -94,12 +148,14 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     defaultValue: ['']
   });
 
-  vm: ControlCenterViewModel | null = null;
-  step: ControlCenterStepViewModel | null = null;
+  vm: FieldBindingContextVm | null = null;
+  step: FieldBindingStepVm | null = null;
 
   reusableFields: ReadonlyArray<ReusableFieldLibraryItem> = [];
   bindings: BoundFieldItem[] = [];
   validation: FieldLibraryBindingValidationResult = { isValid: false, blockingIssues: [], warnings: [] };
+  referenceComponents: ReferenceComponentVm[] = [];
+  referencePolicyBlockingIssues: string[] = [];
 
   groups: SubjectAdminGroupDto[] = [];
   groupOptions: Array<{ label: string; value: number }> = [];
@@ -119,12 +175,14 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   private activeLoadToken = 0;
   private currentCategoryId: number | null = null;
   private currentApplicationId: string | null = null;
+  private routeCategoryId: number | null = null;
+  private routeApplicationId: string | null = null;
   private subjectTypeAdmin: SubjectTypeAdminDto | null = null;
   private fieldCatalogByKey = new Map<string, SubjectAdminFieldDto>();
 
   constructor(
     private readonly fb: FormBuilder,
-    private readonly facade: AdminControlCenterFacade,
+    private readonly route: ActivatedRoute,
     private readonly router: Router,
     private readonly bindingEngine: FieldLibraryBindingEngine,
     private readonly dynamicSubjectsController: DynamicSubjectsController,
@@ -132,39 +190,15 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.facade.initialize(this.stepKey);
+    this.referenceComponents = [this.createReferenceComponent('sequence')];
+    this.vm = { context: { categoryId: null, applicationId: null } };
+    this.step = { requiredCompleted: 0, requiredTotal: 3, isCompleted: false };
 
     this.subscriptions.add(
-      this.facade.vm$.subscribe(vm => {
-        this.vm = vm;
-        const matchingStep = vm.steps.find(step => step.key === this.stepKey) ?? null;
-        this.step = matchingStep;
-
-        const nextCategoryId = this.toPositiveInt(vm.context.categoryId);
-        const nextApplicationId = this.normalizeNullable(vm.context.applicationId);
-        const contextChanged = nextCategoryId !== this.currentCategoryId || nextApplicationId !== this.currentApplicationId;
-
-        if (contextChanged) {
-          this.currentCategoryId = nextCategoryId;
-          this.currentApplicationId = nextApplicationId;
-          this.resetWorkspaceForNewContext();
-          if (nextCategoryId) {
-            void this.loadBackendWorkspace(nextCategoryId, nextApplicationId);
-          }
-        }
-
-        if (!matchingStep) {
-          return;
-        }
-
-        if (!this.backendWorkspaceLoaded) {
-          this.patchSetupFormFromStep(matchingStep.values);
-          this.patchReferencePolicyFormFromStep(matchingStep.values);
-          this.patchPresentationFormFromStep(matchingStep.values);
-          this.patchBindingsFromStep(matchingStep.values);
-        }
-
-        this.evaluateBindings(false);
+      this.route.queryParamMap.subscribe(params => {
+        this.routeCategoryId = this.toPositiveInt(params.get('categoryId'));
+        this.routeApplicationId = this.normalizeNullable(params.get('applicationId'));
+        this.syncContextFromInputsOrRoute();
       })
     );
 
@@ -203,10 +237,18 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
           this.evaluateBindings(true, true);
         })
     );
+
+    this.syncContextFromInputsOrRoute();
   }
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['requestTypeId'] || changes['applicationId']) {
+      this.syncContextFromInputsOrRoute();
+    }
   }
 
   get requiredProgressText(): string {
@@ -234,30 +276,82 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     const raw = this.referencePolicyForm.getRawValue();
     const enabled = raw['referencePolicyEnabled'] === true;
     if (!enabled) {
-      return 'Policy Disabled';
+      return 'السياسة غير مفعّلة';
     }
 
-    const separator = this.normalizeNullable(raw['referenceSeparator']) ?? '-';
-    const prefix = this.normalizeNullable(raw['referencePrefix'])
-      ?? (this.currentCategoryId ? `SUBJ${this.currentCategoryId}` : 'SUBJ');
+    const mode = this.normalizeReferenceMode(raw['referenceMode']);
+    const separator = this.normalizeReferenceSeparator(raw['referenceSeparator']);
+    const sequenceLength = this.toSafeSequenceLength(raw['referenceSequencePaddingLength']);
+    const sampleSequence = '1'.padStart(sequenceLength, '0');
 
-    const components: string[] = [prefix];
-    if (raw['referenceIncludeYear'] === true) {
-      components.push(new Date().getUTCFullYear().toString());
+    if (mode === 'default') {
+      const prefix = this.normalizeNullable(raw['referencePrefix']) ?? '';
+      const parts = prefix ? [prefix, sampleSequence] : [sampleSequence];
+      return parts.join(separator);
     }
 
-    if (raw['referenceUseSequence'] === true) {
-      const padding = this.toSafePadding(raw['referenceSequencePaddingLength']);
-      const sample = padding > 0 ? '1'.padStart(padding, '0') : '1';
-      components.push(sample);
+    const today = new Date();
+    const parts = this.referenceComponents.map(component => {
+      switch (component.type) {
+        case 'static_text':
+          return this.normalizeNullable(component.value) ?? '...';
+        case 'field':
+          return this.resolveFieldPreviewValue(component.fieldKey);
+        case 'year':
+          return today.getUTCFullYear().toString();
+        case 'month':
+          return String(today.getUTCMonth() + 1).padStart(2, '0');
+        case 'day':
+          return String(today.getUTCDate()).padStart(2, '0');
+        case 'sequence':
+          return sampleSequence;
+        default:
+          return '...';
+      }
+    });
+
+    return parts.join(separator);
+  }
+
+  get isCustomReferenceMode(): boolean {
+    return this.normalizeReferenceMode(this.referencePolicyForm.getRawValue()['referenceMode']) === 'custom';
+  }
+
+  get requiredReferenceFieldOptions(): Array<{ label: string; value: string }> {
+    const options: Array<{ label: string; value: string }> = [];
+    const seen = new Set<string>();
+
+    for (const binding of this.bindings ?? []) {
+      const fieldKey = this.normalizeNullable(binding.fieldKey);
+      if (!fieldKey) {
+        continue;
+      }
+
+      const normalizedFieldKey = this.normalizeFieldKey(fieldKey);
+      if (seen.has(normalizedFieldKey)) {
+        continue;
+      }
+
+      if (binding.required !== true) {
+        continue;
+      }
+
+      if (binding.visible === false) {
+        continue;
+      }
+
+      seen.add(normalizedFieldKey);
+      options.push({
+        label: `${this.normalizeNullable(binding.label) ?? fieldKey} (${fieldKey})`,
+        value: fieldKey
+      });
     }
 
-    return components.join(separator);
+    return options;
   }
 
   getOptions(fieldKey: string): Array<{ label: string; value: string }> {
-    const field = this.step?.fields.find(item => item.key === fieldKey);
-    return [...(field?.options ?? [])];
+    return [...(this.setupFieldOptions[fieldKey] ?? [])];
   }
 
   controlHasError(controlName: string): boolean {
@@ -320,7 +414,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
         }
       } catch (error) {
         this.stepMessageSeverity = 'warn';
-        this.stepMessage = this.toErrorMessage(error, 'تعذر تجهيز Group افتراضي لإضافة الحقل.');
+        this.stepMessage = this.toErrorMessage(error, 'تعذر تجهيز مجموعة افتراضية لإضافة الحقل.');
         return;
       }
     }
@@ -339,7 +433,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
     if (!fieldKey || !label || !groupId) {
       this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'يرجى إدخال Field Key و Label و Group صالحين.';
+      this.stepMessage = 'يرجى إدخال مفتاح حقل واسم حقل ومجموعة صالحين.';
       return;
     }
 
@@ -423,6 +517,68 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     this.evaluateBindings(true, true);
   }
 
+  onAddReferenceComponent(): void {
+    const sequenceIndex = this.referenceComponents.findIndex(component => component.type === 'sequence');
+    const insertIndex = sequenceIndex >= 0 ? sequenceIndex : this.referenceComponents.length;
+    this.referenceComponents.splice(insertIndex, 0, this.createReferenceComponent('static_text'));
+    this.referenceComponents = this.normalizeReferenceComponentsStructure(this.referenceComponents);
+    this.evaluateBindings(true, true);
+  }
+
+  onDeleteReferenceComponent(component: ReferenceComponentVm): void {
+    if (component.type === 'sequence') {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'لا يمكن حذف مكوّن المسلسل لأنه إلزامي.';
+      return;
+    }
+
+    this.referenceComponents = this.referenceComponents.filter(item => item.id !== component.id);
+    this.referenceComponents = this.normalizeReferenceComponentsStructure(this.referenceComponents);
+    this.evaluateBindings(true, true);
+  }
+
+  onMoveReferenceComponentUp(component: ReferenceComponentVm): void {
+    const index = this.referenceComponents.findIndex(item => item.id === component.id);
+    if (index <= 0 || component.type === 'sequence') {
+      return;
+    }
+
+    const reordered = [...this.referenceComponents];
+    [reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]];
+    this.referenceComponents = this.normalizeReferenceComponentsStructure(reordered);
+    this.evaluateBindings(true, true);
+  }
+
+  onMoveReferenceComponentDown(component: ReferenceComponentVm): void {
+    const index = this.referenceComponents.findIndex(item => item.id === component.id);
+    if (index < 0 || index >= this.referenceComponents.length - 1 || component.type === 'sequence') {
+      return;
+    }
+
+    const reordered = [...this.referenceComponents];
+    [reordered[index + 1], reordered[index]] = [reordered[index], reordered[index + 1]];
+    this.referenceComponents = this.normalizeReferenceComponentsStructure(reordered);
+    this.evaluateBindings(true, true);
+  }
+
+  onReferenceComponentTypeChanged(component: ReferenceComponentVm): void {
+    if (component.type !== 'static_text') {
+      component.value = undefined;
+    }
+
+    if (component.type !== 'field') {
+      component.fieldKey = undefined;
+    }
+
+    this.referenceComponents = this.normalizeReferenceComponentsStructure(this.referenceComponents);
+    this.evaluateBindings(true, true);
+  }
+
+  onReferenceComponentValueChanged(): void {
+    this.referenceComponents = this.normalizeReferenceComponentsStructure(this.referenceComponents);
+    this.evaluateBindings(true, true);
+  }
+
   async onSaveToBackend(): Promise<void> {
     this.setupForm.markAllAsTouched();
     this.referencePolicyForm.markAllAsTouched();
@@ -437,7 +593,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
     if (!this.currentCategoryId) {
       this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'يجب تحديد Category صالح من خطوة Scope Definition قبل الحفظ.';
+      this.stepMessage = 'يجب تحديد تصنيف صالح أولًا قبل الحفظ.';
       return;
     }
 
@@ -460,7 +616,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   async onReloadFromBackend(): Promise<void> {
     if (!this.currentCategoryId) {
       this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'يجب اختيار Category أولًا لإعادة التحميل.';
+      this.stepMessage = 'يجب اختيار تصنيف صالح أولًا لإعادة التحميل.';
       return;
     }
 
@@ -469,9 +625,14 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
   onSaveDraft(): void {
     this.evaluateBindings(true, false);
-    const draftResult = this.facade.saveDraft();
-    this.stepMessageSeverity = draftResult.success ? 'success' : 'warn';
-    this.stepMessage = draftResult.message;
+    if (!this.persistDraftToLocalStorage()) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'تعذر حفظ المسودة محليًا بسبب عدم توفر سياق التصنيف/التطبيق.';
+      return;
+    }
+
+    this.stepMessageSeverity = 'success';
+    this.stepMessage = 'تم حفظ المسودة محليًا بنجاح.';
   }
 
   onGoNext(): void {
@@ -492,13 +653,13 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const nextStep = this.facade.getNextStepKey(this.stepKey);
-    if (!nextStep) {
-      return;
-    }
-
     this.stepMessage = '';
-    this.router.navigate(['/Admin/ControlCenter', nextStep]);
+    this.router.navigate(['/Admin/ControlCenterCatalog'], {
+      queryParams: {
+        categoryId: this.currentCategoryId ?? undefined,
+        applicationId: this.currentApplicationId ?? undefined
+      }
+    });
   }
 
   isFieldAlreadyBound(item: ReusableFieldLibraryItem): boolean {
@@ -509,14 +670,17 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   private evaluateBindings(syncToStore: boolean, markBackendDirty = false): void {
     const baseValidation = this.bindingEngine.validateBindings(this.bindings);
     const groupIssues = this.collectGroupValidationIssues(this.bindings);
+    const referenceIssues = this.validateReferencePolicy();
+    this.referencePolicyBlockingIssues = referenceIssues;
 
     this.validation = {
-      isValid: baseValidation.isValid && groupIssues.length === 0,
-      blockingIssues: [...baseValidation.blockingIssues, ...groupIssues],
+      isValid: baseValidation.isValid && groupIssues.length === 0 && referenceIssues.length === 0,
+      blockingIssues: [...baseValidation.blockingIssues, ...groupIssues, ...referenceIssues],
       warnings: baseValidation.warnings
     };
 
     if (!syncToStore) {
+      this.refreshStepState(this.validation.isValid ? 'valid' : 'draft');
       return;
     }
 
@@ -525,48 +689,11 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   }
 
   private syncStepValues(syncToken: 'valid' | 'draft', markBackendDirty: boolean): void {
-    const setupValue = this.setupForm.getRawValue();
-    const referenceValue = this.referencePolicyForm.getRawValue();
-    const presentationValue = this.presentationForm.getRawValue();
-    const payload = this.bindingEngine.serializeBindingsPayload(this.bindings);
-
-    this.facade.updateFieldValue(this.stepKey, 'libraryVersion', setupValue['libraryVersion']);
-    this.facade.updateFieldValue(this.stepKey, 'bindingStrategy', setupValue['bindingStrategy']);
-    this.facade.updateFieldValue(this.stepKey, 'includeLegacyFields', setupValue['includeLegacyFields'] === true);
-    this.facade.updateFieldValue(this.stepKey, 'bindingNotes', setupValue['bindingNotes']);
-    this.facade.updateFieldValue(this.stepKey, 'bindingPayload', payload);
-    this.facade.updateFieldValue(this.stepKey, 'bindingValidationToken', syncToken === 'valid' ? 'valid' : null);
-
-    this.facade.updateFieldValue(this.stepKey, 'referencePolicyEnabled', referenceValue['referencePolicyEnabled'] === true);
-    this.facade.updateFieldValue(this.stepKey, 'referencePrefix', this.normalizeNullable(referenceValue['referencePrefix']));
-    this.facade.updateFieldValue(this.stepKey, 'referenceSeparator', this.normalizeNullable(referenceValue['referenceSeparator']) ?? '-');
-    this.facade.updateFieldValue(this.stepKey, 'referenceIncludeYear', referenceValue['referenceIncludeYear'] === true);
-    this.facade.updateFieldValue(this.stepKey, 'referenceUseSequence', referenceValue['referenceUseSequence'] === true);
-    this.facade.updateFieldValue(this.stepKey, 'referenceSequenceName', this.normalizeNullable(referenceValue['referenceSequenceName']));
-    this.facade.updateFieldValue(
-      this.stepKey,
-      'referenceSequencePaddingLength',
-      this.toSafePadding(referenceValue['referenceSequencePaddingLength'])
-    );
-    this.facade.updateFieldValue(
-      this.stepKey,
-      'referenceSequenceResetScope',
-      this.normalizeSequenceResetScope(referenceValue['referenceSequenceResetScope'])
-    );
-    this.facade.updateFieldValue(
-      this.stepKey,
-      'defaultDisplayMode',
-      this.normalizeDisplayMode(presentationValue['defaultDisplayMode'])
-    );
-    this.facade.updateFieldValue(
-      this.stepKey,
-      'allowUserToChangeDisplayMode',
-      presentationValue['allowUserToChangeDisplayMode'] === true
-    );
-
     if (markBackendDirty) {
       this.hasPendingBackendChanges = true;
     }
+
+    this.refreshStepState(syncToken);
   }
 
   private async loadBackendWorkspace(categoryId: number, applicationId: string | null): Promise<void> {
@@ -594,7 +721,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
       this.groups = [...groups].sort((left, right) => left.groupId - right.groupId);
       this.groupOptions = this.groups.map(group => ({
-        label: `${group.groupName ?? `Group ${group.groupId}`} (${group.groupId})`,
+        label: `${group.groupName ?? `مجموعة ${group.groupId}`} (${group.groupId})`,
         value: group.groupId
       }));
 
@@ -609,7 +736,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
           continue;
         }
 
-        const label = this.normalizeNullable(link.groupName) ?? `Group ${linkGroupId}`;
+        const label = this.normalizeNullable(link.groupName) ?? `مجموعة ${linkGroupId}`;
         this.groupOptions.push({
           label: `${label} (${linkGroupId})`,
           value: linkGroupId
@@ -641,7 +768,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
       );
 
       this.subjectTypeAdmin = subjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
-      this.patchReferencePolicyFormFromAdminType(this.subjectTypeAdmin, categoryId);
+      this.patchReferencePolicyFormFromAdminType(this.subjectTypeAdmin);
       this.patchPresentationFormFromAdminType(this.subjectTypeAdmin);
       this.patchSetupFormDefaultsIfMissing();
       this.patchPresentationFormDefaultsIfMissing();
@@ -662,9 +789,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
       this.libraryLoadedFromDb = false;
       this.reusableFields = this.bindingEngine.reusableLibrary;
       this.fieldCatalogByKey.clear();
+      this.evaluateBindings(true, false);
 
       this.stepMessageSeverity = 'warn';
-      this.stepMessage = this.toErrorMessage(error, 'تعذر تحميل بيانات الحقول من قاعدة البيانات. سيتم استخدام fallback محلي مؤقتًا.');
+      this.stepMessage = this.toErrorMessage(error, 'تعذر تحميل بيانات الحقول من قاعدة البيانات. سيتم استخدام مصدر محلي احتياطي مؤقتًا.');
     } finally {
       if (loadToken === this.activeLoadToken) {
         this.loadingLibrary = false;
@@ -755,12 +883,12 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     for (const binding of normalizedBindings) {
       const normalizedFieldKey = this.normalizeFieldKey(binding.fieldKey);
       if (!normalizedFieldKey) {
-        throw new Error('يوجد حقل بدون Field Key صالح.');
+        throw new Error('يوجد حقل بدون مفتاح صالح.');
       }
 
       const groupId = this.toPositiveInt(binding.groupId);
       if (!groupId) {
-        throw new Error(`يرجى اختيار Group صالح للحقل ${binding.fieldKey}.`);
+        throw new Error(`يرجى اختيار مجموعة صالحة للحقل ${binding.fieldKey}.`);
       }
 
       const existing = latestFieldsByKey.get(normalizedFieldKey) ?? null;
@@ -854,29 +982,29 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   ): SubjectTypeAdminUpsertRequestDto {
     const referenceValue = this.referencePolicyForm.getRawValue();
     const presentationValue = this.presentationForm.getRawValue();
-    const sourceFieldKeys = this.normalizeNullable(targetType?.sourceFieldKeys)
-      ?? this.buildDefaultSourceFieldKeys(normalizedBindings);
-
-    const useSequence = referenceValue['referenceUseSequence'] === true;
+    const referenceMode = this.normalizeReferenceMode(referenceValue['referenceMode']);
+    const referenceComponents = referenceMode === 'custom'
+      ? this.serializeReferenceComponents(this.referenceComponents)
+      : [];
 
     return {
       isActive: targetType?.isActive !== false,
       referencePolicyEnabled: referenceValue['referencePolicyEnabled'] === true,
+      referenceMode,
       referencePrefix: this.normalizeNullable(referenceValue['referencePrefix'])
         ?? targetType?.referencePrefix
-        ?? (this.currentCategoryId ? `SUBJ${this.currentCategoryId}` : 'SUBJ'),
-      referenceSeparator: this.normalizeNullable(referenceValue['referenceSeparator'])
-        ?? targetType?.referenceSeparator
-        ?? '-',
-      sourceFieldKeys,
-      includeYear: referenceValue['referenceIncludeYear'] === true,
-      useSequence,
-      sequenceName: useSequence
-        ? this.normalizeNullable(referenceValue['referenceSequenceName'])
-          ?? targetType?.sequenceName
-          ?? 'Seq_Tickets'
-        : undefined,
-      sequencePaddingLength: this.toSafePadding(referenceValue['referenceSequencePaddingLength']),
+        ?? '',
+      referenceSeparator: this.normalizeReferenceSeparator(referenceValue['referenceSeparator']),
+      referenceStartingValue: this.toSafeStartingValue(referenceValue['referenceStartingValue']),
+      referenceComponents,
+      sourceFieldKeys: referenceMode === 'custom'
+        ? undefined
+        : (this.normalizeNullable(targetType?.sourceFieldKeys)
+          ?? this.buildDefaultSourceFieldKeys(normalizedBindings)),
+      includeYear: false,
+      useSequence: true,
+      sequenceName: undefined,
+      sequencePaddingLength: this.toSafeSequenceLength(referenceValue['referenceSequencePaddingLength']),
       sequenceResetScope: this.normalizeSequenceResetScope(referenceValue['referenceSequenceResetScope']),
       requestPolicy: targetType?.requestPolicy,
       defaultDisplayMode: this.normalizeDisplayMode(presentationValue['defaultDisplayMode']),
@@ -912,7 +1040,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     const visit = (node: AdminCatalogGroupTreeNodeDto): void => {
       flattened.push({
         groupId: Number(node.groupId ?? 0),
-        groupName: this.normalizeNullable(node.groupName) ?? `Group ${node.groupId}`,
+        groupName: this.normalizeNullable(node.groupName) ?? `مجموعة ${node.groupId}`,
         groupDescription: this.normalizeNullable(node.groupDescription) ?? undefined,
         isExtendable: false,
         groupWithInRow: 12,
@@ -975,15 +1103,15 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     const categoryId = this.toPositiveInt(this.currentCategoryId);
     const applicationId = this.normalizeNullable(this.currentApplicationId);
     if (!categoryId || !applicationId) {
-      throw new Error('لا يمكن إنشاء Group افتراضية بدون Category/Application صالحين.');
+      throw new Error('لا يمكن إنشاء مجموعة افتراضية بدون تصنيف وتطبيق صالحين.');
     }
 
     const created = this.readSingleResponse(
       await firstValueFrom(this.adminCatalogController.createGroup({
         categoryId,
         applicationId,
-        groupName: 'Admin Control Center Group',
-        groupDescription: 'Auto-created from Admin Control Center field binding page.',
+        groupName: 'مجموعة افتراضية للوحة التحكم',
+        groupDescription: 'تم إنشاؤها تلقائيًا من صفحة ربط مكتبة الحقول.',
         displayOrder: 0,
         isActive: true
       })),
@@ -1000,7 +1128,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
     this.groups = [createdGroup];
     this.groupOptions = [{
-      label: `${createdGroup.groupName ?? `Group ${createdGroup.groupId}`} (${createdGroup.groupId})`,
+      label: `${createdGroup.groupName ?? `مجموعة ${createdGroup.groupId}`} (${createdGroup.groupId})`,
       value: createdGroup.groupId
     }];
 
@@ -1027,34 +1155,39 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   private patchReferencePolicyFormFromStep(values: Record<string, unknown>): void {
     const nextValue = {
       referencePolicyEnabled: values['referencePolicyEnabled'] !== false,
+      referenceMode: this.normalizeReferenceMode(values['referenceMode']),
       referencePrefix: this.normalizeNullable(values['referencePrefix']) ?? '',
-      referenceSeparator: this.normalizeNullable(values['referenceSeparator']) ?? '-',
-      referenceIncludeYear: values['referenceIncludeYear'] !== false,
-      referenceUseSequence: values['referenceUseSequence'] !== false,
-      referenceSequenceName: this.normalizeNullable(values['referenceSequenceName']) ?? '',
-      referenceSequencePaddingLength: this.toSafePadding(values['referenceSequencePaddingLength']),
+      referenceSeparator: this.normalizeReferenceSeparator(values['referenceSeparator']),
+      referenceStartingValue: this.toSafeStartingValue(values['referenceStartingValue']),
+      referenceSequencePaddingLength: this.toSafeSequenceLength(values['referenceSequencePaddingLength']),
       referenceSequenceResetScope: this.normalizeSequenceResetScope(values['referenceSequenceResetScope'])
     };
 
     this.syncingFromStore = true;
     this.referencePolicyForm.patchValue(nextValue, { emitEvent: false });
+    this.referenceComponents = this.normalizeReferenceComponentsStructure(
+      this.parseReferenceComponents(values['referenceComponents'])
+    );
     this.syncingFromStore = false;
   }
 
-  private patchReferencePolicyFormFromAdminType(subjectType: SubjectTypeAdminDto | null, categoryId: number): void {
+  private patchReferencePolicyFormFromAdminType(subjectType: SubjectTypeAdminDto | null): void {
+    const resolvedMode = this.normalizeReferenceMode(subjectType?.referenceMode);
     const nextValue = {
       referencePolicyEnabled: subjectType?.referencePolicyEnabled !== false,
-      referencePrefix: this.normalizeNullable(subjectType?.referencePrefix) ?? `SUBJ${categoryId}`,
-      referenceSeparator: this.normalizeNullable(subjectType?.referenceSeparator) ?? '-',
-      referenceIncludeYear: subjectType?.includeYear !== false,
-      referenceUseSequence: subjectType?.useSequence !== false,
-      referenceSequenceName: this.normalizeNullable(subjectType?.sequenceName) ?? 'Seq_Tickets',
-      referenceSequencePaddingLength: this.toSafePadding(subjectType?.sequencePaddingLength),
+      referenceMode: resolvedMode,
+      referencePrefix: this.normalizeNullable(subjectType?.referencePrefix) ?? '',
+      referenceSeparator: this.normalizeReferenceSeparator(subjectType?.referenceSeparator),
+      referenceStartingValue: this.toSafeStartingValue(subjectType?.referenceStartingValue),
+      referenceSequencePaddingLength: this.toSafeSequenceLength(subjectType?.sequencePaddingLength),
       referenceSequenceResetScope: this.normalizeSequenceResetScope(subjectType?.sequenceResetScope)
     };
 
     this.syncingFromStore = true;
     this.referencePolicyForm.patchValue(nextValue, { emitEvent: false });
+    this.referenceComponents = this.normalizeReferenceComponentsStructure(
+      this.parseReferenceComponents(subjectType?.referenceComponents)
+    );
     this.syncingFromStore = false;
   }
 
@@ -1141,13 +1274,13 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     for (const item of bindings) {
       const groupId = this.toPositiveInt(item.groupId);
       if (!groupId) {
-        issues.push(`الحقل "${item.label || item.fieldKey}" غير مرتبط بأي Group.`);
+        issues.push(`الحقل "${item.label || item.fieldKey}" غير مرتبط بأي مجموعة.`);
         continue;
       }
 
       const knownGroup = this.groups.some(group => group.groupId === groupId);
       if (!knownGroup && this.groupOptions.length > 0) {
-        issues.push(`Group رقم ${groupId} غير موجود ضمن الجروبات المتاحة للحقل "${item.label || item.fieldKey}".`);
+        issues.push(`المجموعة رقم ${groupId} غير موجودة ضمن المجموعات المتاحة للحقل "${item.label || item.fieldKey}".`);
       }
     }
 
@@ -1240,6 +1373,24 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     return 'InputText';
   }
 
+  getFieldTypeLabel(type: string | undefined): string {
+    switch (this.normalizeBindingType(type)) {
+      case 'Textarea':
+        return 'نص طويل';
+      case 'Dropdown':
+        return 'قائمة اختيار';
+      case 'Number':
+        return 'رقم';
+      case 'Date':
+        return 'تاريخ';
+      case 'Checkbox':
+        return 'اختيار نعم/لا';
+      case 'InputText':
+      default:
+        return 'نص قصير';
+    }
+  }
+
   private resolveDefaultGroupId(): number | null {
     if (this.groupOptions.length === 0) {
       return null;
@@ -1254,7 +1405,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     }
 
     const match = this.groups.find(group => group.groupId === groupId);
-    return this.normalizeNullable(match?.groupName) ?? `Group ${groupId}`;
+    return this.normalizeNullable(match?.groupName) ?? `مجموعة ${groupId}`;
   }
 
   private readArrayResponse<T>(response: CommonResponse<T[]>, fallbackMessage: string): T[] {
@@ -1285,15 +1436,15 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     return response.data;
   }
 
-  private toSafePadding(value: unknown): number {
-    const normalized = Number(value ?? 0);
+  private toSafeSequenceLength(value: unknown): number {
+    const normalized = Number(value ?? 6);
     if (!Number.isFinite(normalized)) {
-      return 0;
+      return 6;
     }
 
     const rounded = Math.trunc(normalized);
-    if (rounded < 0) {
-      return 0;
+    if (rounded < 1) {
+      return 1;
     }
 
     if (rounded > 12) {
@@ -1301,6 +1452,226 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     }
 
     return rounded;
+  }
+
+  private toSafeStartingValue(value: unknown): number {
+    const normalized = Number(value ?? 1);
+    if (!Number.isFinite(normalized)) {
+      return 1;
+    }
+
+    const rounded = Math.trunc(normalized);
+    if (rounded < 1) {
+      return 1;
+    }
+
+    if (rounded > 2147483647) {
+      return 2147483647;
+    }
+
+    return rounded;
+  }
+
+  private normalizeReferenceMode(value: unknown): ReferenceMode {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return normalized === 'custom' ? 'custom' : 'default';
+  }
+
+  private normalizeReferenceSeparator(value: unknown): ReferenceSeparator {
+    if (value == null) {
+      return '-';
+    }
+
+    const normalized = String(value ?? '').trim();
+    if (normalized === '/' || normalized === '_' || normalized === '-') {
+      return normalized;
+    }
+
+    return normalized.length === 0 ? '' : '-';
+  }
+
+  private validateReferencePolicy(): string[] {
+    const issues: string[] = [];
+    const raw = this.referencePolicyForm.getRawValue();
+    if (raw['referencePolicyEnabled'] !== true) {
+      return issues;
+    }
+
+    const mode = this.normalizeReferenceMode(raw['referenceMode']);
+    const separator = this.normalizeReferenceSeparator(raw['referenceSeparator']);
+    if (!['-', '/', '_', ''].includes(separator)) {
+      issues.push('فاصل الرقم المرجعي غير صالح.');
+    }
+
+    const sequenceLength = this.toSafeSequenceLength(raw['referenceSequencePaddingLength']);
+    if (sequenceLength < 1 || sequenceLength > 12) {
+      issues.push('طول المسلسل يجب أن يكون بين 1 و 12.');
+    }
+
+    const startingValue = this.toSafeStartingValue(raw['referenceStartingValue']);
+    if (startingValue < 1) {
+      issues.push('قيمة بداية المسلسل يجب أن تكون رقمًا موجبًا.');
+    }
+
+    if (mode === 'custom') {
+      const components = this.normalizeReferenceComponentsStructure(this.referenceComponents);
+      const sequenceComponents = components.filter(component => component.type === 'sequence');
+      if (sequenceComponents.length === 0) {
+        issues.push('لا يمكن حفظ سياسة مخصصة بدون مسلسل.');
+      }
+
+      if (sequenceComponents.length > 1) {
+        issues.push('لا يمكن تكرار المسلسل أكثر من مرة.');
+      }
+
+      if (components.length === 0 || components[components.length - 1]?.type !== 'sequence') {
+        issues.push('يجب أن يكون المسلسل هو الجزء الأخير دائمًا.');
+      }
+
+      for (const component of components) {
+        if (component.type === 'static_text' && !this.normalizeNullable(component.value)) {
+          issues.push('يوجد جزء نص ثابت فارغ. يرجى إدخال نص صالح.');
+        }
+
+        if (component.type === 'field') {
+          const fieldKey = this.normalizeNullable(component.fieldKey);
+          if (!fieldKey) {
+            issues.push('يوجد جزء من نوع حقل بدون اختيار حقل.');
+            continue;
+          }
+
+          if (!this.isRequiredReferenceField(fieldKey)) {
+            issues.push(`الحقل ${fieldKey} غير إلزامي عند الإنشاء ولا يمكن استخدامه في الرقم المرجعي.`);
+          }
+        }
+      }
+
+      const hasMissingPreviewPart = this.referencePreview.includes('...');
+      if (hasMissingPreviewPart) {
+        issues.push('لا يمكن حفظ سياسة تنتج قيمة ناقصة أو فارغة.');
+      }
+    }
+
+    if (!this.normalizeNullable(this.referencePreview)) {
+      issues.push('لا يمكن حفظ سياسة تنتج رقمًا مرجعيًا فارغًا.');
+    }
+
+    return Array.from(new Set(issues));
+  }
+
+  private createReferenceComponent(type: ReferenceComponentType): ReferenceComponentVm {
+    return {
+      id: `ref-comp-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      type
+    };
+  }
+
+  private normalizeReferenceComponentsStructure(
+    components: ReadonlyArray<ReferenceComponentVm> | null | undefined
+  ): ReferenceComponentVm[] {
+    const source = [...(components ?? [])];
+    const normalized: ReferenceComponentVm[] = [];
+    let sequenceComponent: ReferenceComponentVm | null = null;
+
+    for (const item of source) {
+      const normalizedType = this.normalizeReferenceComponentType(item?.type);
+      const normalizedItem: ReferenceComponentVm = {
+        id: item?.id ?? this.createReferenceComponent(normalizedType).id,
+        type: normalizedType,
+        value: this.normalizeNullable(item?.value) ?? undefined,
+        fieldKey: this.normalizeNullable(item?.fieldKey) ?? undefined
+      };
+
+      if (normalizedType === 'sequence') {
+        if (!sequenceComponent) {
+          sequenceComponent = normalizedItem;
+        }
+        continue;
+      }
+
+      normalized.push(normalizedItem);
+    }
+
+    normalized.push(sequenceComponent ?? this.createReferenceComponent('sequence'));
+    return normalized;
+  }
+
+  private normalizeReferenceComponentType(value: unknown): ReferenceComponentType {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'field'
+      || normalized === 'year'
+      || normalized === 'month'
+      || normalized === 'day'
+      || normalized === 'sequence') {
+      return normalized;
+    }
+
+    return 'static_text';
+  }
+
+  private parseReferenceComponents(value: unknown): ReferenceComponentVm[] {
+    let source: unknown[] = [];
+    if (Array.isArray(value)) {
+      source = value;
+    } else {
+      const asString = this.normalizeNullable(value);
+      if (asString) {
+        try {
+          const parsedJson = JSON.parse(asString);
+          source = Array.isArray(parsedJson) ? parsedJson : [];
+        } catch {
+          source = [];
+        }
+      }
+    }
+
+    if (source.length === 0) {
+      return [this.createReferenceComponent('sequence')];
+    }
+
+    const parsed = source.map((item, index) => {
+      const candidate = item as SubjectReferencePolicyComponentDto;
+      return {
+        id: `ref-component-loaded-${index}-${Date.now()}`,
+        type: this.normalizeReferenceComponentType(candidate?.type),
+        value: this.normalizeNullable(candidate?.value) ?? undefined,
+        fieldKey: this.normalizeNullable(candidate?.fieldKey) ?? undefined
+      } as ReferenceComponentVm;
+    });
+
+    return this.normalizeReferenceComponentsStructure(parsed);
+  }
+
+  private serializeReferenceComponents(
+    components: ReadonlyArray<ReferenceComponentVm>
+  ): SubjectReferencePolicyComponentDto[] {
+    return this.normalizeReferenceComponentsStructure(components)
+      .map(component => ({
+        type: component.type,
+        value: component.type === 'static_text' ? this.normalizeNullable(component.value) ?? undefined : undefined,
+        fieldKey: component.type === 'field' ? this.normalizeNullable(component.fieldKey) ?? undefined : undefined
+      }));
+  }
+
+  private resolveFieldPreviewValue(fieldKey: string | undefined): string {
+    const normalizedKey = this.normalizeNullable(fieldKey);
+    if (!normalizedKey) {
+      return '...';
+    }
+
+    const option = this.requiredReferenceFieldOptions.find(item =>
+      this.normalizeFieldKey(item.value) === this.normalizeFieldKey(normalizedKey));
+    if (!option) {
+      return '...';
+    }
+
+    return `{${normalizedKey}}`;
+  }
+
+  private isRequiredReferenceField(fieldKey: string): boolean {
+    const normalized = this.normalizeFieldKey(fieldKey);
+    return this.requiredReferenceFieldOptions.some(option =>
+      this.normalizeFieldKey(option.value) === normalized);
   }
 
   private normalizeSequenceResetScope(value: unknown): SequenceResetScope {
@@ -1325,10 +1696,142 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     return 'Standard';
   }
 
+  private syncContextFromInputsOrRoute(): void {
+    const inputCategoryId = this.toPositiveInt(this.requestTypeId);
+    const inputApplicationId = this.normalizeNullable(this.applicationId);
+
+    const nextCategoryId = inputCategoryId ?? this.routeCategoryId;
+    const nextApplicationId = inputApplicationId ?? this.routeApplicationId;
+    const contextChanged = nextCategoryId !== this.currentCategoryId || nextApplicationId !== this.currentApplicationId;
+
+    this.vm = {
+      context: {
+        categoryId: nextCategoryId,
+        applicationId: nextApplicationId
+      }
+    };
+
+    if (!contextChanged) {
+      this.refreshStepState();
+      return;
+    }
+
+    this.currentCategoryId = nextCategoryId;
+    this.currentApplicationId = nextApplicationId;
+
+    this.resetWorkspaceForNewContext();
+    const draftValues = this.readDraftFromLocalStorage();
+    if (draftValues) {
+      this.patchSetupFormFromStep(draftValues);
+      this.patchReferencePolicyFormFromStep(draftValues);
+      this.patchPresentationFormFromStep(draftValues);
+      this.patchBindingsFromStep(draftValues);
+      this.hasPendingBackendChanges = true;
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'تم تحميل مسودة محلية غير محفوظة في قاعدة البيانات.';
+      this.evaluateBindings(true, false);
+    } else {
+      this.patchSetupFormDefaultsIfMissing();
+      this.patchPresentationFormDefaultsIfMissing();
+      this.evaluateBindings(false);
+    }
+
+    if (nextCategoryId) {
+      void this.loadBackendWorkspace(nextCategoryId, nextApplicationId);
+      return;
+    }
+
+    this.stepMessageSeverity = 'warn';
+    this.stepMessage = 'اختر نوع الطلب أولًا من لوحة الكتالوج لبدء الربط.';
+  }
+
+  private refreshStepState(syncToken: 'valid' | 'draft' = this.validation.isValid ? 'valid' : 'draft'): void {
+    const setupValue = this.setupForm.getRawValue();
+    const requiredCompleted = [
+      this.normalizeNullable(setupValue['libraryVersion']) != null,
+      this.normalizeNullable(setupValue['bindingStrategy']) != null,
+      syncToken === 'valid'
+    ].filter(Boolean).length;
+
+    this.step = {
+      requiredCompleted,
+      requiredTotal: 3,
+      isCompleted: requiredCompleted === 3
+    };
+  }
+
+  private buildDraftStepValues(syncToken: 'valid' | 'draft'): Record<string, unknown> {
+    const setupValue = this.setupForm.getRawValue();
+    const referenceValue = this.referencePolicyForm.getRawValue();
+    const presentationValue = this.presentationForm.getRawValue();
+
+    return {
+      libraryVersion: setupValue['libraryVersion'],
+      bindingStrategy: setupValue['bindingStrategy'],
+      includeLegacyFields: setupValue['includeLegacyFields'] === true,
+      bindingNotes: setupValue['bindingNotes'],
+      bindingPayload: this.bindingEngine.serializeBindingsPayload(this.bindings),
+      bindingValidationToken: syncToken === 'valid' ? 'valid' : null,
+      referencePolicyEnabled: referenceValue['referencePolicyEnabled'] === true,
+      referenceMode: this.normalizeReferenceMode(referenceValue['referenceMode']),
+      referencePrefix: this.normalizeNullable(referenceValue['referencePrefix']),
+      referenceSeparator: this.normalizeReferenceSeparator(referenceValue['referenceSeparator']),
+      referenceStartingValue: this.toSafeStartingValue(referenceValue['referenceStartingValue']),
+      referenceSequencePaddingLength: this.toSafeSequenceLength(referenceValue['referenceSequencePaddingLength']),
+      referenceSequenceResetScope: this.normalizeSequenceResetScope(referenceValue['referenceSequenceResetScope']),
+      referenceComponents: this.serializeReferenceComponents(this.referenceComponents),
+      defaultDisplayMode: this.normalizeDisplayMode(presentationValue['defaultDisplayMode']),
+      allowUserToChangeDisplayMode: presentationValue['allowUserToChangeDisplayMode'] === true
+    };
+  }
+
+  private buildDraftStorageKey(): string | null {
+    if (!this.currentCategoryId || !this.currentApplicationId) {
+      return null;
+    }
+
+    return `connect:${this.stepKey}:${this.currentApplicationId}:${this.currentCategoryId}`;
+  }
+
+  private persistDraftToLocalStorage(): boolean {
+    const key = this.buildDraftStorageKey();
+    if (!key) {
+      return false;
+    }
+
+    const syncToken: 'valid' | 'draft' = this.validation.isValid ? 'valid' : 'draft';
+    localStorage.setItem(key, JSON.stringify(this.buildDraftStepValues(syncToken)));
+    return true;
+  }
+
+  private readDraftFromLocalStorage(): Record<string, unknown> | null {
+    const key = this.buildDraftStorageKey();
+    if (!key) {
+      return null;
+    }
+
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
   private resetWorkspaceForNewContext(): void {
     this.backendWorkspaceLoaded = false;
     this.libraryLoadedFromDb = false;
     this.hasPendingBackendChanges = false;
+    this.librarySearchTerm = '';
     this.bindings = [];
     this.groups = [];
     this.groupOptions = [];
@@ -1337,11 +1840,38 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     this.reusableFields = [];
 
     this.syncingFromStore = true;
+    this.setupForm.patchValue({
+      libraryVersion: 'default',
+      bindingStrategy: 'strict',
+      includeLegacyFields: true,
+      bindingNotes: ''
+    }, { emitEvent: false });
+    this.referencePolicyForm.patchValue({
+      referencePolicyEnabled: true,
+      referenceMode: 'default',
+      referencePrefix: '',
+      referenceSeparator: '-',
+      referenceStartingValue: 1,
+      referenceSequencePaddingLength: 6,
+      referenceSequenceResetScope: 'none'
+    }, { emitEvent: false });
     this.presentationForm.patchValue({
       defaultDisplayMode: 'Standard',
       allowUserToChangeDisplayMode: false
     }, { emitEvent: false });
+    this.newFieldForm.patchValue({
+      fieldKey: '',
+      label: '',
+      type: 'InputText',
+      groupId: null,
+      required: false,
+      readonly: false,
+      visible: true,
+      defaultValue: ''
+    }, { emitEvent: false });
+    this.referenceComponents = [this.createReferenceComponent('sequence')];
     this.syncingFromStore = false;
+    this.refreshStepState('draft');
   }
 
   private toPositiveInt(value: unknown): number | null {

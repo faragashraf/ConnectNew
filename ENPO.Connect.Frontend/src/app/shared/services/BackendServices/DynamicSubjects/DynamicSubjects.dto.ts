@@ -440,6 +440,12 @@ export interface RequestPolicyDefinitionDto {
 
 export type RequestTypeDisplayMode = 'standard' | 'tabbed' | 'Standard' | 'Tabbed' | string;
 
+export interface SubjectReferencePolicyComponentDto {
+  type: 'static_text' | 'field' | 'year' | 'month' | 'day' | 'sequence' | string;
+  value?: string;
+  fieldKey?: string;
+}
+
 export interface SubjectTypeAdminDto {
   categoryId: number;
   parentCategoryId: number;
@@ -458,8 +464,11 @@ export interface SubjectTypeAdminDto {
   settingsJson?: string;
   referencePolicyId?: number;
   referencePolicyEnabled: boolean;
+  referenceMode?: 'default' | 'custom' | string;
   referencePrefix?: string;
   referenceSeparator?: string;
+  referenceStartingValue?: number;
+  referenceComponents?: SubjectReferencePolicyComponentDto[];
   sourceFieldKeys?: string;
   includeYear: boolean;
   useSequence: boolean;
@@ -478,8 +487,11 @@ export interface SubjectTypeAdminDto {
 export interface SubjectTypeAdminUpsertRequestDto {
   isActive: boolean;
   referencePolicyEnabled: boolean;
+  referenceMode?: 'default' | 'custom' | string;
   referencePrefix?: string;
   referenceSeparator?: string;
+  referenceStartingValue?: number;
+  referenceComponents?: SubjectReferencePolicyComponentDto[];
   sourceFieldKeys?: string;
   includeYear: boolean;
   useSequence: boolean;

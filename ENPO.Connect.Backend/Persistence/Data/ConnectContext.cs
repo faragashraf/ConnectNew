@@ -55,6 +55,8 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<SubjectReferencePolicy> SubjectReferencePolicies { get; set; }
 
+    public virtual DbSet<ReferenceSequence> ReferenceSequences { get; set; }
+
     public virtual DbSet<SubjectTypeAdminSetting> SubjectTypeAdminSettings { get; set; }
 
     public virtual DbSet<SubjectTypeRequestAvailability> SubjectTypeRequestAvailabilities { get; set; }
@@ -454,6 +456,10 @@ public partial class ConnectContext : DbContext
 
             entity.HasIndex(e => e.Status, "IX_Messages_Status");
 
+            entity.HasIndex(e => e.RequestRef, "UX_Messages_RequestRef")
+                .IsUnique()
+                .HasFilter("([RequestRef] IS NOT NULL AND LTRIM(RTRIM([RequestRef]))<>N'')");
+
             entity.Property(e => e.MessageId)
                 .ValueGeneratedNever()
                 .HasColumnName("MessageID");
@@ -710,6 +716,9 @@ public partial class ConnectContext : DbContext
                 .HasColumnName("PolicyID")
                 .ValueGeneratedOnAdd();
             entity.Property(e => e.CategoryId).HasColumnName("CategoryID");
+            entity.Property(e => e.Mode)
+                .HasMaxLength(20)
+                .HasDefaultValue("default");
             entity.Property(e => e.Prefix)
                 .HasMaxLength(40)
                 .IsRequired();
@@ -720,10 +729,12 @@ public partial class ConnectContext : DbContext
             entity.Property(e => e.IncludeYear).HasDefaultValue(true);
             entity.Property(e => e.UseSequence).HasDefaultValue(true);
             entity.Property(e => e.SequenceName).HasMaxLength(80);
-            entity.Property(e => e.SequencePaddingLength).HasDefaultValue(0);
+            entity.Property(e => e.SequencePaddingLength).HasDefaultValue(6);
             entity.Property(e => e.SequenceResetScope)
                 .HasMaxLength(16)
                 .HasDefaultValue("none");
+            entity.Property(e => e.StartingValue).HasDefaultValue(1L);
+            entity.Property(e => e.ComponentsJson);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.CreatedBy)
                 .HasMaxLength(64)
@@ -737,6 +748,37 @@ public partial class ConnectContext : DbContext
             entity.HasIndex(e => e.CategoryId, "UX_SubjectReferencePolicies_CategoryID")
                 .IsUnique();
             entity.HasIndex(e => e.IsActive, "IX_SubjectReferencePolicies_IsActive");
+        });
+
+        modelBuilder.Entity<ReferenceSequence>(entity =>
+        {
+            entity.ToTable("ReferenceSequences");
+
+            entity.HasKey(e => e.SequenceId).HasName("PK_ReferenceSequences");
+
+            entity.Property(e => e.SequenceId)
+                .HasColumnName("SequenceID")
+                .ValueGeneratedOnAdd();
+            entity.Property(e => e.SubjectId).HasColumnName("SubjectID");
+            entity.Property(e => e.SequenceKey)
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.Property(e => e.CurrentValue).HasDefaultValue(0L);
+            entity.Property(e => e.ResetPolicy)
+                .HasMaxLength(16)
+                .HasDefaultValue("none")
+                .IsRequired();
+            entity.Property(e => e.LastResetAtUtc).HasColumnType("datetime2");
+            entity.Property(e => e.CreatedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.LastModifiedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasIndex(e => new { e.SubjectId, e.SequenceKey }, "UX_ReferenceSequences_Subject_SequenceKey")
+                .IsUnique();
+            entity.HasIndex(e => e.LastModifiedAtUtc, "IX_ReferenceSequences_LastModifiedAtUtc");
         });
 
         modelBuilder.Entity<SubjectTypeAdminSetting>(entity =>

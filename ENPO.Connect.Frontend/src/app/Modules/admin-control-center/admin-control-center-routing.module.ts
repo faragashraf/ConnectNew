@@ -7,7 +7,6 @@ import { ADMIN_CONTROL_CENTER_DEFAULT_STEP } from './domain/models/admin-control
 import { AdminControlCenterStepGuard } from './guards/admin-control-center-step.guard';
 import { ScopeDefinitionPageComponent } from './pages/scope-definition/scope-definition-page.component';
 import { SubjectStructurePageComponent } from './pages/subject-structure/subject-structure-page.component';
-import { FieldLibraryBindingPageComponent } from './pages/field-library-binding/field-library-binding-page.component';
 import { FormCompositionPageComponent } from './pages/form-composition/form-composition-page.component';
 import { WorkflowRoutingPageComponent } from './pages/workflow-routing/workflow-routing-page.component';
 import { AccessVisibilityPageComponent } from './pages/access-visibility/access-visibility-page.component';
@@ -37,8 +36,8 @@ const routes: Routes = [
       },
       {
         path: 'field-library-binding',
-        component: FieldLibraryBindingPageComponent,
-        canActivate: [AdminControlCenterStepGuard]
+        redirectTo: '/Admin/ControlCenterCatalog/field-library-binding',
+        pathMatch: 'full'
       },
       {
         path: 'form-composition',

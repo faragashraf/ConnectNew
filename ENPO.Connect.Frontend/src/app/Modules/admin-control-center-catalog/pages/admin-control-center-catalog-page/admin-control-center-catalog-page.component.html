@@ -18,6 +18,15 @@
         pButton
         type="button"
         class="p-button-text phase-next-link"
+        icon="pi pi-link"
+        label="إدارة ربط مكتبة الحقول"
+        [routerLink]="['/Admin/ControlCenterCatalog/field-library-binding']"
+        [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
+      </button>
+      <button
+        pButton
+        type="button"
+        class="p-button-text phase-next-link"
         icon="pi pi-eye"
         label="المعاينة التشغيلية الفعالة للطلب"
         routerLink="/Admin/ControlCenterCatalog/request-preview">

@@ -9,6 +9,8 @@ import { AdminControlCenterCatalogRoutingWorkspaceComponent } from './pages/admi
 import { AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent } from './pages/admin-control-center-catalog-field-access-policy-workspace/admin-control-center-catalog-field-access-policy-workspace.component';
 import { AdminControlCenterRequestPreviewPageComponent } from './pages/admin-control-center-request-preview-page/admin-control-center-request-preview-page.component';
 import { AdminControlCenterCatalogDisplaySettingsWorkspaceComponent } from './pages/admin-control-center-catalog-display-settings-workspace/admin-control-center-catalog-display-settings-workspace.component';
+import { FieldLibraryBindingPageComponent } from './pages/field-library-binding/field-library-binding-page.component';
+import { FieldLibraryBindingEngine } from './domain/field-library-binding/field-library-binding.engine';
 
 @NgModule({
   declarations: [
@@ -17,7 +19,8 @@ import { AdminControlCenterCatalogDisplaySettingsWorkspaceComponent } from './pa
     AdminControlCenterCatalogRoutingWorkspaceComponent,
     AdminControlCenterCatalogFieldAccessPolicyWorkspaceComponent,
     AdminControlCenterRequestPreviewPageComponent,
-    AdminControlCenterCatalogDisplaySettingsWorkspaceComponent
+    AdminControlCenterCatalogDisplaySettingsWorkspaceComponent,
+    FieldLibraryBindingPageComponent
   ],
   imports: [
     CommonModule,
@@ -25,6 +28,9 @@ import { AdminControlCenterCatalogDisplaySettingsWorkspaceComponent } from './pa
     ReactiveFormsModule,
     PrimengModule,
     AdminControlCenterCatalogRoutingModule
+  ],
+  providers: [
+    FieldLibraryBindingEngine
   ]
 })
 export class AdminControlCenterCatalogModule {}

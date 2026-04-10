@@ -12,7 +12,6 @@ import { AdminControlCenterStore } from './store/admin-control-center.store';
 import { AdminControlCenterWorkflowEngine } from './domain/workflow/admin-control-center-workflow.engine';
 import { ScopeDefinitionPageComponent } from './pages/scope-definition/scope-definition-page.component';
 import { SubjectStructurePageComponent } from './pages/subject-structure/subject-structure-page.component';
-import { FieldLibraryBindingPageComponent } from './pages/field-library-binding/field-library-binding-page.component';
 import { SubjectStructureEngine } from './domain/subject-structure/subject-structure.engine';
 import { FieldLibraryBindingEngine } from './domain/field-library-binding/field-library-binding.engine';
 import { FormCompositionPageComponent } from './pages/form-composition/form-composition-page.component';
@@ -43,7 +42,6 @@ import { AdminControlCenterLegacyMetadataPersistenceService } from './services/a
     ControlCenterSummaryComponent,
     ScopeDefinitionPageComponent,
     SubjectStructurePageComponent,
-    FieldLibraryBindingPageComponent,
     FormCompositionPageComponent,
     WorkflowRoutingPageComponent,
     AccessVisibilityPageComponent,

@@ -1,8 +1,8 @@
 <section class="field-binding-page" dir="rtl" *ngIf="step as currentStep">
   <header class="page-header">
     <div>
-      <p class="eyebrow">الخطوة 3 من 11</p>
-      <h2>Field Library Binding</h2>
+      <p class="eyebrow">لوحة الكتالوج - ربط مكتبة الحقول</p>
+      <h2>ربط مكتبة الحقول</h2>
       <p>
         إدارة الحقول الفعلية المرتبطة بالنوع الحالي مباشرة من قاعدة البيانات مع دعم الخصائص والجروبات وسياسة الرقم المرجعي.
       </p>
@@ -29,19 +29,19 @@
 
   <section class="backend-status" *ngIf="vm as currentVm">
     <span>
-      <strong>Category:</strong>
+      <strong>التصنيف:</strong>
       {{ currentVm.context.categoryId ?? '-' }}
     </span>
     <span>
-      <strong>Application:</strong>
+      <strong>التطبيق:</strong>
       {{ currentVm.context.applicationId ?? '-' }}
     </span>
     <p-tag
-      [value]="libraryLoadedFromDb ? 'DB Source' : 'Fallback Local'"
+      [value]="libraryLoadedFromDb ? 'مصدر قاعدة البيانات' : 'مصدر احتياطي محلي'"
       [severity]="libraryLoadedFromDb ? 'success' : 'warning'">
     </p-tag>
     <p-tag
-      [value]="hasPendingBackendChanges ? 'Unsaved DB Changes' : 'DB Synced'"
+      [value]="hasPendingBackendChanges ? 'تغييرات غير محفوظة في قاعدة البيانات' : 'متزامن مع قاعدة البيانات'"
       [severity]="hasPendingBackendChanges ? 'warning' : 'success'">
     </p-tag>
   </section>
@@ -56,7 +56,7 @@
               pButton
               type="button"
               class="p-button-sm p-button-outlined"
-              label="إعادة تحميل من DB"
+              label="إعادة التحميل من قاعدة البيانات"
               icon="pi pi-refresh"
               [loading]="loadingLibrary"
               [disabled]="loadingLibrary || savingToBackend"
@@ -119,7 +119,7 @@
       <section class="card">
         <header class="card-head">
           <h3>سياسة الرقم المرجعي</h3>
-          <small>إدارة فعلية مرتبطة بجدول SubjectReferencePolicies</small>
+          <small>إدارة فعلية مرتبطة بجدول سياسة الرقم المرجعي</small>
         </header>
 
         <form class="reference-grid" [formGroup]="referencePolicyForm" novalidate>
@@ -129,64 +129,213 @@
           </article>
 
           <article class="field">
-            <label for="referencePrefix">Prefix</label>
-            <input pInputText id="referencePrefix" formControlName="referencePrefix" />
-          </article>
-
-          <article class="field">
-            <label for="referenceSeparator">Separator</label>
-            <input pInputText id="referenceSeparator" formControlName="referenceSeparator" />
-          </article>
-
-          <article class="field switch-field">
-            <label for="referenceIncludeYear">Include Year</label>
-            <p-inputSwitch inputId="referenceIncludeYear" formControlName="referenceIncludeYear"></p-inputSwitch>
-          </article>
-
-          <article class="field switch-field">
-            <label for="referenceUseSequence">Use Sequence</label>
-            <p-inputSwitch inputId="referenceUseSequence" formControlName="referenceUseSequence"></p-inputSwitch>
-          </article>
-
-          <article class="field">
-            <label for="referenceSequenceName">Sequence Name</label>
-            <input pInputText id="referenceSequenceName" formControlName="referenceSequenceName" />
-          </article>
-
-          <article class="field">
-            <label for="referenceSequencePaddingLength">Padding Length</label>
-            <input pInputText id="referenceSequencePaddingLength" type="number" min="0" max="12" formControlName="referenceSequencePaddingLength" />
-          </article>
-
-          <article class="field">
-            <label for="referenceSequenceResetScope">Reset Scope</label>
+            <label for="referenceMode">وضع الترقيم</label>
             <p-dropdown
               appendTo="body"
-              inputId="referenceSequenceResetScope"
-              [options]="sequenceResetScopeOptions"
+              inputId="referenceMode"
+              [options]="referenceModeOptions"
               optionLabel="label"
               optionValue="value"
               [showClear]="false"
-              formControlName="referenceSequenceResetScope">
+              formControlName="referenceMode">
             </p-dropdown>
           </article>
 
+          <article class="field">
+            <label for="referenceSeparator">الفاصل العام</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="referenceSeparator"
+              [options]="referenceSeparatorOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="referenceSeparator">
+            </p-dropdown>
+          </article>
+
+          <ng-container *ngIf="!isCustomReferenceMode">
+            <article class="field">
+              <label for="referencePrefix">البادئة (اختياري)</label>
+              <input pInputText id="referencePrefix" formControlName="referencePrefix" />
+            </article>
+
+            <article class="field">
+              <label for="referenceSequencePaddingLength">طول المسلسل</label>
+              <input
+                pInputText
+                id="referenceSequencePaddingLength"
+                type="number"
+                min="1"
+                max="12"
+                formControlName="referenceSequencePaddingLength" />
+            </article>
+
+            <article class="field">
+              <label for="referenceStartingValue">قيمة البداية</label>
+              <input
+                pInputText
+                id="referenceStartingValue"
+                type="number"
+                min="1"
+                formControlName="referenceStartingValue" />
+            </article>
+
+            <article class="field">
+              <label for="referenceSequenceResetScope">سياسة إعادة الضبط</label>
+              <p-dropdown
+                appendTo="body"
+                inputId="referenceSequenceResetScope"
+                [options]="sequenceResetScopeOptions"
+                optionLabel="label"
+                optionValue="value"
+                [showClear]="false"
+                formControlName="referenceSequenceResetScope">
+              </p-dropdown>
+            </article>
+          </ng-container>
+
+          <ng-container *ngIf="isCustomReferenceMode">
+            <article class="field">
+              <label for="referenceSequencePaddingLengthCustom">طول المسلسل</label>
+              <input
+                pInputText
+                id="referenceSequencePaddingLengthCustom"
+                type="number"
+                min="1"
+                max="12"
+                formControlName="referenceSequencePaddingLength" />
+            </article>
+
+            <article class="field">
+              <label for="referenceStartingValueCustom">قيمة البداية</label>
+              <input
+                pInputText
+                id="referenceStartingValueCustom"
+                type="number"
+                min="1"
+                formControlName="referenceStartingValue" />
+            </article>
+
+            <article class="field">
+              <label for="referenceSequenceResetScopeCustom">سياسة إعادة الضبط</label>
+              <p-dropdown
+                appendTo="body"
+                inputId="referenceSequenceResetScopeCustom"
+                [options]="sequenceResetScopeOptions"
+                optionLabel="label"
+                optionValue="value"
+                [showClear]="false"
+                formControlName="referenceSequenceResetScope">
+              </p-dropdown>
+            </article>
+
+            <article class="field field-wide">
+              <div class="component-builder-head">
+                <label>مكونات الترقيم المخصص</label>
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-sm p-button-outlined"
+                  icon="pi pi-plus"
+                  label="إضافة جزء"
+                  (click)="onAddReferenceComponent()">
+                </button>
+              </div>
+
+              <div class="table-wrapper reference-components-wrap">
+                <p-table [value]="referenceComponents" styleClass="p-datatable-sm reference-components-table">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th>نوع الجزء</th>
+                      <th>القيمة</th>
+                      <th>إجراءات</th>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="body" let-component>
+                    <tr>
+                      <td>
+                        <p-dropdown
+                          appendTo="body"
+                          [options]="referenceComponentTypeOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          [showClear]="false"
+                          [(ngModel)]="component.type"
+                          [ngModelOptions]="{ standalone: true }"
+                          (onChange)="onReferenceComponentTypeChanged(component)">
+                        </p-dropdown>
+                      </td>
+                      <td>
+                        <input
+                          *ngIf="component.type === 'static_text'"
+                          pInputText
+                          type="text"
+                          placeholder="أدخل النص الثابت"
+                          [(ngModel)]="component.value"
+                          [ngModelOptions]="{ standalone: true }"
+                          (ngModelChange)="onReferenceComponentValueChanged()" />
+                        <p-dropdown
+                          *ngIf="component.type === 'field'"
+                          appendTo="body"
+                          [options]="requiredReferenceFieldOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          [showClear]="false"
+                          placeholder="اختر حقلًا إلزاميًا"
+                          [(ngModel)]="component.fieldKey"
+                          [ngModelOptions]="{ standalone: true }"
+                          (onChange)="onReferenceComponentValueChanged()">
+                        </p-dropdown>
+                        <span class="component-fixed" *ngIf="component.type === 'year'">السنة</span>
+                        <span class="component-fixed" *ngIf="component.type === 'month'">الشهر</span>
+                        <span class="component-fixed" *ngIf="component.type === 'day'">اليوم</span>
+                        <span class="component-fixed" *ngIf="component.type === 'sequence'">المسلسل (إجباري وآخر جزء)</span>
+                      </td>
+                      <td>
+                        <div class="row-actions">
+                          <button pButton type="button" icon="pi pi-arrow-up" class="p-button-text p-button-sm" (click)="onMoveReferenceComponentUp(component)"></button>
+                          <button pButton type="button" icon="pi pi-arrow-down" class="p-button-text p-button-sm" (click)="onMoveReferenceComponentDown(component)"></button>
+                          <button
+                            pButton
+                            type="button"
+                            icon="pi pi-trash"
+                            class="p-button-text p-button-danger p-button-sm"
+                            [disabled]="component.type === 'sequence'"
+                            (click)="onDeleteReferenceComponent(component)">
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </ng-template>
+                </p-table>
+              </div>
+            </article>
+          </ng-container>
+
           <article class="field field-wide preview-chip">
-            <label>Preview</label>
+            <label>معاينة مباشرة</label>
             <code>{{ referencePreview }}</code>
+          </article>
+
+          <article class="field field-wide" *ngIf="referencePolicyBlockingIssues.length > 0">
+            <label>تنبيهات السياسة</label>
+            <ul class="reference-issues">
+              <li *ngFor="let issue of referencePolicyBlockingIssues">{{ issue }}</li>
+            </ul>
           </article>
         </form>
       </section>
 
       <section class="card">
         <header class="card-head">
-          <h3>Form Display Settings</h3>
-          <small>Presentation على مستوى Request Type</small>
+          <h3>إعدادات عرض النموذج</h3>
+          <small>إعدادات العرض على مستوى نوع الطلب</small>
         </header>
 
         <form class="presentation-grid" [formGroup]="presentationForm" novalidate>
           <article class="field">
-            <label for="defaultDisplayMode">Default Display Mode</label>
+            <label for="defaultDisplayMode">وضع العرض الافتراضي</label>
             <p-dropdown
               appendTo="body"
               inputId="defaultDisplayMode"
@@ -200,7 +349,7 @@
           </article>
 
           <article class="field switch-field">
-            <label for="allowUserToChangeDisplayMode">Allow User To Change Mode</label>
+            <label for="allowUserToChangeDisplayMode">السماح للمستخدم بتغيير وضع العرض</label>
             <p-inputSwitch
               inputId="allowUserToChangeDisplayMode"
               formControlName="allowUserToChangeDisplayMode">
@@ -212,7 +361,7 @@
 
       <section class="card">
         <header class="card-head">
-          <h3>Reusable Field Library (DB)</h3>
+          <h3>مكتبة الحقول القابلة لإعادة الاستخدام</h3>
           <input
             class="library-search"
             pInputText
@@ -230,10 +379,10 @@
           <p-table [value]="filteredReusableFields" styleClass="p-datatable-sm library-table">
             <ng-template pTemplate="header">
               <tr>
-                <th class="label-col">Label</th>
-                <th class="key-col">Field Key</th>
-                <th class="type-col">Type</th>
-                <th class="actions-col">Action</th>
+                <th class="label-col">اسم الحقل</th>
+                <th class="key-col">مفتاح الحقل</th>
+                <th class="type-col">نوع الحقل</th>
+                <th class="actions-col">إجراء</th>
               </tr>
             </ng-template>
 
@@ -241,7 +390,7 @@
               <tr>
                 <td class="label-col">{{ row.label }}</td>
                 <td class="key-col"><code>{{ row.fieldKey }}</code></td>
-                <td class="type-col">{{ row.type }}</td>
+                <td class="type-col">{{ getFieldTypeLabel(row.type) }}</td>
                 <td class="actions-col">
                   <button
                     pButton
@@ -267,17 +416,17 @@
 
         <form class="new-field-grid" [formGroup]="newFieldForm" novalidate>
           <article class="field">
-            <label for="newFieldKey">Field Key</label>
-            <input pInputText id="newFieldKey" formControlName="fieldKey" placeholder="exampleFieldKey" />
+            <label for="newFieldKey">مفتاح الحقل</label>
+            <input pInputText id="newFieldKey" formControlName="fieldKey" placeholder="مثال: رقم_المعاملة" />
           </article>
 
           <article class="field">
-            <label for="newFieldLabel">Label</label>
+            <label for="newFieldLabel">اسم الحقل</label>
             <input pInputText id="newFieldLabel" formControlName="label" placeholder="اسم الحقل" />
           </article>
 
           <article class="field">
-            <label for="newFieldType">Type</label>
+            <label for="newFieldType">نوع الحقل</label>
             <p-dropdown
               appendTo="body"
               inputId="newFieldType"
@@ -290,7 +439,7 @@
           </article>
 
           <article class="field">
-            <label for="newFieldGroup">Group</label>
+            <label for="newFieldGroup">المجموعة</label>
             <p-dropdown
               appendTo="body"
               inputId="newFieldGroup"
@@ -304,22 +453,22 @@
           </article>
 
           <article class="field switch-field">
-            <label for="newFieldVisible">Visible</label>
+            <label for="newFieldVisible">ظاهر</label>
             <p-inputSwitch inputId="newFieldVisible" formControlName="visible"></p-inputSwitch>
           </article>
 
           <article class="field switch-field">
-            <label for="newFieldRequired">Required</label>
+            <label for="newFieldRequired">إلزامي</label>
             <p-inputSwitch inputId="newFieldRequired" formControlName="required"></p-inputSwitch>
           </article>
 
           <article class="field switch-field">
-            <label for="newFieldReadonly">Readonly</label>
+            <label for="newFieldReadonly">قراءة فقط</label>
             <p-inputSwitch inputId="newFieldReadonly" formControlName="readonly"></p-inputSwitch>
           </article>
 
           <article class="field">
-            <label for="newFieldDefault">Default</label>
+            <label for="newFieldDefault">القيمة الافتراضية</label>
             <input pInputText id="newFieldDefault" formControlName="defaultValue" />
           </article>
 
@@ -346,15 +495,15 @@
           <p-table [value]="bindings" styleClass="p-datatable-sm bindings-table">
             <ng-template pTemplate="header">
               <tr>
-                <th class="label-col">Label</th>
-                <th class="type-col">Type</th>
-                <th class="key-col">Field Key</th>
-                <th class="group-col">Group</th>
-                <th class="order-col">Order</th>
-                <th class="switch-col">Visible</th>
-                <th class="switch-col">Required</th>
-                <th class="switch-col">Readonly</th>
-                <th class="default-col">Default</th>
+                <th class="label-col">اسم الحقل</th>
+                <th class="type-col">نوع الحقل</th>
+                <th class="key-col">مفتاح الحقل</th>
+                <th class="group-col">المجموعة</th>
+                <th class="order-col">الترتيب</th>
+                <th class="switch-col">ظاهر</th>
+                <th class="switch-col">إلزامي</th>
+                <th class="switch-col">قراءة فقط</th>
+                <th class="default-col">القيمة الافتراضية</th>
                 <th class="actions-col">إجراءات</th>
               </tr>
             </ng-template>
@@ -450,7 +599,7 @@
     </main>
 
     <aside class="summary">
-      <h3>Binding Validation</h3>
+      <h3>فحص صلاحية الربط</h3>
 
       <div class="summary-row">
         <span>إجمالي الحقول المرتبطة</span>
@@ -458,11 +607,11 @@
       </div>
       <div class="summary-row">
         <span>حالة الربط</span>
-        <strong>{{ validation.isValid ? 'صالح' : 'Blocked' }}</strong>
+        <strong>{{ validation.isValid ? 'صالح' : 'غير صالح' }}</strong>
       </div>
       <div class="summary-row">
         <span>مصدر المكتبة</span>
-        <strong>{{ libraryLoadedFromDb ? 'DB' : 'Fallback' }}</strong>
+        <strong>{{ libraryLoadedFromDb ? 'قاعدة البيانات' : 'مصدر احتياطي' }}</strong>
       </div>
       <div class="summary-row">
         <span>حالة المزامنة</span>
@@ -497,7 +646,7 @@
           [disabled]="savingToBackend || loadingLibrary"
           (click)="onSaveToBackend()">
         </button>
-        <button pButton type="button" label="التالي: Form Composition" icon="pi pi-arrow-left" iconPos="left" (click)="onGoNext()"></button>
+        <button pButton type="button" label="العودة إلى لوحة التحكم الجديدة" icon="pi pi-arrow-left" iconPos="left" (click)="onGoNext()"></button>
       </div>
     </aside>
   </div>

@@ -92,7 +92,7 @@ builder.Services.AddScoped<IDynamicSubjectsAdminRoutingService, DynamicSubjectsA
 builder.Services.AddScoped<IDynamicSubjectsAdminAccessPolicyService, DynamicSubjectsAdminAccessPolicyService>();
 builder.Services.AddScoped<IFieldAccessResolutionService, FieldAccessResolutionService>();
 builder.Services.AddScoped<IDynamicSubjectsRealtimePublisher, DynamicSubjectsRealtimePublisher>();
-builder.Services.AddScoped<ISubjectReferenceGenerator, SubjectReferenceGenerator>();
+builder.Services.AddScoped<ISubjectReferenceGenerator, ReferenceNumberGeneratorService>();
 builder.Services.AddHostedService<SummerPaymentAutoCancellationHostedService>();
 builder.Services.AddSingleton<ENPOCreateLogFile>(provider => new ENPOCreateLogFile("YourStringValue", "YourSecondStringValue", FileExtension.txt));
 
@@ -411,11 +411,6 @@ static async Task EnsureConnectMigrationsAsync(
         "Startup migrations check: {PendingCount} pending migration(s).",
         initialPending.Count);
 
-    if (initialPending.Count == 0)
-    {
-        return;
-    }
-
     var useSqlServerLock = database.IsSqlServer();
     var lockAcquired = false;
     if (useSqlServerLock)
@@ -440,23 +435,26 @@ static async Task EnsureConnectMigrationsAsync(
         if (pendingAfterLock.Count == 0)
         {
             logger?.LogInformation("Startup migrations: no pending migrations after lock acquisition.");
-            return;
         }
-
-        logger?.LogInformation(
-            "Applying pending migrations: {Migrations}",
-            string.Join(", ", pendingAfterLock));
-
-        await database.MigrateAsync(cancellationToken);
-
-        var remainingPending = database.GetPendingMigrations().ToList();
-        if (remainingPending.Count > 0)
+        else
         {
-            throw new InvalidOperationException(
-                $"Startup migrations finished with remaining pending migrations: {string.Join(", ", remainingPending)}");
+            logger?.LogInformation(
+                "Applying pending migrations: {Migrations}",
+                string.Join(", ", pendingAfterLock));
+
+            await database.MigrateAsync(cancellationToken);
+
+            var remainingPending = database.GetPendingMigrations().ToList();
+            if (remainingPending.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Startup migrations finished with remaining pending migrations: {string.Join(", ", remainingPending)}");
+            }
+
+            logger?.LogInformation("Startup migrations completed successfully.");
         }
 
-        logger?.LogInformation("Startup migrations completed successfully.");
+        await EnsureSubjectReferencePolicySchemaCompatibilityAsync(connectContext, logger, cancellationToken);
     }
     finally
     {
@@ -477,6 +475,65 @@ static async Task EnsureConnectMigrationsAsync(
             await database.CloseConnectionAsync();
         }
     }
+}
+
+static async Task EnsureSubjectReferencePolicySchemaCompatibilityAsync(
+    ConnectContext connectContext,
+    Microsoft.Extensions.Logging.ILogger? logger,
+    CancellationToken cancellationToken)
+{
+    if (!connectContext.Database.IsSqlServer())
+    {
+        return;
+    }
+
+    const string compatibilitySql = @"
+IF OBJECT_ID(N'[dbo].[SubjectReferencePolicies]', N'U') IS NULL
+    RETURN;
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'Mode') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[SubjectReferencePolicies]
+        ADD [Mode] [nvarchar](20) NOT NULL
+            CONSTRAINT [DF_SubjectReferencePolicies_Mode] DEFAULT (N'default');
+END
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'StartingValue') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[SubjectReferencePolicies]
+        ADD [StartingValue] [bigint] NOT NULL
+            CONSTRAINT [DF_SubjectReferencePolicies_StartingValue] DEFAULT ((1));
+END
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'ComponentsJson') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[SubjectReferencePolicies]
+        ADD [ComponentsJson] [nvarchar](max) NULL;
+END
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'Mode') IS NOT NULL
+BEGIN
+    EXEC(N'
+        UPDATE [dbo].[SubjectReferencePolicies]
+           SET [Mode] = N''default''
+         WHERE [Mode] IS NULL
+            OR LTRIM(RTRIM([Mode])) = N'''';
+    ');
+END
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'StartingValue') IS NOT NULL
+BEGIN
+    EXEC(N'
+        UPDATE [dbo].[SubjectReferencePolicies]
+           SET [StartingValue] = 1
+         WHERE [StartingValue] IS NULL
+            OR [StartingValue] <= 0;
+    ');
+END
+";
+
+    await connectContext.Database.ExecuteSqlRawAsync(compatibilitySql, cancellationToken);
+    logger?.LogInformation("Startup schema compatibility check for SubjectReferencePolicies completed.");
 }
 
 static async Task<bool> TryAcquireStartupMigrationSqlLockAsync(
