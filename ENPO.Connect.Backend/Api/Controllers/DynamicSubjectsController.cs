@@ -48,6 +48,7 @@ public class DynamicSubjectsController : ControllerBase
         public Task<CommonResponse<SubjectFormDefinitionDto>> GetFormDefinition(
             int categoryId,
             string? appId,
+            string? documentDirection,
             int? stageId,
             int? actionId,
             int? requestId,
@@ -57,6 +58,7 @@ public class DynamicSubjectsController : ControllerBase
                 categoryId,
                 GetCurrentUserId(),
                 appId,
+                documentDirection,
                 stageId,
                 actionId,
                 requestId,

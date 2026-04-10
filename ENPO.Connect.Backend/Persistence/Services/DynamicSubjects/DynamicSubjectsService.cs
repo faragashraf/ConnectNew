@@ -8,6 +8,7 @@ using Models.DTO.DynamicSubjects;
 using Models.GPA.OrgStructure;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.DynamicSubjects.AdminCatalog;
 using Persistence.Services.DynamicSubjects.FieldAccess;
 using Persistence.Services.Notifications;
 using System;
@@ -41,6 +42,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
     private readonly IDynamicSubjectsRealtimePublisher _realtimePublisher;
     private readonly ISubjectNotificationService _subjectNotificationService;
     private readonly IFieldAccessResolutionService _fieldAccessResolutionService;
+    private readonly IAdminControlCenterRequestPreviewResolver _requestPreviewResolver;
     private readonly ILogger<DynamicSubjectsService>? _logger;
 
     public DynamicSubjectsService(
@@ -52,6 +54,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         IDynamicSubjectsRealtimePublisher realtimePublisher,
         ISubjectNotificationService subjectNotificationService,
         IFieldAccessResolutionService fieldAccessResolutionService,
+        IAdminControlCenterRequestPreviewResolver requestPreviewResolver,
         ILogger<DynamicSubjectsService>? logger = null)
     {
         _connectContext = connectContext;
@@ -62,6 +65,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         _realtimePublisher = realtimePublisher;
         _subjectNotificationService = subjectNotificationService;
         _fieldAccessResolutionService = fieldAccessResolutionService;
+        _requestPreviewResolver = requestPreviewResolver;
         _logger = logger;
     }
 
@@ -166,6 +170,16 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return HasLegacyCreateAccess(category.CatId);
             }
 
+            var candidateRuntimeCategoryIds = scopedCategories
+                .Where(CanCreateByPolicy)
+                .Select(item => item.CatId)
+                .Distinct()
+                .ToList();
+            var runtimeAvailabilityMap = await ResolveRuntimePreviewAvailabilityMapAsync(
+                candidateRuntimeCategoryIds,
+                normalizedUserId,
+                cancellationToken);
+
             List<SubjectCategoryTreeNodeDto> BuildChildren(int parentId)
             {
                 if (!lookup.TryGetValue(parentId, out var children))
@@ -173,19 +187,31 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     return new List<SubjectCategoryTreeNodeDto>();
                 }
 
-                return children.Select(category => new SubjectCategoryTreeNodeDto
+                return children.Select(category =>
                 {
-                    CategoryId = category.CatId,
-                    ParentCategoryId = category.CatParent,
-                    CategoryName = category.CatName,
-                    IsActive = !category.CatStatus,
-                    ApplicationId = category.ApplicationId,
-                    HasDynamicFields = categoriesWithFieldsSet.Contains(category.CatId),
-                    CanCreate = CanCreateByPolicy(category),
-                    DisplayOrder = categorySettingsMap.TryGetValue(category.CatId, out var setting)
-                        ? setting.DisplayOrder
-                        : 0,
-                    Children = BuildChildren(category.CatId)
+                    var canCreateByPolicy = CanCreateByPolicy(category);
+                    var runtimeAvailability = runtimeAvailabilityMap.TryGetValue(category.CatId, out var resolvedRuntime)
+                        ? resolvedRuntime
+                        : RuntimePreviewAvailabilityState.CreateByPolicyDenied;
+                    var canCreate = canCreateByPolicy && runtimeAvailability.IsAvailable;
+
+                    return new SubjectCategoryTreeNodeDto
+                    {
+                        CategoryId = category.CatId,
+                        ParentCategoryId = category.CatParent,
+                        CategoryName = category.CatName,
+                        IsActive = !category.CatStatus,
+                        ApplicationId = category.ApplicationId,
+                        HasDynamicFields = categoriesWithFieldsSet.Contains(category.CatId),
+                        CanCreate = canCreate,
+                        IsRuntimeAvailable = canCreate,
+                        RuntimeAvailabilityReasons = runtimeAvailability.Reasons,
+                        RuntimeWarnings = runtimeAvailability.Warnings,
+                        DisplayOrder = categorySettingsMap.TryGetValue(category.CatId, out var setting)
+                            ? setting.DisplayOrder
+                            : 0,
+                        Children = BuildChildren(category.CatId)
+                    };
                 }).ToList();
             }
 
@@ -203,6 +229,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         int categoryId,
         string userId,
         string? appId,
+        string? documentDirection = null,
         int? stageId = null,
         int? actionId = null,
         int? requestId = null,
@@ -212,6 +239,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             categoryId,
             userId,
             appId,
+            documentDirection,
             allowInactiveCategory: false,
             stageId: NormalizePositiveInt(stageId),
             actionId: NormalizePositiveInt(actionId),
@@ -225,6 +253,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         int categoryId,
         string userId,
         string? appId,
+        string? documentDirection,
         bool allowInactiveCategory,
         int? stageId,
         int? actionId,
@@ -265,6 +294,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
+            AdminControlCenterRequestPreviewDto? runtimePreviewData = null;
             if (!allowInactiveCategory)
             {
                 var unitIds = await GetCurrentUserUnitIdsAsync(normalizedUserId, cancellationToken);
@@ -272,6 +302,25 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 {
                     response.Errors.Add(new Error { Code = "403", Message = "غير مصرح بعرض هذا النوع." });
                     return response;
+                }
+
+                if (!requestId.HasValue || requestId.Value <= 0)
+                {
+                    var runtimeAvailability = await ResolveRuntimePreviewAvailabilityAsync(
+                        category.CatId,
+                        normalizedUserId,
+                        cancellationToken);
+                    runtimePreviewData = runtimeAvailability.PreviewData;
+                    if (!runtimeAvailability.IsAvailable)
+                    {
+                        var reason = runtimeAvailability.Reasons.FirstOrDefault();
+                        response.Errors.Add(new Error
+                        {
+                            Code = "403",
+                            Message = reason ?? "هذا النوع غير متاح للمستخدم الحالي حسب Runtime Availability."
+                        });
+                        return response;
+                    }
                 }
             }
 
@@ -472,6 +521,13 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 groups,
                 fieldRows,
                 cancellationToken);
+
+            if (runtimePreviewData != null)
+            {
+                ApplyRuntimePreviewFieldState(fieldRows, runtimePreviewData.Fields);
+            }
+
+            ApplyPresentationPolicyOverrides(fieldRows, requestPolicy, documentDirection);
 
             var effectiveGroups = groups;
             var effectiveFields = fieldRows;
@@ -2522,6 +2578,23 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             errors.Add(new Error { Code = "403", Message = "غير مسموح بإنشاء طلبات على هذا النوع." });
         }
 
+        if (errors.Count == 0)
+        {
+            var runtimeAvailability = await ResolveRuntimePreviewAvailabilityAsync(
+                category.CatId,
+                NormalizeUser(userId),
+                cancellationToken);
+            if (!runtimeAvailability.IsAvailable)
+            {
+                errors.Add(new Error
+                {
+                    Code = "403",
+                    Message = runtimeAvailability.Reasons.FirstOrDefault()
+                        ?? "هذا النوع غير متاح للمستخدم الحالي حسب Runtime Availability."
+                });
+            }
+        }
+
         var requestPolicy = await LoadCategoryRequestPolicyAsync(category.CatId, cancellationToken);
         var resolvedWorkflowPolicy = RequestPolicyResolver.ResolveWorkflowPolicy(requestPolicy);
         if (requestPolicy != null && HasWorkflowPolicyCustomization(requestPolicy))
@@ -2631,6 +2704,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             categoryId,
             userId,
             categoryApplicationId,
+            documentDirection,
             allowInactiveCategory: true,
             stageId: NormalizePositiveInt(stageId),
             actionId: NormalizePositiveInt(actionId),
@@ -2734,6 +2808,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             categoryId,
             userId,
             categoryApplicationId,
+            documentDirection,
             allowInactiveCategory: true,
             stageId: NormalizePositiveInt(stageId),
             actionId: NormalizePositiveInt(actionId),
@@ -4313,6 +4388,216 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             .Where(unitId => unitId.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private async Task<Dictionary<int, RuntimePreviewAvailabilityState>> ResolveRuntimePreviewAvailabilityMapAsync(
+        IReadOnlyCollection<int> categoryIds,
+        string normalizedUserId,
+        CancellationToken cancellationToken)
+    {
+        var map = new Dictionary<int, RuntimePreviewAvailabilityState>();
+        foreach (var categoryId in (categoryIds ?? Array.Empty<int>())
+                     .Where(item => item > 0)
+                     .Distinct()
+                     .OrderBy(item => item))
+        {
+            map[categoryId] = await ResolveRuntimePreviewAvailabilityAsync(categoryId, normalizedUserId, cancellationToken);
+        }
+
+        return map;
+    }
+
+    private async Task<RuntimePreviewAvailabilityState> ResolveRuntimePreviewAvailabilityAsync(
+        int categoryId,
+        string normalizedUserId,
+        CancellationToken cancellationToken)
+    {
+        if (categoryId <= 0 || normalizedUserId.Length == 0)
+        {
+            return RuntimePreviewAvailabilityState.CreateByPolicyDenied;
+        }
+
+        try
+        {
+            var previewResponse = await _requestPreviewResolver.ResolveAsync(
+                categoryId,
+                normalizedUserId,
+                cancellationToken);
+            if (previewResponse?.Data != null && (previewResponse.Errors?.Count ?? 0) == 0)
+            {
+                return new RuntimePreviewAvailabilityState
+                {
+                    IsAvailable = previewResponse.Data.IsAvailable,
+                    Reasons = DistinctNormalized(previewResponse.Data.AvailabilityReasons),
+                    Warnings = DistinctNormalized(previewResponse.Data.Warnings),
+                    PreviewData = previewResponse.Data
+                };
+            }
+
+            var warningMessages = new List<string> { "تعذر تقييم Runtime Availability لهذا النوع أثناء التحميل." };
+            if (previewResponse?.Errors != null)
+            {
+                warningMessages.AddRange(
+                    previewResponse.Errors
+                        .Select(error => NormalizeNullable(error?.Message))
+                        .Where(message => message != null)
+                        .Select(message => message!));
+            }
+
+            return new RuntimePreviewAvailabilityState
+            {
+                IsAvailable = false,
+                Reasons = new List<string> { "تم حجب النوع لعدم اكتمال تقييم Runtime Availability." },
+                Warnings = DistinctNormalized(warningMessages)
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(
+                ex,
+                "Runtime preview availability evaluation failed for categoryId {CategoryId}, userId {UserId}.",
+                categoryId,
+                normalizedUserId);
+            return new RuntimePreviewAvailabilityState
+            {
+                IsAvailable = false,
+                Reasons = new List<string> { "تم حجب النوع بسبب خطأ أثناء تقييم Runtime Availability." },
+                Warnings = new List<string> { "تعذر الوصول لنتيجة Runtime Preview في هذه اللحظة." }
+            };
+        }
+    }
+
+    private static void ApplyRuntimePreviewFieldState(
+        List<SubjectFieldDefinitionDto> fields,
+        IReadOnlyCollection<AdminControlCenterRequestPreviewFieldDto>? previewFields)
+    {
+        var map = (previewFields ?? Array.Empty<AdminControlCenterRequestPreviewFieldDto>())
+            .GroupBy(item => item.FieldId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var field in fields ?? new List<SubjectFieldDefinitionDto>())
+        {
+            if (!map.TryGetValue(field.MendSql, out var previewField))
+            {
+                continue;
+            }
+
+            var isVisible = previewField.IsVisible;
+            var isRequired = previewField.IsRequired && isVisible;
+
+            field.IsVisible = isVisible;
+            field.CanView = isVisible;
+            field.IsHidden = !isVisible;
+            field.Required = isRequired;
+            field.IsRequired = isRequired;
+
+            if (!isVisible)
+            {
+                field.IsDisabledInit = true;
+                field.IsReadOnly = true;
+                field.CanEdit = false;
+                field.CanFill = false;
+            }
+        }
+    }
+
+    private static void ApplyPresentationPolicyOverrides(
+        List<SubjectFieldDefinitionDto> fields,
+        RequestPolicyDefinitionDto? requestPolicy,
+        string? documentDirection)
+    {
+        if (fields == null || fields.Count == 0)
+        {
+            return;
+        }
+
+        var context = BuildValidationPolicyContext(documentDirection);
+        foreach (var field in fields)
+        {
+            var resolvedPatch = RequestPolicyResolver.ResolvePresentationMetadata(
+                field.FieldKey,
+                requestPolicy,
+                context);
+            if (resolvedPatch == null)
+            {
+                continue;
+            }
+
+            if (resolvedPatch.Label != null)
+            {
+                field.FieldLabel = resolvedPatch.Label;
+            }
+
+            if (resolvedPatch.Placeholder != null)
+            {
+                field.Placeholder = resolvedPatch.Placeholder;
+            }
+
+            if (resolvedPatch.Visible.HasValue)
+            {
+                var visible = resolvedPatch.Visible.Value;
+                field.IsVisible = visible;
+                field.CanView = visible;
+                field.IsHidden = !visible;
+                if (!visible)
+                {
+                    field.Required = false;
+                    field.IsRequired = false;
+                }
+            }
+
+            if (resolvedPatch.Readonly.HasValue)
+            {
+                var readOnly = resolvedPatch.Readonly.Value;
+                field.IsDisabledInit = readOnly;
+                field.IsReadOnly = readOnly;
+                field.CanEdit = !readOnly;
+                field.CanFill = !readOnly;
+            }
+
+            if (resolvedPatch.Required.HasValue)
+            {
+                var required = resolvedPatch.Required.Value && field.IsVisible;
+                field.Required = required;
+                field.IsRequired = required;
+            }
+        }
+    }
+
+    private static List<string> DistinctNormalized(IEnumerable<string?> values)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in values ?? Array.Empty<string>())
+        {
+            var normalized = NormalizeNullable(value);
+            if (normalized == null || !seen.Add(normalized))
+            {
+                continue;
+            }
+
+            result.Add(normalized);
+        }
+
+        return result;
+    }
+
+    private sealed class RuntimePreviewAvailabilityState
+    {
+        public static RuntimePreviewAvailabilityState CreateByPolicyDenied => new()
+        {
+            IsAvailable = false,
+            Reasons = new List<string> { "النوع غير متاح للإنشاء حسب سياسة الوصول الحالية." },
+            Warnings = new List<string>()
+        };
+
+        public bool IsAvailable { get; set; }
+
+        public List<string> Reasons { get; set; } = new();
+
+        public List<string> Warnings { get; set; } = new();
+
+        public AdminControlCenterRequestPreviewDto? PreviewData { get; set; }
     }
 
     private static string NormalizeUser(string? userId)

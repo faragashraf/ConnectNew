@@ -26,10 +26,6 @@ import { DynamicGroupRenderItem } from '../shared/models/dynamic-group-render-it
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
 import { DynamicSubjectAccessService } from '../../services/dynamic-subject-access.service';
 import {
-  RequestPolicyResolverService,
-  RequestPolicyRuntimeContext
-} from 'src/app/Modules/admins/services/request-policy-resolver.service';
-import {
   AdminControlCenterCanonicalCategoryLink,
   AdminControlCenterRuntimeBridgeContext,
   AdminControlCenterRuntimeBridgeService
@@ -97,7 +93,6 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     private readonly previewFoundation: CentralAdminPreviewFoundationService,
     private readonly genericFormService: GenericFormsService,
     private readonly appNotification: AppNotificationService,
-    private readonly requestPolicyResolver: RequestPolicyResolverService,
     private readonly runtimeBridgeService: AdminControlCenterRuntimeBridgeService
   ) {
     this.editorForm = this.fb.group({
@@ -123,7 +118,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.rebuildResolvedDynamicDefinitionPreservingValues();
+        this.reloadFormDefinitionForDirectionChange();
       })
     );
 
@@ -519,7 +514,11 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     });
   }
 
-  private loadFormDefinition(categoryId: number, detail?: SubjectDetailDto): void {
+  private loadFormDefinition(
+    categoryId: number,
+    detail?: SubjectDetailDto,
+    initialValues?: SubjectFieldValueDto[]
+  ): void {
     this.refreshTreeRuntimeMetadata(categoryId);
 
     if (!this.isEditMode && this.allowedCategoryIds.size > 0 && !this.allowedCategoryIds.has(categoryId)) {
@@ -529,14 +528,17 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     }
 
     const appId = this.dynamicSubjectAccess.getApplicationId();
-    this.dynamicSubjectsController.getFormDefinition(categoryId, appId).subscribe({
+    const documentDirection = this.resolveDocumentDirectionForForm() ?? this.runtimeBridgeContext?.documentDirection ?? undefined;
+    const requestContext = { documentDirection };
+
+    this.dynamicSubjectsController.getFormDefinition(categoryId, appId, requestContext).subscribe({
       next: response => {
         const hasErrors = Boolean(response?.errors?.length);
         const hasAnyField = Number(response?.data?.fields?.length ?? 0) > 0;
         const shouldRetryWithoutAppScope = hasErrors || !hasAnyField;
 
         if (shouldRetryWithoutAppScope) {
-          this.dynamicSubjectsController.getFormDefinition(categoryId).subscribe({
+          this.dynamicSubjectsController.getFormDefinition(categoryId, undefined, requestContext).subscribe({
             next: fallbackResponse => {
               if (fallbackResponse?.errors?.length) {
                 this.loadLegacyFormDefinition(categoryId, detail);
@@ -549,7 +551,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
                 return;
               }
 
-              this.applyLoadedDefinition(fallbackDefinition, detail);
+              this.applyLoadedDefinition(fallbackDefinition, detail, initialValues);
             },
             error: () => {
               this.loadLegacyFormDefinition(categoryId, detail);
@@ -564,7 +566,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.applyLoadedDefinition(definition, detail);
+        this.applyLoadedDefinition(definition, detail, initialValues);
       },
       error: () => {
         this.loadLegacyFormDefinition(categoryId, detail);
@@ -576,11 +578,18 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     return Boolean(definition && Array.isArray(definition.fields) && definition.fields.length > 0);
   }
 
-  private applyLoadedDefinition(definition: SubjectFormDefinitionDto | null, detail?: SubjectDetailDto): void {
+  private applyLoadedDefinition(
+    definition: SubjectFormDefinitionDto | null,
+    detail?: SubjectDetailDto,
+    initialValues?: SubjectFieldValueDto[]
+  ): void {
     this.rawFormDefinition = definition ?? null;
     this.activeRequestPolicy = this.rawFormDefinition?.requestPolicy ?? null;
     this.applyDirectionPolicyFromDefinition(this.resolveInitialDirectionCandidate(detail));
-    this.rebuildResolvedDynamicDefinition(detail?.dynamicFields ?? [], false);
+    const seedValues = (initialValues && initialValues.length > 0)
+      ? initialValues
+      : (detail?.dynamicFields ?? []);
+    this.rebuildResolvedDynamicDefinition(seedValues, false);
     this.applyPendingDynamicFieldValueBindings();
     this.populateStakeholders(detail);
     this.populateTasks(detail);
@@ -610,8 +619,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   }
 
   private applyDirectionPolicyFromDefinition(initialDirection: string | null): void {
-    const normalizedPolicy = this.requestPolicyResolver.normalizePolicy(this.activeRequestPolicy);
-    const workflow = normalizedPolicy.workflowPolicy;
+    const workflow = this.activeRequestPolicy?.workflowPolicy;
     const directionMode = String(workflow?.directionMode ?? 'selectable').trim().toLowerCase() === 'fixed'
       ? 'fixed'
       : 'selectable';
@@ -648,8 +656,13 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.lastResolvedDirectionKey = preferredDirection;
   }
 
-  private rebuildResolvedDynamicDefinitionPreservingValues(): void {
-    this.rebuildResolvedDynamicDefinition([], true);
+  private reloadFormDefinitionForDirectionChange(): void {
+    const categoryId = Number(this.editorForm.get('categoryId')?.value ?? 0);
+    if (categoryId <= 0 || this.loading || this.saving) {
+      return;
+    }
+
+    this.loadFormDefinition(categoryId, undefined, this.buildDynamicFieldValues());
   }
 
   private rebuildResolvedDynamicDefinition(
@@ -678,45 +691,19 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
   private resolveDefinitionByPolicy(
     source: SubjectFormDefinitionDto,
-    documentDirection: string | null
+    _documentDirection: string | null
   ): SubjectFormDefinitionDto {
-    const context = this.buildRuntimePolicyContext(documentDirection);
-    const policy = this.activeRequestPolicy;
-
-    const fields = (source.fields ?? []).map(field => {
-      const resolved = this.requestPolicyResolver.resolvePresentationMetadata(field, context, policy);
-      return {
-        ...field,
-        fieldLabel: resolved.label,
-        placeholder: resolved.placeholder ?? field.placeholder,
-        required: Boolean(resolved.required),
-        isDisabledInit: Boolean(resolved.readonly),
-        isVisible: Boolean(resolved.visible),
-        group: field.group ? { ...field.group } : undefined
-      } as SubjectFieldDefinitionDto;
-    });
-
     const policyResolved: SubjectFormDefinitionDto = {
       ...source,
       groups: (source.groups ?? []).map(group => ({ ...group })),
-      fields,
+      fields: (source.fields ?? []).map(field => ({
+        ...field,
+        group: field.group ? { ...field.group } : undefined
+      })),
       requestPolicy: this.activeRequestPolicy ?? source.requestPolicy
     };
 
     return this.runtimeBridgeService.applyDefinitionOverrides(policyResolved, this.runtimeBridgeContext);
-  }
-
-  private buildRuntimePolicyContext(documentDirection: string | null): RequestPolicyRuntimeContext {
-    return {
-      applicationId: this.dynamicSubjectAccess.getApplicationId(),
-      categoryId: Number(this.editorForm.get('categoryId')?.value ?? 0) || null,
-      routeKeyPrefix: this.runtimeBridgeContext?.routeKeyPrefix ?? 'DynamicSubjects',
-      documentDirection: documentDirection ?? this.runtimeBridgeContext?.documentDirection ?? null,
-      requestMode: this.isEditMode ? 'edit' : 'create',
-      creatorUnitId: null,
-      targetUnitId: null,
-      variables: {}
-    };
   }
 
   private resolveDocumentDirectionForForm(): string | null {

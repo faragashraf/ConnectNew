@@ -21,6 +21,9 @@ export interface SubjectCategoryTreeNodeDto {
   applicationId?: string;
   hasDynamicFields: boolean;
   canCreate: boolean;
+  isRuntimeAvailable: boolean;
+  runtimeAvailabilityReasons: string[];
+  runtimeWarnings: string[];
   displayOrder: number;
   children: SubjectCategoryTreeNodeDto[];
 }

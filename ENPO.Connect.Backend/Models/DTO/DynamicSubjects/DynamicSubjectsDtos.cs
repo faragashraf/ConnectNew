@@ -20,6 +20,12 @@ public sealed class SubjectCategoryTreeNodeDto
 
     public bool CanCreate { get; set; }
 
+    public bool IsRuntimeAvailable { get; set; } = true;
+
+    public List<string> RuntimeAvailabilityReasons { get; set; } = new();
+
+    public List<string> RuntimeWarnings { get; set; } = new();
+
     public int DisplayOrder { get; set; }
 
     public List<SubjectCategoryTreeNodeDto> Children { get; set; } = new();

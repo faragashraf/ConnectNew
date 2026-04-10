@@ -69,12 +69,18 @@
     <form [formGroup]="editorForm" class="main-form">
       <div class="field">
         <label>نوع الموضوع/الطلب *</label>
-        <select formControlName="categoryId" (change)="onCategoryChanged()" [disabled]="isEditMode">
-          <option value="0">اختر النوع</option>
-          <option *ngFor="let option of categoryOptions" [value]="option.id">
-            {{ option.name }}
-          </option>
-        </select>
+        <p-dropdown
+          formControlName="categoryId"
+          [options]="categoryOptions"
+          optionLabel="name"
+          optionValue="id"
+          appendTo="body"
+          [filter]="true"
+          [showClear]="!isEditMode"
+          [disabled]="isEditMode"
+          placeholder="اختر النوع"
+          (onChange)="onCategoryChanged()">
+        </p-dropdown>
         <small class="error" *ngIf="shouldShowEditorError('categoryId')">{{ getEditorErrorMessage('categoryId') }}</small>
       </div>
 

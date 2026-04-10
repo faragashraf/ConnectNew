@@ -17,6 +17,7 @@ public interface IDynamicSubjectsService
         int categoryId,
         string userId,
         string? appId,
+        string? documentDirection = null,
         int? stageId = null,
         int? actionId = null,
         int? requestId = null,

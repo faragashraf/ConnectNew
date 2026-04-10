@@ -61,11 +61,14 @@ export class DynamicSubjectsController {
   getFormDefinition(
     categoryId: number,
     appId?: string,
-    context?: { stageId?: number; actionId?: number; requestId?: number }
+    context?: { stageId?: number; actionId?: number; requestId?: number; documentDirection?: string }
   ): Observable<CommonResponse<SubjectFormDefinitionDto>> {
     let params = new HttpParams();
     if (appId) {
       params = params.set('appId', appId);
+    }
+    if (context?.documentDirection) {
+      params = params.set('documentDirection', String(context.documentDirection));
     }
     if (context?.stageId != null) {
       params = params.set('stageId', String(context.stageId));
