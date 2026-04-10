@@ -257,6 +257,23 @@
   margin: 0 0 0.6rem;
 }
 
+.panel-header-inline {
+  margin-bottom: 0.6rem;
+}
+
+.panel-header-inline h3 {
+  margin: 0;
+}
+
+.diagnostics-toggle {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 8px;
+  padding: 0.28rem 0.6rem;
+  font-size: 0.78rem;
+}
+
 .runtime-field-inspector {
   background: #f8fbff;
   border-color: #bfdbfe;
@@ -352,10 +369,17 @@
   padding: 1rem;
 }
 
+.group-card-nested {
+  background: #fcfdff;
+  border-color: #dbeafe;
+  padding-inline-start: calc(1rem + (var(--group-level, 1) * 0.2rem));
+}
+
 .group-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.45rem;
   margin-bottom: 0.75rem;
 }
 
@@ -368,6 +392,20 @@
 .group-header span {
   color: #64748b;
   font-size: 0.8rem;
+}
+
+.group-description {
+  margin: -0.2rem 0 0.75rem;
+  color: #475569;
+  font-size: 0.8rem;
+}
+
+.group-children {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-right: 0.75rem;
+  border-right: 2px solid #e2e8f0;
 }
 
 .form-array {

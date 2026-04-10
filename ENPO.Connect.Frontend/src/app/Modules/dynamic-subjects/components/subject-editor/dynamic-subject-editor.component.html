@@ -140,8 +140,30 @@
         </div>
       </form>
 
-      <section class="panel runtime-field-inspector" *ngIf="canShowRuntimeFieldInspector">
-        <h3>نتيجة Runtime الحالية</h3>
+      <section class="panel">
+        <div class="panel-header panel-header-inline">
+          <h3>الحقول الديناميكية</h3>
+          <button
+            type="button"
+            class="diagnostics-toggle"
+            *ngIf="canShowRuntimeFieldInspector"
+            (click)="toggleDiagnostics()">
+            {{ showDiagnostics ? 'إخفاء التشخيص' : 'إظهار التشخيص' }}
+          </button>
+        </div>
+
+        <div class="groups-wrap" *ngIf="dynamicControls && renderGroupTree.length > 0" [formGroup]="dynamicControls">
+          <ng-container *ngFor="let groupNode of renderGroupTree; trackBy: trackByGroupNode">
+            <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: groupNode, level: 0 }"></ng-container>
+          </ng-container>
+        </div>
+        <p class="empty-text" *ngIf="!renderGroupTree || renderGroupTree.length === 0">
+          لا توجد حقول ديناميكية مهيأة لهذا النوع.
+        </p>
+      </section>
+
+      <section class="panel runtime-field-inspector" *ngIf="shouldRenderRuntimeDiagnostics">
+        <h3>نتيجة Runtime الحالية (تشخيص)</h3>
         <p class="runtime-inspector-caption">
           النوع المحدد: <strong>{{ selectedCategoryDisplayName || ('#' + selectedCategoryId) }}</strong>
         </p>
@@ -179,38 +201,43 @@
         </div>
       </section>
 
-      <section class="panel">
-        <h3>الحقول الديناميكية</h3>
-        <div class="groups-wrap" *ngIf="dynamicControls && renderGroups.length > 0" [formGroup]="dynamicControls">
-          <section class="group-card" *ngFor="let group of renderGroups; trackBy: trackByGroup">
-            <header class="group-header">
-              <h3>{{ getGroupDisplayName(group) }}</h3>
-              <span>{{ group.fields.length }} حقل</span>
-            </header>
+      <ng-template #runtimeGroupNodeTemplate let-groupNode let-level="level">
+        <section class="group-card" [class.group-card-nested]="level > 0" [style.--group-level]="level">
+          <header class="group-header">
+            <h3>{{ groupNode.groupName }}</h3>
+            <span *ngIf="groupNode.totalVisibleFieldsCount > 0">{{ groupNode.totalVisibleFieldsCount }} حقل</span>
+          </header>
 
-            <div [formArrayName]="group.formArrayName" class="form-array">
-              <div *ngFor="let mandFiled of getFormArrayControls(group.formArrayName); let i = index" [formGroupName]="i" style="display: contents;">
-                <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" style="display: contents;">
-                  <app-generic-form-array
-                    [controlFullName]="ctrlName"
-                    [index]="i"
-                    [filtered_CategoryMand]="group.fields"
-                    [isDivDisabled]="false"
-                    [ticketForm]="dynamicControls"
-                    [mandFileds]="getFormArrayInstance(group.formArrayName)!"
-                    [tree]="unitTree"
-                    [showTreeButton]="true"
-                    (genericEvent)="onDynamicFieldGenericEvent($event)">
-                  </app-generic-form-array>
-                </div>
+          <p class="group-description" *ngIf="groupNode.groupDescription">{{ groupNode.groupDescription }}</p>
+
+          <div
+            *ngIf="groupNode.formArrayName && groupNode.fields.length > 0"
+            [formArrayName]="groupNode.formArrayName!"
+            class="form-array">
+            <div *ngFor="let mandFiled of getFormArrayControls(groupNode.formArrayName!); let i = index" [formGroupName]="i" style="display: contents;">
+              <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" style="display: contents;">
+                <app-generic-form-array
+                  [controlFullName]="ctrlName"
+                  [index]="i"
+                  [filtered_CategoryMand]="groupNode.fields"
+                  [isDivDisabled]="false"
+                  [ticketForm]="dynamicControls"
+                  [mandFileds]="getFormArrayInstance(groupNode.formArrayName!)!"
+                  [tree]="unitTree"
+                  [showTreeButton]="true"
+                  (genericEvent)="onDynamicFieldGenericEvent($event)">
+                </app-generic-form-array>
               </div>
             </div>
-          </section>
-        </div>
-        <p class="empty-text" *ngIf="!renderGroups || renderGroups.length === 0">
-          لا توجد حقول ديناميكية مهيأة لهذا النوع.
-        </p>
-      </section>
+          </div>
+
+          <div class="group-children" *ngIf="groupNode.children.length > 0">
+            <ng-container *ngFor="let childNode of groupNode.children; trackBy: trackByGroupNode">
+              <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: childNode, level: level + 1 }"></ng-container>
+            </ng-container>
+          </div>
+        </section>
+      </ng-template>
 
       <section class="panel" *ngIf="!isRuntimeRegistrationMvpMode">
         <div class="panel-header">

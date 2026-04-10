@@ -22,7 +22,6 @@ import {
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { ComponentConfig, getConfigByRoute, processRequestsAndPopulate, RequestArrayItem, routeKey } from 'src/app/shared/models/Component.Config.model';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
-import { DynamicGroupRenderItem } from '../shared/models/dynamic-group-render-item.model';
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
 import { DynamicSubjectAccessService } from '../../services/dynamic-subject-access.service';
 import {
@@ -35,6 +34,21 @@ interface RuntimeFieldInspectorRow {
   fieldKey: string;
   fieldLabel: string;
   required: boolean;
+}
+
+interface RuntimeGroupHierarchyMeta {
+  parentGroupId: number | null;
+  displayOrder: number;
+}
+
+interface RuntimeGroupRenderNode {
+  groupId: number;
+  groupName: string;
+  groupDescription?: string;
+  formArrayName: string | null;
+  fields: CdCategoryMandDto[];
+  totalVisibleFieldsCount: number;
+  children: RuntimeGroupRenderNode[];
 }
 
 @Component({
@@ -60,10 +74,11 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   saving = false;
   isEditMode = false;
   isRuntimeRegistrationMvpMode = false;
+  showDiagnostics = false;
   messageId = 0;
   private rawFormDefinition: SubjectFormDefinitionDto | null = null;
   formDefinition: SubjectFormDefinitionDto | null = null;
-  renderGroups: DynamicGroupRenderItem[] = [];
+  renderGroupTree: RuntimeGroupRenderNode[] = [];
   categoryOptions: Array<{ id: number; name: string }> = [];
   pendingFiles: FileParameter[] = [];
   existingAttachments: Array<{ attachmentId: number; fileName: string }> = [];
@@ -248,6 +263,10 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     return this.isRuntimeRegistrationMvpMode && !this.isEditMode && this.selectedCategoryId > 0;
   }
 
+  get shouldRenderRuntimeDiagnostics(): boolean {
+    return this.canShowRuntimeFieldInspector && this.showDiagnostics;
+  }
+
   get runtimeVisibleFieldRows(): RuntimeFieldInspectorRow[] {
     return this.buildRuntimeFieldInspectorRows(true);
   }
@@ -256,11 +275,14 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     return this.buildRuntimeFieldInspectorRows(false);
   }
 
-  trackByGroup = (_index: number, group: DynamicGroupRenderItem): number => group.groupId;
+  trackByGroupNode = (_index: number, groupNode: RuntimeGroupRenderNode): number => groupNode.groupId;
 
-  getGroupDisplayName(group: DynamicGroupRenderItem): string {
-    const groupName = String(group.groupName ?? '').trim();
-    return groupName.length > 0 ? groupName : `مجموعة ${group.groupId}`;
+  toggleDiagnostics(): void {
+    if (!this.canShowRuntimeFieldInspector) {
+      return;
+    }
+
+    this.showDiagnostics = !this.showDiagnostics;
   }
 
   getFormArrayControls(formArrayName: string): AbstractControl[] {
@@ -1075,17 +1097,46 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.resetDynamicFormState();
 
     const allFields = (definition?.fields ?? [])
-      .sort((left, right) => Number(left.displayOrder ?? 0) - Number(right.displayOrder ?? 0));
-    const visibleFields = allFields.filter(field => field.isVisible !== false);
-    const fieldsToRender = visibleFields.length > 0 ? visibleFields : allFields;
+      .sort((left, right) => this.compareFieldsByDisplayOrder(left, right));
+    const fieldsToRender = allFields.filter(field => field.isVisible !== false);
 
     if (!definition || fieldsToRender.length === 0) {
       return;
     }
 
+    const definitionGroups = definition.groups ?? [];
+    const definitionGroupById = new Map<number, SubjectGroupDefinitionDto>();
+    definitionGroups.forEach(group => {
+      const groupId = Number(group.groupId ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      definitionGroupById.set(groupId, group);
+    });
+
+    fieldsToRender.forEach(field => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0 || definitionGroupById.has(groupId)) {
+        return;
+      }
+
+      definitionGroupById.set(groupId, {
+        groupId,
+        groupName: String(field.group?.groupName ?? '').trim(),
+        groupDescription: String(field.group?.groupDescription ?? '').trim(),
+        isExtendable: Boolean(field.group?.isExtendable),
+        groupWithInRow: Number(field.group?.groupWithInRow ?? 12)
+      });
+    });
+
     const fieldsByGroup = new Map<number, SubjectFieldDefinitionDto[]>();
     fieldsToRender.forEach(field => {
       const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
       if (!fieldsByGroup.has(groupId)) {
         fieldsByGroup.set(groupId, []);
       }
@@ -1093,118 +1144,495 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       fieldsByGroup.get(groupId)?.push(field);
     });
 
-    const orderedGroupIds: number[] = [];
-    const definitionGroups = definition.groups ?? [];
-    definitionGroups.forEach(group => {
-      if (fieldsByGroup.has(group.groupId)) {
-        orderedGroupIds.push(group.groupId);
+    const groupHierarchyMap = this.buildRuntimeGroupHierarchy(
+      Array.from(definitionGroupById.values()),
+      fieldsToRender
+    );
+    const groupIdsToRender = new Set<number>(Array.from(fieldsByGroup.keys()));
+    Array.from(fieldsByGroup.keys()).forEach(groupId => {
+      const visited = new Set<number>([groupId]);
+      let parentGroupId = groupHierarchyMap.get(groupId)?.parentGroupId ?? null;
+      while (parentGroupId && !visited.has(parentGroupId)) {
+        if (!groupHierarchyMap.has(parentGroupId)) {
+          break;
+        }
+
+        groupIdsToRender.add(parentGroupId);
+        visited.add(parentGroupId);
+        parentGroupId = groupHierarchyMap.get(parentGroupId)?.parentGroupId ?? null;
       }
     });
 
-    Array.from(fieldsByGroup.keys())
-      .filter(groupId => !orderedGroupIds.includes(groupId))
-      .sort((left, right) => left - right)
-      .forEach(groupId => orderedGroupIds.push(groupId));
+    const safeParentByGroupId = this.buildSanitizedParentGroupMap(groupIdsToRender, groupHierarchyMap);
+    const orderedGroupIds = Array.from(groupIdsToRender.values())
+      .sort((left, right) => this.compareGroupsByDisplayOrder(left, right, groupHierarchyMap));
 
     const mappedMendDefinitions: CdmendDto[] = [];
     const mappedCategoryMandDefinitions: CdCategoryMandDto[] = [];
+    const renderNodesByGroupId = new Map<number, RuntimeGroupRenderNode>();
     let nextControlIndex = 0;
 
     orderedGroupIds.forEach(groupId => {
-      const groupFields = fieldsByGroup.get(groupId) ?? [];
-      if (groupFields.length === 0) {
-        return;
-      }
-
-      const groupDefinition = definitionGroups.find(group => Number(group.groupId) === groupId);
-      const groupName = String(groupDefinition?.groupName ?? groupFields[0]?.group?.groupName ?? `مجموعة ${groupId}`);
-      const formArrayName = `dynamic_subject_group_${groupId}`;
-      const formArray = this.fb.array([]);
+      const groupFields = [...(fieldsByGroup.get(groupId) ?? [])]
+        .sort((left, right) => this.compareFieldsByDisplayOrder(left, right));
+      const groupDefinition = definitionGroupById.get(groupId) ?? groupFields[0]?.group;
+      const groupName = this.resolveRuntimeGroupDisplayName(groupId, groupDefinition, groupFields[0]);
+      const groupDescription = String(groupDefinition?.groupDescription ?? groupFields[0]?.group?.groupDescription ?? '').trim() || undefined;
+      const formArrayName = groupFields.length > 0 ? `dynamic_subject_group_${groupId}` : null;
       const mappedGroupFields: CdCategoryMandDto[] = [];
 
-      groupFields.forEach(field => {
-        const controlIndex = nextControlIndex++;
-        const controlName = `${field.fieldKey}|${controlIndex}`;
-        const cdmendType = this.mapFieldTypeToGenericType(field.fieldType, field.fieldKey);
-        const cdmendDatatype = this.mapFieldDataType(field, cdmendType);
-        const usesSelectionTable = cdmendType === 'Dropdown' || cdmendType === 'DropdownTree' || cdmendType === 'RadioButton';
-        const cdmendTbl = usesSelectionTable
-          ? this.parseFieldOptionsAsSelectionJson(field.optionsPayload)
-          : this.resolvePatternExpression(field.optionsPayload);
-        const hasPattern = Boolean(field.pattern) && cdmendTbl.length > 0;
+      if (formArrayName) {
+        const formArray = this.fb.array([]);
+        groupFields.forEach(field => {
+          const controlIndex = nextControlIndex++;
+          const controlName = `${field.fieldKey}|${controlIndex}`;
+          const cdmendType = this.mapFieldTypeToGenericType(field.fieldType, field.fieldKey);
+          const cdmendDatatype = this.mapFieldDataType(field, cdmendType);
+          const usesSelectionTable = cdmendType === 'Dropdown' || cdmendType === 'DropdownTree' || cdmendType === 'RadioButton';
+          const cdmendTbl = usesSelectionTable
+            ? this.parseFieldOptionsAsSelectionJson(field.optionsPayload)
+            : this.resolvePatternExpression(field.optionsPayload);
+          const hasPattern = Boolean(field.pattern) && cdmendTbl.length > 0;
 
-        const mappedMendDefinition: CdmendDto = {
-          cdmendSql: Number(field.mendSql ?? 0),
-          cdmendType,
-          cdmendTxt: field.fieldKey,
-          cdMendLbl: field.fieldLabel ?? field.fieldKey,
-          placeholder: field.placeholder ?? '',
-          defaultValue: field.defaultValue ?? '',
-          cdmendTbl,
-          cdmendDatatype,
-          required: Boolean(field.required),
-          requiredTrue: Boolean(field.requiredTrue),
-          email: Boolean(field.email),
-          pattern: hasPattern,
-          min: Number.isFinite(Number(field.minValue)) ? Number(field.minValue) : undefined,
-          max: Number.isFinite(Number(field.maxValue)) ? Number(field.maxValue) : undefined,
-          minxLenght: undefined,
-          maxLenght: undefined,
-          cdmendmask: field.mask ?? '',
-          cdmendStat: true,
-          maxValue: field.maxValue ?? '',
-          minValue: field.minValue ?? '',
-          width: Number(field.width ?? 0),
-          height: Number(field.height ?? 0),
-          isDisabledInit: Boolean(field.isDisabledInit),
-          isSearchable: Boolean(field.isSearchable),
-          applicationId: field.applicationId
-        };
+          const mappedMendDefinition: CdmendDto = {
+            cdmendSql: Number(field.mendSql ?? 0),
+            cdmendType,
+            cdmendTxt: field.fieldKey,
+            cdMendLbl: field.fieldLabel ?? field.fieldKey,
+            placeholder: field.placeholder ?? '',
+            defaultValue: field.defaultValue ?? '',
+            cdmendTbl,
+            cdmendDatatype,
+            required: Boolean(field.required || field.requiredTrue),
+            requiredTrue: Boolean(field.requiredTrue),
+            email: Boolean(field.email),
+            pattern: hasPattern,
+            min: Number.isFinite(Number(field.minValue)) ? Number(field.minValue) : undefined,
+            max: Number.isFinite(Number(field.maxValue)) ? Number(field.maxValue) : undefined,
+            minxLenght: undefined,
+            maxLenght: undefined,
+            cdmendmask: field.mask ?? '',
+            cdmendStat: true,
+            maxValue: field.maxValue ?? '',
+            minValue: field.minValue ?? '',
+            width: Number(field.width ?? 0),
+            height: Number(field.height ?? 0),
+            isDisabledInit: Boolean(field.isDisabledInit),
+            isSearchable: Boolean(field.isSearchable),
+            applicationId: field.applicationId
+          };
 
-        mappedMendDefinitions.push(mappedMendDefinition);
+          mappedMendDefinitions.push(mappedMendDefinition);
+          this.genericFormService.cdmendDto = mappedMendDefinitions;
 
-        const mappedGroupField: CdCategoryMandDto = {
-          mendSql: Number(field.mendSql ?? 0),
-          mendCategory: Number(field.categoryId ?? definition.categoryId),
-          mendField: field.fieldKey,
-          mendStat: true,
-          mendGroup: groupId,
-          applicationId: field.applicationId ?? definition.applicationId,
-          groupName,
-          isExtendable: Boolean(groupDefinition?.isExtendable ?? field.group?.isExtendable),
-          groupWithInRow: Number(groupDefinition?.groupWithInRow ?? field.group?.groupWithInRow ?? 12)
-        };
+          const mappedGroupField: CdCategoryMandDto = {
+            mendSql: Number(field.mendSql ?? 0),
+            mendCategory: Number(field.categoryId ?? definition.categoryId),
+            mendField: field.fieldKey,
+            mendStat: true,
+            mendGroup: groupId,
+            applicationId: field.applicationId ?? definition.applicationId,
+            groupName,
+            isExtendable: Boolean(groupDefinition?.isExtendable ?? field.group?.isExtendable),
+            groupWithInRow: Number(groupDefinition?.groupWithInRow ?? field.group?.groupWithInRow ?? 12)
+          };
 
-        mappedGroupFields.push(mappedGroupField);
-        mappedCategoryMandDefinitions.push(mappedGroupField);
+          mappedGroupFields.push(mappedGroupField);
+          mappedCategoryMandDefinitions.push(mappedGroupField);
 
-        this.genericFormService.addFormArrayWithValidators(controlName, formArray);
+          this.genericFormService.addFormArrayWithValidators(controlName, formArray);
 
-        const matchedValue = values.find(valueItem =>
-          String(valueItem.fieldKey ?? '').toLowerCase() === String(field.fieldKey ?? '').toLowerCase()
-          && Number(valueItem.instanceGroupId ?? 1) === 1);
-        const initialValue = this.normalizeInitialDynamicValue(field, cdmendType, matchedValue?.value ?? field.defaultValue);
-        const control = this.genericFormService.GetControl(formArray, controlName);
-        control?.patchValue(initialValue, { emitEvent: false });
+          const matchedValue = values.find(valueItem =>
+            String(valueItem.fieldKey ?? '').toLowerCase() === String(field.fieldKey ?? '').toLowerCase()
+            && Number(valueItem.instanceGroupId ?? 1) === 1);
+          const initialValue = this.normalizeInitialDynamicValue(field, cdmendType, matchedValue?.value ?? field.defaultValue);
+          const control = this.genericFormService.GetControl(formArray, controlName);
+          control?.patchValue(initialValue, { emitEvent: false });
 
-        if (field.isDisabledInit) {
-          control?.disable({ emitEvent: false });
-        }
+          if (field.isDisabledInit) {
+            control?.disable({ emitEvent: false });
+          }
 
-        this.controlMap.set(controlName, { fieldKey: field.fieldKey, instanceGroupId: 1 });
-      });
+          this.controlMap.set(controlName, { fieldKey: field.fieldKey, instanceGroupId: 1 });
+        });
 
-      this.dynamicControls.addControl(formArrayName, formArray);
-      this.renderGroups.push({
+        this.dynamicControls.addControl(formArrayName, formArray);
+      }
+
+      renderNodesByGroupId.set(groupId, {
         groupId,
         groupName,
         formArrayName,
-        fields: mappedGroupFields
+        groupDescription,
+        fields: mappedGroupFields,
+        totalVisibleFieldsCount: mappedGroupFields.length,
+        children: []
       });
     });
 
+    const rootNodes: RuntimeGroupRenderNode[] = [];
+    orderedGroupIds.forEach(groupId => {
+      const currentNode = renderNodesByGroupId.get(groupId);
+      if (!currentNode) {
+        return;
+      }
+
+      const parentGroupId = safeParentByGroupId.get(groupId) ?? null;
+      const parentNode = parentGroupId ? renderNodesByGroupId.get(parentGroupId) : null;
+      if (parentNode) {
+        parentNode.children.push(currentNode);
+        return;
+      }
+
+      rootNodes.push(currentNode);
+    });
+
+    rootNodes.forEach(node => this.recomputeGroupTreeFieldCounts(node));
+    this.renderGroupTree = rootNodes;
     this.genericFormService.cdmendDto = mappedMendDefinitions;
     this.genericFormService.cdCategoryMandDto = mappedCategoryMandDefinitions;
+  }
+
+  private compareFieldsByDisplayOrder(left: SubjectFieldDefinitionDto, right: SubjectFieldDefinitionDto): number {
+    const leftOrder = Number(left.displayOrder ?? 0);
+    const rightOrder = Number(right.displayOrder ?? 0);
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    return Number(left.mendSql ?? 0) - Number(right.mendSql ?? 0);
+  }
+
+  private compareGroupsByDisplayOrder(
+    leftGroupId: number,
+    rightGroupId: number,
+    hierarchy: Map<number, RuntimeGroupHierarchyMeta>
+  ): number {
+    const leftOrder = Number(hierarchy.get(leftGroupId)?.displayOrder ?? leftGroupId);
+    const rightOrder = Number(hierarchy.get(rightGroupId)?.displayOrder ?? rightGroupId);
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    return leftGroupId - rightGroupId;
+  }
+
+  private buildRuntimeGroupHierarchy(
+    definitionGroups: SubjectGroupDefinitionDto[],
+    fields: SubjectFieldDefinitionDto[]
+  ): Map<number, RuntimeGroupHierarchyMeta> {
+    const hierarchy = new Map<number, RuntimeGroupHierarchyMeta>();
+
+    definitionGroups.forEach((group, index) => {
+      const groupId = Number(group.groupId ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      hierarchy.set(groupId, {
+        parentGroupId: this.readParentGroupIdFromGroupMetadata(group),
+        displayOrder: this.resolveRuntimeGroupDisplayOrder(group, index + 1)
+      });
+    });
+
+    fields.forEach((field, index) => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      const current = hierarchy.get(groupId) ?? {
+        parentGroupId: null,
+        displayOrder: Number(field.displayOrder ?? 0) || (index + 1)
+      };
+
+      const parentFromField = this.readParentGroupIdFromGroupMetadata(field.group)
+        ?? this.readParentGroupIdFromDisplaySettings(field.displaySettingsJson);
+      if (!current.parentGroupId && parentFromField && parentFromField !== groupId) {
+        current.parentGroupId = parentFromField;
+      }
+
+      const fieldDisplayOrder = Number(field.displayOrder ?? 0);
+      if (Number.isFinite(fieldDisplayOrder) && fieldDisplayOrder > 0) {
+        current.displayOrder = Math.min(current.displayOrder, fieldDisplayOrder);
+      }
+
+      hierarchy.set(groupId, current);
+    });
+
+    this.enrichHierarchyFromGroupNamePath(hierarchy, definitionGroups, fields);
+
+    hierarchy.forEach((meta, groupId) => {
+      if (!Number.isFinite(meta.displayOrder) || meta.displayOrder <= 0) {
+        meta.displayOrder = groupId;
+      }
+
+      if (!meta.parentGroupId || meta.parentGroupId === groupId || !hierarchy.has(meta.parentGroupId)) {
+        meta.parentGroupId = null;
+      }
+    });
+
+    return hierarchy;
+  }
+
+  private enrichHierarchyFromGroupNamePath(
+    hierarchy: Map<number, RuntimeGroupHierarchyMeta>,
+    definitionGroups: SubjectGroupDefinitionDto[],
+    fields: SubjectFieldDefinitionDto[]
+  ): void {
+    const knownNameByGroupId = new Map<number, string>();
+
+    definitionGroups.forEach(group => {
+      const groupId = Number(group.groupId ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      const groupName = String(group.groupName ?? '').trim();
+      if (groupName.length > 0) {
+        knownNameByGroupId.set(groupId, groupName);
+      }
+    });
+
+    fields.forEach(field => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0 || knownNameByGroupId.has(groupId)) {
+        return;
+      }
+
+      const groupName = String(field.group?.groupName ?? '').trim();
+      if (groupName.length > 0) {
+        knownNameByGroupId.set(groupId, groupName);
+      }
+    });
+
+    const fullNameLookup = new Map<string, number>();
+    const segmentLookup = new Map<string, number[]>();
+    knownNameByGroupId.forEach((groupName, groupId) => {
+      const segments = this.splitGroupPathSegments(groupName);
+      const normalizedFullName = this.normalizeGroupPathKey(segments.length > 0 ? segments.join(' / ') : groupName);
+      if (normalizedFullName.length > 0 && !fullNameLookup.has(normalizedFullName)) {
+        fullNameLookup.set(normalizedFullName, groupId);
+      }
+
+      const leafSegment = this.normalizeGroupPathKey(segments.length > 0 ? segments[segments.length - 1] : groupName);
+      if (leafSegment.length > 0) {
+        const existing = segmentLookup.get(leafSegment) ?? [];
+        existing.push(groupId);
+        segmentLookup.set(leafSegment, existing);
+      }
+    });
+
+    hierarchy.forEach((meta, groupId) => {
+      if (meta.parentGroupId) {
+        return;
+      }
+
+      const groupName = knownNameByGroupId.get(groupId);
+      if (!groupName) {
+        return;
+      }
+
+      const segments = this.splitGroupPathSegments(groupName);
+      if (segments.length < 2) {
+        return;
+      }
+
+      const parentPath = this.normalizeGroupPathKey(segments.slice(0, -1).join(' / '));
+      const parentLeaf = this.normalizeGroupPathKey(segments[segments.length - 2]);
+
+      const parentFromPath = fullNameLookup.get(parentPath);
+      if (parentFromPath && parentFromPath !== groupId) {
+        meta.parentGroupId = parentFromPath;
+        return;
+      }
+
+      const sameLeafCandidates = segmentLookup.get(parentLeaf) ?? [];
+      const parentFromLeaf = sameLeafCandidates.find(candidate => candidate !== groupId);
+      if (parentFromLeaf && parentFromLeaf !== groupId) {
+        meta.parentGroupId = parentFromLeaf;
+      }
+    });
+  }
+
+  private buildSanitizedParentGroupMap(
+    groupIds: Set<number>,
+    hierarchy: Map<number, RuntimeGroupHierarchyMeta>
+  ): Map<number, number | null> {
+    const safeParentByGroupId = new Map<number, number | null>();
+
+    groupIds.forEach(groupId => {
+      const candidateParent = hierarchy.get(groupId)?.parentGroupId ?? null;
+      if (!candidateParent || !groupIds.has(candidateParent) || candidateParent === groupId) {
+        safeParentByGroupId.set(groupId, null);
+        return;
+      }
+
+      const visited = new Set<number>([groupId]);
+      let hasCycle = false;
+      let cursor: number | null = candidateParent;
+      while (cursor && groupIds.has(cursor)) {
+        if (visited.has(cursor)) {
+          hasCycle = true;
+          break;
+        }
+
+        visited.add(cursor);
+        cursor = hierarchy.get(cursor)?.parentGroupId ?? null;
+      }
+
+      safeParentByGroupId.set(groupId, hasCycle ? null : candidateParent);
+    });
+
+    return safeParentByGroupId;
+  }
+
+  private resolveRuntimeGroupDisplayName(
+    groupId: number,
+    groupDefinition?: SubjectGroupDefinitionDto,
+    fallbackField?: SubjectFieldDefinitionDto
+  ): string {
+    const resolvedName = String(groupDefinition?.groupName ?? fallbackField?.group?.groupName ?? '').trim();
+    if (!resolvedName) {
+      return `مجموعة ${groupId}`;
+    }
+
+    const segments = this.splitGroupPathSegments(resolvedName);
+    return segments.length > 0 ? segments[segments.length - 1] : resolvedName;
+  }
+
+  private recomputeGroupTreeFieldCounts(node: RuntimeGroupRenderNode): number {
+    const childrenFieldsCount = node.children
+      .map(child => this.recomputeGroupTreeFieldCounts(child))
+      .reduce((sum, value) => sum + value, 0);
+    node.totalVisibleFieldsCount = node.fields.length + childrenFieldsCount;
+    return node.totalVisibleFieldsCount;
+  }
+
+  private resolveRuntimeGroupDisplayOrder(group: SubjectGroupDefinitionDto | undefined, fallback: number): number {
+    const candidate = Number((group as Record<string, unknown> | undefined)?.['displayOrder'] ?? fallback);
+    if (!Number.isFinite(candidate) || candidate <= 0) {
+      return fallback;
+    }
+
+    return Math.trunc(candidate);
+  }
+
+  private readParentGroupIdFromGroupMetadata(group: unknown): number | null {
+    if (!group || typeof group !== 'object') {
+      return null;
+    }
+
+    const payload = group as Record<string, unknown>;
+    const directCandidate = this.normalizePositiveInt(payload['parentGroupId'])
+      ?? this.normalizePositiveInt(payload['parentId'])
+      ?? this.normalizePositiveInt(payload['groupParentId'])
+      ?? this.normalizePositiveInt(payload['parent_group_id'])
+      ?? this.normalizePositiveInt(payload['parentGroupID']);
+    return directCandidate ?? null;
+  }
+
+  private readParentGroupIdFromDisplaySettings(displaySettingsJson?: string): number | null {
+    const parsed = this.parseJsonObject(displaySettingsJson);
+    if (!parsed) {
+      return null;
+    }
+
+    const directCandidate = this.normalizePositiveInt(parsed['parentGroupId'])
+      ?? this.normalizePositiveInt(parsed['groupParentId'])
+      ?? this.normalizePositiveInt(parsed['parentId'])
+      ?? this.normalizePositiveInt(parsed['parent_group_id']);
+    if (directCandidate) {
+      return directCandidate;
+    }
+
+    const adminControlCenter = parsed['adminControlCenter'];
+    if (adminControlCenter && typeof adminControlCenter === 'object' && !Array.isArray(adminControlCenter)) {
+      const adminPayload = adminControlCenter as Record<string, unknown>;
+      const nestedCandidate = this.normalizePositiveInt(adminPayload['parentGroupId'])
+        ?? this.normalizePositiveInt(adminPayload['groupParentId'])
+        ?? this.normalizePositiveInt(adminPayload['parentId']);
+      if (nestedCandidate) {
+        return nestedCandidate;
+      }
+    }
+
+    const pathCandidateKeys = ['groupPathIds', 'groupPath', 'hierarchyPath', 'parents'];
+    for (const key of pathCandidateKeys) {
+      const parentFromPath = this.readParentGroupIdFromPathCandidate(parsed[key]);
+      if (parentFromPath) {
+        return parentFromPath;
+      }
+    }
+
+    return null;
+  }
+
+  private readParentGroupIdFromPathCandidate(candidate: unknown): number | null {
+    if (!Array.isArray(candidate)) {
+      return null;
+    }
+
+    const resolvedIds = candidate
+      .map(item => this.normalizePositiveInt(item))
+      .filter((item): item is number => item !== null);
+    if (resolvedIds.length < 2) {
+      return null;
+    }
+
+    return resolvedIds[resolvedIds.length - 2];
+  }
+
+  private parseJsonObject(raw: unknown): Record<string, unknown> | null {
+    const payload = String(raw ?? '').trim();
+    if (!payload) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(payload);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  private splitGroupPathSegments(groupName: string): string[] {
+    const normalizedName = String(groupName ?? '').trim();
+    if (!normalizedName) {
+      return [];
+    }
+
+    const unified = normalizedName
+      .replace(/\s*::\s*/g, '/')
+      .replace(/[>›»\\|]+/g, '/')
+      .replace(/\s*\/\s*/g, '/');
+
+    return unified
+      .split('/')
+      .map(segment => segment.trim())
+      .filter(segment => segment.length > 0);
+  }
+
+  private normalizeGroupPathKey(value: string): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/\s*\/\s*/g, '/');
+  }
+
+  private normalizePositiveInt(value: unknown): number | null {
+    const normalized = Number(value ?? 0);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      return null;
+    }
+
+    return Math.trunc(normalized);
   }
 
   private applyPendingDynamicFieldValueBindings(): void {
@@ -1472,7 +1900,8 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
   private resetDynamicFormState(): void {
     this.dynamicControls = this.fb.group({});
-    this.renderGroups = [];
+    this.renderGroupTree = [];
+    this.showDiagnostics = false;
     this.controlMap.clear();
     this.genericFormService.resetDynamicRuntimeState();
     this.genericFormService.cdmendDto = [];
