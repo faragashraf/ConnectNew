@@ -160,9 +160,9 @@ public sealed class DynamicSubjectsAdminCatalogRepository : IDynamicSubjectsAdmi
             return 0;
         }
 
-        return await _connectContext.CdCategoryMands
+        return await _connectContext.AdminCatalogCategoryFieldBindings
             .AsNoTracking()
-            .CountAsync(item => item.MendCategory == categoryId, cancellationToken);
+            .CountAsync(item => item.CategoryId == categoryId, cancellationToken);
     }
 
     public async Task<int> CountCategoryMessageLinksAsync(int categoryId, CancellationToken cancellationToken = default)
@@ -527,7 +527,7 @@ public sealed class DynamicSubjectsAdminCatalogRepository : IDynamicSubjectsAdmi
             return 0;
         }
 
-        var query = _connectContext.CdCategoryMands
+        var query = _connectContext.AdminCatalogCategoryFieldBindings
             .AsNoTracking()
             .Where(item => item.MendField == normalizedFieldKey);
 
@@ -587,7 +587,7 @@ public sealed class DynamicSubjectsAdminCatalogRepository : IDynamicSubjectsAdmi
             return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         }
 
-        var query = _connectContext.CdCategoryMands
+        var query = _connectContext.AdminCatalogCategoryFieldBindings
             .AsNoTracking()
             .Where(item => normalizedFieldKeys.Contains(item.MendField));
 

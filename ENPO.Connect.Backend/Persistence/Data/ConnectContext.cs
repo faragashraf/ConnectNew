@@ -21,6 +21,8 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<AdminCatalogCategoryGroup> AdminCatalogCategoryGroups { get; set; }
 
+    public virtual DbSet<AdminCatalogCategoryFieldBinding> AdminCatalogCategoryFieldBindings { get; set; }
+
     public virtual DbSet<Cdmend> Cdmends { get; set; }
 
     public virtual DbSet<MandGroup> MandGroups { get; set; }
@@ -243,6 +245,41 @@ public partial class ConnectContext : DbContext
                 .HasForeignKey(d => d.ParentGroupId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_AdminCatalogCategoryGroups_Parent");
+        });
+
+        modelBuilder.Entity<AdminCatalogCategoryFieldBinding>(entity =>
+        {
+            entity.HasKey(e => e.MendSql).HasName("PK_AdminCatalogCategoryFieldBindings");
+
+            entity.ToTable("AdminCatalogCategoryFieldBindings");
+
+            entity.HasIndex(e => e.CategoryId, "IX_AdminCatalogCategoryFieldBindings_CategoryID");
+
+            entity.HasIndex(e => new { e.CategoryId, e.MendStat, e.GroupId }, "IX_AdminCatalogCategoryFieldBindings_CategoryStatusGroup");
+
+            entity.HasIndex(e => new { e.CategoryId, e.MendField }, "IX_AdminCatalogCategoryFieldBindings_CategoryField");
+
+            entity.HasIndex(e => e.GroupId, "IX_AdminCatalogCategoryFieldBindings_GroupID");
+
+            entity.Property(e => e.MendSql)
+                .HasColumnName("MendSQL")
+                .ValueGeneratedNever();
+            entity.Property(e => e.CategoryId).HasColumnName("CategoryID");
+            entity.Property(e => e.GroupId).HasColumnName("GroupID");
+            entity.Property(e => e.MendField).HasMaxLength(50);
+            entity.Property(e => e.MendStat).HasDefaultValue(false);
+
+            entity.HasOne<Cdcategory>()
+                .WithMany()
+                .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_AdminCatalogCategoryFieldBindings_CDCategory");
+
+            entity.HasOne<AdminCatalogCategoryGroup>()
+                .WithMany()
+                .HasForeignKey(e => e.GroupId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_AdminCatalogCategoryFieldBindings_AdminCatalogCategoryGroups");
         });
 
         modelBuilder.Entity<CdCategoryMand>(entity =>

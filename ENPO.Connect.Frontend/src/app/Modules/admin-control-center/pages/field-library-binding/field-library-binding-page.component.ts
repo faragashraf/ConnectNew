@@ -14,6 +14,8 @@ import {
   SubjectTypeAdminUpsertRequestDto
 } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
+import { AdminCatalogGroupTreeNodeDto } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
+import { DynamicSubjectsAdminCatalogController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
 import {
   BoundFieldItem,
   FieldLibraryBindingValidationResult,
@@ -114,7 +116,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     private readonly facade: AdminControlCenterFacade,
     private readonly router: Router,
     private readonly bindingEngine: FieldLibraryBindingEngine,
-    private readonly dynamicSubjectsController: DynamicSubjectsController
+    private readonly dynamicSubjectsController: DynamicSubjectsController,
+    private readonly adminCatalogController: DynamicSubjectsAdminCatalogController
   ) {}
 
   ngOnInit(): void {
@@ -537,7 +540,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     try {
       const [fieldsResponse, groupsResponse, linksResponse, subjectTypesResponse] = await Promise.all([
         firstValueFrom(this.dynamicSubjectsController.getAdminFields(applicationId ?? undefined)),
-        firstValueFrom(this.dynamicSubjectsController.getAdminGroups()),
+        firstValueFrom(this.adminCatalogController.getGroupsByCategory(categoryId)),
         firstValueFrom(this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId)),
         firstValueFrom(this.dynamicSubjectsController.getSubjectTypesAdminConfig(applicationId ?? undefined))
       ]);
@@ -547,7 +550,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
       }
 
       const fields = this.readArrayResponse(fieldsResponse, 'تعذر تحميل مكتبة الحقول من قاعدة البيانات.');
-      const groups = this.readArrayResponse(groupsResponse, 'تعذر تحميل الجروبات من قاعدة البيانات.');
+      const groupTree = this.readArrayResponse(groupsResponse, 'تعذر تحميل شجرة الجروبات من قاعدة البيانات.');
+      const groups = this.flattenAdminCatalogGroups(groupTree);
       const links = this.readArrayResponse(linksResponse, 'تعذر تحميل روابط الحقول من قاعدة البيانات.');
       const subjectTypes = this.readArrayResponse(subjectTypesResponse, 'تعذر تحميل إعدادات النوع من قاعدة البيانات.');
 
@@ -860,6 +864,31 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     }
   }
 
+  private flattenAdminCatalogGroups(nodes: ReadonlyArray<AdminCatalogGroupTreeNodeDto>): SubjectAdminGroupDto[] {
+    const flattened: SubjectAdminGroupDto[] = [];
+
+    const visit = (node: AdminCatalogGroupTreeNodeDto): void => {
+      flattened.push({
+        groupId: Number(node.groupId ?? 0),
+        groupName: this.normalizeNullable(node.groupName) ?? `Group ${node.groupId}`,
+        groupDescription: this.normalizeNullable(node.groupDescription) ?? undefined,
+        isExtendable: false,
+        groupWithInRow: 12,
+        linkedFieldsCount: 0
+      });
+
+      for (const child of node.children ?? []) {
+        visit(child);
+      }
+    };
+
+    for (const node of nodes ?? []) {
+      visit(node);
+    }
+
+    return flattened.filter(group => this.toPositiveInt(group.groupId) !== null);
+  }
+
   private parseDisplaySettings(raw: string | undefined): Record<string, unknown> | null {
     const payload = this.normalizeNullable(raw);
     if (!payload) {
@@ -901,15 +930,31 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const createdGroup = this.readSingleResponse(
-      await firstValueFrom(this.dynamicSubjectsController.createAdminGroup({
+    const categoryId = this.toPositiveInt(this.currentCategoryId);
+    const applicationId = this.normalizeNullable(this.currentApplicationId);
+    if (!categoryId || !applicationId) {
+      throw new Error('لا يمكن إنشاء Group افتراضية بدون Category/Application صالحين.');
+    }
+
+    const created = this.readSingleResponse(
+      await firstValueFrom(this.adminCatalogController.createGroup({
+        categoryId,
+        applicationId,
         groupName: 'Admin Control Center Group',
         groupDescription: 'Auto-created from Admin Control Center field binding page.',
-        isExtendable: false,
-        groupWithInRow: 12
+        displayOrder: 0,
+        isActive: true
       })),
       'تعذر إنشاء مجموعة افتراضية لربط الحقول.'
     );
+    const createdGroup: SubjectAdminGroupDto = {
+      groupId: created.groupId,
+      groupName: created.groupName,
+      groupDescription: created.groupDescription,
+      isExtendable: false,
+      groupWithInRow: 12,
+      linkedFieldsCount: 0
+    };
 
     this.groups = [createdGroup];
     this.groupOptions = [{

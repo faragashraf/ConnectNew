@@ -3,6 +3,7 @@ using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
 using Persistence.Data;
+using Persistence.Services.DynamicSubjects;
 using Persistence.Services.DynamicSubjects.FieldAccess;
 
 namespace Persistence.Services.DynamicSubjects.AdminAccessPolicy;
@@ -401,6 +402,14 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
             .ThenByDescending(item => item.Id)
             .ToListAsync(cancellationToken);
 
+        var candidateLegacyGroupIds = CollectCandidateLegacyGroupIds(rules, locks);
+        var groupBridge = await SubjectCategoryGroupBridgeBuilder.BuildAsync(
+            _connectContext,
+            requestTypeId,
+            candidateLegacyGroupIds: candidateLegacyGroupIds,
+            cancellationToken: cancellationToken);
+        NormalizeGroupTargetIds(rules, locks, groupBridge);
+
         var metadata = await LoadMetadataAsync(requestTypeId, cancellationToken);
         var routingLookups = await LoadRoutingLookupsAsync(requestTypeId, cancellationToken);
 
@@ -431,23 +440,30 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
         int requestTypeId,
         CancellationToken cancellationToken)
     {
-        var linkRows = await (from link in _connectContext.CdCategoryMands.AsNoTracking()
-                              join adminGroup in _connectContext.AdminCatalogCategoryGroups.AsNoTracking()
-                                  on new { GroupId = link.MendGroup, CategoryId = link.MendCategory }
-                                  equals new { GroupId = adminGroup.GroupId, CategoryId = adminGroup.CategoryId }
-                                  into groupJoin
-                              from adminGroup in groupJoin.DefaultIfEmpty()
+        var adminGroups = await _connectContext.AdminCatalogCategoryGroups
+            .AsNoTracking()
+            .Where(item => item.CategoryId == requestTypeId && item.IsActive)
+            .ToListAsync(cancellationToken);
+        var adminGroupById = adminGroups
+            .GroupBy(item => item.GroupId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var linkRows = await (from link in _connectContext.AdminCatalogCategoryFieldBindings.AsNoTracking()
                               join fieldSetting in _connectContext.SubjectCategoryFieldSettings.AsNoTracking()
                                   on link.MendSql equals fieldSetting.MendSql into fieldSettingJoin
                               from fieldSetting in fieldSettingJoin.DefaultIfEmpty()
-                              where link.MendCategory == requestTypeId && !link.MendStat
+                              join groupNode in _connectContext.AdminCatalogCategoryGroups.AsNoTracking()
+                                  on link.GroupId equals groupNode.GroupId into groupJoin
+                              from groupNode in groupJoin.DefaultIfEmpty()
+                              where link.CategoryId == requestTypeId && !link.MendStat
                               select new
                               {
                                   link.MendSql,
                                   link.MendField,
-                                  link.MendGroup,
-                                  GroupName = adminGroup != null ? adminGroup.GroupName : null,
-                                  GroupDescription = adminGroup != null ? adminGroup.GroupDescription : null,
+                                  GroupId = link.GroupId,
+                                  GroupName = groupNode != null ? groupNode.GroupName : null,
+                                  GroupDescription = groupNode != null ? groupNode.GroupDescription : null,
+                                  GroupDisplayOrder = groupNode != null ? groupNode.DisplayOrder : int.MaxValue,
                                   IsVisible = fieldSetting == null || fieldSetting.IsVisible,
                                   DisplayOrder = fieldSetting != null ? fieldSetting.DisplayOrder : link.MendSql,
                                   DisplaySettingsJson = fieldSetting != null ? fieldSetting.DisplaySettingsJson : null
@@ -456,47 +472,56 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
 
         var mendByFieldKey = await BuildMendLookupAsync(cancellationToken);
 
-        var groups = linkRows
-            .GroupBy(item => item.MendGroup)
+        var groups = adminGroups
+            .OrderBy(item => item.DisplayOrder)
+            .ThenBy(item => item.GroupName)
+            .ThenBy(item => item.GroupId)
             .Select(group => new SubjectGroupDefinitionDto
             {
-                GroupId = group.Key,
-                GroupName = NormalizeNullable(group.FirstOrDefault()?.GroupName) ?? $"مجموعة {group.Key}",
-                GroupDescription = NormalizeNullable(group.FirstOrDefault()?.GroupDescription),
+                GroupId = group.GroupId,
+                GroupName = NormalizeNullable(group.GroupName) ?? $"مجموعة {group.GroupId}",
+                GroupDescription = NormalizeNullable(group.GroupDescription),
                 IsExtendable = false,
                 GroupWithInRow = 12
             })
-            .OrderBy(item => item.GroupId)
             .ToList();
 
         var groupLookupById = groups.ToDictionary(item => item.GroupId);
         var fields = new List<SubjectFieldDefinitionDto>();
 
         foreach (var row in linkRows
-                     .OrderBy(item => item.MendGroup)
+                     .OrderBy(item => item.GroupDisplayOrder)
+                     .ThenBy(item => item.GroupId)
                      .ThenBy(item => item.DisplayOrder)
                      .ThenBy(item => item.MendSql))
         {
+            var canonicalGroupId = row.GroupId;
             var normalizedFieldKey = NormalizeFieldKey(row.MendField);
             mendByFieldKey.TryGetValue(normalizedFieldKey, out var mend);
 
-            if (!groupLookupById.TryGetValue(row.MendGroup, out var group))
+            if (!groupLookupById.TryGetValue(canonicalGroupId, out var group))
             {
+                adminGroupById.TryGetValue(canonicalGroupId, out var adminGroup);
                 group = new SubjectGroupDefinitionDto
                 {
-                    GroupId = row.MendGroup,
-                    GroupName = $"مجموعة {row.MendGroup}",
+                    GroupId = canonicalGroupId,
+                    GroupName = NormalizeNullable(adminGroup?.GroupName)
+                        ?? NormalizeNullable(row.GroupName)
+                        ?? $"مجموعة {canonicalGroupId}",
+                    GroupDescription = NormalizeNullable(adminGroup?.GroupDescription)
+                        ?? NormalizeNullable(row.GroupDescription),
                     IsExtendable = false,
                     GroupWithInRow = 12
                 };
-                groupLookupById[row.MendGroup] = group;
+                groupLookupById[canonicalGroupId] = group;
+                groups.Add(group);
             }
 
             fields.Add(new SubjectFieldDefinitionDto
             {
                 MendSql = row.MendSql,
                 CategoryId = requestTypeId,
-                MendGroup = row.MendGroup,
+                MendGroup = canonicalGroupId,
                 FieldKey = mend?.CdmendTxt ?? NormalizeNullable(row.MendField) ?? string.Empty,
                 FieldType = mend?.CdmendType ?? "InputText",
                 FieldLabel = NormalizeNullable(mend?.CDMendLbl) ?? NormalizeNullable(row.MendField) ?? string.Empty,
@@ -522,6 +547,12 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
                 Group = group
             });
         }
+
+        groups = groups
+            .GroupBy(item => item.GroupId)
+            .Select(group => group.First())
+            .OrderBy(item => item.GroupId)
+            .ToList();
 
         var groupLookups = groups
             .Select(group => new FieldAccessLookupItemDto
@@ -677,6 +708,60 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
             IsActive = item.IsActive,
             Notes = item.Notes
         };
+    }
+
+    private static void NormalizeGroupTargetIds(
+        IReadOnlyCollection<FieldAccessPolicyRule> rules,
+        IReadOnlyCollection<FieldAccessLock> locks,
+        SubjectCategoryGroupBridge groupBridge)
+    {
+        foreach (var rule in rules ?? Array.Empty<FieldAccessPolicyRule>())
+        {
+            if (IsGroupTargetLevel(rule.TargetLevel) && rule.TargetId > 0)
+            {
+                rule.TargetId = groupBridge.ResolveCanonicalGroupId(rule.TargetId);
+            }
+        }
+
+        foreach (var lockItem in locks ?? Array.Empty<FieldAccessLock>())
+        {
+            if (IsGroupTargetLevel(lockItem.TargetLevel) && lockItem.TargetId > 0)
+            {
+                lockItem.TargetId = groupBridge.ResolveCanonicalGroupId(lockItem.TargetId);
+            }
+        }
+    }
+
+    private static IReadOnlyCollection<int> CollectCandidateLegacyGroupIds(
+        IReadOnlyCollection<FieldAccessPolicyRule> rules,
+        IReadOnlyCollection<FieldAccessLock> locks)
+    {
+        var candidateIds = new HashSet<int>();
+
+        foreach (var rule in rules ?? Array.Empty<FieldAccessPolicyRule>())
+        {
+            if (IsGroupTargetLevel(rule.TargetLevel) && rule.TargetId > 0)
+            {
+                candidateIds.Add(rule.TargetId);
+            }
+        }
+
+        foreach (var lockItem in locks ?? Array.Empty<FieldAccessLock>())
+        {
+            if (IsGroupTargetLevel(lockItem.TargetLevel) && lockItem.TargetId > 0)
+            {
+                candidateIds.Add(lockItem.TargetId);
+            }
+        }
+
+        return candidateIds
+            .OrderBy(item => item)
+            .ToArray();
+    }
+
+    private static bool IsGroupTargetLevel(string? targetLevel)
+    {
+        return string.Equals(NormalizeTargetLevel(targetLevel), "Group", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void ApplyResolvedState(SubjectGroupDefinitionDto target, FieldAccessResolvedState source)

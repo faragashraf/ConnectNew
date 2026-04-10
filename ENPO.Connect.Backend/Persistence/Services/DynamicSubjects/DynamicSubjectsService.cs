@@ -88,10 +88,10 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 .AsNoTracking()
                 .Where(setting => categoryIds.Contains(setting.CategoryId))
                 .ToDictionaryAsync(setting => setting.CategoryId, cancellationToken);
-            var categoriesWithFields = await _connectContext.CdCategoryMands
+            var categoriesWithFields = await _connectContext.AdminCatalogCategoryFieldBindings
                 .AsNoTracking()
-                .Where(link => categoryIds.Contains(link.MendCategory) && !link.MendStat)
-                .Select(link => link.MendCategory)
+                .Where(link => categoryIds.Contains(link.CategoryId) && !link.MendStat)
+                .Select(link => link.CategoryId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
             var categoriesWithFieldsSet = categoriesWithFields.ToHashSet();
@@ -282,25 +282,66 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 .FirstOrDefaultAsync(cancellationToken);
             var requestPolicy = TryReadRequestPolicyFromSettingsJson(settingsJson);
 
-            var linkRows = await (from link in _connectContext.CdCategoryMands.AsNoTracking()
-                                  join adminGroup in _connectContext.AdminCatalogCategoryGroups.AsNoTracking()
-                                       on new { GroupId = link.MendGroup, CategoryId = link.MendCategory }
-                                       equals new { GroupId = adminGroup.GroupId, CategoryId = adminGroup.CategoryId } into groupJoin
-                                  from adminGroup in groupJoin.DefaultIfEmpty()
+            var adminGroups = await _connectContext.AdminCatalogCategoryGroups
+                .AsNoTracking()
+                .Where(item => item.CategoryId == categoryId && item.IsActive)
+                .ToListAsync(cancellationToken);
+            var adminGroupLookup = adminGroups
+                .GroupBy(item => item.GroupId)
+                .ToDictionary(group => group.Key, group => group.First());
+
+            int ResolveGroupDisplayOrder(int groupId)
+            {
+                return adminGroupLookup.TryGetValue(groupId, out var group)
+                    ? group.DisplayOrder
+                    : int.MaxValue;
+            }
+
+            string ResolveGroupName(int groupId, string? fallbackName = null)
+            {
+                if (adminGroupLookup.TryGetValue(groupId, out var group)
+                    && NormalizeNullable(group.GroupName) is { } normalizedName)
+                {
+                    return normalizedName;
+                }
+
+                if (NormalizeNullable(fallbackName) is { } fallback)
+                {
+                    return fallback;
+                }
+
+                return $"مجموعة {groupId}";
+            }
+
+            string? ResolveGroupDescription(int groupId, string? fallbackDescription = null)
+            {
+                if (adminGroupLookup.TryGetValue(groupId, out var group)
+                    && NormalizeNullable(group.GroupDescription) is { } normalizedDescription)
+                {
+                    return normalizedDescription;
+                }
+
+                return NormalizeNullable(fallbackDescription);
+            }
+
+            var linkRows = await (from link in _connectContext.AdminCatalogCategoryFieldBindings.AsNoTracking()
                                   join fieldSetting in _connectContext.SubjectCategoryFieldSettings.AsNoTracking()
                                        on link.MendSql equals fieldSetting.MendSql into fieldSettingJoin
                                   from fieldSetting in fieldSettingJoin.DefaultIfEmpty()
-                                  where link.MendCategory == categoryId
+                                  join groupNode in _connectContext.AdminCatalogCategoryGroups.AsNoTracking()
+                                       on link.GroupId equals groupNode.GroupId into groupJoin
+                                  from groupNode in groupJoin.DefaultIfEmpty()
+                                  where link.CategoryId == categoryId
                                         && !link.MendStat
                                         && (includeMetadataHiddenLinks || fieldSetting == null || fieldSetting.IsVisible)
                                   select new FormDefinitionLinkRow
                                   {
                                       MendSql = link.MendSql,
-                                      MendCategory = link.MendCategory,
+                                      MendCategory = link.CategoryId,
                                       MendField = link.MendField,
-                                      MendGroup = link.MendGroup,
-                                      GroupName = adminGroup != null ? adminGroup.GroupName : null,
-                                      GroupDescription = adminGroup != null ? adminGroup.GroupDescription : null,
+                                      MendGroup = link.GroupId,
+                                      GroupName = groupNode != null ? groupNode.GroupName : null,
+                                      GroupDescription = groupNode != null ? groupNode.GroupDescription : null,
                                       IsExtendable = false,
                                       GroupWithInRow = 12,
                                       IsVisible = fieldSetting == null || fieldSetting.IsVisible,
@@ -329,10 +370,12 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             var statusFallbackCount = 0;
 
             foreach (var linkRow in linkRows
-                         .OrderBy(item => item.MendGroup)
+                         .OrderBy(item => ResolveGroupDisplayOrder(item.MendGroup))
+                         .ThenBy(item => item.MendGroup)
                          .ThenBy(item => item.DisplayOrder)
                          .ThenBy(item => item.MendSql))
             {
+                var canonicalGroupId = linkRow.MendGroup;
                 var normalizedFieldKey = NormalizeFieldKey(linkRow.MendField);
                 if (!mendLookup.TryGetValue(normalizedFieldKey, out var fieldCandidates) || fieldCandidates.Count == 0)
                 {
@@ -360,7 +403,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 {
                     MendSql = linkRow.MendSql,
                     CategoryId = linkRow.MendCategory,
-                    MendGroup = linkRow.MendGroup,
+                    MendGroup = canonicalGroupId,
                     FieldKey = selectedMetadata.CdmendTxt,
                     FieldType = selectedMetadata.CdmendType,
                     FieldLabel = selectedMetadata.CDMendLbl,
@@ -385,9 +428,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     DisplaySettingsJson = linkRow.DisplaySettingsJson,
                     Group = new SubjectGroupDefinitionDto
                     {
-                        GroupId = linkRow.MendGroup,
-                        GroupName = linkRow.GroupName ?? string.Empty,
-                        GroupDescription = linkRow.GroupDescription,
+                        GroupId = canonicalGroupId,
+                        GroupName = ResolveGroupName(canonicalGroupId, linkRow.GroupName),
+                        GroupDescription = ResolveGroupDescription(canonicalGroupId, linkRow.GroupDescription),
                         IsExtendable = linkRow.IsExtendable,
                         GroupWithInRow = linkRow.GroupWithInRow
                     }
@@ -2148,10 +2191,10 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 .ToListAsync(cancellationToken);
             var categoryIds = categories.Select(item => item.CatId).ToList();
 
-            var categoriesWithFields = await _connectContext.CdCategoryMands
+            var categoriesWithFields = await _connectContext.AdminCatalogCategoryFieldBindings
                 .AsNoTracking()
-                .Where(link => categoryIds.Contains(link.MendCategory) && !link.MendStat)
-                .Select(link => link.MendCategory)
+                .Where(link => categoryIds.Contains(link.CategoryId) && !link.MendStat)
+                .Select(link => link.CategoryId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
             var categoriesWithFieldsSet = categoriesWithFields.ToHashSet();
@@ -2402,9 +2445,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
             await _connectContext.SaveChangesAsync(cancellationToken);
 
-            var hasDynamicFields = await _connectContext.CdCategoryMands
+            var hasDynamicFields = await _connectContext.AdminCatalogCategoryFieldBindings
                 .AsNoTracking()
-                .AnyAsync(link => link.MendCategory == categoryId && !link.MendStat, cancellationToken);
+                .AnyAsync(link => link.CategoryId == categoryId && !link.MendStat, cancellationToken);
 
             response.Data = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy, categorySetting);
 
@@ -3603,10 +3646,10 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
 
     private async Task<bool> CategoryHasDirectionFieldAsync(int categoryId, CancellationToken cancellationToken)
     {
-        return await _connectContext.CdCategoryMands
+        return await _connectContext.AdminCatalogCategoryFieldBindings
             .AsNoTracking()
             .AnyAsync(item =>
-                item.MendCategory == categoryId
+                item.CategoryId == categoryId
                 && !item.MendStat
                 && (item.MendField ?? string.Empty).Trim().ToUpper() == TopicDirectionFieldKey,
                 cancellationToken);
@@ -4536,9 +4579,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         var normalizedManualTargetFieldKey = NormalizeFieldKey(manualTargetFieldKey);
-        var linkedFieldRows = await _connectContext.CdCategoryMands
+        var linkedFieldRows = await _connectContext.AdminCatalogCategoryFieldBindings
             .AsNoTracking()
-            .Where(link => link.MendCategory == categoryId && !link.MendStat)
+            .Where(link => link.CategoryId == categoryId && !link.MendStat)
             .Select(link => new { link.MendSql, link.MendField })
             .ToListAsync(cancellationToken);
         var linkedRow = linkedFieldRows

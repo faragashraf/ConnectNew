@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Models.Correspondance;
 using Persistence.Data;
+using Persistence.Services.DynamicSubjects;
 using System.Globalization;
 
 namespace Persistence.Services.DynamicSubjects.FieldAccess;
@@ -60,6 +61,13 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
             .Where(item => (item.RequestId.HasValue && request.RequestId.HasValue && item.RequestId.Value == request.RequestId.Value)
                 || (item.RequestTypeId.HasValue && item.RequestTypeId.Value == request.RequestTypeId))
             .ToListAsync(cancellationToken);
+        var candidateLegacyGroupIds = CollectCandidateLegacyGroupIds(rules, locks, overrides);
+        var groupBridge = await SubjectCategoryGroupBridgeBuilder.BuildAsync(
+            _connectContext,
+            request.RequestTypeId,
+            candidateLegacyGroupIds: candidateLegacyGroupIds,
+            cancellationToken: cancellationToken);
+        NormalizeGroupTargetIds(rules, locks, overrides, groupBridge);
 
         var subjectContext = await BuildSubjectContextAsync(request, cancellationToken);
 
@@ -313,6 +321,82 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
         }
 
         return false;
+    }
+
+    private static void NormalizeGroupTargetIds(
+        IReadOnlyCollection<FieldAccessPolicyRule> rules,
+        IReadOnlyCollection<FieldAccessLock> locks,
+        IReadOnlyCollection<FieldAccessOverride> overrides,
+        SubjectCategoryGroupBridge groupBridge)
+    {
+        foreach (var rule in rules ?? Array.Empty<FieldAccessPolicyRule>())
+        {
+            if (IsGroupTargetLevel(rule.TargetLevel) && rule.TargetId > 0)
+            {
+                rule.TargetId = groupBridge.ResolveCanonicalGroupId(rule.TargetId);
+            }
+        }
+
+        foreach (var lockItem in locks ?? Array.Empty<FieldAccessLock>())
+        {
+            if (IsGroupTargetLevel(lockItem.TargetLevel) && lockItem.TargetId > 0)
+            {
+                lockItem.TargetId = groupBridge.ResolveCanonicalGroupId(lockItem.TargetId);
+            }
+        }
+
+        foreach (var overrideItem in overrides ?? Array.Empty<FieldAccessOverride>())
+        {
+            if (IsGroupTargetLevel(overrideItem.TargetLevel)
+                && overrideItem.TargetId.HasValue
+                && overrideItem.TargetId.Value > 0)
+            {
+                overrideItem.TargetId = groupBridge.ResolveCanonicalGroupId(overrideItem.TargetId.Value);
+            }
+        }
+    }
+
+    private static IReadOnlyCollection<int> CollectCandidateLegacyGroupIds(
+        IReadOnlyCollection<FieldAccessPolicyRule> rules,
+        IReadOnlyCollection<FieldAccessLock> locks,
+        IReadOnlyCollection<FieldAccessOverride> overrides)
+    {
+        var candidateIds = new HashSet<int>();
+
+        foreach (var rule in rules ?? Array.Empty<FieldAccessPolicyRule>())
+        {
+            if (IsGroupTargetLevel(rule.TargetLevel) && rule.TargetId > 0)
+            {
+                candidateIds.Add(rule.TargetId);
+            }
+        }
+
+        foreach (var lockItem in locks ?? Array.Empty<FieldAccessLock>())
+        {
+            if (IsGroupTargetLevel(lockItem.TargetLevel) && lockItem.TargetId > 0)
+            {
+                candidateIds.Add(lockItem.TargetId);
+            }
+        }
+
+        foreach (var overrideItem in overrides ?? Array.Empty<FieldAccessOverride>())
+        {
+            if (IsGroupTargetLevel(overrideItem.TargetLevel)
+                && overrideItem.TargetId.HasValue
+                && overrideItem.TargetId.Value > 0)
+            {
+                candidateIds.Add(overrideItem.TargetId.Value);
+            }
+        }
+
+        return candidateIds
+            .OrderBy(item => item)
+            .ToArray();
+    }
+
+    private static bool IsGroupTargetLevel(string? targetLevel)
+    {
+        return string.Equals(NormalizeLevel(targetLevel), "group", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool MatchesTarget(string? sourceTargetLevel, int sourceTargetId, string expectedTargetLevel, int expectedTargetId)
