@@ -37,7 +37,7 @@
       {{ currentVm.context.applicationId ?? '-' }}
     </span>
     <p-tag
-      [value]="libraryLoadedFromDb ? 'مصدر قاعدة البيانات' : 'مصدر احتياطي محلي'"
+      [value]="libraryLoadedFromDb ? 'تم التحميل من قاعدة البيانات' : 'تعذر التحميل من قاعدة البيانات'"
       [severity]="libraryLoadedFromDb ? 'success' : 'warning'">
     </p-tag>
     <p-tag
@@ -69,7 +69,7 @@
               label="حفظ في قاعدة البيانات"
               icon="pi pi-save"
               [loading]="savingToBackend"
-              [disabled]="savingToBackend || loadingLibrary"
+              [disabled]="savingToBackend || loadingLibrary || !backendWorkspaceLoaded"
               (click)="onSaveToBackend()">
             </button>
           </div>
@@ -102,11 +102,6 @@
               formControlName="bindingStrategy">
             </p-dropdown>
             <small class="error" *ngIf="controlHasError('bindingStrategy')">{{ controlErrorMessage('bindingStrategy') }}</small>
-          </article>
-
-          <article class="field switch-field">
-            <label for="includeLegacyFields">تضمين الحقول القديمة</label>
-            <p-inputSwitch inputId="includeLegacyFields" formControlName="includeLegacyFields"></p-inputSwitch>
           </article>
 
           <article class="field field-wide">
@@ -417,7 +412,7 @@
         <form class="new-field-grid" [formGroup]="newFieldForm" novalidate>
           <article class="field">
             <label for="newFieldKey">مفتاح الحقل</label>
-            <input pInputText id="newFieldKey" formControlName="fieldKey" placeholder="مثال: رقم_المعاملة" />
+            <input pInputText id="newFieldKey" formControlName="fieldKey" placeholder="مثال: requestNumber" />
           </article>
 
           <article class="field">
@@ -611,7 +606,7 @@
       </div>
       <div class="summary-row">
         <span>مصدر المكتبة</span>
-        <strong>{{ libraryLoadedFromDb ? 'قاعدة البيانات' : 'مصدر احتياطي' }}</strong>
+        <strong>{{ libraryLoadedFromDb ? 'قاعدة البيانات' : 'غير متاح حاليًا' }}</strong>
       </div>
       <div class="summary-row">
         <span>حالة المزامنة</span>
@@ -643,10 +638,10 @@
           label="حفظ في قاعدة البيانات"
           icon="pi pi-save"
           [loading]="savingToBackend"
-          [disabled]="savingToBackend || loadingLibrary"
+          [disabled]="savingToBackend || loadingLibrary || !backendWorkspaceLoaded"
           (click)="onSaveToBackend()">
         </button>
-        <button pButton type="button" label="العودة إلى لوحة التحكم الجديدة" icon="pi pi-arrow-left" iconPos="left" (click)="onGoNext()"></button>
+        <button pButton type="button" label="العودة إلى لوحة التحكم الجديدة" icon="pi pi-arrow-left" iconPos="left" (click)="onBackToCatalogDashboard()"></button>
       </div>
     </aside>
   </div>

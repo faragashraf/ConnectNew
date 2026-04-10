@@ -7,63 +7,6 @@ import {
 
 @Injectable()
 export class FieldLibraryBindingEngine {
-  readonly reusableLibrary: ReadonlyArray<ReusableFieldLibraryItem> = [
-    {
-      id: 'fld-request-title',
-      fieldKey: 'requestTitle',
-      label: 'عنوان الطلب',
-      type: 'InputText',
-      defaultValue: '',
-      requiredByDefault: true,
-      readonlyByDefault: false
-    },
-    {
-      id: 'fld-request-description',
-      fieldKey: 'requestDescription',
-      label: 'وصف الطلب',
-      type: 'Textarea',
-      defaultValue: '',
-      requiredByDefault: true,
-      readonlyByDefault: false
-    },
-    {
-      id: 'fld-priority',
-      fieldKey: 'priorityLevel',
-      label: 'مستوى الأولوية',
-      type: 'Dropdown',
-      defaultValue: '',
-      requiredByDefault: true,
-      readonlyByDefault: false
-    },
-    {
-      id: 'fld-created-date',
-      fieldKey: 'createdDate',
-      label: 'تاريخ الإنشاء',
-      type: 'Date',
-      defaultValue: '',
-      requiredByDefault: true,
-      readonlyByDefault: true
-    },
-    {
-      id: 'fld-estimated-cost',
-      fieldKey: 'estimatedCost',
-      label: 'التكلفة التقديرية',
-      type: 'Number',
-      defaultValue: '',
-      requiredByDefault: false,
-      readonlyByDefault: false
-    },
-    {
-      id: 'fld-has-attachment',
-      fieldKey: 'hasAttachment',
-      label: 'يوجد مرفقات',
-      type: 'Checkbox',
-      defaultValue: 'false',
-      requiredByDefault: false,
-      readonlyByDefault: false
-    }
-  ];
-
   createBindingFromLibrary(
     reusableField: ReusableFieldLibraryItem,
     existingBindings: ReadonlyArray<BoundFieldItem>
@@ -149,10 +92,10 @@ export class FieldLibraryBindingEngine {
       displayOrderSet.add(binding.displayOrder);
 
       if (!binding.label.trim()) {
-        blockingIssues.push('يوجد حقل مرتبط بدون Label.');
+        blockingIssues.push('يوجد حقل مرتبط بدون اسم.');
       }
       if (!binding.fieldKey.trim()) {
-        blockingIssues.push('يوجد حقل مرتبط بدون Field Key.');
+        blockingIssues.push('يوجد حقل مرتبط بدون مفتاح.');
       }
       if (binding.displayOrder <= 0) {
         blockingIssues.push(`الحقل "${binding.label || binding.fieldKey}" يملك ترتيب عرض غير صالح.`);
@@ -179,7 +122,7 @@ export class FieldLibraryBindingEngine {
 
     for (const [fieldKey, count] of keyMap.entries()) {
       if (count > 1) {
-        blockingIssues.push(`Field Key "${fieldKey}" مكرر داخل الربط.`);
+        blockingIssues.push(`مفتاح الحقل "${fieldKey}" مكرر داخل الربط.`);
       }
     }
 

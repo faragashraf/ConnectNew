@@ -118,7 +118,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   readonly setupForm: FormGroup = this.fb.group({
     libraryVersion: [null, [Validators.required]],
     bindingStrategy: [null, [Validators.required]],
-    includeLegacyFields: [true],
     bindingNotes: ['', [Validators.maxLength(1000)]]
   });
 
@@ -597,6 +596,18 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       return;
     }
 
+    if (!this.currentApplicationId) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'يجب تحديد تطبيق صالح أولًا قبل الحفظ.';
+      return;
+    }
+
+    if (!this.backendWorkspaceLoaded) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'لا يمكن الحفظ قبل تحميل بيانات الربط الفعلية من قاعدة البيانات.';
+      return;
+    }
+
     this.savingToBackend = true;
     this.stepMessage = '';
 
@@ -635,24 +646,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.stepMessage = 'تم حفظ المسودة محليًا بنجاح.';
   }
 
-  onGoNext(): void {
-    this.setupForm.markAllAsTouched();
-    this.referencePolicyForm.markAllAsTouched();
-    this.presentationForm.markAllAsTouched();
-    this.evaluateBindings(true, false);
-
-    if (this.setupForm.invalid || this.referencePolicyForm.invalid || this.presentationForm.invalid || !this.validation.isValid || !this.step?.isCompleted) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'لا يمكن المتابعة قبل استكمال الإعدادات وحل التعارضات المانعة.';
-      return;
-    }
-
-    if (this.hasPendingBackendChanges) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'توجد تعديلات غير محفوظة في قاعدة البيانات. يرجى الضغط على "حفظ في قاعدة البيانات" أولًا.';
-      return;
-    }
-
+  onBackToCatalogDashboard(): void {
     this.stepMessage = '';
     this.router.navigate(['/Admin/ControlCenterCatalog'], {
       queryParams: {
@@ -787,12 +781,12 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
       this.backendWorkspaceLoaded = false;
       this.libraryLoadedFromDb = false;
-      this.reusableFields = this.bindingEngine.reusableLibrary;
+      this.reusableFields = [];
       this.fieldCatalogByKey.clear();
       this.evaluateBindings(true, false);
 
       this.stepMessageSeverity = 'warn';
-      this.stepMessage = this.toErrorMessage(error, 'تعذر تحميل بيانات الحقول من قاعدة البيانات. سيتم استخدام مصدر محلي احتياطي مؤقتًا.');
+      this.stepMessage = this.toErrorMessage(error, 'تعذر تحميل بيانات الحقول من قاعدة البيانات. يرجى إعادة التحميل بعد التحقق من الاتصال.');
     } finally {
       if (loadToken === this.activeLoadToken) {
         this.loadingLibrary = false;
@@ -1143,7 +1137,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     const nextValue = {
       libraryVersion: this.normalizeNullable(values['libraryVersion']),
       bindingStrategy: this.normalizeNullable(values['bindingStrategy']),
-      includeLegacyFields: values['includeLegacyFields'] !== false,
       bindingNotes: String(values['bindingNotes'] ?? '').trim()
     };
 
@@ -1217,8 +1210,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     const current = this.setupForm.getRawValue();
     const patch = {
       libraryVersion: this.normalizeNullable(current['libraryVersion']) ?? 'default',
-      bindingStrategy: this.normalizeNullable(current['bindingStrategy']) ?? 'strict',
-      includeLegacyFields: current['includeLegacyFields'] !== false
+      bindingStrategy: this.normalizeNullable(current['bindingStrategy']) ?? 'strict'
     };
 
     this.syncingFromStore = true;
@@ -1768,7 +1760,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     return {
       libraryVersion: setupValue['libraryVersion'],
       bindingStrategy: setupValue['bindingStrategy'],
-      includeLegacyFields: setupValue['includeLegacyFields'] === true,
       bindingNotes: setupValue['bindingNotes'],
       bindingPayload: this.bindingEngine.serializeBindingsPayload(this.bindings),
       bindingValidationToken: syncToken === 'valid' ? 'valid' : null,
@@ -1843,7 +1834,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.setupForm.patchValue({
       libraryVersion: 'default',
       bindingStrategy: 'strict',
-      includeLegacyFields: true,
       bindingNotes: ''
     }, { emitEvent: false });
     this.referencePolicyForm.patchValue({
