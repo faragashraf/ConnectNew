@@ -29,6 +29,7 @@ import { FieldLibraryBindingEngine } from '../../domain/field-library-binding/fi
 import { AdminControlCenterFacade } from '../../facades/admin-control-center.facade';
 
 type SequenceResetScope = 'none' | 'yearly' | 'monthly';
+type FormDisplayMode = 'Standard' | 'Tabbed';
 
 @Component({
   selector: 'app-field-library-binding-page',
@@ -54,6 +55,11 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     { label: 'شهري', value: 'monthly' }
   ];
 
+  readonly displayModeOptions: Array<{ label: string; value: FormDisplayMode }> = [
+    { label: 'Standard', value: 'Standard' },
+    { label: 'Tabbed', value: 'Tabbed' }
+  ];
+
   readonly setupForm: FormGroup = this.fb.group({
     libraryVersion: [null, [Validators.required]],
     bindingStrategy: [null, [Validators.required]],
@@ -70,6 +76,11 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     referenceSequenceName: ['', [Validators.maxLength(80)]],
     referenceSequencePaddingLength: [0, [Validators.min(0), Validators.max(12)]],
     referenceSequenceResetScope: ['none']
+  });
+
+  readonly presentationForm: FormGroup = this.fb.group({
+    defaultDisplayMode: ['Standard', [Validators.required]],
+    allowUserToChangeDisplayMode: [false]
   });
 
   readonly newFieldForm: FormGroup = this.fb.group({
@@ -149,6 +160,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
         if (!this.backendWorkspaceLoaded) {
           this.patchSetupFormFromStep(matchingStep.values);
           this.patchReferencePolicyFormFromStep(matchingStep.values);
+          this.patchPresentationFormFromStep(matchingStep.values);
           this.patchBindingsFromStep(matchingStep.values);
         }
 
@@ -170,6 +182,18 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
     this.subscriptions.add(
       this.referencePolicyForm.valueChanges
+        .pipe(auditTime(80))
+        .subscribe(() => {
+          if (this.syncingFromStore) {
+            return;
+          }
+
+          this.evaluateBindings(true, true);
+        })
+    );
+
+    this.subscriptions.add(
+      this.presentationForm.valueChanges
         .pipe(auditTime(80))
         .subscribe(() => {
           if (this.syncingFromStore) {
@@ -402,9 +426,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   async onSaveToBackend(): Promise<void> {
     this.setupForm.markAllAsTouched();
     this.referencePolicyForm.markAllAsTouched();
+    this.presentationForm.markAllAsTouched();
     this.evaluateBindings(true, false);
 
-    if (this.setupForm.invalid || this.referencePolicyForm.invalid || !this.validation.isValid) {
+    if (this.setupForm.invalid || this.referencePolicyForm.invalid || this.presentationForm.invalid || !this.validation.isValid) {
       this.stepMessageSeverity = 'warn';
       this.stepMessage = 'لا يمكن الحفظ قبل استكمال المدخلات الإلزامية ومعالجة المشكلات المانعة.';
       return;
@@ -452,9 +477,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   onGoNext(): void {
     this.setupForm.markAllAsTouched();
     this.referencePolicyForm.markAllAsTouched();
+    this.presentationForm.markAllAsTouched();
     this.evaluateBindings(true, false);
 
-    if (this.setupForm.invalid || this.referencePolicyForm.invalid || !this.validation.isValid || !this.step?.isCompleted) {
+    if (this.setupForm.invalid || this.referencePolicyForm.invalid || this.presentationForm.invalid || !this.validation.isValid || !this.step?.isCompleted) {
       this.stepMessageSeverity = 'warn';
       this.stepMessage = 'لا يمكن المتابعة قبل استكمال الإعدادات وحل التعارضات المانعة.';
       return;
@@ -501,6 +527,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
   private syncStepValues(syncToken: 'valid' | 'draft', markBackendDirty: boolean): void {
     const setupValue = this.setupForm.getRawValue();
     const referenceValue = this.referencePolicyForm.getRawValue();
+    const presentationValue = this.presentationForm.getRawValue();
     const payload = this.bindingEngine.serializeBindingsPayload(this.bindings);
 
     this.facade.updateFieldValue(this.stepKey, 'libraryVersion', setupValue['libraryVersion']);
@@ -525,6 +552,16 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
       this.stepKey,
       'referenceSequenceResetScope',
       this.normalizeSequenceResetScope(referenceValue['referenceSequenceResetScope'])
+    );
+    this.facade.updateFieldValue(
+      this.stepKey,
+      'defaultDisplayMode',
+      this.normalizeDisplayMode(presentationValue['defaultDisplayMode'])
+    );
+    this.facade.updateFieldValue(
+      this.stepKey,
+      'allowUserToChangeDisplayMode',
+      presentationValue['allowUserToChangeDisplayMode'] === true
     );
 
     if (markBackendDirty) {
@@ -605,7 +642,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
       this.subjectTypeAdmin = subjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
       this.patchReferencePolicyFormFromAdminType(this.subjectTypeAdmin, categoryId);
+      this.patchPresentationFormFromAdminType(this.subjectTypeAdmin);
       this.patchSetupFormDefaultsIfMissing();
+      this.patchPresentationFormDefaultsIfMissing();
 
       this.backendWorkspaceLoaded = true;
       this.libraryLoadedFromDb = true;
@@ -814,6 +853,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     normalizedBindings: ReadonlyArray<BoundFieldItem>
   ): SubjectTypeAdminUpsertRequestDto {
     const referenceValue = this.referencePolicyForm.getRawValue();
+    const presentationValue = this.presentationForm.getRawValue();
     const sourceFieldKeys = this.normalizeNullable(targetType?.sourceFieldKeys)
       ?? this.buildDefaultSourceFieldKeys(normalizedBindings);
 
@@ -838,7 +878,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
         : undefined,
       sequencePaddingLength: this.toSafePadding(referenceValue['referenceSequencePaddingLength']),
       sequenceResetScope: this.normalizeSequenceResetScope(referenceValue['referenceSequenceResetScope']),
-      requestPolicy: targetType?.requestPolicy
+      requestPolicy: targetType?.requestPolicy,
+      defaultDisplayMode: this.normalizeDisplayMode(presentationValue['defaultDisplayMode']),
+      allowUserToChangeDisplayMode: presentationValue['allowUserToChangeDisplayMode'] === true
     };
   }
 
@@ -1016,6 +1058,28 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     this.syncingFromStore = false;
   }
 
+  private patchPresentationFormFromStep(values: Record<string, unknown>): void {
+    const nextValue = {
+      defaultDisplayMode: this.normalizeDisplayMode(values['defaultDisplayMode']),
+      allowUserToChangeDisplayMode: values['allowUserToChangeDisplayMode'] === true
+    };
+
+    this.syncingFromStore = true;
+    this.presentationForm.patchValue(nextValue, { emitEvent: false });
+    this.syncingFromStore = false;
+  }
+
+  private patchPresentationFormFromAdminType(subjectType: SubjectTypeAdminDto | null): void {
+    const nextValue = {
+      defaultDisplayMode: this.normalizeDisplayMode(subjectType?.defaultDisplayMode),
+      allowUserToChangeDisplayMode: subjectType?.allowUserToChangeDisplayMode === true
+    };
+
+    this.syncingFromStore = true;
+    this.presentationForm.patchValue(nextValue, { emitEvent: false });
+    this.syncingFromStore = false;
+  }
+
   private patchSetupFormDefaultsIfMissing(): void {
     const current = this.setupForm.getRawValue();
     const patch = {
@@ -1026,6 +1090,18 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
 
     this.syncingFromStore = true;
     this.setupForm.patchValue(patch, { emitEvent: false });
+    this.syncingFromStore = false;
+  }
+
+  private patchPresentationFormDefaultsIfMissing(): void {
+    const current = this.presentationForm.getRawValue();
+    const patch = {
+      defaultDisplayMode: this.normalizeDisplayMode(current['defaultDisplayMode']),
+      allowUserToChangeDisplayMode: current['allowUserToChangeDisplayMode'] === true
+    };
+
+    this.syncingFromStore = true;
+    this.presentationForm.patchValue(patch, { emitEvent: false });
     this.syncingFromStore = false;
   }
 
@@ -1240,6 +1316,15 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     return 'none';
   }
 
+  private normalizeDisplayMode(value: unknown): FormDisplayMode {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'tabbed') {
+      return 'Tabbed';
+    }
+
+    return 'Standard';
+  }
+
   private resetWorkspaceForNewContext(): void {
     this.backendWorkspaceLoaded = false;
     this.libraryLoadedFromDb = false;
@@ -1250,6 +1335,13 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnDestroy {
     this.fieldCatalogByKey.clear();
     this.subjectTypeAdmin = null;
     this.reusableFields = [];
+
+    this.syncingFromStore = true;
+    this.presentationForm.patchValue({
+      defaultDisplayMode: 'Standard',
+      allowUserToChangeDisplayMode: false
+    }, { emitEvent: false });
+    this.syncingFromStore = false;
   }
 
   private toPositiveInt(value: unknown): number | null {

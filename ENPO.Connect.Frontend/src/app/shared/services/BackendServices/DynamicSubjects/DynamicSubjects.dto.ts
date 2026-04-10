@@ -89,6 +89,8 @@ export interface SubjectFormDefinitionDto {
   groups: SubjectGroupDefinitionDto[];
   fields: SubjectFieldDefinitionDto[];
   requestPolicy?: RequestPolicyDefinitionDto;
+  defaultDisplayMode?: RequestTypeDisplayMode;
+  allowUserToChangeDisplayMode?: boolean;
 }
 
 export interface SubjectAdminPreviewIssueDto {
@@ -434,6 +436,8 @@ export interface RequestPolicyDefinitionDto {
   workflowPolicy: RequestWorkflowPolicyDto;
 }
 
+export type RequestTypeDisplayMode = 'Standard' | 'Tabbed' | string;
+
 export interface SubjectTypeAdminDto {
   categoryId: number;
   parentCategoryId: number;
@@ -463,6 +467,8 @@ export interface SubjectTypeAdminDto {
   lastModifiedBy?: string;
   lastModifiedAtUtc?: string;
   requestPolicy?: RequestPolicyDefinitionDto;
+  defaultDisplayMode?: RequestTypeDisplayMode;
+  allowUserToChangeDisplayMode?: boolean;
 }
 
 export interface SubjectTypeAdminUpsertRequestDto {
@@ -477,6 +483,8 @@ export interface SubjectTypeAdminUpsertRequestDto {
   sequencePaddingLength?: number;
   sequenceResetScope?: 'none' | 'yearly' | 'monthly' | string;
   requestPolicy?: RequestPolicyDefinitionDto;
+  defaultDisplayMode?: RequestTypeDisplayMode;
+  allowUserToChangeDisplayMode?: boolean;
 }
 
 export interface SubjectTypeAdminTreeMoveRequestDto {

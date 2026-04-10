@@ -146,6 +146,10 @@ public sealed class SubjectFormDefinitionDto
     public List<SubjectFieldDefinitionDto> Fields { get; set; } = new();
 
     public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
+
+    public string DefaultDisplayMode { get; set; } = "Standard";
+
+    public bool AllowUserToChangeDisplayMode { get; set; }
 }
 
 public sealed class SubjectAdminPreviewIssueDto
@@ -813,6 +817,10 @@ public sealed class SubjectTypeAdminDto
     public DateTime? LastModifiedAtUtc { get; set; }
 
     public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
+
+    public string DefaultDisplayMode { get; set; } = "Standard";
+
+    public bool AllowUserToChangeDisplayMode { get; set; }
 }
 
 public sealed class SubjectTypeAdminUpsertRequestDto
@@ -838,6 +846,10 @@ public sealed class SubjectTypeAdminUpsertRequestDto
     public string SequenceResetScope { get; set; } = "none";
 
     public RequestPolicyDefinitionDto? RequestPolicy { get; set; }
+
+    public string? DefaultDisplayMode { get; set; }
+
+    public bool? AllowUserToChangeDisplayMode { get; set; }
 }
 
 public sealed class SubjectTypeAdminTreeMoveRequestDto

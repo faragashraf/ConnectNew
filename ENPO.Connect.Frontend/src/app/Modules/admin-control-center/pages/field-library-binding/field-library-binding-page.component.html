@@ -180,6 +180,38 @@
 
       <section class="card">
         <header class="card-head">
+          <h3>Form Display Settings</h3>
+          <small>Presentation على مستوى Request Type</small>
+        </header>
+
+        <form class="presentation-grid" [formGroup]="presentationForm" novalidate>
+          <article class="field">
+            <label for="defaultDisplayMode">Default Display Mode</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="defaultDisplayMode"
+              [options]="displayModeOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="defaultDisplayMode">
+            </p-dropdown>
+            <small class="field-note">الوضع الافتراضي الذي يبدأ به نموذج التسجيل.</small>
+          </article>
+
+          <article class="field switch-field">
+            <label for="allowUserToChangeDisplayMode">Allow User To Change Mode</label>
+            <p-inputSwitch
+              inputId="allowUserToChangeDisplayMode"
+              formControlName="allowUserToChangeDisplayMode">
+            </p-inputSwitch>
+            <small class="field-note">عند الإيقاف سيتم فرض الوضع الافتراضي بدون أي اختيار للمستخدم.</small>
+          </article>
+        </form>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
           <h3>Reusable Field Library (DB)</h3>
           <input
             class="library-search"

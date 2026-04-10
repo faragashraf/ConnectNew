@@ -350,6 +350,40 @@
   margin: 0;
 }
 
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.display-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 999px;
+  padding: 0.22rem 0.32rem 0.22rem 0.5rem;
+}
+
+.display-mode-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+:host ::ng-deep .display-mode-switch .p-selectbutton .p-button {
+  font-size: 0.74rem;
+  line-height: 1.1;
+  padding: 0.26rem 0.52rem;
+}
+
+:host ::ng-deep .display-mode-switch .p-selectbutton .p-button.p-highlight {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
 .diagnostics-toggle {
   border: 1px solid #bfdbfe;
   background: #eff6ff;
@@ -558,6 +592,21 @@
   gap: 0.78rem 0.9rem;
 }
 
+.root-group-tab-label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+:host ::ng-deep .root-group-tabview .p-tabview-nav {
+  margin-bottom: 0.7rem;
+}
+
+:host ::ng-deep .root-group-tabview .p-tabview-panels {
+  background: transparent;
+  padding: 0;
+}
+
 .field-instance-row {
   display: contents;
 }
@@ -764,6 +813,11 @@
     gap: 0.6rem;
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .panel-header-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .diagnostics-toggle {

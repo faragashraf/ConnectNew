@@ -330,6 +330,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 .Select(item => item.SettingsJson)
                 .FirstOrDefaultAsync(cancellationToken);
             var requestPolicy = TryReadRequestPolicyFromSettingsJson(settingsJson);
+            var presentationSettings = ResolvePresentationSettingsFromSettingsJson(settingsJson);
 
             var adminGroups = await _connectContext.AdminCatalogCategoryGroups
                 .AsNoTracking()
@@ -552,6 +553,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 ParentCategoryId = category.CatParent,
                 ApplicationId = category.ApplicationId,
                 RequestPolicy = requestPolicy,
+                DefaultDisplayMode = presentationSettings.DefaultDisplayMode,
+                AllowUserToChangeDisplayMode = presentationSettings.AllowUserToChangeDisplayMode,
                 Groups = effectiveGroups,
                 Fields = effectiveFields
             };
@@ -2372,6 +2375,19 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 await _connectContext.SubjectTypeAdminSettings.AddAsync(categorySetting, cancellationToken);
             }
 
+            var currentPresentationSettings = ResolvePresentationSettingsFromSettingsJson(categorySetting.SettingsJson);
+            var hasRequestedDefaultDisplayMode = NormalizeNullable(safeRequest.DefaultDisplayMode) != null;
+            var hasRequestedAllowUserChange = safeRequest.AllowUserToChangeDisplayMode.HasValue;
+            var targetPresentationSettings = new RequestTypePresentationSettingsState
+            {
+                DefaultDisplayMode = hasRequestedDefaultDisplayMode
+                    ? NormalizeDisplayMode(safeRequest.DefaultDisplayMode)
+                    : currentPresentationSettings.DefaultDisplayMode,
+                AllowUserToChangeDisplayMode = hasRequestedAllowUserChange
+                    ? safeRequest.AllowUserToChangeDisplayMode == true
+                    : currentPresentationSettings.AllowUserToChangeDisplayMode
+            };
+
             var prefix = (safeRequest.ReferencePrefix ?? string.Empty).Trim();
             if (prefix.Length == 0)
             {
@@ -2493,6 +2509,10 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     normalizedRequestPolicy);
             }
 
+            categorySetting.SettingsJson = MergePresentationSettingsIntoSettingsJson(
+                categorySetting.SettingsJson,
+                targetPresentationSettings);
+
             categorySetting.SettingsJson = MergeDirectionLifecycleIntoSettingsJson(
                 categorySetting.SettingsJson,
                 directionLifecycle);
@@ -2528,6 +2548,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     ["isActive"] = safeRequest.IsActive ? "true" : "false",
                     ["referencePolicyEnabled"] = safeRequest.ReferencePolicyEnabled ? "true" : "false",
                     ["referencePrefix"] = policy.Prefix,
+                    ["defaultDisplayMode"] = targetPresentationSettings.DefaultDisplayMode,
+                    ["allowUserToChangeDisplayMode"] = targetPresentationSettings.AllowUserToChangeDisplayMode ? "true" : "false",
                     ["requestPolicyVersion"] = normalizedRequestPolicy?.Version.ToString(CultureInfo.InvariantCulture),
                     ["workflowMode"] = normalizedRequestPolicy?.WorkflowPolicy?.Mode,
                     ["accessCreateMode"] = normalizedRequestPolicy?.AccessPolicy?.CreateMode
@@ -3343,6 +3365,7 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         SubjectTypeAdminSetting? settings)
     {
         var requestPolicy = TryReadRequestPolicyFromSettingsJson(settings?.SettingsJson);
+        var presentationSettings = ResolvePresentationSettingsFromSettingsJson(settings?.SettingsJson);
         return new SubjectTypeAdminDto
         {
             CategoryId = category.CatId,
@@ -3372,7 +3395,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             SequenceResetScope = NormalizeSequenceResetScope(policy?.SequenceResetScope) ?? "none",
             LastModifiedBy = policy?.LastModifiedBy ?? policy?.CreatedBy,
             LastModifiedAtUtc = policy?.LastModifiedAtUtc ?? policy?.CreatedAtUtc,
-            RequestPolicy = requestPolicy
+            RequestPolicy = requestPolicy,
+            DefaultDisplayMode = presentationSettings.DefaultDisplayMode,
+            AllowUserToChangeDisplayMode = presentationSettings.AllowUserToChangeDisplayMode
         };
     }
 
@@ -4710,6 +4735,150 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return root.ToJsonString(SerializerOptions);
+    }
+
+    private sealed class RequestTypePresentationSettingsState
+    {
+        public string DefaultDisplayMode { get; set; } = "Standard";
+
+        public bool AllowUserToChangeDisplayMode { get; set; }
+    }
+
+    private static RequestTypePresentationSettingsState ResolvePresentationSettingsFromSettingsJson(string? settingsJson)
+    {
+        var result = new RequestTypePresentationSettingsState();
+        var payload = (settingsJson ?? string.Empty).Trim();
+        if (payload.Length == 0)
+        {
+            return result;
+        }
+
+        try
+        {
+            var rootNode = JsonNode.Parse(payload);
+            if (rootNode is not JsonObject rootObject)
+            {
+                return result;
+            }
+
+            var nestedPresentationObject = rootObject["presentationSettings"] as JsonObject;
+            var defaultDisplayModeCandidate =
+                ReadStringFromJsonNode(rootObject["defaultDisplayMode"])
+                ?? ReadStringFromJsonNode(nestedPresentationObject?["defaultDisplayMode"]);
+            var allowUserToChangeCandidate =
+                ReadBooleanFromJsonNode(rootObject["allowUserToChangeDisplayMode"])
+                ?? ReadBooleanFromJsonNode(nestedPresentationObject?["allowUserToChangeDisplayMode"]);
+
+            result.DefaultDisplayMode = NormalizeDisplayMode(defaultDisplayModeCandidate);
+            if (allowUserToChangeCandidate.HasValue)
+            {
+                result.AllowUserToChangeDisplayMode = allowUserToChangeCandidate.Value;
+            }
+        }
+        catch
+        {
+            // keep defaults.
+        }
+
+        return result;
+    }
+
+    private static string? MergePresentationSettingsIntoSettingsJson(
+        string? existingSettingsJson,
+        RequestTypePresentationSettingsState? presentationSettings)
+    {
+        JsonObject root;
+        var existingPayload = (existingSettingsJson ?? string.Empty).Trim();
+        if (existingPayload.Length == 0)
+        {
+            root = new JsonObject();
+        }
+        else
+        {
+            try
+            {
+                root = JsonNode.Parse(existingPayload) as JsonObject ?? new JsonObject();
+            }
+            catch
+            {
+                root = new JsonObject();
+            }
+        }
+
+        var effectiveSettings = presentationSettings ?? new RequestTypePresentationSettingsState();
+        root["defaultDisplayMode"] = NormalizeDisplayMode(effectiveSettings.DefaultDisplayMode);
+        root["allowUserToChangeDisplayMode"] = effectiveSettings.AllowUserToChangeDisplayMode;
+        root.Remove("presentationSettings");
+
+        if (root.Count == 0)
+        {
+            return null;
+        }
+
+        return root.ToJsonString(SerializerOptions);
+    }
+
+    private static string NormalizeDisplayMode(string? value)
+    {
+        var normalized = NormalizeNullable(value)?.ToLowerInvariant();
+        if (normalized == "tabbed")
+        {
+            return "Tabbed";
+        }
+
+        return "Standard";
+    }
+
+    private static string? ReadStringFromJsonNode(JsonNode? node)
+    {
+        if (node is not JsonValue value)
+        {
+            return null;
+        }
+
+        return value.TryGetValue<string>(out var stringValue)
+            ? NormalizeNullable(stringValue)
+            : null;
+    }
+
+    private static bool? ReadBooleanFromJsonNode(JsonNode? node)
+    {
+        if (node is not JsonValue value)
+        {
+            return null;
+        }
+
+        if (value.TryGetValue<bool>(out var boolValue))
+        {
+            return boolValue;
+        }
+
+        if (value.TryGetValue<string>(out var stringValue))
+        {
+            var normalized = NormalizeNullable(stringValue)?.ToLowerInvariant();
+            return normalized switch
+            {
+                "true" => true,
+                "1" => true,
+                "yes" => true,
+                "false" => false,
+                "0" => false,
+                "no" => false,
+                _ => null
+            };
+        }
+
+        if (value.TryGetValue<int>(out var intValue))
+        {
+            return intValue != 0;
+        }
+
+        if (value.TryGetValue<long>(out var longValue))
+        {
+            return longValue != 0L;
+        }
+
+        return null;
     }
 
     private sealed class DirectionLifecycleSettingsState

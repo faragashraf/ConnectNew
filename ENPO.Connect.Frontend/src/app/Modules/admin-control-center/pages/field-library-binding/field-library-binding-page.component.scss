@@ -136,6 +136,7 @@
 }
 
 .reference-grid,
+.presentation-grid,
 .new-field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -164,6 +165,11 @@
 .error {
   color: #b91c1c;
   font-size: 0.76rem;
+}
+
+.field-note {
+  color: #64748b;
+  font-size: 0.75rem;
 }
 
 .switch-field {
@@ -294,6 +300,7 @@
 
   .setup-grid,
   .reference-grid,
+  .presentation-grid,
   .new-field-grid {
     grid-template-columns: 1fr;
   }

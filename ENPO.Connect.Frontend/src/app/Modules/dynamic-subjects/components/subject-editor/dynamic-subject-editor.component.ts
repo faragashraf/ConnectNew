@@ -63,6 +63,8 @@ interface RuntimeGroupRenderNode {
   children: RuntimeGroupRenderNode[];
 }
 
+type RuntimeFormDisplayMode = 'standard' | 'tabbed';
+
 @Component({
   selector: 'app-dynamic-subject-editor',
   templateUrl: './dynamic-subject-editor.component.html',
@@ -91,6 +93,13 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private rawFormDefinition: SubjectFormDefinitionDto | null = null;
   formDefinition: SubjectFormDefinitionDto | null = null;
   renderGroupTree: RuntimeGroupRenderNode[] = [];
+  readonly formDisplayModeOptions: Array<{ label: string; value: RuntimeFormDisplayMode }> = [
+    { label: 'Standard', value: 'standard' },
+    { label: 'Tabbed', value: 'tabbed' }
+  ];
+  allowUserToChangeDisplayMode = false;
+  currentDisplayMode: RuntimeFormDisplayMode = 'standard';
+  rootGroupTabIndex = 0;
   categoryOptions: Array<{ id: number; name: string }> = [];
   pendingFiles: FileParameter[] = [];
   existingAttachments: Array<{ attachmentId: number; fileName: string }> = [];
@@ -284,6 +293,14 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     return this.canShowRuntimeFieldInspector && this.showDiagnostics;
   }
 
+  get shouldShowDisplayModeSelector(): boolean {
+    return this.allowUserToChangeDisplayMode;
+  }
+
+  get isTabbedDisplayModeActive(): boolean {
+    return this.currentDisplayMode === 'tabbed' && this.renderGroupTree.length > 0;
+  }
+
   get runtimeVisibleFieldRows(): RuntimeFieldInspectorRow[] {
     return this.buildRuntimeFieldInspectorRows(true);
   }
@@ -300,6 +317,18 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     }
 
     this.showDiagnostics = !this.showDiagnostics;
+  }
+
+  onDisplayModeChanged(mode: RuntimeFormDisplayMode | null | undefined): void {
+    this.currentDisplayMode = this.normalizeRuntimeDisplayMode(mode);
+    this.rootGroupTabIndex = 0;
+  }
+
+  onRootGroupTabChange(nextIndex: number | null | undefined): void {
+    const normalized = Number(nextIndex ?? 0);
+    this.rootGroupTabIndex = Number.isFinite(normalized) && normalized >= 0
+      ? Math.trunc(normalized)
+      : 0;
   }
 
   getFormArrayControls(formArrayName: string): AbstractControl[] {
@@ -678,6 +707,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   ): void {
     this.rawFormDefinition = definition ?? null;
     this.activeRequestPolicy = this.rawFormDefinition?.requestPolicy ?? null;
+    this.applyPresentationSettingsFromDefinition(this.rawFormDefinition);
     this.applyDirectionPolicyFromDefinition(this.resolveInitialDirectionCandidate(detail));
     const seedValues = (initialValues && initialValues.length > 0)
       ? initialValues
@@ -686,6 +716,22 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.applyPendingDynamicFieldValueBindings();
     this.populateStakeholders(detail);
     this.populateTasks(detail);
+  }
+
+  private applyPresentationSettingsFromDefinition(definition: SubjectFormDefinitionDto | null): void {
+    const defaultDisplayMode = this.normalizeRuntimeDisplayMode(definition?.defaultDisplayMode);
+    this.allowUserToChangeDisplayMode = definition?.allowUserToChangeDisplayMode === true;
+    this.currentDisplayMode = defaultDisplayMode;
+    this.rootGroupTabIndex = 0;
+  }
+
+  private normalizeRuntimeDisplayMode(value: unknown): RuntimeFormDisplayMode {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'tabbed') {
+      return 'tabbed';
+    }
+
+    return 'standard';
   }
 
   private get hasDirectionCapability(): boolean {
@@ -1438,6 +1484,9 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
     rootNodes.forEach(node => this.recomputeGroupTreeFieldCounts(node));
     this.renderGroupTree = rootNodes;
+    if (this.rootGroupTabIndex >= this.renderGroupTree.length) {
+      this.rootGroupTabIndex = 0;
+    }
     this.genericFormService.cdmendDto = mappedMendDefinitions;
     this.genericFormService.cdCategoryMandDto = mappedCategoryMandDefinitions;
   }
@@ -1999,6 +2048,9 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     this.rawFormDefinition = null;
     this.formDefinition = null;
     this.activeRequestPolicy = null;
+    this.allowUserToChangeDisplayMode = false;
+    this.currentDisplayMode = 'standard';
+    this.rootGroupTabIndex = 0;
     this.directionSelectionMode = 'selectable';
     this.fixedDocumentDirection = null;
     this.lastResolvedDirectionKey = null;

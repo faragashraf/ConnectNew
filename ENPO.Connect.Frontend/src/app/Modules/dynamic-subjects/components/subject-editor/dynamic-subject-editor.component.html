@@ -146,13 +146,27 @@
             <h3>الحقول الديناميكية</h3>
             <p class="panel-subtitle">عرض حي للجروبات والحقول حسب إعدادات Runtime الفعلية.</p>
           </div>
-          <button
-            type="button"
-            class="diagnostics-toggle"
-            *ngIf="canShowRuntimeFieldInspector"
-            (click)="toggleDiagnostics()">
-            {{ showDiagnostics ? 'إخفاء التشخيص' : 'إظهار التشخيص' }}
-          </button>
+          <div class="panel-header-actions">
+            <div class="display-mode-switch" *ngIf="shouldShowDisplayModeSelector">
+              <span class="display-mode-label">Display Mode</span>
+              <p-selectButton
+                [options]="formDisplayModeOptions"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="currentDisplayMode"
+                [ngModelOptions]="{ standalone: true }"
+                (onChange)="onDisplayModeChanged($event.value)">
+              </p-selectButton>
+            </div>
+
+            <button
+              type="button"
+              class="diagnostics-toggle"
+              *ngIf="canShowRuntimeFieldInspector"
+              (click)="toggleDiagnostics()">
+              {{ showDiagnostics ? 'إخفاء التشخيص' : 'إظهار التشخيص' }}
+            </button>
+          </div>
         </div>
 
         <div class="groups-wrap" *ngIf="dynamicControls && renderGroupTree.length > 0" [formGroup]="dynamicControls">
@@ -197,9 +211,25 @@
             </section>
           </ng-template>
 
-          <ng-container *ngFor="let groupNode of renderGroupTree; trackBy: trackByGroupNode">
-            <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: groupNode, level: 0 }"></ng-container>
+          <ng-container *ngIf="isTabbedDisplayModeActive; else standardGroupLayout">
+            <p-tabView
+              styleClass="root-group-tabview"
+              [activeIndex]="rootGroupTabIndex"
+              (onChange)="onRootGroupTabChange($event.index)">
+              <p-tabPanel *ngFor="let groupNode of renderGroupTree; trackBy: trackByGroupNode">
+                <ng-template pTemplate="header">
+                  <span class="root-group-tab-label">{{ groupNode.groupName }}</span>
+                </ng-template>
+                <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: groupNode, level: 0 }"></ng-container>
+              </p-tabPanel>
+            </p-tabView>
           </ng-container>
+
+          <ng-template #standardGroupLayout>
+            <ng-container *ngFor="let groupNode of renderGroupTree; trackBy: trackByGroupNode">
+              <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: groupNode, level: 0 }"></ng-container>
+            </ng-container>
+          </ng-template>
         </div>
         <p class="empty-text" *ngIf="!renderGroupTree || renderGroupTree.length === 0">
           لا توجد حقول ديناميكية مهيأة لهذا النوع.
