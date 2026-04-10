@@ -3,6 +3,7 @@ using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
 using Models.GPA;
 using Models.GPA.OrgStructure;
+using Persistence.Services.DynamicSubjects.AdminCatalog;
 
 namespace Persistence.Services.DynamicSubjects.AdminRouting;
 
@@ -103,10 +104,14 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
         };
 
     private readonly IDynamicSubjectsAdminRoutingRepository _repository;
+    private readonly IAdminControlCenterRequestPreviewCache _requestPreviewCache;
 
-    public DynamicSubjectsAdminRoutingService(IDynamicSubjectsAdminRoutingRepository repository)
+    public DynamicSubjectsAdminRoutingService(
+        IDynamicSubjectsAdminRoutingRepository repository,
+        IAdminControlCenterRequestPreviewCache requestPreviewCache)
     {
         _repository = repository;
+        _requestPreviewCache = requestPreviewCache;
     }
 
     public async Task<CommonResponse<IEnumerable<SubjectRoutingProfileDto>>> GetProfilesByRequestTypeAsync(
@@ -1360,6 +1365,7 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
             entity.LastModifiedAtUtc = DateTime.UtcNow;
 
             await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
 
             response.Data = new SubjectTypeRequestAvailabilityDto
             {

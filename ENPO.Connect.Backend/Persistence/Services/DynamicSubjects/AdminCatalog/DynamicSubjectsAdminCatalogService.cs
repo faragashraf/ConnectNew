@@ -50,10 +50,14 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
     };
 
     private readonly IDynamicSubjectsAdminCatalogRepository _repository;
+    private readonly IAdminControlCenterRequestPreviewCache _requestPreviewCache;
 
-    public DynamicSubjectsAdminCatalogService(IDynamicSubjectsAdminCatalogRepository repository)
+    public DynamicSubjectsAdminCatalogService(
+        IDynamicSubjectsAdminCatalogRepository repository,
+        IAdminControlCenterRequestPreviewCache requestPreviewCache)
     {
         _repository = repository;
+        _requestPreviewCache = requestPreviewCache;
     }
 
     public async Task<CommonResponse<IEnumerable<AdminCatalogApplicationDto>>> GetApplicationsAsync(
@@ -138,7 +142,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             };
 
             await _repository.AddApplicationAsync(application, cancellationToken);
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
 
             response.Data = MapApplication(application);
         }
@@ -198,7 +202,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             application.IsActive = safeRequest.IsActive;
             application.StampDate = DateTime.Now;
 
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
             response.Data = MapApplication(application);
         }
         catch (Exception)
@@ -281,7 +285,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             if (diagnostics.CanHardDelete)
             {
                 _repository.RemoveApplication(application);
-                await _repository.SaveChangesAsync(cancellationToken);
+                await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
                 response.Data = new AdminCatalogDeleteResultDto
                 {
                     Deleted = true,
@@ -306,7 +310,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
 
             application.IsActive = false;
             application.StampDate = DateTime.Now;
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
 
             response.Data = new AdminCatalogDeleteResultDto
             {
@@ -453,7 +457,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             };
 
             await _repository.AddCategoryAsync(category, cancellationToken);
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
 
             response.Data = MapCategory(category);
         }
@@ -567,7 +571,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             category.CatStatus = !safeRequest.IsActive;
             category.StampDate = DateTime.Now;
 
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
             response.Data = MapCategory(category);
         }
         catch (Exception)
@@ -654,7 +658,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             if (diagnostics.CanHardDelete)
             {
                 _repository.RemoveCategory(category);
-                await _repository.SaveChangesAsync(cancellationToken);
+                await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
                 response.Data = new AdminCatalogDeleteResultDto
                 {
                     Deleted = true,
@@ -679,7 +683,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
 
             category.CatStatus = true;
             category.StampDate = DateTime.Now;
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
 
             response.Data = new AdminCatalogDeleteResultDto
             {
@@ -854,7 +858,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             };
 
             await _repository.AddGroupAsync(group, cancellationToken);
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
             response.Data = MapGroup(group);
         }
         catch (Exception)
@@ -969,7 +973,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             group.IsActive = safeRequest.IsActive;
             group.StampDate = DateTime.Now;
 
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
             response.Data = MapGroup(group);
         }
         catch (Exception)
@@ -1016,7 +1020,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             }
 
             _repository.RemoveGroup(group);
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
             response.Data = new AdminCatalogDeleteResultDto
             {
                 Deleted = true,
@@ -1248,7 +1252,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             };
 
             await _repository.AddFieldAsync(field, cancellationToken);
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
 
             response.Data = MapFieldDetails(
                 field,
@@ -1336,7 +1340,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             field.IsDisabledInit = safeRequest.IsDisabledInit;
             field.IsSearchable = safeRequest.IsSearchable;
 
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
 
             var diagnostics = await BuildFieldDeleteDiagnosticsAsync(field, cancellationToken);
             response.Data = MapFieldDetails(field, diagnostics);
@@ -1425,7 +1429,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             if (diagnostics.CanHardDelete)
             {
                 _repository.RemoveField(field);
-                await _repository.SaveChangesAsync(cancellationToken);
+                await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
                 response.Data = new AdminCatalogDeleteResultDto
                 {
                     Deleted = true,
@@ -1449,7 +1453,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             }
 
             field.CdmendStat = true;
-            await _repository.SaveChangesAsync(cancellationToken);
+            await SaveChangesAndInvalidatePreviewCacheAsync(cancellationToken);
             response.Data = new AdminCatalogDeleteResultDto
             {
                 Deleted = true,
@@ -2264,6 +2268,12 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
     private static bool ExceedsMaxLength(string? value, int maxLength)
     {
         return (value ?? string.Empty).Length > maxLength;
+    }
+
+    private async Task SaveChangesAndInvalidatePreviewCacheAsync(CancellationToken cancellationToken)
+    {
+        await _repository.SaveChangesAsync(cancellationToken);
+        await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
     }
 
     private static void AddUnhandledError<T>(CommonResponse<T> response)

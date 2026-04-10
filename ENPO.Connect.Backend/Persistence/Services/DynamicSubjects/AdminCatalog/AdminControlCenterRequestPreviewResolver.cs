@@ -1,27 +1,37 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
 using Persistence.Data;
 using Persistence.Services.DynamicSubjects.FieldAccess;
+using System.Diagnostics;
 using System.Globalization;
 
 namespace Persistence.Services.DynamicSubjects.AdminCatalog;
 
 public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCenterRequestPreviewResolver
 {
+    private static readonly TimeSpan PreviewCacheTtl = TimeSpan.FromMinutes(10);
+
     private readonly ConnectContext _connectContext;
     private readonly GPAContext _gpaContext;
     private readonly IFieldAccessResolutionService _fieldAccessResolutionService;
+    private readonly IAdminControlCenterRequestPreviewCache _requestPreviewCache;
+    private readonly ILogger<AdminControlCenterRequestPreviewResolver> _logger;
 
     public AdminControlCenterRequestPreviewResolver(
         ConnectContext connectContext,
         GPAContext gpaContext,
-        IFieldAccessResolutionService fieldAccessResolutionService)
+        IFieldAccessResolutionService fieldAccessResolutionService,
+        IAdminControlCenterRequestPreviewCache requestPreviewCache,
+        ILogger<AdminControlCenterRequestPreviewResolver> logger)
     {
         _connectContext = connectContext;
         _gpaContext = gpaContext;
         _fieldAccessResolutionService = fieldAccessResolutionService;
+        _requestPreviewCache = requestPreviewCache;
+        _logger = logger;
     }
 
     public async Task<CommonResponse<AdminControlCenterRequestPreviewDto>> ResolveAsync(
@@ -30,6 +40,7 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
         CancellationToken cancellationToken = default)
     {
         var response = new CommonResponse<AdminControlCenterRequestPreviewDto>();
+        var totalStopwatch = Stopwatch.StartNew();
 
         try
         {
@@ -45,6 +56,21 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                 response.Errors.Add(new Error { Code = "400", Message = "نوع الطلب مطلوب." });
                 return response;
             }
+
+            var cached = await _requestPreviewCache.TryGetAsync(requestTypeId, normalizedUserId, cancellationToken);
+            if (cached != null
+                && cached.Data != null
+                && (cached.Errors?.Count ?? 0) == 0)
+            {
+                _logger.LogInformation(
+                    "Request preview cache hit for requestTypeId {RequestTypeId}, userId {UserId}. totalElapsedMs={ElapsedMs}",
+                    requestTypeId,
+                    normalizedUserId,
+                    totalStopwatch.ElapsedMilliseconds);
+                return cached;
+            }
+
+            var resolverStopwatch = Stopwatch.StartNew();
 
             var category = await _connectContext.Cdcategories
                 .AsNoTracking()
@@ -135,9 +161,11 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                 EvaluatedForUserId = userContext.UserId ?? normalizedUserId,
                 IsUserContextResolved = userContext.IsResolved,
                 UserUnitIds = userContext.UnitIds
+                    .OrderBy(item => item)
                     .Select(item => item.ToString(CultureInfo.InvariantCulture))
                     .ToList(),
                 UserPositionIds = userContext.PositionIds
+                    .OrderBy(item => item)
                     .Select(item => item.ToString(CultureInfo.InvariantCulture))
                     .ToList(),
                 IsAvailable = isAvailable,
@@ -153,6 +181,23 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
             }
 
             response.Data = preview;
+
+            if (response.Data != null && (response.Errors?.Count ?? 0) == 0)
+            {
+                await _requestPreviewCache.SetAsync(
+                    requestTypeId,
+                    normalizedUserId,
+                    response,
+                    PreviewCacheTtl,
+                    cancellationToken);
+            }
+
+            _logger.LogInformation(
+                "Request preview cache miss for requestTypeId {RequestTypeId}, userId {UserId}. resolverElapsedMs={ResolverElapsedMs}, totalElapsedMs={TotalElapsedMs}",
+                requestTypeId,
+                normalizedUserId,
+                resolverStopwatch.ElapsedMilliseconds,
+                totalStopwatch.ElapsedMilliseconds);
         }
         catch
         {

@@ -4,6 +4,7 @@ using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
 using Persistence.Data;
 using Persistence.Services.DynamicSubjects;
+using Persistence.Services.DynamicSubjects.AdminCatalog;
 using Persistence.Services.DynamicSubjects.FieldAccess;
 
 namespace Persistence.Services.DynamicSubjects.AdminAccessPolicy;
@@ -12,13 +13,16 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
 {
     private readonly ConnectContext _connectContext;
     private readonly IFieldAccessResolutionService _resolutionService;
+    private readonly IAdminControlCenterRequestPreviewCache _requestPreviewCache;
 
     public DynamicSubjectsAdminAccessPolicyService(
         ConnectContext connectContext,
-        IFieldAccessResolutionService resolutionService)
+        IFieldAccessResolutionService resolutionService,
+        IAdminControlCenterRequestPreviewCache requestPreviewCache)
     {
         _connectContext = connectContext;
         _resolutionService = resolutionService;
+        _requestPreviewCache = requestPreviewCache;
     }
 
     public async Task<CommonResponse<FieldAccessPolicyWorkspaceDto>> GetWorkspaceAsync(
@@ -130,6 +134,7 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
 
                 await _connectContext.FieldAccessPolicies.AddAsync(policy, cancellationToken);
                 await _connectContext.SaveChangesAsync(cancellationToken);
+                await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
             }
             else
             {
@@ -207,6 +212,7 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
             }
 
             await _connectContext.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
 
             response.Data = await BuildWorkspaceAsync(requestTypeId, cancellationToken);
         }
