@@ -1,8 +1,8 @@
 <section class="request-preview-page" dir="rtl">
   <header class="page-header">
     <div>
-      <p class="eyebrow">ControlCenterCatalog - Effective Request Preview MVP</p>
-      <h2>Effective Request Preview</h2>
+      <p class="eyebrow">ControlCenterCatalog - Runtime-Aware Request Preview</p>
+      <h2>Runtime-Aware Request Preview</h2>
       <p>
         ترجمة تشغيلية مباشرة للإعدادات الحالية لإظهار الحالة الفعلية للـ Request Type والحقول أثناء runtime.
       </p>
@@ -78,6 +78,34 @@
   </section>
 
   <ng-container *ngIf="preview as data; else noPreview">
+    <section class="card context-card">
+      <header class="card-header">
+        <div>
+          <h3>User Runtime Context</h3>
+          <small>السياق الذي تم بناء نتيجة المعاينة عليه</small>
+        </div>
+        <p-tag
+          [severity]="data.isUserContextResolved ? 'success' : 'warning'"
+          [value]="data.isUserContextResolved ? 'Context Resolved' : 'Context Incomplete'">
+        </p-tag>
+      </header>
+
+      <div class="context-grid">
+        <div>
+          <span>UserId</span>
+          <strong>{{ data.evaluatedForUserId || '-' }}</strong>
+        </div>
+        <div>
+          <span>Unit Memberships</span>
+          <strong>{{ userUnitsLabel }}</strong>
+        </div>
+        <div>
+          <span>Position Memberships</span>
+          <strong>{{ userPositionsLabel }}</strong>
+        </div>
+      </div>
+    </section>
+
     <section class="stats-grid">
       <article class="stat-card">
         <span>الحقول المرئية</span>

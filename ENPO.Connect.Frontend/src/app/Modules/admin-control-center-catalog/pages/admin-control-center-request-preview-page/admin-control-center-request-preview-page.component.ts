@@ -67,6 +67,16 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
     return (this.preview?.fields ?? []).filter(item => !item.isRequired).length;
   }
 
+  get userUnitsLabel(): string {
+    const units = this.preview?.userUnitIds ?? [];
+    return units.length > 0 ? units.join(' , ') : '-';
+  }
+
+  get userPositionsLabel(): string {
+    const positions = this.preview?.userPositionIds ?? [];
+    return positions.length > 0 ? positions.join(' , ') : '-';
+  }
+
   onRefreshRequestTypes(): void {
     this.loadRequestTypes();
   }

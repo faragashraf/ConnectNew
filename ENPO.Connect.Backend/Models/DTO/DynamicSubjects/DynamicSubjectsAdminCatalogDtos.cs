@@ -411,6 +411,14 @@ public sealed class AdminControlCenterRequestPreviewDto
 
     public string RequestTypeName { get; set; } = string.Empty;
 
+    public string EvaluatedForUserId { get; set; } = string.Empty;
+
+    public bool IsUserContextResolved { get; set; }
+
+    public List<string> UserUnitIds { get; set; } = new();
+
+    public List<string> UserPositionIds { get; set; } = new();
+
     public bool IsAvailable { get; set; }
 
     public List<string> AvailabilityReasons { get; set; } = new();

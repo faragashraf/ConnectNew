@@ -4,19 +4,23 @@ using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
 using Persistence.Data;
 using Persistence.Services.DynamicSubjects.FieldAccess;
+using System.Globalization;
 
 namespace Persistence.Services.DynamicSubjects.AdminCatalog;
 
 public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCenterRequestPreviewResolver
 {
     private readonly ConnectContext _connectContext;
+    private readonly GPAContext _gpaContext;
     private readonly IFieldAccessResolutionService _fieldAccessResolutionService;
 
     public AdminControlCenterRequestPreviewResolver(
         ConnectContext connectContext,
+        GPAContext gpaContext,
         IFieldAccessResolutionService fieldAccessResolutionService)
     {
         _connectContext = connectContext;
+        _gpaContext = gpaContext;
         _fieldAccessResolutionService = fieldAccessResolutionService;
     }
 
@@ -55,6 +59,8 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                 .AsNoTracking()
                 .FirstOrDefaultAsync(item => item.CategoryId == requestTypeId, cancellationToken);
 
+            var userContext = await ResolveUserRuntimeContextAsync(normalizedUserId, cancellationToken);
+
             var warnings = new List<string>();
             var availabilityReasons = new List<string>();
 
@@ -64,7 +70,16 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                 availabilityReasons.Add("نوع الطلب غير مفعل في جدول CDCategory.");
             }
 
-            var availabilityEvaluation = EvaluateAvailability(availability);
+            if (!userContext.IsResolved)
+            {
+                warnings.Add("تعذر تحميل سياق المستخدم الحالي (الوحدات/المناصب) بدقة.");
+            }
+            else if (userContext.UnitIds.Count == 0)
+            {
+                warnings.Add("لا توجد عضويات وحدات نشطة للمستخدم الحالي داخل GPA.");
+            }
+
+            var availabilityEvaluation = EvaluateAvailability(availability, userContext);
             isAvailable = isAvailable && availabilityEvaluation.IsAvailable;
             availabilityReasons.AddRange(availabilityEvaluation.Reasons);
             warnings.AddRange(availabilityEvaluation.Warnings);
@@ -106,13 +121,9 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                         RequestId = null,
                         StageId = null,
                         ActionId = null,
-                        UserId = "SYSTEM_PREVIEW",
+                        UserId = normalizedUserId,
                         Groups = metadata.Groups,
-                        Fields = metadata.Fields,
-                        SubjectContextOverride = new FieldAccessSubjectContextOverride
-                        {
-                            SubjectType = "RequestOwner"
-                        }
+                        Fields = metadata.Fields
                     },
                     cancellationToken);
             }
@@ -121,6 +132,14 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
             {
                 RequestTypeId = requestTypeId,
                 RequestTypeName = NormalizeNullable(category.CatName) ?? $"Request Type {requestTypeId}",
+                EvaluatedForUserId = userContext.UserId ?? normalizedUserId,
+                IsUserContextResolved = userContext.IsResolved,
+                UserUnitIds = userContext.UnitIds
+                    .Select(item => item.ToString(CultureInfo.InvariantCulture))
+                    .ToList(),
+                UserPositionIds = userContext.PositionIds
+                    .Select(item => item.ToString(CultureInfo.InvariantCulture))
+                    .ToList(),
                 IsAvailable = isAvailable,
                 AvailabilityReasons = DistinctInOrder(availabilityReasons),
                 Fields = BuildPreviewFields(metadata.Fields, resolution, warnings),
@@ -325,7 +344,8 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
     }
 
     private static (bool IsAvailable, List<string> Reasons, List<string> Warnings) EvaluateAvailability(
-        SubjectTypeRequestAvailability? availability)
+        SubjectTypeRequestAvailability? availability,
+        UserRuntimeContext userContext)
     {
         var reasons = new List<string>();
         var warnings = new List<string>();
@@ -345,11 +365,11 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
 
         if (string.Equals(mode, "Public", StringComparison.OrdinalIgnoreCase))
         {
-            reasons.Add("نمط الإتاحة الحالي Public: نوع الطلب متاح لجميع المستخدمين المسجلين.");
+            reasons.Add("نمط الإتاحة الحالي Public: النوع متاح للمستخدم الحالي.");
             return (true, reasons, warnings);
         }
 
-        reasons.Add("نمط الإتاحة الحالي Restricted: نوع الطلب متاح لفئة تنظيمية محددة.");
+        reasons.Add("نمط الإتاحة الحالي Restricted: يجب مطابقة سياق المستخدم الحالي مع عقدة الإتاحة.");
 
         if (!TryNormalizeSelectedNodeType(availability.SelectedNodeType, out var selectedNodeType))
         {
@@ -368,8 +388,21 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                 return (false, reasons, warnings);
             }
 
-            reasons.Add($"الإتاحة مقيدة على مستخدم محدد: {selectedUserId}.");
-            return (true, reasons, warnings);
+            if (userContext.UserId == null)
+            {
+                reasons.Add($"الإتاحة مقيدة على مستخدم محدد ({selectedUserId}) لكن user context غير متوفر.");
+                warnings.Add("تعذر مطابقة SpecificUser بسبب غياب UserId الحالي.");
+                return (false, reasons, warnings);
+            }
+
+            if (string.Equals(userContext.UserId, selectedUserId, StringComparison.OrdinalIgnoreCase))
+            {
+                reasons.Add($"Available لأن المستخدم الحالي يطابق SpecificUser ({selectedUserId}).");
+                return (true, reasons, warnings);
+            }
+
+            reasons.Add($"Unavailable لأن المستخدم الحالي ({userContext.UserId}) لا يطابق SpecificUser ({selectedUserId}).");
+            return (false, reasons, warnings);
         }
 
         if (!availability.SelectedNodeNumericId.HasValue || availability.SelectedNodeNumericId.Value <= 0)
@@ -379,7 +412,7 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
             return (false, reasons, warnings);
         }
 
-        reasons.Add($"الإتاحة مقيدة على عقدة {selectedNodeType} برقم {availability.SelectedNodeNumericId.Value}.");
+        var requiredNodeId = availability.SelectedNodeNumericId.Value;
 
         var selectionLabel = NormalizeNullable(availability.SelectionLabelAr);
         if (selectionLabel != null)
@@ -393,7 +426,81 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
             reasons.Add($"المسار التنظيمي: {selectionPath}.");
         }
 
-        return (true, reasons, warnings);
+        if (!userContext.IsResolved)
+        {
+            reasons.Add("Unavailable لأن سياق المستخدم الحالي غير متاح لتقييم Restricted availability.");
+            return (false, reasons, warnings);
+        }
+
+        if (string.Equals(selectedNodeType, "OrgUnit", StringComparison.OrdinalIgnoreCase))
+        {
+            if (userContext.UnitIds.Contains(requiredNodeId))
+            {
+                reasons.Add($"Available لأن المستخدم الحالي عضو في الوحدة المسموح بها ({requiredNodeId}).");
+                return (true, reasons, warnings);
+            }
+
+            reasons.Add($"Unavailable لأن المستخدم الحالي ليس عضوًا في الوحدة المطلوبة ({requiredNodeId}).");
+            return (false, reasons, warnings);
+        }
+
+        if (string.Equals(selectedNodeType, "Position", StringComparison.OrdinalIgnoreCase))
+        {
+            if (userContext.PositionIds.Contains(requiredNodeId))
+            {
+                reasons.Add($"Available لأن المستخدم الحالي يشغل المنصب المطلوب ({requiredNodeId}).");
+                return (true, reasons, warnings);
+            }
+
+            reasons.Add($"Unavailable لأن المستخدم الحالي لا يشغل المنصب المطلوب ({requiredNodeId}).");
+            return (false, reasons, warnings);
+        }
+
+        reasons.Add("Unavailable لأن نوع العقدة المقيّدة غير مدعوم في runtime evaluation.");
+        return (false, reasons, warnings);
+    }
+
+    private async Task<UserRuntimeContext> ResolveUserRuntimeContextAsync(
+        string normalizedUserId,
+        CancellationToken cancellationToken)
+    {
+        var context = new UserRuntimeContext
+        {
+            UserId = normalizedUserId,
+            IsResolved = true
+        };
+
+        try
+        {
+            var today = DateTime.Today;
+            var positions = await _gpaContext.UserPositions
+                .AsNoTracking()
+                .Where(position => position.UserId == normalizedUserId
+                    && position.IsActive != false
+                    && (!position.StartDate.HasValue || position.StartDate.Value <= today)
+                    && (!position.EndDate.HasValue || position.EndDate.Value >= today))
+                .ToListAsync(cancellationToken);
+
+            context.UnitIds = positions
+                .Select(item => item.UnitId)
+                .Distinct()
+                .OrderBy(item => item)
+                .ToHashSet();
+
+            context.PositionIds = positions
+                .Select(item => item.PositionId)
+                .Distinct()
+                .OrderBy(item => item)
+                .ToHashSet();
+        }
+        catch
+        {
+            context.IsResolved = false;
+            context.UnitIds = new HashSet<decimal>();
+            context.PositionIds = new HashSet<decimal>();
+        }
+
+        return context;
     }
 
     private static bool TryNormalizeAvailabilityMode(string? availabilityMode, out string normalized)
@@ -496,6 +603,17 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
         }
 
         return result;
+    }
+
+    private sealed class UserRuntimeContext
+    {
+        public string? UserId { get; set; }
+
+        public bool IsResolved { get; set; }
+
+        public HashSet<decimal> UnitIds { get; set; } = new();
+
+        public HashSet<decimal> PositionIds { get; set; } = new();
     }
 
     private sealed class FieldBindingRow

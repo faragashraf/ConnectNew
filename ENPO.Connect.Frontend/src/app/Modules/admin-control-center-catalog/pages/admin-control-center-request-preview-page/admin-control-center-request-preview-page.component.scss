@@ -92,6 +92,33 @@
   color: #64748b;
 }
 
+.context-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.context-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.65rem;
+  background: #f8fafc;
+}
+
+.context-grid span {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.context-grid strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
 .reason-list {
   margin: 0;
   padding-inline-start: 1.2rem;
@@ -141,6 +168,10 @@
 
 @media (max-width: 1024px) {
   .selector-row {
+    grid-template-columns: 1fr;
+  }
+
+  .context-grid {
     grid-template-columns: 1fr;
   }
 

@@ -243,6 +243,10 @@ export interface AdminControlCenterRequestPreviewFieldDto {
 export interface AdminControlCenterRequestPreviewDto {
   requestTypeId: number;
   requestTypeName: string;
+  evaluatedForUserId: string;
+  isUserContextResolved: boolean;
+  userUnitIds: string[];
+  userPositionIds: string[];
   isAvailable: boolean;
   availabilityReasons: string[];
   fields: AdminControlCenterRequestPreviewFieldDto[];
