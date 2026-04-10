@@ -153,6 +153,44 @@
         </div>
 
         <div class="groups-wrap" *ngIf="dynamicControls && renderGroupTree.length > 0" [formGroup]="dynamicControls">
+          <ng-template #runtimeGroupNodeTemplate let-groupNode let-level="level">
+            <section class="group-card" [class.group-card-nested]="level > 0" [style.--group-level]="level">
+              <header class="group-header">
+                <h3>{{ groupNode.groupName }}</h3>
+                <span *ngIf="groupNode.totalVisibleFieldsCount > 0">{{ groupNode.totalVisibleFieldsCount }} حقل</span>
+              </header>
+
+              <p class="group-description" *ngIf="groupNode.groupDescription">{{ groupNode.groupDescription }}</p>
+
+              <div
+                *ngIf="groupNode.formArrayName && groupNode.fields.length > 0"
+                [formArrayName]="groupNode.formArrayName!"
+                class="form-array">
+                <div *ngFor="let mandFiled of getFormArrayControls(groupNode.formArrayName!); let i = index" [formGroupName]="i" style="display: contents;">
+                  <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" style="display: contents;">
+                    <app-generic-form-array
+                      [controlFullName]="ctrlName"
+                      [index]="i"
+                      [filtered_CategoryMand]="groupNode.fields"
+                      [isDivDisabled]="false"
+                      [ticketForm]="dynamicControls"
+                      [mandFileds]="getFormArrayInstance(groupNode.formArrayName!)!"
+                      [tree]="unitTree"
+                      [showTreeButton]="true"
+                      (genericEvent)="onDynamicFieldGenericEvent($event)">
+                    </app-generic-form-array>
+                  </div>
+                </div>
+              </div>
+
+              <div class="group-children" *ngIf="groupNode.children.length > 0">
+                <ng-container *ngFor="let childNode of groupNode.children; trackBy: trackByGroupNode">
+                  <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: childNode, level: level + 1 }"></ng-container>
+                </ng-container>
+              </div>
+            </section>
+          </ng-template>
+
           <ng-container *ngFor="let groupNode of renderGroupTree; trackBy: trackByGroupNode">
             <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: groupNode, level: 0 }"></ng-container>
           </ng-container>
@@ -200,44 +238,6 @@
           </article>
         </div>
       </section>
-
-      <ng-template #runtimeGroupNodeTemplate let-groupNode let-level="level">
-        <section class="group-card" [class.group-card-nested]="level > 0" [style.--group-level]="level">
-          <header class="group-header">
-            <h3>{{ groupNode.groupName }}</h3>
-            <span *ngIf="groupNode.totalVisibleFieldsCount > 0">{{ groupNode.totalVisibleFieldsCount }} حقل</span>
-          </header>
-
-          <p class="group-description" *ngIf="groupNode.groupDescription">{{ groupNode.groupDescription }}</p>
-
-          <div
-            *ngIf="groupNode.formArrayName && groupNode.fields.length > 0"
-            [formArrayName]="groupNode.formArrayName!"
-            class="form-array">
-            <div *ngFor="let mandFiled of getFormArrayControls(groupNode.formArrayName!); let i = index" [formGroupName]="i" style="display: contents;">
-              <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" style="display: contents;">
-                <app-generic-form-array
-                  [controlFullName]="ctrlName"
-                  [index]="i"
-                  [filtered_CategoryMand]="groupNode.fields"
-                  [isDivDisabled]="false"
-                  [ticketForm]="dynamicControls"
-                  [mandFileds]="getFormArrayInstance(groupNode.formArrayName!)!"
-                  [tree]="unitTree"
-                  [showTreeButton]="true"
-                  (genericEvent)="onDynamicFieldGenericEvent($event)">
-                </app-generic-form-array>
-              </div>
-            </div>
-          </div>
-
-          <div class="group-children" *ngIf="groupNode.children.length > 0">
-            <ng-container *ngFor="let childNode of groupNode.children; trackBy: trackByGroupNode">
-              <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: childNode, level: level + 1 }"></ng-container>
-            </ng-container>
-          </div>
-        </section>
-      </ng-template>
 
       <section class="panel" *ngIf="!isRuntimeRegistrationMvpMode">
         <div class="panel-header">
