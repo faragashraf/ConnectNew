@@ -148,6 +148,10 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
             var existingRules = await _connectContext.FieldAccessPolicyRules
                 .Where(item => item.PolicyId == policy.Id)
                 .ToListAsync(cancellationToken);
+            var existingRuleIds = existingRules
+                .Select(item => item.Id)
+                .Where(item => item > 0)
+                .ToHashSet();
             if (existingRules.Count > 0)
             {
                 _connectContext.FieldAccessPolicyRules.RemoveRange(existingRules);
@@ -159,6 +163,29 @@ public sealed class DynamicSubjectsAdminAccessPolicyService : IDynamicSubjectsAd
             if (existingLocks.Count > 0)
             {
                 _connectContext.FieldAccessLocks.RemoveRange(existingLocks);
+            }
+
+            var conflictingOverrides = await _connectContext.FieldAccessOverrides
+                .Where(item => item.IsActive && item.RequestTypeId == requestTypeId)
+                .ToListAsync(cancellationToken);
+            if (existingRuleIds.Count > 0)
+            {
+                var ruleLinkedOverrides = await _connectContext.FieldAccessOverrides
+                    .Where(item => item.IsActive && item.RuleId.HasValue && existingRuleIds.Contains(item.RuleId.Value))
+                    .ToListAsync(cancellationToken);
+
+                foreach (var item in ruleLinkedOverrides)
+                {
+                    if (conflictingOverrides.All(existing => existing.Id != item.Id))
+                    {
+                        conflictingOverrides.Add(item);
+                    }
+                }
+            }
+
+            if (conflictingOverrides.Count > 0)
+            {
+                _connectContext.FieldAccessOverrides.RemoveRange(conflictingOverrides);
             }
 
             foreach (var rule in safeRequest.Rules ?? new List<FieldAccessPolicyRuleDto>())
