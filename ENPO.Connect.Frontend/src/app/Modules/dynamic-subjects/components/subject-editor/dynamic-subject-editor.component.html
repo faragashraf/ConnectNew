@@ -15,57 +15,6 @@
     </div>
   </header>
 
-  <section class="runtime-bridge" *ngIf="runtimeBridgeContext as runtimeBridge">
-    <header>
-      <h3>وضع التشغيل من لوحة التحكم المركزية</h3>
-      <span [class.blocked]="runtimeBridge.issues.length > 0">
-        {{ runtimeBridge.issues.length > 0 ? 'يتطلب استكمال' : 'مفعل' }}
-      </span>
-    </header>
-    <div class="runtime-grid">
-      <article>
-        <span>معرّف النوع</span>
-        <strong>{{ runtimeBridge.categoryId || '-' }}</strong>
-      </article>
-      <article>
-        <span>اتجاه الطلب</span>
-        <strong>{{ runtimeBridge.documentDirection || '-' }}</strong>
-      </article>
-      <article>
-        <span>مفتاح مسار الإنشاء</span>
-        <strong>{{ runtimeBridge.createConfigRouteKey || '-' }}</strong>
-      </article>
-      <article>
-        <span>بادئة المسار</span>
-        <strong>{{ runtimeBridge.routeKeyPrefix || '-' }}</strong>
-      </article>
-      <article>
-        <span>مسار الشجرة الأم</span>
-        <strong>{{ runtimeCanonicalCategoryLink?.categoryPathLabel || '-' }}</strong>
-      </article>
-      <article>
-        <span>معرّف النوع الأم</span>
-        <strong>{{ runtimeCanonicalCategoryLink?.parentCategoryId || '-' }}</strong>
-      </article>
-    </div>
-
-    <ul class="runtime-issues" *ngIf="runtimeBridge.issues.length > 0">
-      <li *ngFor="let issue of runtimeBridge.issues">{{ issue }}</li>
-    </ul>
-
-    <ul class="runtime-warnings" *ngIf="runtimeBridge.warnings.length > 0">
-      <li *ngFor="let warning of runtimeBridge.warnings">{{ warning }}</li>
-    </ul>
-
-    <ul class="runtime-issues" *ngIf="runtimeCanonicalCategoryLink && runtimeCanonicalCategoryLink.issues.length > 0">
-      <li *ngFor="let issue of runtimeCanonicalCategoryLink.issues">{{ issue }}</li>
-    </ul>
-
-    <ul class="runtime-warnings" *ngIf="runtimeCanonicalCategoryLink && runtimeCanonicalCategoryLink.warnings.length > 0">
-      <li *ngFor="let warning of runtimeCanonicalCategoryLink.warnings">{{ warning }}</li>
-    </ul>
-  </section>
-
   <div class="live-notice" *ngIf="liveEventNotice">{{ liveEventNotice }}</div>
   <div class="loading" *ngIf="loading">جاري تحميل البيانات...</div>
 

@@ -14,7 +14,7 @@
         class="p-button-outlined"
         label="إدارة ربط مكتبة الحقول"
         [routerLink]="['/Admin/ControlCenterCatalog/field-library-binding']"
-        [queryParams]="{ applicationId: selectedApplicationFilter || null }">
+        [queryParams]="fieldBindingNavigationQueryParams">
       </button>
       <button pButton type="button" class="p-button-outlined" label="المعاينة التشغيلية الفعالة للطلب" routerLink="/Admin/ControlCenterCatalog/request-preview"></button>
       <button pButton type="button" class="p-button-outlined" label="العودة لمراحل التطبيقات/الشجرة/الجروبات" routerLink="/Admin/ControlCenterCatalog"></button>

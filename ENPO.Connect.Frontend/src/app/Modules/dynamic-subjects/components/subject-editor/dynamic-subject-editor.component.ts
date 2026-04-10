@@ -25,11 +25,6 @@ import { AppNotificationService } from 'src/app/shared/services/notifications/ap
 import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
 import { DynamicSubjectAccessService } from '../../services/dynamic-subject-access.service';
 import {
-  AdminControlCenterCanonicalCategoryLink,
-  AdminControlCenterRuntimeBridgeContext,
-  AdminControlCenterRuntimeBridgeService
-} from '../../services/admin-control-center-runtime-bridge.service';
-import {
   AdminCatalogGroupTreeNodeDto
 } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
 import {
@@ -124,9 +119,6 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
   private canonicalGroupHierarchyRequestToken = 0;
   private canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
   private readonly canonicalGroupHierarchyCache = new Map<number, Map<number, RuntimeCanonicalGroupMeta>>();
-  runtimeBridgeContext: AdminControlCenterRuntimeBridgeContext | null = null;
-  runtimeCanonicalCategoryLink: AdminControlCenterCanonicalCategoryLink | null = null;
-  private runtimeBridgeNoticeShown = false;
 
   private controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>();
   private readonly subscriptions: Subscription[] = [];
@@ -144,7 +136,6 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     private readonly previewFoundation: CentralAdminPreviewFoundationService,
     private readonly genericFormService: GenericFormsService,
     private readonly appNotification: AppNotificationService,
-    private readonly runtimeBridgeService: AdminControlCenterRuntimeBridgeService,
     private readonly adminCatalogController: DynamicSubjectsAdminCatalogController
   ) {
     this.editorForm = this.fb.group({
@@ -186,22 +177,9 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     } else {
       this.subscriptions.push(
         this.route.queryParamMap.subscribe(params => {
-          this.runtimeBridgeContext = this.runtimeBridgeService.resolveFromQueryParams(params);
-          this.resolveRuntimeCanonicalCategoryLink();
-
           const categoryIdFromQuery = Number(params.get('categoryId') ?? 0);
-          const categoryId = this.runtimeBridgeContext?.categoryId ?? categoryIdFromQuery;
-          const requestedDirection = this.runtimeBridgeContext?.documentDirection
-            ?? this.normalizeDocumentDirection(params.get('documentDirection'));
-
-          if (!this.runtimeBridgeNoticeShown && this.runtimeBridgeContext) {
-            this.runtimeBridgeNoticeShown = true;
-            if (this.runtimeBridgeContext.issues.length > 0) {
-              this.appNotification.warning(this.runtimeBridgeContext.issues[0]);
-            } else {
-              this.appNotification.info('تم تفعيل وضع التشغيل من Admin Control Center لهذا النموذج.');
-            }
-          }
+          const categoryId = categoryIdFromQuery;
+          const requestedDirection = this.normalizeDocumentDirection(params.get('documentDirection'));
 
           if (requestedDirection) {
             this.editorForm.patchValue({ documentDirection: requestedDirection }, { emitEvent: false });
@@ -539,20 +517,6 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
 
     const dynamicFields = this.buildDynamicFieldValues();
     const documentDirection = this.resolveDocumentDirectionForSave(dynamicFields);
-    if (this.runtimeCanonicalCategoryLink?.issues.length) {
-      this.appNotification.warning(this.runtimeCanonicalCategoryLink.issues[0]);
-      return;
-    }
-
-    const runtimeValidation = this.runtimeBridgeService.evaluateSubmission(this.runtimeBridgeContext, dynamicFields);
-    if (runtimeValidation.blockingIssues.length > 0) {
-      this.appNotification.warning(runtimeValidation.blockingIssues[0]);
-      return;
-    }
-
-    if (runtimeValidation.warnings.length > 0) {
-      this.appNotification.info(runtimeValidation.warnings[0]);
-    }
 
     if (this.categoryRequiresDocumentDirection() && !documentDirection) {
       this.editorForm.get('documentDirection')?.markAsTouched();
@@ -653,7 +617,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     }
 
     const appId = this.dynamicSubjectAccess.getApplicationId();
-    const documentDirection = this.resolveDocumentDirectionForForm() ?? this.runtimeBridgeContext?.documentDirection ?? undefined;
+    const documentDirection = this.resolveDocumentDirectionForForm() ?? undefined;
     const requestContext = { documentDirection };
 
     this.dynamicSubjectsController.getFormDefinition(categoryId, appId, requestContext).subscribe({
@@ -950,7 +914,7 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
       requestPolicy: this.activeRequestPolicy ?? source.requestPolicy
     };
 
-    return this.runtimeBridgeService.applyDefinitionOverrides(policyResolved, this.runtimeBridgeContext);
+    return policyResolved;
   }
 
   private resolveDocumentDirectionForForm(): string | null {
@@ -2063,35 +2027,6 @@ export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
     directionControl?.patchValue('', { emitEvent: false });
     this.suppressDirectionRebuild = false;
     this.resetDynamicFormState();
-  }
-
-  private resolveRuntimeCanonicalCategoryLink(): void {
-    if (!this.runtimeBridgeContext) {
-      this.runtimeCanonicalCategoryLink = null;
-      return;
-    }
-
-    const fallbackApplicationId = this.dynamicSubjectAccess.getApplicationId();
-    this.subscriptions.push(
-      this.runtimeBridgeService.resolveCanonicalCategoryLink(this.runtimeBridgeContext, fallbackApplicationId).subscribe({
-        next: link => {
-          this.runtimeCanonicalCategoryLink = link;
-        },
-        error: () => {
-          this.runtimeCanonicalCategoryLink = {
-            applicationId: fallbackApplicationId,
-            categoryId: Number(this.runtimeBridgeContext?.categoryId ?? 0),
-            categoryName: null,
-            parentCategoryId: null,
-            categoryPathLabel: null,
-            canCreate: false,
-            isFoundInParentTree: false,
-            issues: ['تعذر التحقق من ربط النطاق الحالي بالشجرة الأم.'],
-            warnings: []
-          };
-        }
-      })
-    );
   }
 
   private focusFirstInvalidDynamicControl(): void {

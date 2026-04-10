@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription, firstValueFrom } from 'rxjs';
+import { ActivatedRoute, ParamMap, Router } from '@angular/router';
+import { Subscription, combineLatest, firstValueFrom } from 'rxjs';
 import { auditTime } from 'rxjs/operators';
 import {
   CommonResponse,
@@ -194,9 +194,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.step = { requiredCompleted: 0, requiredTotal: 3, isCompleted: false };
 
     this.subscriptions.add(
-      this.route.queryParamMap.subscribe(params => {
-        this.routeCategoryId = this.toPositiveInt(params.get('categoryId'));
-        this.routeApplicationId = this.normalizeNullable(params.get('applicationId'));
+      combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(([pathParams, queryParams]) => {
+        this.routeCategoryId = this.readRouteCategoryId(queryParams) ?? this.readRouteCategoryId(pathParams);
+        this.routeApplicationId = this.readRouteApplicationId(queryParams) ?? this.readRouteApplicationId(pathParams);
         this.syncContextFromInputsOrRoute();
       })
     );
@@ -1876,6 +1876,36 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private normalizeNullable(value: unknown): string | null {
     const normalized = String(value ?? '').trim();
     return normalized.length > 0 ? normalized : null;
+  }
+
+  private readRouteCategoryId(params: ParamMap): number | null {
+    return this.readPositiveIntParam(params, ['categoryId', 'requestTypeId', 'subjectTypeId']);
+  }
+
+  private readRouteApplicationId(params: ParamMap): string | null {
+    return this.readTextParam(params, ['applicationId', 'appId', 'scopeApplicationId']);
+  }
+
+  private readPositiveIntParam(params: ParamMap, keys: ReadonlyArray<string>): number | null {
+    for (const key of keys) {
+      const value = this.toPositiveInt(params.get(key));
+      if (value != null) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  private readTextParam(params: ParamMap, keys: ReadonlyArray<string>): string | null {
+    for (const key of keys) {
+      const value = this.normalizeNullable(params.get(key));
+      if (value != null) {
+        return value;
+      }
+    }
+
+    return null;
   }
 
   private normalizeFieldKey(value: unknown): string {

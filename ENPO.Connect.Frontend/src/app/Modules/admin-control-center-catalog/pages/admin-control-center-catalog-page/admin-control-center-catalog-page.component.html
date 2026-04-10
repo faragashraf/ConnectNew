@@ -12,7 +12,8 @@
         class="p-button-text phase-next-link"
         icon="pi pi-arrow-left"
         label="المرحلة التالية: مكتبة الحقول"
-        routerLink="/Admin/ControlCenterCatalog/field-library">
+        [routerLink]="['/Admin/ControlCenterCatalog/field-library']"
+        [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
       </button>
       <button
         pButton

@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ActivatedRoute, ParamMap } from '@angular/router';
 import { forkJoin, Subscription } from 'rxjs';
 import { CommonResponse } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
 import { DynamicSubjectsAdminCatalogController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
@@ -70,6 +71,8 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
   selectedApplicationFilter = '';
   statusFilter: AdminCatalogFieldStatusFilter = 'all';
   searchTerm = '';
+  contextCategoryId: number | null = null;
+  contextApplicationId: string | null = null;
 
   fields: AdminCatalogFieldListItemDto[] = [];
 
@@ -102,10 +105,22 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
 
   constructor(
     private readonly fb: FormBuilder,
+    private readonly route: ActivatedRoute,
     private readonly adminCatalogController: DynamicSubjectsAdminCatalogController
   ) {}
 
   ngOnInit(): void {
+    this.subscriptions.add(
+      this.route.queryParamMap.subscribe(params => {
+        this.contextCategoryId = this.readCategoryIdFromParams(params);
+        this.contextApplicationId = this.readApplicationIdFromParams(params);
+
+        if (!this.normalizeText(this.selectedApplicationFilter) && this.contextApplicationId) {
+          this.selectedApplicationFilter = this.contextApplicationId;
+        }
+      })
+    );
+
     const fieldTypeControl = this.fieldForm.get('fieldType');
     if (fieldTypeControl) {
       this.subscriptions.add(
@@ -174,6 +189,16 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
 
     const passed = checkpoints.filter(Boolean).length;
     return Math.round((passed / checkpoints.length) * 100);
+  }
+
+  get fieldBindingNavigationQueryParams(): Record<string, string | number | null> {
+    const selectedAppId = this.normalizeText(this.selectedApplicationFilter);
+    const applicationId = selectedAppId ?? this.contextApplicationId;
+
+    return {
+      categoryId: this.contextCategoryId ?? null,
+      applicationId: applicationId ?? null
+    };
   }
 
   get areMandatoryFieldsCompleted(): boolean {
@@ -1079,6 +1104,28 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
   private normalizeText(value: unknown): string | null {
     const normalized = String(value ?? '').trim();
     return normalized.length > 0 ? normalized : null;
+  }
+
+  private readCategoryIdFromParams(params: ParamMap): number | null {
+    for (const key of ['categoryId', 'requestTypeId', 'subjectTypeId']) {
+      const value = this.toPositiveInt(params.get(key));
+      if (value != null) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  private readApplicationIdFromParams(params: ParamMap): string | null {
+    for (const key of ['applicationId', 'appId', 'scopeApplicationId']) {
+      const value = this.normalizeText(params.get(key));
+      if (value != null) {
+        return value;
+      }
+    }
+
+    return null;
   }
 
   private toNonNegativeInt(value: unknown): number {
