@@ -140,9 +140,12 @@
         </div>
       </form>
 
-      <section class="panel">
+      <section class="panel dynamic-fields-panel">
         <div class="panel-header panel-header-inline">
-          <h3>الحقول الديناميكية</h3>
+          <div class="panel-title-block">
+            <h3>الحقول الديناميكية</h3>
+            <p class="panel-subtitle">عرض حي للجروبات والحقول حسب إعدادات Runtime الفعلية.</p>
+          </div>
           <button
             type="button"
             class="diagnostics-toggle"
@@ -156,8 +159,11 @@
           <ng-template #runtimeGroupNodeTemplate let-groupNode let-level="level">
             <section class="group-card" [class.group-card-nested]="level > 0" [style.--group-level]="level">
               <header class="group-header">
-                <h3>{{ groupNode.groupName }}</h3>
-                <span *ngIf="groupNode.totalVisibleFieldsCount > 0">{{ groupNode.totalVisibleFieldsCount }} حقل</span>
+                <div class="group-heading">
+                  <span class="group-level-badge" *ngIf="level > 0">مجموعة فرعية</span>
+                  <h3>{{ groupNode.groupName }}</h3>
+                </div>
+                <span class="group-count-chip" *ngIf="groupNode.totalVisibleFieldsCount > 0">{{ groupNode.totalVisibleFieldsCount }} حقل</span>
               </header>
 
               <p class="group-description" *ngIf="groupNode.groupDescription">{{ groupNode.groupDescription }}</p>
@@ -166,8 +172,8 @@
                 *ngIf="groupNode.formArrayName && groupNode.fields.length > 0"
                 [formArrayName]="groupNode.formArrayName!"
                 class="form-array">
-                <div *ngFor="let mandFiled of getFormArrayControls(groupNode.formArrayName!); let i = index" [formGroupName]="i" style="display: contents;">
-                  <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" style="display: contents;">
+                <div *ngFor="let mandFiled of getFormArrayControls(groupNode.formArrayName!); let i = index" [formGroupName]="i" class="field-instance-row">
+                  <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" class="field-slot">
                     <app-generic-form-array
                       [controlFullName]="ctrlName"
                       [index]="i"
