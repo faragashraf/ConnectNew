@@ -609,7 +609,8 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 UserId = normalizedUserId,
                 Message = message,
                 Groups = groups,
-                Fields = fields
+                Fields = fields,
+                ResolveMissingStageActionFromWorkflowStart = true
             },
             cancellationToken);
 

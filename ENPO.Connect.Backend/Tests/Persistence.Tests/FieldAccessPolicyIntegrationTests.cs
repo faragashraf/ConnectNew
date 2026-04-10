@@ -93,6 +93,117 @@ public class FieldAccessResolutionServiceTests
         Assert.True(groupedFieldState.CanView);
     }
 
+    [Fact]
+    public async Task ResolveAsync_StageScopedNoInputStaysInactive_WhenWorkflowContextIsMissingAndAutoResolveIsDisabled()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedCategory(connectContext, 124, "التظلمات");
+        SeedWorkflowContext(connectContext, requestTypeId: 124, stageId: 1, actionId: 1);
+        SeedStageScopedNoInputLock(
+            connectContext,
+            requestTypeId: 124,
+            fieldId: 155,
+            stageId: 1,
+            actionId: 1,
+            allowedOrgUnitId: "126");
+        SeedActiveUserPosition(gpaContext, userId: "USR-OUTSIDE-126", unitId: 120);
+
+        await connectContext.SaveChangesAsync();
+        await gpaContext.SaveChangesAsync();
+
+        var service = new FieldAccessResolutionService(connectContext, gpaContext);
+        var result = await service.ResolveAsync(new FieldAccessResolutionRequest
+        {
+            RequestTypeId = 124,
+            UserId = "USR-OUTSIDE-126",
+            Groups = BuildGroups(),
+            Fields = BuildFields(actionTakenFieldId: 155, groupedFieldId: 502),
+            ResolveMissingStageActionFromWorkflowStart = false
+        });
+
+        Assert.True(result.FieldStatesByMendSql.TryGetValue(155, out var fieldState));
+        Assert.NotNull(fieldState);
+        Assert.False(fieldState!.IsLocked);
+        Assert.False(fieldState.IsReadOnly);
+        Assert.True(fieldState.CanEdit);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_StageScopedNoInputLocksField_ForUserOutsideAllowedUnit_WhenWorkflowContextAutoResolves()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedCategory(connectContext, 124, "التظلمات");
+        SeedWorkflowContext(connectContext, requestTypeId: 124, stageId: 1, actionId: 1);
+        SeedStageScopedNoInputLock(
+            connectContext,
+            requestTypeId: 124,
+            fieldId: 155,
+            stageId: 1,
+            actionId: 1,
+            allowedOrgUnitId: "126");
+        SeedActiveUserPosition(gpaContext, userId: "USR-OUTSIDE-126", unitId: 120);
+
+        await connectContext.SaveChangesAsync();
+        await gpaContext.SaveChangesAsync();
+
+        var service = new FieldAccessResolutionService(connectContext, gpaContext);
+        var result = await service.ResolveAsync(new FieldAccessResolutionRequest
+        {
+            RequestTypeId = 124,
+            UserId = "USR-OUTSIDE-126",
+            Groups = BuildGroups(),
+            Fields = BuildFields(actionTakenFieldId: 155, groupedFieldId: 502),
+            ResolveMissingStageActionFromWorkflowStart = true
+        });
+
+        Assert.True(result.FieldStatesByMendSql.TryGetValue(155, out var fieldState));
+        Assert.NotNull(fieldState);
+        Assert.True(fieldState!.IsLocked);
+        Assert.True(fieldState.IsReadOnly);
+        Assert.False(fieldState.CanEdit);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_StageScopedNoInputAllowsUnit126Bypass_WhenWorkflowContextAutoResolves()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedCategory(connectContext, 124, "التظلمات");
+        SeedWorkflowContext(connectContext, requestTypeId: 124, stageId: 1, actionId: 1);
+        SeedStageScopedNoInputLock(
+            connectContext,
+            requestTypeId: 124,
+            fieldId: 155,
+            stageId: 1,
+            actionId: 1,
+            allowedOrgUnitId: "126");
+        SeedActiveUserPosition(gpaContext, userId: "USR-INSIDE-126", unitId: 126);
+
+        await connectContext.SaveChangesAsync();
+        await gpaContext.SaveChangesAsync();
+
+        var service = new FieldAccessResolutionService(connectContext, gpaContext);
+        var result = await service.ResolveAsync(new FieldAccessResolutionRequest
+        {
+            RequestTypeId = 124,
+            UserId = "USR-INSIDE-126",
+            Groups = BuildGroups(),
+            Fields = BuildFields(actionTakenFieldId: 155, groupedFieldId: 502),
+            ResolveMissingStageActionFromWorkflowStart = true
+        });
+
+        Assert.True(result.FieldStatesByMendSql.TryGetValue(155, out var fieldState));
+        Assert.NotNull(fieldState);
+        Assert.False(fieldState!.IsLocked);
+        Assert.False(fieldState.IsReadOnly);
+        Assert.True(fieldState.CanEdit);
+    }
+
     private static List<SubjectGroupDefinitionDto> BuildGroups()
     {
         return new List<SubjectGroupDefinitionDto>
@@ -207,6 +318,141 @@ public class FieldAccessResolutionServiceTests
                 LastModifiedBy = "SYSTEM",
                 LastModifiedDate = DateTime.UtcNow
             });
+    }
+
+    private static void SeedWorkflowContext(ConnectContext context, int requestTypeId, int stageId, int actionId)
+    {
+        var now = DateTime.UtcNow;
+        var profile = new SubjectRoutingProfile
+        {
+            Id = 3001,
+            SubjectTypeId = requestTypeId,
+            NameAr = "مسار اختبار",
+            DescriptionAr = "مسار لاختبار Stage/Action في صلاحيات الحقول.",
+            IsActive = true,
+            DirectionMode = "Both",
+            StartStepId = stageId,
+            VersionNo = 1,
+            CreatedBy = "SYSTEM",
+            CreatedDate = now,
+            LastModifiedBy = "SYSTEM",
+            LastModifiedDate = now
+        };
+
+        context.SubjectRoutingProfiles.Add(profile);
+        context.SubjectTypeRoutingBindings.Add(new SubjectTypeRoutingBinding
+        {
+            Id = 4001,
+            SubjectTypeId = requestTypeId,
+            RoutingProfileId = profile.Id,
+            IsDefault = true,
+            AppliesToInbound = true,
+            AppliesToOutbound = true,
+            IsActive = true,
+            CreatedBy = "SYSTEM",
+            CreatedDate = now,
+            LastModifiedBy = "SYSTEM",
+            LastModifiedDate = now
+        });
+
+        context.SubjectRoutingSteps.AddRange(
+            new SubjectRoutingStep
+            {
+                Id = stageId,
+                RoutingProfileId = profile.Id,
+                StepCode = "STAGE_1",
+                StepNameAr = "المرحلة الأولى",
+                StepType = "Approval",
+                StepOrder = 1,
+                IsStart = true,
+                IsEnd = false,
+                SlaHours = null,
+                IsActive = true,
+                NotesAr = null,
+                CreatedBy = "SYSTEM",
+                CreatedDate = now,
+                LastModifiedBy = "SYSTEM",
+                LastModifiedDate = now
+            },
+            new SubjectRoutingStep
+            {
+                Id = stageId + 100,
+                RoutingProfileId = profile.Id,
+                StepCode = "STAGE_2",
+                StepNameAr = "المرحلة الثانية",
+                StepType = "Approval",
+                StepOrder = 2,
+                IsStart = false,
+                IsEnd = true,
+                SlaHours = null,
+                IsActive = true,
+                NotesAr = null,
+                CreatedBy = "SYSTEM",
+                CreatedDate = now,
+                LastModifiedBy = "SYSTEM",
+                LastModifiedDate = now
+            });
+
+        context.SubjectRoutingTransitions.Add(new SubjectRoutingTransition
+        {
+            Id = actionId,
+            RoutingProfileId = profile.Id,
+            FromStepId = stageId,
+            ToStepId = stageId + 100,
+            ActionCode = "ACTION_1",
+            ActionNameAr = "الإجراء الأول",
+            DisplayOrder = 1,
+            RequiresComment = false,
+            RequiresMandatoryFieldsCompletion = false,
+            IsRejectPath = false,
+            IsReturnPath = false,
+            IsEscalationPath = false,
+            ConditionExpression = null,
+            IsActive = true,
+            CreatedBy = "SYSTEM",
+            CreatedDate = now,
+            LastModifiedBy = "SYSTEM",
+            LastModifiedDate = now
+        });
+    }
+
+    private static void SeedStageScopedNoInputLock(
+        ConnectContext context,
+        int requestTypeId,
+        int fieldId,
+        int stageId,
+        int actionId,
+        string allowedOrgUnitId)
+    {
+        context.FieldAccessPolicies.Add(new FieldAccessPolicy
+        {
+            RequestTypeId = requestTypeId,
+            Name = "سياسة اختبار سياق المرحلة/الإجراء",
+            IsActive = true,
+            DefaultAccessMode = "Editable",
+            CreatedBy = "SYSTEM",
+            CreatedDate = DateTime.UtcNow,
+            LastModifiedBy = "SYSTEM",
+            LastModifiedDate = DateTime.UtcNow
+        });
+
+        context.FieldAccessLocks.Add(new FieldAccessLock
+        {
+            RequestTypeId = requestTypeId,
+            StageId = stageId,
+            ActionId = actionId,
+            TargetLevel = "Field",
+            TargetId = fieldId,
+            LockMode = "NoInput",
+            AllowedOverrideSubjectType = "OrgUnit",
+            AllowedOverrideSubjectId = allowedOrgUnitId,
+            IsActive = true,
+            Notes = $"الحقل #{fieldId} مقفل في {stageId}/{actionId} إلا للوحدة {allowedOrgUnitId}.",
+            CreatedBy = "SYSTEM",
+            CreatedDate = DateTime.UtcNow,
+            LastModifiedBy = "SYSTEM",
+            LastModifiedDate = DateTime.UtcNow
+        });
     }
 
     private static void SeedCategory(ConnectContext context, int categoryId, string categoryName)

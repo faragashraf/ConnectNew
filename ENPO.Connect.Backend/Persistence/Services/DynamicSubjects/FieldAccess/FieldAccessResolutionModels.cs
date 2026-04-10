@@ -22,6 +22,8 @@ public sealed class FieldAccessResolutionRequest
     public IReadOnlyCollection<SubjectFieldDefinitionDto> Fields { get; set; } = Array.Empty<SubjectFieldDefinitionDto>();
 
     public FieldAccessSubjectContextOverride? SubjectContextOverride { get; set; }
+
+    public bool ResolveMissingStageActionFromWorkflowStart { get; set; }
 }
 
 public sealed class FieldAccessSubjectContextOverride

@@ -70,6 +70,15 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
         NormalizeGroupTargetIds(rules, locks, overrides, groupBridge);
 
         var subjectContext = await BuildSubjectContextAsync(request, cancellationToken);
+        var (effectiveStageId, effectiveActionId) = await ResolveEffectiveWorkflowContextAsync(request, cancellationToken);
+        var effectiveRequestContext = new FieldAccessResolutionRequest
+        {
+            RequestTypeId = request.RequestTypeId,
+            RequestId = request.RequestId,
+            StageId = effectiveStageId,
+            ActionId = effectiveActionId,
+            UserId = request.UserId
+        };
 
         foreach (var group in normalizedGroups)
         {
@@ -81,10 +90,10 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
             };
 
             ApplyDefaultMode(state, policy?.DefaultAccessMode);
-            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Request", request.RequestTypeId);
-            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Group", group.GroupId);
-            var selectedGroupLock = SelectBestLock(locks, subjectContext, request, "Group", group.GroupId)
-                ?? SelectBestLock(locks, subjectContext, request, "Request", request.RequestTypeId);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, effectiveRequestContext, "Request", request.RequestTypeId);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, effectiveRequestContext, "Group", group.GroupId);
+            var selectedGroupLock = SelectBestLock(locks, subjectContext, effectiveRequestContext, "Group", group.GroupId)
+                ?? SelectBestLock(locks, subjectContext, effectiveRequestContext, "Request", request.RequestTypeId);
             ApplyLock(state, selectedGroupLock, subjectContext);
 
             result.GroupStates[group.GroupId] = state.ToResolved();
@@ -100,13 +109,13 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
             };
 
             ApplyDefaultMode(state, policy?.DefaultAccessMode);
-            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Request", request.RequestTypeId);
-            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Group", field.MendGroup);
-            ApplyTargetPolicies(state, rules, overrides, subjectContext, request, "Field", field.MendSql);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, effectiveRequestContext, "Request", request.RequestTypeId);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, effectiveRequestContext, "Group", field.MendGroup);
+            ApplyTargetPolicies(state, rules, overrides, subjectContext, effectiveRequestContext, "Field", field.MendSql);
 
-            var selectedLock = SelectBestLock(locks, subjectContext, request, "Field", field.MendSql)
-                ?? SelectBestLock(locks, subjectContext, request, "Group", field.MendGroup)
-                ?? SelectBestLock(locks, subjectContext, request, "Request", request.RequestTypeId);
+            var selectedLock = SelectBestLock(locks, subjectContext, effectiveRequestContext, "Field", field.MendSql)
+                ?? SelectBestLock(locks, subjectContext, effectiveRequestContext, "Group", field.MendGroup)
+                ?? SelectBestLock(locks, subjectContext, effectiveRequestContext, "Request", request.RequestTypeId);
             ApplyLock(state, selectedLock, subjectContext);
 
             var resolved = state.ToResolved();
@@ -120,6 +129,142 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
         }
 
         return result;
+    }
+
+    private async Task<(int? StageId, int? ActionId)> ResolveEffectiveWorkflowContextAsync(
+        FieldAccessResolutionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var normalizedStageId = NormalizePositiveInt(request.StageId);
+        var normalizedActionId = NormalizePositiveInt(request.ActionId);
+        if (!request.ResolveMissingStageActionFromWorkflowStart
+            || request.RequestTypeId <= 0
+            || (normalizedStageId.HasValue && normalizedActionId.HasValue))
+        {
+            return (normalizedStageId, normalizedActionId);
+        }
+
+        var profileIds = await _connectContext.SubjectTypeRoutingBindings
+            .AsNoTracking()
+            .Where(item => item.SubjectTypeId == request.RequestTypeId && item.IsActive)
+            .Select(item => item.RoutingProfileId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (profileIds.Count == 0)
+        {
+            profileIds = await _connectContext.SubjectRoutingProfiles
+                .AsNoTracking()
+                .Where(item => item.SubjectTypeId == request.RequestTypeId && item.IsActive)
+                .Select(item => item.Id)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+        }
+
+        if (profileIds.Count == 0)
+        {
+            return (normalizedStageId, normalizedActionId);
+        }
+
+        var activeProfiles = await _connectContext.SubjectRoutingProfiles
+            .AsNoTracking()
+            .Where(item => profileIds.Contains(item.Id) && item.IsActive)
+            .ToListAsync(cancellationToken);
+        var activeProfileIds = activeProfiles
+            .Select(item => item.Id)
+            .Distinct()
+            .ToList();
+        if (activeProfileIds.Count == 0)
+        {
+            return (normalizedStageId, normalizedActionId);
+        }
+
+        var activeSteps = await _connectContext.SubjectRoutingSteps
+            .AsNoTracking()
+            .Where(item => activeProfileIds.Contains(item.RoutingProfileId) && item.IsActive)
+            .OrderBy(item => item.StepOrder)
+            .ThenBy(item => item.Id)
+            .ToListAsync(cancellationToken);
+        if (activeSteps.Count == 0)
+        {
+            return (normalizedStageId, normalizedActionId);
+        }
+
+        if (!normalizedStageId.HasValue && normalizedActionId.HasValue)
+        {
+            var actionTransition = await _connectContext.SubjectRoutingTransitions
+                .AsNoTracking()
+                .Where(item => activeProfileIds.Contains(item.RoutingProfileId)
+                    && item.IsActive
+                    && item.Id == normalizedActionId.Value)
+                .Select(item => new { item.FromStepId })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (actionTransition != null && actionTransition.FromStepId > 0)
+            {
+                normalizedStageId = actionTransition.FromStepId;
+            }
+        }
+
+        if (!normalizedStageId.HasValue)
+        {
+            var stepOrderById = activeSteps.ToDictionary(step => step.Id, step => (step.StepOrder, step.Id));
+            var profileStartStepId = activeProfiles
+                .Where(item => item.StartStepId.HasValue && stepOrderById.ContainsKey(item.StartStepId.Value))
+                .Select(item => item.StartStepId!.Value)
+                .OrderBy(item => stepOrderById[item].StepOrder)
+                .ThenBy(item => stepOrderById[item].Id)
+                .FirstOrDefault();
+            if (profileStartStepId > 0)
+            {
+                normalizedStageId = profileStartStepId;
+            }
+
+            if (!normalizedStageId.HasValue)
+            {
+                var flaggedStartStepId = activeSteps
+                    .Where(item => item.IsStart)
+                    .OrderBy(item => item.StepOrder)
+                    .ThenBy(item => item.Id)
+                    .Select(item => item.Id)
+                    .FirstOrDefault();
+                if (flaggedStartStepId > 0)
+                {
+                    normalizedStageId = flaggedStartStepId;
+                }
+            }
+
+            if (!normalizedStageId.HasValue)
+            {
+                var firstStepId = activeSteps
+                    .OrderBy(item => item.StepOrder)
+                    .ThenBy(item => item.Id)
+                    .Select(item => item.Id)
+                    .FirstOrDefault();
+                if (firstStepId > 0)
+                {
+                    normalizedStageId = firstStepId;
+                }
+            }
+        }
+
+        if (!normalizedActionId.HasValue && normalizedStageId.HasValue)
+        {
+            var firstActionId = await _connectContext.SubjectRoutingTransitions
+                .AsNoTracking()
+                .Where(item => activeProfileIds.Contains(item.RoutingProfileId)
+                    && item.IsActive
+                    && item.FromStepId == normalizedStageId.Value)
+                .OrderBy(item => item.DisplayOrder)
+                .ThenBy(item => item.Id)
+                .Select(item => item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (firstActionId > 0)
+            {
+                normalizedActionId = firstActionId;
+            }
+        }
+
+        return (normalizedStageId, normalizedActionId);
     }
 
     private static void ApplyTargetPolicies(
@@ -999,6 +1144,13 @@ public sealed class FieldAccessResolutionService : IFieldAccessResolutionService
         }
 
         return context;
+    }
+
+    private static int? NormalizePositiveInt(int? value)
+    {
+        return value.HasValue && value.Value > 0
+            ? value.Value
+            : null;
     }
 
     private static string NormalizePermission(string? permissionType)
