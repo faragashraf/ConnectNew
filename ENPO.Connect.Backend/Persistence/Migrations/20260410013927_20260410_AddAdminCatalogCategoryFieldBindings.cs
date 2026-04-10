@@ -195,6 +195,37 @@ BEGIN
                 ROW_NUMBER() OVER (PARTITION BY u.[CategoryID] ORDER BY u.[LegacyGroupID]) AS [CategorySeq]
             FROM Unresolved u
         )
+        INSERT INTO #CreatedGroupMap([GroupID], [CategoryID], [LegacyGroupID])
+        SELECT
+            @NextGroupId + src.[GlobalSeq],
+            src.[CategoryID],
+            src.[LegacyGroupID]
+        FROM Numbered src;
+
+        ;WITH Unresolved AS (
+            SELECT
+                gm.[CategoryID],
+                gm.[LegacyGroupID],
+                gm.[LegacyGroupName],
+                gm.[MatchType],
+                gm.[CandidateCount],
+                gm.[Details],
+                cat.[ApplicationID],
+                COALESCE(
+                    NULLIF(LTRIM(RTRIM(gm.[LegacyGroupName])), N''),
+                    CONCAT(N'Legacy Group ', CONVERT(NVARCHAR(20), gm.[LegacyGroupID]))
+                ) AS [BaseName]
+            FROM #GroupMapping gm
+            INNER JOIN [CDCategory] cat ON cat.[CatId] = gm.[CategoryID]
+            WHERE gm.[CanonicalGroupID] IS NULL
+        ),
+        Numbered AS (
+            SELECT
+                u.*,
+                ROW_NUMBER() OVER (ORDER BY u.[CategoryID], u.[LegacyGroupID]) AS [GlobalSeq],
+                ROW_NUMBER() OVER (PARTITION BY u.[CategoryID] ORDER BY u.[LegacyGroupID]) AS [CategorySeq]
+            FROM Unresolved u
+        )
         INSERT INTO [AdminCatalogCategoryGroups](
             [GroupId],
             [CategoryId],
@@ -206,8 +237,6 @@ BEGIN
             [IsActive],
             [StampDate],
             [CreatedBy])
-        OUTPUT inserted.[GroupId], inserted.[CategoryId], src.[LegacyGroupID]
-            INTO #CreatedGroupMap([GroupID], [CategoryID], [LegacyGroupID])
         SELECT
             @NextGroupId + src.[GlobalSeq],
             src.[CategoryID],
