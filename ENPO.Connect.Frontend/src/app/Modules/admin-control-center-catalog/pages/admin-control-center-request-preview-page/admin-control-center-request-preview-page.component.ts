@@ -3,6 +3,7 @@ import { CommonResponse } from 'src/app/shared/services/BackendServices/DynamicS
 import { DynamicSubjectsAdminCatalogController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
 import {
   AdminCatalogCategoryTreeNodeDto,
+  AdminControlCenterDiagnosticMessageDto,
   AdminControlCenterRequestPreviewDto
 } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
 
@@ -77,6 +78,30 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
     return positions.length > 0 ? positions.join(' , ') : '-';
   }
 
+  get requestInfoDiagnostics(): AdminControlCenterDiagnosticMessageDto[] {
+    return (this.preview?.diagnostics ?? []).filter(item => item.severity === 'Info');
+  }
+
+  get requestWarningDiagnostics(): AdminControlCenterDiagnosticMessageDto[] {
+    return (this.preview?.diagnostics ?? []).filter(item => item.severity === 'Warning');
+  }
+
+  get requestConflictDiagnostics(): AdminControlCenterDiagnosticMessageDto[] {
+    return (this.preview?.diagnostics ?? []).filter(item => item.severity === 'Conflict');
+  }
+
+  get requestWarningsCount(): number {
+    return this.preview?.warnings?.length ?? 0;
+  }
+
+  get requestConflictsCount(): number {
+    return this.preview?.conflicts?.length ?? 0;
+  }
+
+  resolveFieldInfoCount(field: { diagnostics?: AdminControlCenterDiagnosticMessageDto[] }): number {
+    return (field.diagnostics ?? []).filter(item => item.severity === 'Info').length;
+  }
+
   onRefreshRequestTypes(): void {
     this.loadRequestTypes();
   }
@@ -103,6 +128,10 @@ export class AdminControlCenterRequestPreviewPageComponent implements OnInit {
 
   trackByString(_index: number, item: string): string {
     return item;
+  }
+
+  trackByDiagnostic(_index: number, item: AdminControlCenterDiagnosticMessageDto): string {
+    return `${item.severity}:${item.code ?? '-'}:${item.message}`;
   }
 
   private loadRequestTypes(): void {

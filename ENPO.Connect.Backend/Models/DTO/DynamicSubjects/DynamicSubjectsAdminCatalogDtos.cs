@@ -426,6 +426,12 @@ public sealed class AdminControlCenterRequestPreviewDto
     public List<AdminControlCenterRequestPreviewFieldDto> Fields { get; set; } = new();
 
     public List<string> Warnings { get; set; } = new();
+
+    public List<string> Conflicts { get; set; } = new();
+
+    public AdminControlCenterDiagnosticsSummaryDto DiagnosticsSummary { get; set; } = new();
+
+    public List<AdminControlCenterDiagnosticMessageDto> Diagnostics { get; set; } = new();
 }
 
 public sealed class AdminControlCenterRequestPreviewFieldDto
@@ -439,4 +445,34 @@ public sealed class AdminControlCenterRequestPreviewFieldDto
     public bool IsRequired { get; set; }
 
     public List<string> Reasons { get; set; } = new();
+
+    public List<string> Warnings { get; set; } = new();
+
+    public List<string> Conflicts { get; set; } = new();
+
+    public List<AdminControlCenterDiagnosticMessageDto> Diagnostics { get; set; } = new();
+}
+
+public sealed class AdminControlCenterDiagnosticsSummaryDto
+{
+    public int TotalCount { get; set; }
+
+    public int InfoCount { get; set; }
+
+    public int WarningCount { get; set; }
+
+    public int ConflictCount { get; set; }
+
+    public int RequestLevelCount { get; set; }
+
+    public int FieldLevelCount { get; set; }
+}
+
+public sealed class AdminControlCenterDiagnosticMessageDto
+{
+    public string Severity { get; set; } = "Info";
+
+    public string Message { get; set; } = string.Empty;
+
+    public string? Code { get; set; }
 }

@@ -87,33 +87,58 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
 
             var userContext = await ResolveUserRuntimeContextAsync(normalizedUserId, cancellationToken);
 
-            var warnings = new List<string>();
+            var requestDiagnostics = new DiagnosticsCollector();
             var availabilityReasons = new List<string>();
 
             var isAvailable = !category.CatStatus;
             if (category.CatStatus)
             {
-                availabilityReasons.Add("نوع الطلب غير مفعل في جدول CDCategory.");
+                const string categoryInactiveMessage = "نوع الطلب غير مفعل في جدول CDCategory.";
+                availabilityReasons.Add(categoryInactiveMessage);
+                requestDiagnostics.AddWarning(categoryInactiveMessage, "REQUEST_TYPE_INACTIVE");
+            }
+            else
+            {
+                requestDiagnostics.AddInfo("نوع الطلب مفعل على مستوى CDCategory.", "REQUEST_TYPE_ACTIVE");
             }
 
             if (!userContext.IsResolved)
             {
-                warnings.Add("تعذر تحميل سياق المستخدم الحالي (الوحدات/المناصب) بدقة.");
+                requestDiagnostics.AddWarning(
+                    "تعذر تحميل سياق المستخدم الحالي (الوحدات/المناصب) بدقة.",
+                    "USER_CONTEXT_UNRESOLVED");
             }
             else if (userContext.UnitIds.Count == 0)
             {
-                warnings.Add("لا توجد عضويات وحدات نشطة للمستخدم الحالي داخل GPA.");
+                requestDiagnostics.AddWarning(
+                    "لا توجد عضويات وحدات نشطة للمستخدم الحالي داخل GPA.",
+                    "NO_ACTIVE_UNIT_MEMBERSHIPS");
+            }
+            else
+            {
+                requestDiagnostics.AddInfo(
+                    $"تم تحميل عضويات المستخدم الحالية بنجاح ({userContext.UnitIds.Count} وحدة).",
+                    "USER_CONTEXT_UNITS_LOADED");
             }
 
             var availabilityEvaluation = EvaluateAvailability(availability, userContext);
             isAvailable = isAvailable && availabilityEvaluation.IsAvailable;
             availabilityReasons.AddRange(availabilityEvaluation.Reasons);
-            warnings.AddRange(availabilityEvaluation.Warnings);
+            requestDiagnostics.AddRange(availabilityEvaluation.Diagnostics);
+
+            if (category.CatStatus && availabilityEvaluation.IsAvailable)
+            {
+                requestDiagnostics.AddConflict(
+                    "نوع الطلب تم تقييمه كمتاح وفق قواعد الإتاحة، لكنه غير مفعل في CDCategory ولذلك النتيجة النهائية غير متاح.",
+                    "AVAILABILITY_CATEGORY_STATUS_CONFLICT");
+            }
 
             var fieldBindingRows = await LoadFieldBindingRowsAsync(requestTypeId, cancellationToken);
             if (fieldBindingRows.Count == 0)
             {
-                warnings.Add("لا توجد روابط حقول نشطة لهذا النوع داخل AdminCatalogCategoryFieldBindings.");
+                requestDiagnostics.AddWarning(
+                    "لا توجد روابط حقول نشطة لهذا النوع داخل AdminCatalogCategoryFieldBindings.",
+                    "NO_ACTIVE_FIELD_BINDINGS");
             }
 
             var categoryApplicationId = NormalizeNullable(category.ApplicationId);
@@ -131,12 +156,15 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                     .ToListAsync(cancellationToken);
 
             var mendByKey = BuildMendLookup(mends, categoryApplicationId);
-            var metadata = BuildFieldMetadata(requestTypeId, fieldBindingRows, mendByKey, warnings);
+            var metadata = BuildFieldMetadata(requestTypeId, fieldBindingRows, mendByKey, requestDiagnostics);
 
             FieldAccessResolutionResult resolution;
             if (metadata.Fields.Count == 0)
             {
                 resolution = new FieldAccessResolutionResult();
+                requestDiagnostics.AddWarning(
+                    "لم يتم استخراج حقول صالحة لبناء تقييم Field Access؛ تم استخدام نتيجة فارغة.",
+                    "NO_FIELDS_FOR_ACCESS_RESOLUTION");
             }
             else
             {
@@ -154,6 +182,18 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                     cancellationToken);
             }
 
+            var fields = BuildPreviewFields(metadata.Fields, resolution, requestDiagnostics);
+
+            if (fields.Count == 0)
+            {
+                requestDiagnostics.AddWarning("لم يتم توليد أي حقول للمعاينة الفعلية.", "PREVIEW_FIELDS_EMPTY");
+            }
+
+            var requestLevelDiagnostics = requestDiagnostics.ToList();
+            var requestLevelWarnings = requestDiagnostics.MessagesBySeverity("Warning");
+            var requestLevelConflicts = requestDiagnostics.MessagesBySeverity("Conflict");
+            var diagnosticsSummary = BuildDiagnosticsSummary(requestLevelDiagnostics, fields);
+
             var preview = new AdminControlCenterRequestPreviewDto
             {
                 RequestTypeId = requestTypeId,
@@ -170,15 +210,12 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                     .ToList(),
                 IsAvailable = isAvailable,
                 AvailabilityReasons = DistinctInOrder(availabilityReasons),
-                Fields = BuildPreviewFields(metadata.Fields, resolution, warnings),
-                Warnings = DistinctInOrder(warnings)
+                Fields = fields,
+                Warnings = requestLevelWarnings,
+                Conflicts = requestLevelConflicts,
+                DiagnosticsSummary = diagnosticsSummary,
+                Diagnostics = requestLevelDiagnostics
             };
-
-            if (preview.Fields.Count == 0)
-            {
-                warnings.Add("لم يتم توليد أي حقول للمعاينة الفعلية.");
-                preview.Warnings = DistinctInOrder(warnings);
-            }
 
             response.Data = preview;
 
@@ -237,7 +274,7 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
         int requestTypeId,
         IReadOnlyCollection<FieldBindingRow> fieldBindingRows,
         IReadOnlyDictionary<string, Cdmend> mendByKey,
-        ICollection<string> warnings)
+        DiagnosticsCollector requestDiagnostics)
     {
         var groups = new List<SubjectGroupDefinitionDto>();
         var groupsById = new Dictionary<int, SubjectGroupDefinitionDto>();
@@ -250,6 +287,20 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                      .ThenBy(item => item.DisplayOrder ?? item.MendSql)
                      .ThenBy(item => item.MendSql))
         {
+            if (row.GroupId <= 0)
+            {
+                requestDiagnostics.AddConflict(
+                    $"الحقل المرتبط #{row.MendSql} يحمل GroupId غير صالح ({row.GroupId}).",
+                    "INVALID_GROUP_BINDING");
+            }
+
+            if (NormalizeNullable(row.GroupName) == null)
+            {
+                requestDiagnostics.AddWarning(
+                    $"الربط للحقل #{row.MendSql} يشير إلى مجموعة غير مكتملة أو غير موجودة (GroupId={row.GroupId}).",
+                    "MISSING_GROUP_BINDING");
+            }
+
             if (!groupsById.TryGetValue(row.GroupId, out var group))
             {
                 group = new SubjectGroupDefinitionDto
@@ -270,11 +321,15 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
 
             if (mend == null)
             {
-                warnings.Add($"الحقل المرتبط '{NormalizeNullable(row.MendField) ?? row.MendSql.ToString()}' لا يملك تعريفًا في جدول CDMend.");
+                requestDiagnostics.AddWarning(
+                    $"الحقل المرتبط '{NormalizeNullable(row.MendField) ?? row.MendSql.ToString()}' لا يملك تعريفًا في جدول CDMend.",
+                    "MEND_DEFINITION_MISSING");
             }
             else if (mend.CdmendStat)
             {
-                warnings.Add($"الحقل '{NormalizeNullable(mend.CDMendLbl) ?? mend.CdmendTxt}' مرتبط لكنه غير مفعل في CDMend.");
+                requestDiagnostics.AddWarning(
+                    $"الحقل '{NormalizeNullable(mend.CDMendLbl) ?? mend.CdmendTxt}' مرتبط لكنه غير مفعل في CDMend.",
+                    "MEND_INACTIVE");
             }
 
             var resolvedFieldKey = NormalizeNullable(mend?.CdmendTxt)
@@ -336,7 +391,7 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
     private static List<AdminControlCenterRequestPreviewFieldDto> BuildPreviewFields(
         IReadOnlyCollection<SubjectFieldDefinitionDto> fields,
         FieldAccessResolutionResult resolution,
-        ICollection<string> warnings)
+        DiagnosticsCollector requestDiagnostics)
     {
         var safeResolution = resolution ?? new FieldAccessResolutionResult();
         var items = new List<AdminControlCenterRequestPreviewFieldDto>();
@@ -351,6 +406,7 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
             var resolvedIsRequired = state?.IsRequired ?? field.Required;
 
             var reasons = new List<string>();
+            var fieldDiagnostics = new DiagnosticsCollector();
             if (state != null)
             {
                 foreach (var trace in state.AppliedTraces ?? new List<FieldAccessAppliedTrace>())
@@ -362,35 +418,69 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                     }
                 }
 
+                AddTraceConflictDiagnostics(state.AppliedTraces, fieldDiagnostics);
+
                 AddIfNotEmpty(reasons, state.EffectiveReasonAr);
                 AddIfNotEmpty(reasons, state.LockReason);
 
                 if (!resolvedIsVisible)
                 {
                     reasons.Add("Field hidden بسبب access policy (CanView=false).");
+                    fieldDiagnostics.AddInfo("تم إخفاء الحقل بعد تقييم access policy.", "FIELD_HIDDEN_BY_POLICY");
                 }
                 else if (!field.IsVisible && resolvedIsVisible)
                 {
                     reasons.Add("Field visible بسبب access policy (CanView=true).");
+                    fieldDiagnostics.AddInfo(
+                        "الحقل كان مخفيًا في الربط الأساسي لكن access policy أعاد إظهاره.",
+                        "FIELD_VISIBILITY_OVERRIDDEN");
                 }
 
                 if (!field.Required && resolvedIsRequired)
                 {
                     reasons.Add("Field required بسبب access policy (IsRequired=true).");
+                    fieldDiagnostics.AddInfo("تم تحويل الحقل إلى Required بواسطة access policy.", "FIELD_REQUIRED_BY_POLICY");
                 }
                 else if (field.Required && !resolvedIsRequired)
                 {
                     reasons.Add("Field optional بسبب access policy (IsRequired=false).");
+                    fieldDiagnostics.AddInfo("تم تحويل الحقل إلى Optional بواسطة access policy.", "FIELD_OPTIONAL_BY_POLICY");
+                }
+
+                if (state.AppliedTraces.Count == 0)
+                {
+                    fieldDiagnostics.AddWarning(
+                        "لا توجد traces مطبقة على الحقل؛ تم الاعتماد على الحالة الأساسية/الافتراضية.",
+                        "FIELD_NO_APPLIED_TRACES");
+                }
+
+                if (string.Equals(NormalizeNullable(state.EffectiveSourceType), "DefaultPolicy", StringComparison.OrdinalIgnoreCase))
+                {
+                    fieldDiagnostics.AddInfo(
+                        "تم استخدام DefaultPolicy كمرجع نهائي لهذا الحقل.",
+                        "FIELD_DEFAULT_POLICY_FALLBACK");
                 }
             }
             else
             {
-                warnings.Add($"لم يتم إرجاع حالة وصول للحقل #{field.MendSql}. تم استخدام القيم الأساسية.");
+                var missingStateMessage = $"لم يتم إرجاع حالة وصول للحقل #{field.MendSql}. تم استخدام القيم الأساسية.";
+                fieldDiagnostics.AddWarning(missingStateMessage, "FIELD_STATE_MISSING");
+                requestDiagnostics.AddWarning(missingStateMessage, "FIELD_STATE_MISSING");
             }
 
             if (reasons.Count == 0)
             {
                 reasons.Add("لا توجد قواعد مطابقة، وتم اعتماد الحالة الافتراضية الحالية.");
+                fieldDiagnostics.AddInfo(
+                    "لا توجد قواعد Access مطابقة؛ تم استخدام fallback الافتراضي الحالي.",
+                    "FIELD_FALLBACK_DEFAULT");
+            }
+
+            if (!resolvedIsVisible && resolvedIsRequired)
+            {
+                fieldDiagnostics.AddConflict(
+                    "الحقل Hidden وفي نفس الوقت Required؛ تم الاحتفاظ بـ Required في المخرجات لأغراض التشخيص فقط.",
+                    "FIELD_HIDDEN_REQUIRED_CONFLICT");
             }
 
             items.Add(new AdminControlCenterRequestPreviewFieldDto
@@ -401,46 +491,71 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
                     ?? $"Field #{field.MendSql}",
                 IsVisible = resolvedIsVisible,
                 IsRequired = resolvedIsRequired,
-                Reasons = DistinctInOrder(reasons)
+                Reasons = DistinctInOrder(reasons),
+                Warnings = fieldDiagnostics.MessagesBySeverity("Warning"),
+                Conflicts = fieldDiagnostics.MessagesBySeverity("Conflict"),
+                Diagnostics = fieldDiagnostics.ToList()
             });
         }
 
         return items;
     }
 
-    private static (bool IsAvailable, List<string> Reasons, List<string> Warnings) EvaluateAvailability(
+    private static AvailabilityEvaluation EvaluateAvailability(
         SubjectTypeRequestAvailability? availability,
         UserRuntimeContext userContext)
     {
+        var evaluation = new AvailabilityEvaluation();
         var reasons = new List<string>();
-        var warnings = new List<string>();
+        var diagnostics = new DiagnosticsCollector();
 
         if (availability == null)
         {
             reasons.Add("لا يوجد سجل إتاحة محفوظ؛ تم اعتماد الوضع الافتراضي Public (متاح).");
-            return (true, reasons, warnings);
+            diagnostics.AddWarning(
+                "لا يوجد سجل إتاحة محفوظ؛ تم تفعيل fallback إلى Public.",
+                "AVAILABILITY_FALLBACK_PUBLIC");
+            evaluation.IsAvailable = true;
+            evaluation.Reasons = DistinctInOrder(reasons);
+            evaluation.Diagnostics = diagnostics.ToList();
+            return evaluation;
         }
 
         if (!TryNormalizeAvailabilityMode(availability.AvailabilityMode, out var mode))
         {
             reasons.Add("نمط الإتاحة غير معروف، لذلك تم اعتباره غير متاح حتى تصحيح الإعداد.");
-            warnings.Add($"قيمة AvailabilityMode الحالية غير مدعومة: '{availability.AvailabilityMode}'.");
-            return (false, reasons, warnings);
+            diagnostics.AddConflict(
+                $"قيمة AvailabilityMode الحالية غير مدعومة: '{availability.AvailabilityMode}'.",
+                "AVAILABILITY_MODE_UNSUPPORTED");
+            evaluation.IsAvailable = false;
+            evaluation.Reasons = DistinctInOrder(reasons);
+            evaluation.Diagnostics = diagnostics.ToList();
+            return evaluation;
         }
 
         if (string.Equals(mode, "Public", StringComparison.OrdinalIgnoreCase))
         {
             reasons.Add("نمط الإتاحة الحالي Public: النوع متاح للمستخدم الحالي.");
-            return (true, reasons, warnings);
+            diagnostics.AddInfo("تم تطبيق AvailabilityMode=Public بدون قيود إضافية.", "AVAILABILITY_PUBLIC");
+            evaluation.IsAvailable = true;
+            evaluation.Reasons = DistinctInOrder(reasons);
+            evaluation.Diagnostics = diagnostics.ToList();
+            return evaluation;
         }
 
         reasons.Add("نمط الإتاحة الحالي Restricted: يجب مطابقة سياق المستخدم الحالي مع عقدة الإتاحة.");
+        diagnostics.AddInfo("تم تفعيل تقييم Restricted availability.", "AVAILABILITY_RESTRICTED");
 
         if (!TryNormalizeSelectedNodeType(availability.SelectedNodeType, out var selectedNodeType))
         {
             reasons.Add("الإتاحة المقيّدة غير مكتملة لأن SelectedNodeType غير صالح.");
-            warnings.Add("SelectedNodeType مفقود أو غير مدعوم رغم أن AvailabilityMode = Restricted.");
-            return (false, reasons, warnings);
+            diagnostics.AddConflict(
+                "SelectedNodeType مفقود أو غير مدعوم رغم أن AvailabilityMode = Restricted.",
+                "RESTRICTED_NODE_TYPE_INVALID");
+            evaluation.IsAvailable = false;
+            evaluation.Reasons = DistinctInOrder(reasons);
+            evaluation.Diagnostics = diagnostics.ToList();
+            return evaluation;
         }
 
         if (string.Equals(selectedNodeType, "SpecificUser", StringComparison.OrdinalIgnoreCase))
@@ -449,32 +564,59 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
             if (selectedUserId == null)
             {
                 reasons.Add("الإتاحة المقيّدة غير مكتملة لأن SelectedNodeUserId غير محدد.");
-                warnings.Add("SelectedNodeUserId مطلوب عند اختيار SpecificUser.");
-                return (false, reasons, warnings);
+                diagnostics.AddConflict(
+                    "SelectedNodeUserId مطلوب عند اختيار SpecificUser.",
+                    "RESTRICTED_SPECIFIC_USER_MISSING");
+                evaluation.IsAvailable = false;
+                evaluation.Reasons = DistinctInOrder(reasons);
+                evaluation.Diagnostics = diagnostics.ToList();
+                return evaluation;
             }
 
             if (userContext.UserId == null)
             {
                 reasons.Add($"الإتاحة مقيدة على مستخدم محدد ({selectedUserId}) لكن user context غير متوفر.");
-                warnings.Add("تعذر مطابقة SpecificUser بسبب غياب UserId الحالي.");
-                return (false, reasons, warnings);
+                diagnostics.AddConflict(
+                    "تعذر مطابقة SpecificUser بسبب غياب UserId الحالي.",
+                    "RESTRICTED_SPECIFIC_USER_CONTEXT_MISSING");
+                evaluation.IsAvailable = false;
+                evaluation.Reasons = DistinctInOrder(reasons);
+                evaluation.Diagnostics = diagnostics.ToList();
+                return evaluation;
             }
 
             if (string.Equals(userContext.UserId, selectedUserId, StringComparison.OrdinalIgnoreCase))
             {
                 reasons.Add($"Available لأن المستخدم الحالي يطابق SpecificUser ({selectedUserId}).");
-                return (true, reasons, warnings);
+                diagnostics.AddInfo(
+                    $"Available لأن المستخدم الحالي يطابق SpecificUser ({selectedUserId}).",
+                    "RESTRICTED_SPECIFIC_USER_MATCH");
+                evaluation.IsAvailable = true;
+                evaluation.Reasons = DistinctInOrder(reasons);
+                evaluation.Diagnostics = diagnostics.ToList();
+                return evaluation;
             }
 
             reasons.Add($"Unavailable لأن المستخدم الحالي ({userContext.UserId}) لا يطابق SpecificUser ({selectedUserId}).");
-            return (false, reasons, warnings);
+            diagnostics.AddInfo(
+                $"Unavailable لأن المستخدم الحالي ({userContext.UserId}) لا يطابق SpecificUser ({selectedUserId}).",
+                "RESTRICTED_SPECIFIC_USER_NO_MATCH");
+            evaluation.IsAvailable = false;
+            evaluation.Reasons = DistinctInOrder(reasons);
+            evaluation.Diagnostics = diagnostics.ToList();
+            return evaluation;
         }
 
         if (!availability.SelectedNodeNumericId.HasValue || availability.SelectedNodeNumericId.Value <= 0)
         {
             reasons.Add("الإتاحة المقيّدة غير مكتملة لأن SelectedNodeNumericId غير صالح.");
-            warnings.Add($"SelectedNodeNumericId مطلوب لنوع العقدة {selectedNodeType}.");
-            return (false, reasons, warnings);
+            diagnostics.AddConflict(
+                $"SelectedNodeNumericId مطلوب لنوع العقدة {selectedNodeType}.",
+                "RESTRICTED_NODE_ID_INVALID");
+            evaluation.IsAvailable = false;
+            evaluation.Reasons = DistinctInOrder(reasons);
+            evaluation.Diagnostics = diagnostics.ToList();
+            return evaluation;
         }
 
         var requiredNodeId = availability.SelectedNodeNumericId.Value;
@@ -494,7 +636,13 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
         if (!userContext.IsResolved)
         {
             reasons.Add("Unavailable لأن سياق المستخدم الحالي غير متاح لتقييم Restricted availability.");
-            return (false, reasons, warnings);
+            diagnostics.AddConflict(
+                "Unavailable لأن سياق المستخدم الحالي غير متاح لتقييم Restricted availability.",
+                "RESTRICTED_CONTEXT_UNRESOLVED");
+            evaluation.IsAvailable = false;
+            evaluation.Reasons = DistinctInOrder(reasons);
+            evaluation.Diagnostics = diagnostics.ToList();
+            return evaluation;
         }
 
         if (string.Equals(selectedNodeType, "OrgUnit", StringComparison.OrdinalIgnoreCase))
@@ -502,11 +650,23 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
             if (userContext.UnitIds.Contains(requiredNodeId))
             {
                 reasons.Add($"Available لأن المستخدم الحالي عضو في الوحدة المسموح بها ({requiredNodeId}).");
-                return (true, reasons, warnings);
+                diagnostics.AddInfo(
+                    $"Available لأن المستخدم الحالي عضو في الوحدة المسموح بها ({requiredNodeId}).",
+                    "RESTRICTED_ORG_UNIT_MATCH");
+                evaluation.IsAvailable = true;
+                evaluation.Reasons = DistinctInOrder(reasons);
+                evaluation.Diagnostics = diagnostics.ToList();
+                return evaluation;
             }
 
             reasons.Add($"Unavailable لأن المستخدم الحالي ليس عضوًا في الوحدة المطلوبة ({requiredNodeId}).");
-            return (false, reasons, warnings);
+            diagnostics.AddInfo(
+                $"Unavailable لأن المستخدم الحالي ليس عضوًا في الوحدة المطلوبة ({requiredNodeId}).",
+                "RESTRICTED_ORG_UNIT_NO_MATCH");
+            evaluation.IsAvailable = false;
+            evaluation.Reasons = DistinctInOrder(reasons);
+            evaluation.Diagnostics = diagnostics.ToList();
+            return evaluation;
         }
 
         if (string.Equals(selectedNodeType, "Position", StringComparison.OrdinalIgnoreCase))
@@ -514,15 +674,169 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
             if (userContext.PositionIds.Contains(requiredNodeId))
             {
                 reasons.Add($"Available لأن المستخدم الحالي يشغل المنصب المطلوب ({requiredNodeId}).");
-                return (true, reasons, warnings);
+                diagnostics.AddInfo(
+                    $"Available لأن المستخدم الحالي يشغل المنصب المطلوب ({requiredNodeId}).",
+                    "RESTRICTED_POSITION_MATCH");
+                evaluation.IsAvailable = true;
+                evaluation.Reasons = DistinctInOrder(reasons);
+                evaluation.Diagnostics = diagnostics.ToList();
+                return evaluation;
             }
 
             reasons.Add($"Unavailable لأن المستخدم الحالي لا يشغل المنصب المطلوب ({requiredNodeId}).");
-            return (false, reasons, warnings);
+            diagnostics.AddInfo(
+                $"Unavailable لأن المستخدم الحالي لا يشغل المنصب المطلوب ({requiredNodeId}).",
+                "RESTRICTED_POSITION_NO_MATCH");
+            evaluation.IsAvailable = false;
+            evaluation.Reasons = DistinctInOrder(reasons);
+            evaluation.Diagnostics = diagnostics.ToList();
+            return evaluation;
         }
 
         reasons.Add("Unavailable لأن نوع العقدة المقيّدة غير مدعوم في runtime evaluation.");
-        return (false, reasons, warnings);
+        diagnostics.AddConflict(
+            $"نوع العقدة المقيّدة غير مدعوم في runtime evaluation: {selectedNodeType}.",
+            "RESTRICTED_NODE_TYPE_UNSUPPORTED_RUNTIME");
+        evaluation.IsAvailable = false;
+        evaluation.Reasons = DistinctInOrder(reasons);
+        evaluation.Diagnostics = diagnostics.ToList();
+        return evaluation;
+    }
+
+    private static AdminControlCenterDiagnosticsSummaryDto BuildDiagnosticsSummary(
+        IReadOnlyCollection<AdminControlCenterDiagnosticMessageDto> requestDiagnostics,
+        IReadOnlyCollection<AdminControlCenterRequestPreviewFieldDto> fields)
+    {
+        var infoCount = 0;
+        var warningCount = 0;
+        var conflictCount = 0;
+        var requestLevelCount = requestDiagnostics?.Count ?? 0;
+        var fieldLevelCount = 0;
+
+        foreach (var message in requestDiagnostics ?? Array.Empty<AdminControlCenterDiagnosticMessageDto>())
+        {
+            CountSeverity(message?.Severity, ref infoCount, ref warningCount, ref conflictCount);
+        }
+
+        foreach (var field in fields ?? Array.Empty<AdminControlCenterRequestPreviewFieldDto>())
+        {
+            foreach (var message in field.Diagnostics ?? new List<AdminControlCenterDiagnosticMessageDto>())
+            {
+                CountSeverity(message?.Severity, ref infoCount, ref warningCount, ref conflictCount);
+                fieldLevelCount++;
+            }
+        }
+
+        return new AdminControlCenterDiagnosticsSummaryDto
+        {
+            TotalCount = infoCount + warningCount + conflictCount,
+            InfoCount = infoCount,
+            WarningCount = warningCount,
+            ConflictCount = conflictCount,
+            RequestLevelCount = requestLevelCount,
+            FieldLevelCount = fieldLevelCount
+        };
+    }
+
+    private static void AddTraceConflictDiagnostics(
+        IReadOnlyCollection<FieldAccessAppliedTrace> traces,
+        DiagnosticsCollector diagnostics)
+    {
+        var normalizedTraces = traces ?? Array.Empty<FieldAccessAppliedTrace>();
+        if (HasRequirementEffectConflict(normalizedTraces))
+        {
+            diagnostics.AddConflict(
+                "تم اكتشاف Requirement traces متضاربة (Allow/Deny) على نفس الحقل؛ تم اختيار الحالة النهائية حسب الأولوية.",
+                "FIELD_REQUIREMENT_TRACE_CONFLICT");
+        }
+
+        if (HasVisibilityConflict(normalizedTraces))
+        {
+            diagnostics.AddConflict(
+                "تم اكتشاف Visibility traces متداخلة (Hidden مقابل Editable/ReadOnly) على نفس الحقل؛ تم تطبيق أولوية الحسم.",
+                "FIELD_VISIBILITY_TRACE_CONFLICT");
+        }
+    }
+
+    private static bool HasRequirementEffectConflict(IReadOnlyCollection<FieldAccessAppliedTrace> traces)
+    {
+        var hasRequired = false;
+        var hasOptional = false;
+
+        foreach (var trace in traces ?? Array.Empty<FieldAccessAppliedTrace>())
+        {
+            if (!string.Equals(NormalizeNullable(trace.PermissionKind), "requirement", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!string.Equals(NormalizePermission(trace.PermissionType), "requiredinput", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var normalizedEffect = NormalizeEffect(trace.Effect);
+            if (string.Equals(normalizedEffect, "deny", StringComparison.OrdinalIgnoreCase))
+            {
+                hasOptional = true;
+            }
+            else
+            {
+                hasRequired = true;
+            }
+        }
+
+        return hasRequired && hasOptional;
+    }
+
+    private static bool HasVisibilityConflict(IReadOnlyCollection<FieldAccessAppliedTrace> traces)
+    {
+        var outcomes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var trace in traces ?? Array.Empty<FieldAccessAppliedTrace>())
+        {
+            if (!string.Equals(NormalizeNullable(trace.PermissionKind), "visibility", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var outcome = ResolveVisibilityOutcomeKey(trace.PermissionType, trace.Effect);
+            if (outcome != null)
+            {
+                outcomes.Add(outcome);
+            }
+        }
+
+        return outcomes.Contains("hidden")
+            && (outcomes.Contains("editable") || outcomes.Contains("readonly"));
+    }
+
+    private static string? ResolveVisibilityOutcomeKey(string? permissionType, string? effect)
+    {
+        var normalizedPermission = NormalizePermission(permissionType);
+        if (normalizedPermission.Length == 0)
+        {
+            return null;
+        }
+
+        var normalizedEffect = NormalizeEffect(effect);
+        if (string.Equals(normalizedEffect, "deny", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedPermission = normalizedPermission switch
+            {
+                "editable" => "readonly",
+                "readonly" => "hidden",
+                _ => normalizedPermission
+            };
+        }
+
+        return normalizedPermission switch
+        {
+            "hidden" => "hidden",
+            "readonly" => "readonly",
+            "editable" => "editable",
+            _ => null
+        };
     }
 
     private async Task<UserRuntimeContext> ResolveUserRuntimeContextAsync(
@@ -646,6 +960,40 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
         }
     }
 
+    private static void CountSeverity(
+        string? severity,
+        ref int infoCount,
+        ref int warningCount,
+        ref int conflictCount)
+    {
+        var normalized = NormalizeNullable(severity);
+        if (string.Equals(normalized, "Warning", StringComparison.OrdinalIgnoreCase))
+        {
+            warningCount++;
+            return;
+        }
+
+        if (string.Equals(normalized, "Conflict", StringComparison.OrdinalIgnoreCase))
+        {
+            conflictCount++;
+            return;
+        }
+
+        infoCount++;
+    }
+
+    private static string NormalizePermission(string? permissionType)
+    {
+        var normalized = NormalizeNullable(permissionType)?.ToLowerInvariant() ?? string.Empty;
+        return normalized.Replace("_", string.Empty).Replace("-", string.Empty).Replace(" ", string.Empty);
+    }
+
+    private static string NormalizeEffect(string? effect)
+    {
+        var normalized = NormalizeNullable(effect)?.ToLowerInvariant();
+        return normalized ?? "allow";
+    }
+
     private static List<string> DistinctInOrder(IEnumerable<string> values)
     {
         var result = new List<string>();
@@ -668,6 +1016,99 @@ public sealed class AdminControlCenterRequestPreviewResolver : IAdminControlCent
         }
 
         return result;
+    }
+
+    private sealed class AvailabilityEvaluation
+    {
+        public bool IsAvailable { get; set; }
+
+        public List<string> Reasons { get; set; } = new();
+
+        public List<AdminControlCenterDiagnosticMessageDto> Diagnostics { get; set; } = new();
+    }
+
+    private sealed class DiagnosticsCollector
+    {
+        private readonly List<AdminControlCenterDiagnosticMessageDto> _messages = new();
+        private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
+
+        public void AddInfo(string message, string? code = null)
+        {
+            Add("Info", message, code);
+        }
+
+        public void AddWarning(string message, string? code = null)
+        {
+            Add("Warning", message, code);
+        }
+
+        public void AddConflict(string message, string? code = null)
+        {
+            Add("Conflict", message, code);
+        }
+
+        public void AddRange(IEnumerable<AdminControlCenterDiagnosticMessageDto> messages)
+        {
+            foreach (var message in messages ?? Array.Empty<AdminControlCenterDiagnosticMessageDto>())
+            {
+                Add(message?.Severity, message?.Message, message?.Code);
+            }
+        }
+
+        public List<string> MessagesBySeverity(string severity)
+        {
+            var normalizedSeverity = NormalizeNullable(severity) ?? string.Empty;
+            return _messages
+                .Where(message => string.Equals(
+                    NormalizeNullable(message.Severity),
+                    normalizedSeverity,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(message => message.Message)
+                .ToList();
+        }
+
+        public List<AdminControlCenterDiagnosticMessageDto> ToList()
+        {
+            return _messages.ToList();
+        }
+
+        private void Add(string? severity, string? message, string? code)
+        {
+            var normalizedMessage = NormalizeNullable(message);
+            if (normalizedMessage == null)
+            {
+                return;
+            }
+
+            var normalizedSeverity = NormalizeNullable(severity) ?? "Info";
+            if (!string.Equals(normalizedSeverity, "Warning", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(normalizedSeverity, "Conflict", StringComparison.OrdinalIgnoreCase))
+            {
+                normalizedSeverity = "Info";
+            }
+            else if (string.Equals(normalizedSeverity, "Warning", StringComparison.OrdinalIgnoreCase))
+            {
+                normalizedSeverity = "Warning";
+            }
+            else
+            {
+                normalizedSeverity = "Conflict";
+            }
+
+            var normalizedCode = NormalizeNullable(code);
+            var deduplicationKey = $"{normalizedSeverity}|{normalizedCode ?? string.Empty}|{normalizedMessage}";
+            if (!_seen.Add(deduplicationKey))
+            {
+                return;
+            }
+
+            _messages.Add(new AdminControlCenterDiagnosticMessageDto
+            {
+                Severity = normalizedSeverity,
+                Message = normalizedMessage,
+                Code = normalizedCode
+            });
+        }
     }
 
     private sealed class UserRuntimeContext

@@ -52,7 +52,7 @@
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.75rem;
 }
 
@@ -64,6 +64,21 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+
+.stat-card.diagnostics {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+
+.stat-card.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.stat-card.conflict {
+  border-color: #fecaca;
+  background: #fef2f2;
 }
 
 .stat-card span {
@@ -133,6 +148,49 @@
 
 .reason-list.warning li {
   color: #92400e;
+}
+
+.reason-list.conflict li {
+  color: #b91c1c;
+}
+
+.diagnostic-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.75rem;
+}
+
+.diagnostic-block {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: #f8fafc;
+}
+
+.diagnostic-block h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.diagnostic-block.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.diagnostic-block.conflict {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.field-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 220px;
+}
+
+.field-diagnostics .p-tag {
+  margin-inline-end: 0.35rem;
 }
 
 .message {

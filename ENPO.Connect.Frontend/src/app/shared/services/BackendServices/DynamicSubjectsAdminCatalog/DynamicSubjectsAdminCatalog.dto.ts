@@ -238,6 +238,9 @@ export interface AdminControlCenterRequestPreviewFieldDto {
   isVisible: boolean;
   isRequired: boolean;
   reasons: string[];
+  warnings: string[];
+  conflicts: string[];
+  diagnostics: AdminControlCenterDiagnosticMessageDto[];
 }
 
 export interface AdminControlCenterRequestPreviewDto {
@@ -251,4 +254,24 @@ export interface AdminControlCenterRequestPreviewDto {
   availabilityReasons: string[];
   fields: AdminControlCenterRequestPreviewFieldDto[];
   warnings: string[];
+  conflicts: string[];
+  diagnosticsSummary: AdminControlCenterDiagnosticsSummaryDto;
+  diagnostics: AdminControlCenterDiagnosticMessageDto[];
+}
+
+export interface AdminControlCenterDiagnosticsSummaryDto {
+  totalCount: number;
+  infoCount: number;
+  warningCount: number;
+  conflictCount: number;
+  requestLevelCount: number;
+  fieldLevelCount: number;
+}
+
+export type AdminControlCenterDiagnosticSeverity = 'Info' | 'Warning' | 'Conflict';
+
+export interface AdminControlCenterDiagnosticMessageDto {
+  severity: AdminControlCenterDiagnosticSeverity;
+  message: string;
+  code?: string;
 }

@@ -123,6 +123,18 @@
         <span>الحقول الاختيارية</span>
         <strong>{{ optionalFieldsCount }}</strong>
       </article>
+      <article class="stat-card diagnostics">
+        <span>إجمالي Diagnostics</span>
+        <strong>{{ data.diagnosticsSummary.totalCount }}</strong>
+      </article>
+      <article class="stat-card warning">
+        <span>Warnings</span>
+        <strong>{{ data.diagnosticsSummary.warningCount }}</strong>
+      </article>
+      <article class="stat-card conflict">
+        <span>Conflicts</span>
+        <strong>{{ data.diagnosticsSummary.conflictCount }}</strong>
+      </article>
     </section>
 
     <section class="card availability-card">
@@ -139,17 +151,73 @@
       </ul>
     </section>
 
-    <section class="card warnings-card" *ngIf="data.warnings.length > 0">
+    <section class="card diagnostics-card" *ngIf="data.diagnosticsSummary.totalCount > 0">
+      <header class="card-header">
+        <div>
+          <h3>Request Diagnostics</h3>
+          <small>تشخيصات على مستوى نوع الطلب والسياق الحالي</small>
+        </div>
+        <p-tag severity="info" [value]="data.diagnosticsSummary.requestLevelCount + ' Request Message(s)'"></p-tag>
+      </header>
+
+      <div class="diagnostic-sections">
+        <article class="diagnostic-block info" *ngIf="requestInfoDiagnostics.length > 0">
+          <h4>Info</h4>
+          <ul class="reason-list">
+            <li *ngFor="let item of requestInfoDiagnostics; trackBy: trackByDiagnostic">
+              {{ item.message }}
+              <small *ngIf="item.code">({{ item.code }})</small>
+            </li>
+          </ul>
+        </article>
+
+        <article class="diagnostic-block warning" *ngIf="requestWarningDiagnostics.length > 0">
+          <h4>Warnings</h4>
+          <ul class="reason-list warning">
+            <li *ngFor="let item of requestWarningDiagnostics; trackBy: trackByDiagnostic">
+              {{ item.message }}
+              <small *ngIf="item.code">({{ item.code }})</small>
+            </li>
+          </ul>
+        </article>
+
+        <article class="diagnostic-block conflict" *ngIf="requestConflictDiagnostics.length > 0">
+          <h4>Conflicts</h4>
+          <ul class="reason-list conflict">
+            <li *ngFor="let item of requestConflictDiagnostics; trackBy: trackByDiagnostic">
+              {{ item.message }}
+              <small *ngIf="item.code">({{ item.code }})</small>
+            </li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="card warnings-card" *ngIf="requestWarningsCount > 0">
       <header class="card-header">
         <div>
           <h3>Warnings</h3>
           <small>gaps تم اكتشافها من الترجمة التشغيلية الحالية</small>
         </div>
-        <p-tag severity="warning" [value]="data.warnings.length + ' Warning(s)'"></p-tag>
+        <p-tag severity="warning" [value]="requestWarningsCount + ' Warning(s)'"></p-tag>
       </header>
 
       <ul class="reason-list warning">
         <li *ngFor="let warning of data.warnings; trackBy: trackByString">{{ warning }}</li>
+      </ul>
+    </section>
+
+    <section class="card conflicts-card" *ngIf="requestConflictsCount > 0">
+      <header class="card-header">
+        <div>
+          <h3>Conflicts</h3>
+          <small>تعارضات إعدادات تؤثر على تفسير النتيجة الحالية</small>
+        </div>
+        <p-tag severity="danger" [value]="requestConflictsCount + ' Conflict(s)'"></p-tag>
+      </header>
+
+      <ul class="reason-list conflict">
+        <li *ngFor="let conflict of data.conflicts; trackBy: trackByString">{{ conflict }}</li>
       </ul>
     </section>
 
@@ -175,6 +243,7 @@
             <th>Visibility</th>
             <th>Required</th>
             <th>Reasons</th>
+            <th>Diagnostics</th>
           </tr>
         </ng-template>
 
@@ -202,12 +271,26 @@
                 <li *ngFor="let reason of field.reasons; trackBy: trackByString">{{ reason }}</li>
               </ul>
             </td>
+            <td>
+              <div class="field-diagnostics">
+                <p-tag severity="info" [value]="resolveFieldInfoCount(field) + ' Info'"></p-tag>
+                <p-tag severity="warning" [value]="field.warnings.length + ' Warn'"></p-tag>
+                <p-tag severity="danger" [value]="field.conflicts.length + ' Conflict'"></p-tag>
+
+                <ul class="reason-list warning inline" *ngIf="field.warnings.length > 0">
+                  <li *ngFor="let warning of field.warnings; trackBy: trackByString">{{ warning }}</li>
+                </ul>
+                <ul class="reason-list conflict inline" *ngIf="field.conflicts.length > 0">
+                  <li *ngFor="let conflict of field.conflicts; trackBy: trackByString">{{ conflict }}</li>
+                </ul>
+              </div>
+            </td>
           </tr>
         </ng-template>
 
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="4" class="empty-row">لا توجد حقول مرتبطة بنوع الطلب الحالي.</td>
+            <td colspan="5" class="empty-row">لا توجد حقول مرتبطة بنوع الطلب الحالي.</td>
           </tr>
         </ng-template>
       </p-table>

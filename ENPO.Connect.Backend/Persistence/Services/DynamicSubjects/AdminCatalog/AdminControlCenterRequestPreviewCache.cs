@@ -8,6 +8,7 @@ public sealed class AdminControlCenterRequestPreviewCache : IAdminControlCenterR
 {
     private const string VersionKeyIdentifier = "request-preview:version";
     private const string PreviewKeyPrefix = "request-preview";
+    private const string PayloadSchemaVersion = "2";
     private static readonly TimeSpan VersionKeyTtl = TimeSpan.FromDays(180);
 
     private readonly RedisConnectionManager _redisManager;
@@ -126,10 +127,10 @@ public sealed class AdminControlCenterRequestPreviewCache : IAdminControlCenterR
 
         if (normalizedUnitId == null)
         {
-            return $"{PreviewKeyPrefix}:v{normalizedVersion}:{requestTypeId}:{normalizedUserId}";
+            return $"{PreviewKeyPrefix}:schema{PayloadSchemaVersion}:v{normalizedVersion}:{requestTypeId}:{normalizedUserId}";
         }
 
-        return $"{PreviewKeyPrefix}:v{normalizedVersion}:{requestTypeId}:{normalizedUserId}:unit:{normalizedUnitId}";
+        return $"{PreviewKeyPrefix}:schema{PayloadSchemaVersion}:v{normalizedVersion}:{requestTypeId}:{normalizedUserId}:unit:{normalizedUnitId}";
     }
 
     private static string IncrementVersion(string currentVersion)
