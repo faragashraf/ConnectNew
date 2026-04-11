@@ -579,6 +579,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         const normalizedLabel = this.normalizeNullable(item.label) ?? normalizedFieldKey;
         const displayOrder = this.toPositiveInt(item.displayOrder) ?? 1;
         const groupId = this.toPositiveInt(item.groupId) ?? defaultGroupId ?? 0;
+        const resolvedRuntimeJson = this.resolveBindingRuntimeJson(item);
 
         return {
           ...item,
@@ -586,7 +587,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
           label: normalizedLabel,
           type: this.normalizeBindingType(item.type),
           defaultValue: String(item.defaultValue ?? '').trim(),
-          dynamicRuntimeJson: String(item.dynamicRuntimeJson ?? '').trim(),
+          dynamicRuntimeJson: resolvedRuntimeJson,
           displayOrder,
           groupId,
           groupName: this.resolveGroupName(groupId)
@@ -598,7 +599,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
   onOpenDynamicRuntimeBuilder(binding: BoundFieldItem): void {
     this.dynamicRuntimeBuilderTargetBindingId = binding.bindingId;
-    this.dynamicRuntimeBuilderModel = this.createBuilderModelFromRuntimeJson(binding.dynamicRuntimeJson);
+    this.dynamicRuntimeBuilderModel = this.createBuilderModelFromRuntimeJson(this.resolveBuilderRuntimeJson(binding));
     this.dynamicRuntimeBuilderVisible = true;
   }
 
@@ -624,9 +625,14 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         return binding;
       }
 
-      return {
+      const nextBinding: BoundFieldItem = {
         ...binding,
         dynamicRuntimeJson: runtimeJson
+      };
+
+      return {
+        ...nextBinding,
+        displaySettingsJson: this.buildDisplaySettingsJson(binding.displaySettingsJson, nextBinding)
       };
     });
 
@@ -880,6 +886,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     try {
       await this.persistBindingsToBackend(this.currentCategoryId, this.currentApplicationId);
       this.hasPendingBackendChanges = false;
+      this.clearDraftFromLocalStorage();
       this.stepMessageSeverity = 'success';
       this.stepMessage = 'تم حفظ الحقول وسياسة الرقم المرجعي في قاعدة البيانات بنجاح.';
     } catch (error) {
@@ -1374,13 +1381,14 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       return '';
     }
 
-    const dynamicRuntime = parsed['dynamicRuntime'];
-    if (!dynamicRuntime || typeof dynamicRuntime !== 'object' || Array.isArray(dynamicRuntime)) {
+    const normalizedRuntime = this.tryNormalizeRuntimeConfig(parsed['dynamicRuntime'])
+      ?? this.tryNormalizeRuntimeConfig(parsed);
+    if (!normalizedRuntime) {
       return '';
     }
 
     try {
-      return JSON.stringify(dynamicRuntime, null, 2);
+      return JSON.stringify(normalizedRuntime, null, 2);
     } catch {
       return '';
     }
@@ -1398,10 +1406,136 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         return null;
       }
 
-      return parsed as Record<string, unknown>;
+      return this.tryNormalizeRuntimeConfig(parsed)
+        ?? parsed as Record<string, unknown>;
     } catch {
       return null;
     }
+  }
+
+  private tryNormalizeRuntimeConfig(source: unknown): Record<string, unknown> | null {
+    if (source == null) {
+      return null;
+    }
+
+    if (typeof source === 'string') {
+      const payload = this.normalizeNullable(source);
+      if (!payload) {
+        return null;
+      }
+
+      try {
+        return this.tryNormalizeRuntimeConfig(JSON.parse(payload));
+      } catch {
+        return null;
+      }
+    }
+
+    if (typeof source !== 'object' || Array.isArray(source)) {
+      return null;
+    }
+
+    const candidate = source as Record<string, unknown>;
+    if (this.isRuntimeBehaviorPayload(candidate)) {
+      return candidate;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(candidate, 'dynamicRuntime')) {
+      return null;
+    }
+
+    return this.tryNormalizeRuntimeConfig(candidate['dynamicRuntime']);
+  }
+
+  private isRuntimeBehaviorPayload(payload: Record<string, unknown>): boolean {
+    const optionLoader = payload['optionLoader'];
+    if (optionLoader && typeof optionLoader === 'object' && !Array.isArray(optionLoader)) {
+      return true;
+    }
+
+    const asyncValidation = payload['asyncValidation'];
+    if (asyncValidation && typeof asyncValidation === 'object' && !Array.isArray(asyncValidation)) {
+      return true;
+    }
+
+    const actions = payload['actions'];
+    if (Array.isArray(actions)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private resolveBuilderRuntimeJson(
+    binding: Pick<BoundFieldItem, 'dynamicRuntimeJson' | 'displaySettingsJson'>
+  ): string {
+    const direct = this.normalizeNullable(binding.dynamicRuntimeJson);
+    if (direct) {
+      const normalizedDirect = this.parseSupportedDynamicRuntimeJson(direct);
+      if (normalizedDirect) {
+        try {
+          return JSON.stringify(normalizedDirect, null, 2);
+        } catch {
+          return direct;
+        }
+      }
+    }
+
+    const fallback = this.extractDynamicRuntimeJson(binding.displaySettingsJson);
+    if (!fallback) {
+      return '';
+    }
+
+    const normalizedFallback = this.parseSupportedDynamicRuntimeJson(fallback);
+    if (!normalizedFallback) {
+      return '';
+    }
+
+    try {
+      return JSON.stringify(normalizedFallback, null, 2);
+    } catch {
+      return fallback;
+    }
+  }
+
+  private resolveBindingRuntimeJson(binding: Pick<BoundFieldItem, 'dynamicRuntimeJson' | 'displaySettingsJson'>): string {
+    const direct = this.normalizeNullable(binding.dynamicRuntimeJson);
+    if (direct != null) {
+      const normalizedDirect = this.parseSupportedDynamicRuntimeJson(direct);
+      if (normalizedDirect) {
+        try {
+          return JSON.stringify(normalizedDirect, null, 2);
+        } catch {
+          return direct;
+        }
+      }
+    }
+
+    const fallback = this.extractDynamicRuntimeJson(binding.displaySettingsJson);
+    if (fallback) {
+      const normalizedFallback = this.parseSupportedDynamicRuntimeJson(fallback);
+      if (normalizedFallback) {
+        try {
+          return JSON.stringify(normalizedFallback, null, 2);
+        } catch {
+          return fallback;
+        }
+      }
+    }
+
+    return direct ?? '';
+  }
+
+  private parseSupportedDynamicRuntimeJson(raw: unknown): Record<string, unknown> | null {
+    const parsedRuntime = this.parseDynamicRuntimeJson(raw);
+    if (!parsedRuntime) {
+      return null;
+    }
+
+    const parsedBehavior = parseRequestRuntimeDynamicFieldBehavior(
+      JSON.stringify({ dynamicRuntime: parsedRuntime })
+    );
+    return parsedBehavior ? parsedRuntime : null;
   }
 
   private createDefaultBuilderBinding(): DynamicRuntimeBuilderBindingVm {
@@ -2014,9 +2148,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     this.bindings = parsed.map(item => ({
       ...item,
-      dynamicRuntimeJson: this.normalizeNullable(item.dynamicRuntimeJson)
-        ?? this.extractDynamicRuntimeJson(item.displaySettingsJson)
-        ?? ''
+      dynamicRuntimeJson: this.resolveBindingRuntimeJson(item)
     }));
   }
 
@@ -2062,27 +2194,18 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     const issues: string[] = [];
 
     for (const item of bindings ?? []) {
-      const payload = this.normalizeNullable(item.dynamicRuntimeJson);
+      const payload = this.normalizeNullable(this.resolveBindingRuntimeJson(item));
       if (!payload) {
         continue;
       }
 
-      try {
-        const parsed = JSON.parse(payload);
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          issues.push(`تهيئة السلوك الديناميكي للحقل "${item.label || item.fieldKey}" يجب أن تكون JSON Object صالح.`);
-          continue;
-        }
-
-        const parsedBehavior = parseRequestRuntimeDynamicFieldBehavior(
-          JSON.stringify({ dynamicRuntime: parsed })
-        );
-        if (!parsedBehavior) {
-          issues.push(`تهيئة السلوك الديناميكي للحقل "${item.label || item.fieldKey}" لا تطابق عقد التكامل المدعوم.`);
-        }
-      } catch {
+      const parsedRuntime = this.parseSupportedDynamicRuntimeJson(payload);
+      if (!parsedRuntime) {
         issues.push(`تهيئة السلوك الديناميكي للحقل "${item.label || item.fieldKey}" تحتوي JSON غير صالح.`);
+        continue;
       }
+
+      // The contract is already verified by parseSupportedDynamicRuntimeJson.
     }
 
     return issues;
@@ -2683,6 +2806,15 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     const syncToken: 'valid' | 'draft' = this.validation.isValid ? 'valid' : 'draft';
     localStorage.setItem(key, JSON.stringify(this.buildDraftStepValues(syncToken)));
     return true;
+  }
+
+  private clearDraftFromLocalStorage(): void {
+    const key = this.buildDraftStorageKey();
+    if (!key) {
+      return;
+    }
+
+    localStorage.removeItem(key);
   }
 
   private readDraftFromLocalStorage(): Record<string, unknown> | null {
