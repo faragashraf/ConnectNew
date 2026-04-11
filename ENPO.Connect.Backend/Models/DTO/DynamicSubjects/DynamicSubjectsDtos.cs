@@ -827,6 +827,10 @@ public sealed class SubjectTypeAdminDto
 
     public string? SequenceName { get; set; }
 
+    public int? SerialId { get; set; }
+
+    public string? SerialName { get; set; }
+
     public int SequencePaddingLength { get; set; }
 
     public string SequenceResetScope { get; set; } = "none";
@@ -869,6 +873,10 @@ public sealed class SubjectTypeAdminUpsertRequestDto
     public bool UseSequence { get; set; } = true;
 
     public string? SequenceName { get; set; }
+
+    public int? SerialId { get; set; }
+
+    public string? SerialName { get; set; }
 
     public int SequencePaddingLength { get; set; }
 

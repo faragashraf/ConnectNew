@@ -2449,12 +2449,13 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
-            var sequenceName = NormalizeNullable(safeRequest.SequenceName);
-            if (sequenceName != null && sequenceName.Length > 80)
+            var serialResolution = await ResolveReferenceSerialSelectionAsync(safeRequest, cancellationToken);
+            if (serialResolution.ValidationError != null)
             {
-                response.Errors.Add(new Error { Code = "400", Message = "اسم التسلسل يجب ألا يزيد عن 80 حرفًا." });
+                response.Errors.Add(serialResolution.ValidationError);
                 return response;
             }
+            var sequenceName = serialResolution.SerialName;
 
             var sequencePaddingLength = safeRequest.SequencePaddingLength <= 0
                 ? 6
@@ -2664,7 +2665,13 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 .AsNoTracking()
                 .AnyAsync(link => link.CategoryId == categoryId && !link.MendStat, cancellationToken);
 
-            response.Data = BuildSubjectTypeAdminDto(category, hasDynamicFields, policy, categorySetting);
+            response.Data = BuildSubjectTypeAdminDto(
+                category,
+                hasDynamicFields,
+                policy,
+                categorySetting,
+                serialResolution.SerialId,
+                sequenceName);
 
             var scope = new DynamicSubjectRealtimeScope
             {
@@ -3503,7 +3510,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         Cdcategory category,
         bool hasDynamicFields,
         SubjectReferencePolicy? policy,
-        SubjectTypeAdminSetting? settings)
+        SubjectTypeAdminSetting? settings,
+        int? serialIdOverride = null,
+        string? serialNameOverride = null)
     {
         var requestPolicy = TryReadRequestPolicyFromSettingsJson(settings?.SettingsJson);
         var presentationSettings = ResolvePresentationSettings(settings);
@@ -3511,6 +3520,10 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         var referenceComponents = referenceMode == "custom"
             ? ParseReferenceComponents(policy?.ComponentsJson)
             : new List<SubjectReferencePolicyComponentDto>();
+        var sequenceName = NormalizeSerialNameValue(policy?.SequenceName)
+            ?? NormalizeSerialNameValue(serialNameOverride);
+        var serialId = serialIdOverride
+            ?? (sequenceName == null ? null : policy?.PolicyId);
         var referenceStartingValue = policy != null && policy.StartingValue > 0
             ? policy.StartingValue
             : 1;
@@ -3544,7 +3557,9 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
             SourceFieldKeys = policy?.SourceFieldKeys,
             IncludeYear = policy?.IncludeYear ?? true,
             UseSequence = policy?.UseSequence ?? true,
-            SequenceName = policy?.SequenceName,
+            SequenceName = sequenceName,
+            SerialId = serialId,
+            SerialName = sequenceName,
             SequencePaddingLength = sequencePaddingLength,
             SequenceResetScope = NormalizeSequenceResetScope(policy?.SequenceResetScope) ?? "none",
             LastModifiedBy = policy?.LastModifiedBy ?? policy?.CreatedBy,
@@ -5412,6 +5427,15 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         public bool IsTypeValid { get; init; }
     }
 
+    private sealed class ReferenceSerialResolutionResult
+    {
+        public int? SerialId { get; init; }
+
+        public string? SerialName { get; init; }
+
+        public Error? ValidationError { get; init; }
+    }
+
     private async Task<Dictionary<string, (bool IsRequired, string? Label)>> LoadReferenceRequiredFieldMapAsync(
         int categoryId,
         CancellationToken cancellationToken)
@@ -5444,6 +5468,110 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return map;
+    }
+
+    private async Task<ReferenceSerialResolutionResult> ResolveReferenceSerialSelectionAsync(
+        SubjectTypeAdminUpsertRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var safeRequest = request ?? new SubjectTypeAdminUpsertRequestDto();
+        var requestedSerialId = safeRequest.SerialId.HasValue && safeRequest.SerialId.Value > 0
+            ? safeRequest.SerialId.Value
+            : (int?)null;
+        var requestedSerialName = NormalizeSerialNameValue(safeRequest.SerialName)
+            ?? NormalizeSerialNameValue(safeRequest.SequenceName);
+        if (requestedSerialName != null && requestedSerialName.Length > SequenceNameMaxLength)
+        {
+            return new ReferenceSerialResolutionResult
+            {
+                ValidationError = new Error
+                {
+                    Code = "400",
+                    Message = $"اسم المسلسل يجب ألا يزيد عن {SequenceNameMaxLength} حرفًا."
+                }
+            };
+        }
+
+        var existingRows = await _connectContext.SubjectReferencePolicies
+            .AsNoTracking()
+            .Where(item => item.SequenceName != null && item.SequenceName != string.Empty)
+            .Select(item => new
+            {
+                item.PolicyId,
+                item.SequenceName
+            })
+            .ToListAsync(cancellationToken);
+        var serialByPolicyId = new Dictionary<int, (string Name, string Key)>();
+        var canonicalByKey = new Dictionary<string, (int SerialId, string Name)>(StringComparer.Ordinal);
+
+        foreach (var row in existingRows)
+        {
+            var serialName = NormalizeSerialNameValue(row.SequenceName);
+            if (serialName == null)
+            {
+                continue;
+            }
+
+            var serialKey = NormalizeSerialNameKey(serialName);
+            if (serialKey.Length == 0)
+            {
+                continue;
+            }
+
+            serialByPolicyId[row.PolicyId] = (serialName, serialKey);
+            if (!canonicalByKey.TryGetValue(serialKey, out var current)
+                || row.PolicyId < current.SerialId)
+            {
+                canonicalByKey[serialKey] = (row.PolicyId, serialName);
+            }
+        }
+
+        if (requestedSerialId.HasValue)
+        {
+            if (!serialByPolicyId.TryGetValue(requestedSerialId.Value, out var existing))
+            {
+                return new ReferenceSerialResolutionResult
+                {
+                    ValidationError = new Error
+                    {
+                        Code = "400",
+                        Message = "المسلسل المحدد غير موجود. يرجى اختيار مسلسل صالح أو إدخال اسم جديد."
+                    }
+                };
+            }
+
+            return canonicalByKey.TryGetValue(existing.Key, out var canonical)
+                ? new ReferenceSerialResolutionResult
+                {
+                    SerialId = canonical.SerialId,
+                    SerialName = canonical.Name
+                }
+                : new ReferenceSerialResolutionResult
+                {
+                    SerialId = requestedSerialId.Value,
+                    SerialName = existing.Name
+                };
+        }
+
+        if (requestedSerialName == null)
+        {
+            return new ReferenceSerialResolutionResult();
+        }
+
+        var requestedKey = NormalizeSerialNameKey(requestedSerialName);
+        if (canonicalByKey.TryGetValue(requestedKey, out var existingSerial))
+        {
+            return new ReferenceSerialResolutionResult
+            {
+                SerialId = existingSerial.SerialId,
+                SerialName = existingSerial.Name
+            };
+        }
+
+        return new ReferenceSerialResolutionResult
+        {
+            SerialName = requestedSerialName
+        };
     }
 
     private static string? NormalizeReferenceMode(string? value)
@@ -5597,6 +5725,25 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
         }
 
         return null;
+    }
+
+    private static string? NormalizeSerialNameValue(string? value)
+    {
+        var normalized = NormalizeNullable(value);
+        if (normalized == null)
+        {
+            return null;
+        }
+
+        var collapsed = string.Join(" ", normalized
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return collapsed.Length == 0 ? null : collapsed;
+    }
+
+    private static string NormalizeSerialNameKey(string? value)
+    {
+        var normalized = NormalizeSerialNameValue(value);
+        return normalized?.ToUpperInvariant() ?? string.Empty;
     }
 
     private static string? NormalizeNullable(string? value)

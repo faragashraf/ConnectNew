@@ -86,6 +86,36 @@
             </p-dropdown>
           </article>
 
+          <article class="field">
+            <label for="referenceSerialId">اختيار مسلسل موجود</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="referenceSerialId"
+              [options]="serialOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="true"
+              placeholder="اختر مسلسلًا محفوظًا"
+              formControlName="serialId"
+              (onChange)="onSerialIdSelected()">
+            </p-dropdown>
+            <small class="field-note">اختر اسم مسلسل موجود لإعادة استخدامه بدون تكرار.</small>
+          </article>
+
+          <article class="field">
+            <label for="referenceSerialName">أو أدخل اسم مسلسل جديد</label>
+            <input
+              pInputText
+              id="referenceSerialName"
+              formControlName="serialName"
+              placeholder="مثال: Seq_GRV_2026"
+              (input)="onSerialNameEdited()" />
+            <small class="field-note">عند إدخال اسم جديد سيتم إنشاؤه تلقائيًا وربطه بالإعداد الحالي.</small>
+            <small class="error" *ngIf="referencePolicyForm.get('serialName')?.hasError('maxlength')">
+              اسم المسلسل يجب ألا يتجاوز 80 حرفًا.
+            </small>
+          </article>
+
           <ng-container *ngIf="!isCustomReferenceMode">
             <article class="field">
               <label for="referencePrefix">البادئة (اختياري)</label>

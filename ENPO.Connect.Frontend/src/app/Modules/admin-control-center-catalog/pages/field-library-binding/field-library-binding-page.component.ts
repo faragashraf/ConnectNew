@@ -110,6 +110,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     referenceMode: ['default', [Validators.required]],
     referencePrefix: ['', [Validators.maxLength(40)]],
     referenceSeparator: ['-', [Validators.required]],
+    serialId: [null],
+    serialName: ['', [Validators.maxLength(80)]],
     referenceStartingValue: [1, [Validators.required, Validators.min(1), Validators.max(2147483647)]],
     referenceSequencePaddingLength: [6, [Validators.required, Validators.min(1), Validators.max(12)]],
     referenceSequenceResetScope: ['none']
@@ -142,6 +144,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
   groups: SubjectAdminGroupDto[] = [];
   groupOptions: Array<{ label: string; value: number }> = [];
+  serialOptions: Array<{ label: string; value: number }> = [];
 
   stepMessage = '';
   stepMessageSeverity: 'success' | 'warn' = 'warn';
@@ -520,6 +523,37 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.evaluateBindings(true, true);
   }
 
+  onSerialIdSelected(): void {
+    if (this.syncingFromStore) {
+      return;
+    }
+
+    const selectedSerialId = this.toPositiveInt(this.referencePolicyForm.getRawValue()['serialId']);
+    if (!selectedSerialId) {
+      return;
+    }
+
+    this.referencePolicyForm.patchValue({
+      serialName: ''
+    }, { emitEvent: false });
+  }
+
+  onSerialNameEdited(): void {
+    if (this.syncingFromStore) {
+      return;
+    }
+
+    const raw = this.referencePolicyForm.getRawValue();
+    const serialName = this.normalizeSerialName(raw['serialName']);
+    if (!serialName) {
+      return;
+    }
+
+    this.referencePolicyForm.patchValue({
+      serialId: null
+    }, { emitEvent: false });
+  }
+
   async onSaveToBackend(): Promise<void> {
     this.referencePolicyForm.markAllAsTouched();
     this.presentationForm.markAllAsTouched();
@@ -692,6 +726,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         activeLinks.map(link => this.mapLinkToBinding(link))
       );
 
+      this.serialOptions = this.buildSerialOptions(subjectTypes);
       this.subjectTypeAdmin = subjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
       this.patchReferencePolicyFormFromAdminType(this.subjectTypeAdmin);
       this.patchPresentationFormFromAdminType(this.subjectTypeAdmin);
@@ -712,6 +747,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.backendWorkspaceLoaded = false;
       this.libraryLoadedFromDb = false;
       this.reusableFields = [];
+      this.serialOptions = [];
       this.fieldCatalogByKey.clear();
       this.evaluateBindings(true, false);
 
@@ -907,6 +943,13 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     const referenceValue = this.referencePolicyForm.getRawValue();
     const presentationValue = this.presentationForm.getRawValue();
     const referenceMode = this.normalizeReferenceMode(referenceValue['referenceMode']);
+    const selectedSerialId = this.toPositiveInt(referenceValue['serialId']);
+    const typedSerialName = this.normalizeSerialName(referenceValue['serialName']);
+    const selectedSerialName = selectedSerialId
+      ? this.resolveSerialLabelById(selectedSerialId)
+      : null;
+    const fallbackSerialName = this.normalizeSerialName(targetType?.serialName ?? targetType?.sequenceName);
+    const resolvedSequenceName = selectedSerialName ?? typedSerialName ?? fallbackSerialName ?? null;
     const referenceComponents = referenceMode === 'custom'
       ? this.serializeReferenceComponents(this.referenceComponents)
       : [];
@@ -927,7 +970,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
           ?? this.buildDefaultSourceFieldKeys(normalizedBindings)),
       includeYear: false,
       useSequence: true,
-      sequenceName: undefined,
+      serialId: selectedSerialId ?? undefined,
+      serialName: typedSerialName ?? undefined,
+      sequenceName: resolvedSequenceName ?? undefined,
       sequencePaddingLength: this.toSafeSequenceLength(referenceValue['referenceSequencePaddingLength']),
       sequenceResetScope: this.normalizeSequenceResetScope(referenceValue['referenceSequenceResetScope']),
       requestPolicy: targetType?.requestPolicy,
@@ -944,6 +989,37 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       .slice(0, 3);
 
     return selected.length > 0 ? selected.join(',') : undefined;
+  }
+
+  private buildSerialOptions(subjectTypes: ReadonlyArray<SubjectTypeAdminDto>): Array<{ label: string; value: number }> {
+    const options: Array<{ label: string; value: number }> = [];
+    const seen = new Set<string>();
+
+    for (const item of subjectTypes ?? []) {
+      const serialName = this.normalizeSerialName(item.serialName ?? item.sequenceName);
+      const serialId = this.toPositiveInt(item.serialId) ?? this.toPositiveInt(item.referencePolicyId);
+      if (!serialName || !serialId) {
+        continue;
+      }
+
+      const key = this.normalizeSerialNameKey(serialName);
+      if (key.length === 0 || seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      options.push({
+        label: serialName,
+        value: serialId
+      });
+    }
+
+    return options.sort((left, right) =>
+      left.label.localeCompare(right.label, 'ar', { sensitivity: 'base' }));
+  }
+
+  private resolveSerialLabelById(serialId: number): string | null {
+    return this.serialOptions.find(option => option.value === serialId)?.label ?? null;
   }
 
   private buildDisplaySettingsJson(existingRaw: string | undefined, binding: BoundFieldItem): string | undefined {
@@ -1064,11 +1140,15 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   private patchReferencePolicyFormFromStep(values: Record<string, unknown>): void {
+    const serialName = this.normalizeSerialName(values['serialName'] ?? values['sequenceName']);
+    const serialId = this.resolveSerialOptionValue(values['serialId'], serialName);
     const nextValue = {
       referencePolicyEnabled: values['referencePolicyEnabled'] !== false,
       referenceMode: this.normalizeReferenceMode(values['referenceMode']),
       referencePrefix: this.normalizeNullable(values['referencePrefix']) ?? '',
       referenceSeparator: this.normalizeReferenceSeparator(values['referenceSeparator']),
+      serialId,
+      serialName: serialId ? '' : (serialName ?? ''),
       referenceStartingValue: this.toSafeStartingValue(values['referenceStartingValue']),
       referenceSequencePaddingLength: this.toSafeSequenceLength(values['referenceSequencePaddingLength']),
       referenceSequenceResetScope: this.normalizeSequenceResetScope(values['referenceSequenceResetScope'])
@@ -1084,11 +1164,15 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
   private patchReferencePolicyFormFromAdminType(subjectType: SubjectTypeAdminDto | null): void {
     const resolvedMode = this.normalizeReferenceMode(subjectType?.referenceMode);
+    const serialName = this.normalizeSerialName(subjectType?.serialName ?? subjectType?.sequenceName);
+    const serialId = this.resolveSerialOptionValue(subjectType?.serialId ?? subjectType?.referencePolicyId, serialName);
     const nextValue = {
       referencePolicyEnabled: subjectType?.referencePolicyEnabled !== false,
       referenceMode: resolvedMode,
       referencePrefix: this.normalizeNullable(subjectType?.referencePrefix) ?? '',
       referenceSeparator: this.normalizeReferenceSeparator(subjectType?.referenceSeparator),
+      serialId,
+      serialName: serialId ? '' : (serialName ?? ''),
       referenceStartingValue: this.toSafeStartingValue(subjectType?.referenceStartingValue),
       referenceSequencePaddingLength: this.toSafeSequenceLength(subjectType?.sequencePaddingLength),
       referenceSequenceResetScope: this.normalizeSequenceResetScope(subjectType?.sequenceResetScope)
@@ -1684,6 +1768,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       referenceMode: this.normalizeReferenceMode(referenceValue['referenceMode']),
       referencePrefix: this.normalizeNullable(referenceValue['referencePrefix']),
       referenceSeparator: this.normalizeReferenceSeparator(referenceValue['referenceSeparator']),
+      serialId: this.toPositiveInt(referenceValue['serialId']),
+      serialName: this.normalizeSerialName(referenceValue['serialName']),
       referenceStartingValue: this.toSafeStartingValue(referenceValue['referenceStartingValue']),
       referenceSequencePaddingLength: this.toSafeSequenceLength(referenceValue['referenceSequencePaddingLength']),
       referenceSequenceResetScope: this.normalizeSequenceResetScope(referenceValue['referenceSequenceResetScope']),
@@ -1743,6 +1829,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.bindings = [];
     this.groups = [];
     this.groupOptions = [];
+    this.serialOptions = [];
     this.fieldCatalogByKey.clear();
     this.subjectTypeAdmin = null;
     this.reusableFields = [];
@@ -1753,6 +1840,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       referenceMode: 'default',
       referencePrefix: '',
       referenceSeparator: '-',
+      serialId: null,
+      serialName: '',
       referenceStartingValue: 1,
       referenceSequencePaddingLength: 6,
       referenceSequenceResetScope: 'none'
@@ -1788,6 +1877,35 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private normalizeNullable(value: unknown): string | null {
     const normalized = String(value ?? '').trim();
     return normalized.length > 0 ? normalized : null;
+  }
+
+  private normalizeSerialName(value: unknown): string | null {
+    const normalized = this.normalizeNullable(value);
+    if (!normalized) {
+      return null;
+    }
+
+    const collapsed = normalized.replace(/\s+/g, ' ').trim();
+    return collapsed.length > 0 ? collapsed : null;
+  }
+
+  private normalizeSerialNameKey(value: unknown): string {
+    return this.normalizeSerialName(value)?.toLowerCase() ?? '';
+  }
+
+  private resolveSerialOptionValue(serialIdRaw: unknown, serialName: string | null): number | null {
+    const serialId = this.toPositiveInt(serialIdRaw);
+    if (serialId && this.serialOptions.some(option => option.value === serialId)) {
+      return serialId;
+    }
+
+    if (!serialName) {
+      return null;
+    }
+
+    const serialKey = this.normalizeSerialNameKey(serialName);
+    const match = this.serialOptions.find(option => this.normalizeSerialNameKey(option.label) === serialKey);
+    return match?.value ?? null;
   }
 
   private readRouteCategoryId(params: ParamMap): number | null {
