@@ -161,6 +161,108 @@ describe('RequestRuntimeDynamicFieldsFrameworkService', () => {
     expect(control?.errors).toBeNull();
   }));
 
+  it('executes typed asyncValidation integration end-to-end and syncs form validity', fakeAsync(() => {
+    const forms = buildGenericFormsStub();
+    const dynamicControls = new FormGroup({
+      'nationalId|0': new FormControl('')
+    });
+
+    const controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>([
+      ['nationalId|0', { fieldKey: 'nationalId', instanceGroupId: 1 }]
+    ]);
+
+    const fields: RequestRuntimeFieldDefinitionDto[] = [
+      createRuntimeField('nationalId', {
+        asyncValidation: {
+          trigger: 'blur',
+          debounceMs: 20,
+          integration: {
+            sourceType: 'external',
+            fullUrl: 'https://example.test/api/validate',
+            method: 'POST',
+            body: [
+              { name: 'value', value: { source: 'field', fieldKey: 'nationalId' } }
+            ]
+          },
+          responseValidPath: 'result.valid',
+          responseMessagePath: 'result.message',
+          defaultErrorMessage: 'تعذر التحقق من صحة القيمة.'
+        }
+      })
+    ];
+
+    facade.executeDynamicExternalRequest.and.callFake((request: any) => {
+      const value = String(request?.body?.value ?? '');
+      if (value === '111111') {
+        return of({
+          data: {
+            result: {
+              valid: false,
+              message: 'القيمة غير صالحة'
+            }
+          }
+        } as any);
+      }
+
+      return of({
+        data: {
+          result: {
+            valid: true
+          }
+        }
+      } as any);
+    });
+
+    service.bind({
+      dynamicControls,
+      genericFormService: forms as unknown as GenericFormsService,
+      fieldDefinitions: fields,
+      controlMap
+    });
+
+    const control = dynamicControls.get('nationalId|0');
+    expect(control).toBeTruthy();
+
+    control?.setValue('111111');
+    service.handleGenericEvent({ controlFullName: 'nationalId|0', eventType: 'change' });
+    control?.updateValueAndValidity({ emitEvent: false });
+    tick(25);
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledTimes(0);
+
+    service.handleGenericEvent({ controlFullName: 'nationalId|0', eventType: 'blur' });
+    control?.updateValueAndValidity({ emitEvent: false });
+    tick(25);
+
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledTimes(1);
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledWith({
+      fullUrl: 'https://example.test/api/validate',
+      method: 'POST',
+      requestFormat: 'json',
+      authMode: 'bearerCurrent',
+      query: undefined,
+      headers: undefined,
+      body: {
+        value: '111111'
+      }
+    });
+    expect(control?.errors?.['runtimeExternalValidation']).toBe('القيمة غير صالحة');
+    expect(dynamicControls.invalid).toBeTrue();
+
+    service.handleGenericEvent({ controlFullName: 'nationalId|0', eventType: 'blur' });
+    control?.updateValueAndValidity({ emitEvent: false });
+    tick(25);
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledTimes(1);
+
+    control?.setValue('222222');
+    service.handleGenericEvent({ controlFullName: 'nationalId|0', eventType: 'blur' });
+    control?.updateValueAndValidity({ emitEvent: false });
+    tick(25);
+
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledTimes(2);
+    expect(control?.errors).toBeNull();
+    expect(dynamicControls.valid).toBeTrue();
+  }));
+
   it('hardens actions/autofill with dedupe, stale-response guard, and loop-safe patching', () => {
     const forms = buildGenericFormsStub();
     const dynamicControls = new FormGroup({

@@ -682,6 +682,36 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
   }
 
+  onApplyDynamicRuntimeExternalAsyncValidationPreset(): void {
+    this.dynamicRuntimeBuilderModel.behaviorType = 'asyncValidation';
+    this.dynamicRuntimeBuilderModel.trigger = 'blur';
+    this.dynamicRuntimeBuilderModel.sourceType = 'external';
+    this.dynamicRuntimeBuilderModel.requestFormat = 'json';
+    this.dynamicRuntimeBuilderModel.authMode = 'bearerCurrent';
+    this.dynamicRuntimeBuilderModel.sourceFieldKey = '';
+    this.dynamicRuntimeBuilderModel.statementId = null;
+    this.dynamicRuntimeBuilderModel.parameters = [];
+    this.dynamicRuntimeBuilderModel.fullUrl = '';
+    this.dynamicRuntimeBuilderModel.method = 'GET';
+    this.dynamicRuntimeBuilderModel.query = [this.createDefaultBuilderBinding()];
+    this.dynamicRuntimeBuilderModel.body = [];
+    this.dynamicRuntimeBuilderModel.headers = [];
+    this.dynamicRuntimeBuilderModel.customHeaders = [];
+    this.dynamicRuntimeBuilderModel.minQueryLength = null;
+    this.dynamicRuntimeBuilderModel.responseListPath = '';
+    this.dynamicRuntimeBuilderModel.responseValuePath = '';
+    this.dynamicRuntimeBuilderModel.responseLabelPath = '';
+    this.dynamicRuntimeBuilderModel.clearWhenSourceEmpty = false;
+    this.dynamicRuntimeBuilderModel.responseValidPath = 'isValid';
+    this.dynamicRuntimeBuilderModel.responseMessagePath = 'message';
+    this.dynamicRuntimeBuilderModel.defaultErrorMessage = '';
+    this.dynamicRuntimeBuilderModel.debounceMs = 300;
+    this.dynamicRuntimeBuilderModel.minValueLength = null;
+    this.dynamicRuntimeBuilderModel.whenEquals = '';
+    this.dynamicRuntimeBuilderModel.clearTargetsWhenEmpty = false;
+    this.dynamicRuntimeBuilderModel.patches = [this.createDefaultBuilderPatch()];
+  }
+
   get isDynamicRuntimePowerBiSource(): boolean {
     return this.dynamicRuntimeBuilderModel.sourceType === 'powerbi';
   }

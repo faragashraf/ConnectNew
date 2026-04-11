@@ -316,4 +316,63 @@ describe('FieldLibraryBindingPageComponent - Dynamic Integration Builder', () =>
     expect(component.dynamicRuntimeBuilderModel.parameters[0].source).toBe('static');
     expect(component.dynamicRuntimeBuilderModel.parameters[0].staticValue).toBe('incoming');
   });
+
+  it('should build and restore external asyncValidation contract through builder flow', () => {
+    const binding = createBinding();
+    component.bindings = [binding];
+
+    component.onOpenDynamicRuntimeBuilder(binding);
+    component.onApplyDynamicRuntimeExternalAsyncValidationPreset();
+
+    component.dynamicRuntimeBuilderModel.fullUrl = 'https://example.test/api/validate';
+    component.dynamicRuntimeBuilderModel.method = 'POST';
+    component.dynamicRuntimeBuilderModel.query = [];
+    component.dynamicRuntimeBuilderModel.body = [
+      {
+        name: 'value',
+        source: 'field',
+        staticValue: '',
+        fieldKey: 'nationalId',
+        claimKey: '',
+        fallbackValue: ''
+      }
+    ];
+    component.dynamicRuntimeBuilderModel.responseValidPath = 'result.valid';
+    component.dynamicRuntimeBuilderModel.responseMessagePath = 'result.message';
+    component.dynamicRuntimeBuilderModel.defaultErrorMessage = 'تعذر التحقق من صحة القيمة.';
+    component.dynamicRuntimeBuilderModel.debounceMs = 250;
+    component.dynamicRuntimeBuilderModel.minValueLength = 5;
+
+    component.onSaveDynamicRuntimeBuilder();
+
+    const savedRuntimeJson = component.bindings[0].dynamicRuntimeJson ?? '';
+    expect(savedRuntimeJson.length).toBeGreaterThan(0);
+
+    const parsed = JSON.parse(savedRuntimeJson);
+    expect(parsed.asyncValidation.trigger).toBe('blur');
+    expect(parsed.asyncValidation.integration.sourceType).toBe('external');
+    expect(parsed.asyncValidation.integration.fullUrl).toBe('https://example.test/api/validate');
+    expect(parsed.asyncValidation.integration.method).toBe('POST');
+    expect(parsed.asyncValidation.integration.body).toEqual([
+      {
+        name: 'value',
+        value: {
+          source: 'field',
+          fieldKey: 'nationalId'
+        }
+      }
+    ]);
+    expect(parsed.asyncValidation.responseValidPath).toBe('result.valid');
+    expect(parsed.asyncValidation.responseMessagePath).toBe('result.message');
+
+    component.onOpenDynamicRuntimeBuilder(component.bindings[0]);
+    expect(component.dynamicRuntimeBuilderModel.behaviorType).toBe('asyncValidation');
+    expect(component.dynamicRuntimeBuilderModel.trigger).toBe('blur');
+    expect(component.dynamicRuntimeBuilderModel.sourceType).toBe('external');
+    expect(component.dynamicRuntimeBuilderModel.fullUrl).toBe('https://example.test/api/validate');
+    expect(component.dynamicRuntimeBuilderModel.method).toBe('POST');
+    expect(component.dynamicRuntimeBuilderModel.body[0].name).toBe('value');
+    expect(component.dynamicRuntimeBuilderModel.body[0].source).toBe('field');
+    expect(component.dynamicRuntimeBuilderModel.body[0].fieldKey).toBe('nationalId');
+  });
 });
