@@ -1,38 +1,49 @@
 <section class="catalog-page" dir="rtl">
   <header class="page-header">
-    <div>
-      <p class="eyebrow">الاستبدال التدريجي - لوحة الكتالوج</p>
-      <h2>لوحة إدارة الكتالوج</h2>
-      <p>
-        المرحلة الحالية تغطي التطبيقات والشجرة ثم إدارة الجروبات المرتبطة بالنود المختارة، مع حفظ فعلي في قاعدة البيانات.
-      </p>
-      <button
-        pButton
-        type="button"
-        class="p-button-text phase-next-link"
-        icon="pi pi-arrow-left"
-        label="المرحلة التالية: مكتبة الحقول"
-        [routerLink]="['/Admin/ControlCenterCatalog/field-library']"
-        [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
-      </button>
-      <button
-        pButton
-        type="button"
-        class="p-button-text phase-next-link"
-        icon="pi pi-link"
-        label="إدارة ربط مكتبة الحقول"
-        [routerLink]="['/Admin/ControlCenterCatalog/field-library-binding']"
-        [disabled]="selectedCategoryId == null || selectedApplicationId == null"
-        [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
-      </button>
-      <button
-        pButton
-        type="button"
-        class="p-button-text phase-next-link"
-        icon="pi pi-eye"
-        label="المعاينة التشغيلية الفعالة للطلب"
-        routerLink="/Admin/ControlCenterCatalog/request-preview">
-      </button>
+    <div class="page-header-content">
+      <div class="page-title-block">
+        <p class="eyebrow">الاستبدال التدريجي - لوحة الكتالوج</p>
+        <h2>لوحة إدارة الكتالوج</h2>
+        <p>
+          المرحلة الحالية تغطي التطبيقات والشجرة ثم إدارة المجموعات المرتبطة بالعقدة المختارة، مع حفظ فعلي في قاعدة البيانات.
+        </p>
+        <p-tag
+          *ngIf="selectedApplication as selectedApp"
+          class="active-app-tag"
+          [value]="'التطبيق الحالي: ' + selectedApp.applicationId + ' - ' + selectedApp.applicationName"
+          severity="info">
+        </p-tag>
+      </div>
+
+      <div class="page-header-links">
+        <button
+          pButton
+          type="button"
+          class="p-button-text phase-next-link"
+          icon="pi pi-arrow-left"
+          label="المرحلة التالية: مكتبة الحقول"
+          [routerLink]="['/Admin/ControlCenterCatalog/field-library']"
+          [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
+        </button>
+        <button
+          pButton
+          type="button"
+          class="p-button-text phase-next-link"
+          icon="pi pi-link"
+          label="إدارة ربط مكتبة الحقول"
+          [routerLink]="['/Admin/ControlCenterCatalog/field-library-binding']"
+          [disabled]="selectedCategoryId == null || selectedApplicationId == null"
+          [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
+        </button>
+        <button
+          pButton
+          type="button"
+          class="p-button-text phase-next-link"
+          icon="pi pi-eye"
+          label="المعاينة التشغيلية الفعالة للطلب"
+          routerLink="/Admin/ControlCenterCatalog/request-preview">
+        </button>
+      </div>
     </div>
   </header>
 
@@ -183,102 +194,237 @@
       </section>
 
       <section class="card category-card">
-        <header class="card-header">
-          <div>
+        <header class="card-header category-header">
+          <div class="category-header-main">
             <h4>شجرة أنواع الطلب</h4>
-            <small>تحميل الشجرة / اختيار الأصل / إنشاء / تعديل / حذف</small>
+            <small>إدارة هيكل أنواع الطلب بشكل هرمي واضح وسهل التتبع</small>
           </div>
-          <p-tag
-            *ngIf="selectedApplication as selectedApp"
-            [value]="'التطبيق الحالي: ' + selectedApp.applicationId"
-            severity="info">
-          </p-tag>
+          <div class="category-header-badges">
+            <p-tag
+              *ngIf="selectedApplication as selectedApp"
+              [value]="'التطبيق الحالي: ' + selectedApp.applicationId"
+              severity="info">
+            </p-tag>
+            <p-tag
+              [value]="editingCategoryId ? 'وضع التعديل' : 'وضع الإضافة'"
+              [severity]="editingCategoryId ? 'warning' : 'success'">
+            </p-tag>
+          </div>
         </header>
 
         <div *ngIf="selectedApplicationId; else selectApplicationFirst" class="category-layout">
-          <div class="tree-pane">
-            <div class="tree-toolbar">
-              <button pButton type="button" class="p-button-outlined" label="عقدة جديدة" (click)="onStartCreateCategory()"></button>
-              <button pButton type="button" class="p-button-text" label="تعديل المحدد" (click)="onStartEditSelectedCategory()"></button>
+          <section class="request-type-panel request-type-form-panel">
+            <header class="panel-header">
+              <div>
+                <h5>{{ editingCategoryId ? 'تعديل عقدة' : 'إضافة عقدة جديدة' }}</h5>
+                <small>{{ categoryEditorHelperText }}</small>
+              </div>
               <button
+                *ngIf="editingCategoryId != null"
                 pButton
                 type="button"
-                class="p-button-text p-button-danger"
-                label="حذف المحدد"
-                [loading]="deletingCategory"
-                (click)="onDeleteSelectedCategory()">
+                class="p-button-text"
+                icon="pi pi-plus"
+                label="التحويل إلى وضع الإضافة"
+                (click)="onStartCreateCategory()">
               </button>
+            </header>
+
+            <div class="selected-node-summary" [class.has-selection]="selectedCategoryId != null">
+              <div class="summary-item">
+                <span class="summary-label">العقدة المحددة</span>
+                <strong>{{ selectedCategoryId ? selectedCategoryPathLabel : 'لا توجد عقدة محددة' }}</strong>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">العقدة الأم الحالية</span>
+                <strong>{{ parentDisplayLabel }}</strong>
+              </div>
             </div>
 
-            <p-tree
-              [value]="categoryTree"
-              [loading]="loadingTree"
-              selectionMode="single"
-              [(selection)]="selectedCategoryNode"
-              (onNodeSelect)="onCategoryTreeNodeSelect()">
-            </p-tree>
-          </div>
+            <form class="editor category-editor" [formGroup]="categoryForm" novalidate>
+              <p class="required-note"><span>*</span> الحقول الإلزامية موضحة بعلامة النجمة</p>
 
-          <form class="editor" [formGroup]="categoryForm" novalidate>
-            <h5>{{ editingCategoryId ? 'تعديل عقدة' : 'إضافة عقدة جديدة' }}</h5>
-            <p class="required-note"><span>*</span> حقل إلزامي</p>
+              <section class="field-group">
+                <h6>البيانات الأساسية</h6>
+                <label for="categoryName">اسم العقدة <span class="required">*</span></label>
+                <input
+                  pInputText
+                  id="categoryName"
+                  formControlName="categoryName"
+                  placeholder="اسم نوع الطلب" />
+              </section>
 
-            <label for="categoryName">اسم العنصر <span class="required">*</span></label>
-            <input
-              pInputText
-              id="categoryName"
-              formControlName="categoryName"
-              placeholder="اسم الفئة" />
+              <section class="field-group">
+                <h6>العقدة الأم</h6>
+                <label for="parentDisplay">العقدة الأم</label>
+                <div class="parent-picker-row">
+                  <input pInputText id="parentDisplay" [value]="parentDisplayLabel" readonly />
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-outlined"
+                    icon="pi pi-sitemap"
+                    label="تحديد العقدة الأم"
+                    (click)="openParentPicker(parentPicker, $event)">
+                  </button>
+                </div>
+                <small class="field-hint">
+                  {{ selectedCategoryId ? 'يمكن تغيير العقدة الأم لإعادة تنظيم التسلسل الهرمي.' : 'إذا لم يتم اختيار عقدة، سيتم إنشاء عقدة جذرية أو عقدة جديدة حسب الاختيار.' }}
+                </small>
 
-            <label for="parentDisplay">العقدة الأم</label>
-            <div class="parent-picker-row">
-              <input pInputText id="parentDisplay" [value]="parentDisplayLabel" readonly />
-              <button
-                pButton
-                type="button"
-                class="p-button-outlined"
-                icon="pi pi-sitemap"
-                label="اختيار العقدة الأم"
-                (click)="openParentPicker(parentPicker, $event)">
-              </button>
-            </div>
+                <p-overlayPanel #parentPicker [showCloseIcon]="true" [appendTo]="'body'" styleClass="parent-overlay">
+                  <div class="overlay-content">
+                    <button
+                      pButton
+                      type="button"
+                      class="p-button-text"
+                      icon="pi pi-home"
+                      label="اختيار الجذر (بدون عقدة أم)"
+                      (click)="onChooseRootParent(parentPicker)">
+                    </button>
 
-            <p-overlayPanel #parentPicker [showCloseIcon]="true" styleClass="parent-overlay">
-              <div class="overlay-content">
+                    <p-tree
+                      class="parent-picker-tree"
+                      [value]="parentPickerTree"
+                      [filter]="true"
+                      filterPlaceholder="ابحث داخل الشجرة"
+                      selectionMode="single"
+                      emptyMessage="لا توجد عقد متاحة"
+                      (onNodeSelect)="onParentNodeSelect($event, parentPicker)">
+                      <ng-template let-node pTemplate="default">
+                        <div class="parent-node-content">
+                          <i class="pi" [ngClass]="node.children?.length ? 'pi-folder' : 'pi-file'"></i>
+                          <span>{{ node.data?.categoryName ?? node.label }}</span>
+                        </div>
+                      </ng-template>
+                    </p-tree>
+                  </div>
+                </p-overlayPanel>
+              </section>
+
+              <section class="field-group status-group">
+                <h6>الحالة</h6>
+                <div class="switch-row">
+                  <p-inputSwitch inputId="categoryActive" formControlName="isActive"></p-inputSwitch>
+                  <span class="status-text" [class.inactive]="categoryForm.get('isActive')?.value !== true">
+                    {{ categoryStatusLabel }}
+                  </span>
+                </div>
+              </section>
+
+              <div class="editor-actions">
+                <button
+                  pButton
+                  type="button"
+                  [label]="editingCategoryId ? 'حفظ تعديل العقدة' : 'إضافة العقدة'"
+                  [disabled]="!canSaveCategory"
+                  [loading]="savingCategory"
+                  (click)="onSaveCategory()">
+                </button>
+
                 <button
                   pButton
                   type="button"
                   class="p-button-text"
-                  icon="pi pi-home"
-                  label="اختيار الجذر (بدون عقدة أم)"
-                  (click)="onChooseRootParent(parentPicker)">
+                  icon="pi pi-replay"
+                  label="تهيئة نموذج جديد"
+                  (click)="onStartCreateCategory()">
                 </button>
-
-                <p-tree
-                  [value]="parentPickerTree"
-                  selectionMode="single"
-                  (onNodeSelect)="onParentNodeSelect($event, parentPicker)">
-                </p-tree>
               </div>
-            </p-overlayPanel>
+            </form>
+          </section>
 
-            <label for="categoryActive">الحالة</label>
-            <p-inputSwitch inputId="categoryActive" formControlName="isActive"></p-inputSwitch>
+          <aside class="request-type-panel request-type-actions-panel">
+            <h5>عمليات سريعة</h5>
+            <p>ابدأ بإضافة عقدة جديدة، أو اختر عقدة من الشجرة لتفعيل التعديل والحذف.</p>
 
             <button
               pButton
               type="button"
-              [label]="editingCategoryId ? 'حفظ تعديل العقدة' : 'إضافة عقدة'"
-              [disabled]="!canSaveCategory"
-              [loading]="savingCategory"
-              (click)="onSaveCategory()">
+              icon="pi pi-plus"
+              label="إضافة عقدة"
+              class="p-button-outlined"
+              (click)="onStartCreateCategory()">
             </button>
-          </form>
+
+            <button
+              pButton
+              type="button"
+              icon="pi pi-pencil"
+              label="تعديل المحدد"
+              class="p-button-text"
+              [disabled]="selectedCategoryId == null"
+              (click)="onStartEditSelectedCategory()">
+            </button>
+
+            <button
+              pButton
+              type="button"
+              icon="pi pi-trash"
+              label="حذف المحدد"
+              class="p-button-text p-button-danger"
+              [loading]="deletingCategory"
+              [disabled]="selectedCategoryId == null || deletingCategory"
+              (click)="onDeleteSelectedCategory()">
+            </button>
+
+            <div class="actions-status" *ngIf="selectedCategoryId; else noCategorySelected">
+              <span>العقدة النشطة الآن</span>
+              <strong>{{ selectedCategoryPathLabel }}</strong>
+              <small>تمت تعبئة النموذج بقيم العقدة المحددة ويمكنك حفظ التعديل مباشرة.</small>
+            </div>
+
+            <ng-template #noCategorySelected>
+              <div class="actions-status empty">
+                <span>لا توجد عقدة محددة</span>
+                <small>يمكنك البدء بإضافة عقدة جذرية من النموذج.</small>
+              </div>
+            </ng-template>
+          </aside>
+
+          <section class="request-type-panel request-type-tree-panel">
+            <header class="panel-header">
+              <div>
+                <h5>هيكل الشجرة</h5>
+                <small>تسلسل هرمي واضح لأنواع الطلب مع دعم التحديد والبحث</small>
+              </div>
+              <p-tag
+                [value]="selectedCategoryId ? 'تم تحديد عقدة' : 'لم يتم تحديد عقدة بعد'"
+                [severity]="selectedCategoryId ? 'success' : 'warning'">
+              </p-tag>
+            </header>
+
+            <div class="tree-empty-state" *ngIf="!loadingTree && categoryTree.length === 0">
+              لا توجد عقد في هذه الشجرة حتى الآن. أضف أول عقدة من النموذج لبدء البناء.
+            </div>
+
+            <p-tree
+              class="request-type-tree"
+              [value]="categoryTree"
+              [loading]="loadingTree"
+              [filter]="true"
+              filterPlaceholder="ابحث داخل أنواع الطلب"
+              selectionMode="single"
+              [(selection)]="selectedCategoryNode"
+              emptyMessage="لا توجد عقد لعرضها"
+              (onNodeSelect)="onCategoryTreeNodeSelect()">
+              <ng-template let-node pTemplate="default">
+                <div class="tree-node-content" [class.inactive]="node.data?.isActive === false">
+                  <i class="pi node-icon" [ngClass]="node.children?.length ? 'pi-folder-open' : 'pi-file'"></i>
+                  <span class="node-title">{{ node.data?.categoryName ?? node.label }}</span>
+                  <span class="node-id">#{{ node.data?.categoryId }}</span>
+                  <span class="node-state" [class.inactive]="node.data?.isActive === false">
+                    {{ node.data?.isActive === false ? 'غير مفعلة' : 'مفعلة' }}
+                  </span>
+                </div>
+              </ng-template>
+            </p-tree>
+          </section>
         </div>
 
         <ng-template #selectApplicationFirst>
           <div class="empty-state">
-            اختر تطبيقًا من القائمة أولًا لتحميل الشجرة المرتبطة به.
+            اختر تطبيقًا من القائمة أولًا لتحميل شجرة أنواع الطلب المرتبطة به.
           </div>
         </ng-template>
       </section>
@@ -288,7 +434,7 @@
   <section class="card phase-card" [class.dimmed]="activePhase !== 2">
     <header class="card-header">
       <div>
-        <h3>المرحلة الثانية: إدارة الجروبات للنود المختارة</h3>
+        <h3>المرحلة الثانية: إدارة المجموعات للعقدة المختارة</h3>
         <small>مجموعة رئيسية / مجموعة فرعية مع تسلسل هرمي آمن</small>
       </div>
       <p-tag [value]="'اكتمال المرحلة: ' + phase2CompletionPercent + '%'" severity="info"></p-tag>
@@ -296,7 +442,7 @@
 
     <div *ngIf="selectedCategoryId; else selectNodeFirst" class="phase-two-layout">
       <div class="context-banner">
-        <strong>النود المختارة:</strong>
+        <strong>العقدة المختارة:</strong>
         <span>{{ selectedCategoryPathLabel }}</span>
       </div>
 
@@ -339,7 +485,7 @@
               pInputText
               id="groupName"
               formControlName="groupName"
-              placeholder="اسم الجروب" />
+              placeholder="اسم المجموعة" />
 
             <label for="groupDescription">الوصف (اختياري)</label>
             <textarea

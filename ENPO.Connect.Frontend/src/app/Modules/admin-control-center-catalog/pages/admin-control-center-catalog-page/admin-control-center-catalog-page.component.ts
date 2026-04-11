@@ -60,7 +60,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
   groupTree: TreeNode[] = [];
   selectedGroupNode: TreeNode | null = null;
-  groupParentOptions: ParentGroupOption[] = [{ label: 'بدون Parent (Main Group)', value: null }];
+  groupParentOptions: ParentGroupOption[] = [{ label: 'بدون مجموعة أم (مجموعة رئيسية)', value: null }];
 
   editingApplicationId: string | null = null;
   editingCategoryId: number | null = null;
@@ -127,7 +127,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   get selectedCategoryPathLabel(): string {
     const categoryId = this.selectedCategoryId;
     if (!categoryId) {
-      return 'لا يوجد Node محددة';
+      return 'لا توجد عقدة محددة';
     }
 
     return this.categoryPathIndex.get(categoryId) ?? `#${categoryId}`;
@@ -141,10 +141,26 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   get parentDisplayLabel(): string {
     const parentCategoryId = this.toNonNegativeInt(this.categoryForm.get('parentCategoryId')?.value);
     if (parentCategoryId === 0) {
-      return 'جذر (بدون Parent)';
+      return 'الجذر (بدون عقدة أم)';
     }
 
     return this.categoryPathIndex.get(parentCategoryId) ?? `#${parentCategoryId}`;
+  }
+
+  get categoryEditorHelperText(): string {
+    if (this.editingCategoryId != null) {
+      return 'أنت في وضع التعديل، وأي حفظ سيُحدِّث العقدة الحالية مباشرة.';
+    }
+
+    if (this.selectedCategoryId != null) {
+      return 'أنت في وضع الإضافة، وسيتم إنشاء عقدة جديدة أسفل العقدة المحددة ما لم تغيّر العقدة الأم.';
+    }
+
+    return 'ابدأ بإضافة عقدة جذرية أو اختر عقدة من الشجرة ثم عدّل بياناتها.';
+  }
+
+  get categoryStatusLabel(): string {
+    return this.categoryForm.get('isActive')?.value === true ? 'العقدة مفعلة' : 'العقدة غير مفعلة';
   }
 
   get canSaveApplication(): boolean {
@@ -219,7 +235,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
   onActivatePhase(phase: UiPhase): void {
     if (phase === 2 && !this.selectedCategoryId) {
-      this.showMessage('warn', 'اختر Node من الشجرة أولًا للانتقال إلى المرحلة الثانية.');
+      this.showMessage('warn', 'اختر عقدة من الشجرة أولًا للانتقال إلى المرحلة الثانية.');
       return;
     }
 
@@ -392,14 +408,14 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   onDeleteSelectedCategory(): void {
     const selected = this.selectedCategory;
     if (!selected || this.deletingCategory) {
-      this.showMessage('warn', 'اختر Node من الشجرة أولًا للحذف.');
+      this.showMessage('warn', 'اختر عقدة من الشجرة أولًا للحذف.');
       return;
     }
 
     this.deletingCategory = true;
     this.adminCatalogController.diagnoseCategoryDelete(selected.categoryId).subscribe({
       next: response => {
-        if (!this.ensureSuccess(response, 'تعذر تشخيص حذف النود.')) {
+        if (!this.ensureSuccess(response, 'تعذر تشخيص حذف العقدة.')) {
           return;
         }
 
@@ -410,7 +426,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
         }
 
         if (diagnostics.isBlocked) {
-          this.showMessage('warn', diagnostics.decisionReason ?? 'لا يمكن حذف النود في حالتها الحالية.');
+          this.showMessage('warn', diagnostics.decisionReason ?? 'لا يمكن حذف العقدة في حالتها الحالية.');
           return;
         }
 
@@ -421,18 +437,18 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
         this.adminCatalogController.deleteCategory(selected.categoryId).subscribe({
           next: deleteResponse => {
-            if (!this.ensureSuccess(deleteResponse, 'تعذر حذف النود.')) {
+            if (!this.ensureSuccess(deleteResponse, 'تعذر حذف العقدة.')) {
               return;
             }
 
             this.handleCategoryDeleteResult(selected.categoryId, deleteResponse.data);
           },
-          error: () => this.showMessage('error', 'حدث خطأ أثناء حذف النود.'),
+          error: () => this.showMessage('error', 'حدث خطأ أثناء حذف العقدة.'),
           complete: () => { this.deletingCategory = false; }
         });
       },
       error: () => {
-        this.showMessage('error', 'حدث خطأ أثناء تشخيص حذف النود.');
+        this.showMessage('error', 'حدث خطأ أثناء تشخيص حذف العقدة.');
         this.deletingCategory = false;
       }
     });
@@ -472,6 +488,16 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     if (!selected) {
       return;
     }
+
+    this.editingCategoryId = selected.categoryId;
+    this.categoryForm.reset(
+      {
+        categoryName: selected.categoryName,
+        parentCategoryId: this.toNonNegativeInt(selected.parentCategoryId),
+        isActive: selected.isActive
+      },
+      { emitEvent: false }
+    );
 
     this.activePhase = 2;
     this.persistCatalogContextCache(selected.categoryId, this.selectedApplicationId);
@@ -567,7 +593,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   onStartEditSelectedGroup(): void {
     const selected = this.selectedGroup;
     if (!selected) {
-      this.showMessage('warn', 'اختر Group أولًا للتعديل.');
+      this.showMessage('warn', 'اختر مجموعة أولًا للتعديل.');
       return;
     }
 
@@ -587,13 +613,13 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   onDeleteSelectedGroup(): void {
     const selected = this.selectedGroup;
     if (!selected || this.deletingGroup) {
-      this.showMessage('warn', 'اختر Group أولًا للحذف.');
+      this.showMessage('warn', 'اختر مجموعة أولًا للحذف.');
       return;
     }
 
     const confirmationMessage = [
-      `سيتم حذف الجروب: ${selected.groupName} (#${selected.groupId}).`,
-      'إذا كان للجروب أبناء فلن يتم الحذف.',
+      `سيتم حذف المجموعة: ${selected.groupName} (#${selected.groupId}).`,
+      'إذا كان للمجموعة أبناء فلن يتم الحذف.',
       'هل تريد المتابعة؟'
     ].join('\n');
 
@@ -604,11 +630,11 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     this.deletingGroup = true;
     this.adminCatalogController.deleteGroup(selected.groupId).subscribe({
       next: response => {
-        if (!this.ensureSuccess(response, 'تعذر حذف الجروب.')) {
+        if (!this.ensureSuccess(response, 'تعذر حذف المجموعة.')) {
           return;
         }
 
-        this.showMessage('success', response.data?.message ?? 'تم حذف الجروب بنجاح.');
+        this.showMessage('success', response.data?.message ?? 'تم حذف المجموعة بنجاح.');
         this.prepareNewGroup();
 
         const categoryId = this.selectedCategoryId;
@@ -616,7 +642,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
           this.loadGroupsByCategory(categoryId);
         }
       },
-      error: () => this.showMessage('error', 'حدث خطأ أثناء حذف الجروب.'),
+      error: () => this.showMessage('error', 'حدث خطأ أثناء حذف المجموعة.'),
       complete: () => { this.deletingGroup = false; }
     });
   }
@@ -625,7 +651,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     const selectedApplicationId = this.selectedApplicationId;
     const selectedCategoryId = this.selectedCategoryId;
     if (!selectedApplicationId || !selectedCategoryId) {
-      this.showMessage('warn', 'اختر تطبيقًا وNode أولًا قبل إدارة الجروبات.');
+      this.showMessage('warn', 'اختر تطبيقًا وعقدة أولًا قبل إدارة المجموعات.');
       return;
     }
 
@@ -641,7 +667,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     const isActive = this.groupForm.get('isActive')?.value === true;
 
     if (!groupName) {
-      this.showMessage('warn', 'اسم الجروب مطلوب.');
+      this.showMessage('warn', 'اسم المجموعة مطلوب.');
       return;
     }
 
@@ -664,16 +690,16 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
       this.adminCatalogController.updateGroup(this.editingGroupId, request).subscribe({
         next: response => {
-          if (!this.ensureSuccess(response, 'تعذر تعديل الجروب.')) {
+          if (!this.ensureSuccess(response, 'تعذر تعديل المجموعة.')) {
             return;
           }
 
           const updatedGroupId = response.data?.groupId ?? this.editingGroupId;
-          this.showMessage('success', 'تم تعديل الجروب بنجاح.');
+          this.showMessage('success', 'تم تعديل المجموعة بنجاح.');
           this.prepareNewGroup(parentGroupId);
           this.loadGroupsByCategory(selectedCategoryId, updatedGroupId);
         },
-        error: () => this.showMessage('error', 'حدث خطأ أثناء تعديل الجروب.'),
+        error: () => this.showMessage('error', 'حدث خطأ أثناء تعديل المجموعة.'),
         complete: () => { this.savingGroup = false; }
       });
 
@@ -692,16 +718,16 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
     this.adminCatalogController.createGroup(createRequest).subscribe({
       next: response => {
-        if (!this.ensureSuccess(response, 'تعذر إنشاء الجروب.')) {
+        if (!this.ensureSuccess(response, 'تعذر إنشاء المجموعة.')) {
           return;
         }
 
         const createdGroupId = response.data?.groupId ?? null;
-        this.showMessage('success', 'تم إنشاء الجروب بنجاح.');
+        this.showMessage('success', 'تم إنشاء المجموعة بنجاح.');
         this.prepareNewGroup(parentGroupId);
         this.loadGroupsByCategory(selectedCategoryId, createdGroupId);
       },
-      error: () => this.showMessage('error', 'حدث خطأ أثناء إنشاء الجروب.'),
+      error: () => this.showMessage('error', 'حدث خطأ أثناء إنشاء المجموعة.'),
       complete: () => { this.savingGroup = false; }
     });
   }
@@ -762,7 +788,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
     this.adminCatalogController.getCategoryTree(applicationId).subscribe({
       next: response => {
-        if (!this.ensureSuccess(response, 'تعذر تحميل الشجرة من جدول CDCategory.')) {
+        if (!this.ensureSuccess(response, 'تعذر تحميل شجرة الأنواع من قاعدة البيانات.')) {
           this.clearTreeState();
           this.clearGroupsState();
           return;
@@ -803,7 +829,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
     this.adminCatalogController.getGroupsByCategory(categoryId).subscribe({
       next: response => {
-        if (!this.ensureSuccess(response, 'تعذر تحميل الجروبات الخاصة بالنود المختارة.')) {
+        if (!this.ensureSuccess(response, 'تعذر تحميل المجموعات الخاصة بالعقدة المختارة.')) {
           this.clearGroupsState();
           return;
         }
@@ -823,7 +849,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
       },
       error: () => {
         this.clearGroupsState();
-        this.showMessage('error', 'حدث خطأ أثناء تحميل الجروبات.');
+        this.showMessage('error', 'حدث خطأ أثناء تحميل المجموعات.');
       },
       complete: () => { this.loadingGroups = false; }
     });
@@ -921,7 +947,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   }
 
   private buildGroupParentOptions(): void {
-    const options: ParentGroupOption[] = [{ label: 'بدون Parent (Main Group)', value: null }];
+    const options: ParentGroupOption[] = [{ label: 'بدون مجموعة أم (مجموعة رئيسية)', value: null }];
 
     for (const [groupId, path] of this.groupPathIndex.entries()) {
       options.push({ label: path, value: groupId });
@@ -948,11 +974,11 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     }
 
     if (candidateParentGroupId === this.editingGroupId) {
-      return 'لا يمكن اختيار نفس الجروب كأب له.';
+      return 'لا يمكن اختيار نفس المجموعة كأب لها.';
     }
 
     if (this.isDescendantOfEditingGroup(candidateParentGroupId)) {
-      return 'لا يمكن اختيار جروب ابن كأب للجروب الحالي.';
+      return 'لا يمكن اختيار مجموعة ابنة كأب للمجموعة الحالية.';
     }
 
     return null;
@@ -1023,7 +1049,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
 
   private handleCategoryDeleteResult(categoryId: number, result: AdminCatalogDeleteResultDto | undefined): void {
     const message = this.normalizeString(result?.message)
-      ?? (result?.mode === 'soft' ? 'تم حذف النود حذفًا منطقيًا.' : 'تم حذف النود حذفًا نهائيًا.');
+      ?? (result?.mode === 'soft' ? 'تم حذف العقدة حذفًا منطقيًا.' : 'تم حذف العقدة حذفًا نهائيًا.');
 
     this.showMessage('success', message);
 
@@ -1041,26 +1067,26 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   }
 
   private buildApplicationDeleteConfirmationMessage(diagnostics: AdminCatalogApplicationDeleteDiagnosticsDto): string {
-    const modeLabel = diagnostics.canHardDelete ? 'حذف نهائي (Hard Delete)' : 'حذف منطقي (Soft Delete)';
+    const modeLabel = diagnostics.canHardDelete ? 'حذف نهائي' : 'حذف منطقي';
     return [
       `سيتم تنفيذ: ${modeLabel}`,
       `التطبيق: ${diagnostics.applicationId}`,
-      `روابط CDCategory: ${diagnostics.linkedCategoriesCount}`,
-      `روابط CDMend: ${diagnostics.linkedFieldsCount}`,
-      `روابط Groups: ${diagnostics.linkedGroupsCount}`,
+      `روابط أنواع الطلب: ${diagnostics.linkedCategoriesCount}`,
+      `روابط الحقول: ${diagnostics.linkedFieldsCount}`,
+      `روابط المجموعات: ${diagnostics.linkedGroupsCount}`,
       diagnostics.decisionReason ?? '',
       'هل تريد المتابعة؟'
     ].filter(item => item.trim().length > 0).join('\n');
   }
 
   private buildCategoryDeleteConfirmationMessage(diagnostics: AdminCatalogCategoryDeleteDiagnosticsDto): string {
-    const modeLabel = diagnostics.canHardDelete ? 'حذف نهائي (Hard Delete)' : 'حذف منطقي (Soft Delete)';
+    const modeLabel = diagnostics.canHardDelete ? 'حذف نهائي' : 'حذف منطقي';
     return [
       `سيتم تنفيذ: ${modeLabel}`,
-      `Children فعالة: ${diagnostics.childrenCount}`,
-      `روابط Fields: ${diagnostics.linkedFieldsCount}`,
-      `روابط Requests/Messages: ${diagnostics.linkedMessagesCount}`,
-      `روابط Groups: ${diagnostics.linkedGroupsCount}`,
+      `العقد الفرعية الفعالة: ${diagnostics.childrenCount}`,
+      `روابط الحقول: ${diagnostics.linkedFieldsCount}`,
+      `روابط الطلبات/الرسائل: ${diagnostics.linkedMessagesCount}`,
+      `روابط المجموعات: ${diagnostics.linkedGroupsCount}`,
       diagnostics.decisionReason ?? '',
       'هل تريد المتابعة؟'
     ].filter(item => item.trim().length > 0).join('\n');
@@ -1078,7 +1104,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   private clearGroupsState(): void {
     this.groupTree = [];
     this.selectedGroupNode = null;
-    this.groupParentOptions = [{ label: 'بدون Parent (Main Group)', value: null }];
+    this.groupParentOptions = [{ label: 'بدون مجموعة أم (مجموعة رئيسية)', value: null }];
     this.groupsLoadedForCategoryId = null;
     this.groupIndex.clear();
     this.groupPathIndex.clear();
