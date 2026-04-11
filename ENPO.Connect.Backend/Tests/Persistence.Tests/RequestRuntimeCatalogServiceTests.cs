@@ -30,6 +30,16 @@ public class RequestRuntimeCatalogServiceTests
         SeedFieldBinding(connectContext, 101);
         SeedFieldBinding(connectContext, 102);
         SeedFieldBinding(connectContext, 201);
+        connectContext.SubjectTypeAdminSettings.Add(new SubjectTypeAdminSetting
+        {
+            CategoryId = 101,
+            DisplayOrder = 1,
+            DefaultViewMode = "standard",
+            AllowRequesterOverride = false,
+            SettingsJson = "{\"envelopeDisplayName\":\"ظرف\"}",
+            LastModifiedBy = "SYSTEM",
+            LastModifiedAtUtc = DateTime.UtcNow
+        });
 
         SeedUserUnit(gpaContext, "unit-user", 100);
 
@@ -57,6 +67,11 @@ public class RequestRuntimeCatalogServiceTests
         Assert.Contains(101, startableIds);
         Assert.DoesNotContain(102, startableIds);
         Assert.DoesNotContain(201, startableIds);
+
+        var requestNode = FlattenNodes(response.Data)
+            .FirstOrDefault(node => node.CategoryId == 101);
+        Assert.NotNull(requestNode);
+        Assert.Equal("ظرف", requestNode!.EnvelopeDisplayName);
     }
 
     [Fact]
@@ -102,6 +117,10 @@ public class RequestRuntimeCatalogServiceTests
             .Select(node => node.CategoryId)
             .ToList();
         Assert.Contains(301, allowedStartable);
+        var allowedNode = FlattenNodes(allowedResponse.Data)
+            .FirstOrDefault(node => node.CategoryId == 301);
+        Assert.NotNull(allowedNode);
+        Assert.Equal("حزمة طلبات جديدة", allowedNode!.EnvelopeDisplayName);
 
         var deniedResponse = await service.GetAvailableRegistrationTreeAsync("another-user", "APP2");
         Assert.Empty(deniedResponse.Errors);

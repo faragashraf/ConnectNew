@@ -1,8 +1,8 @@
 <div class="runtime-catalog-page" dir="rtl">
   <div class="page-header">
     <div>
-      <h1>شجرة الطلبات المتاحة للتسجيل</h1>
-      <p>يعرض هذا القسم الطلبات التي يمكن للمستخدم الحالي البدء بها فعليًا حسب إعدادات الـ runtime.</p>
+      <h1>مدخل تسجيل الطلبات أثناء التشغيل</h1>
+      <p>اختر الطلب من الشجرة ثم أكمل التسجيل بالكامل داخل نفس الشاشة دون أي انتقال خارجي.</p>
     </div>
     <button pButton type="button" class="p-button-outlined p-button-sm" label="تحديث" (click)="loadCatalog()"></button>
   </div>
@@ -64,54 +64,299 @@
         class="p-button-text p-button-sm"
         label="طي الكل"
         (click)="collapseAll()"></button>
-      <button
-        pButton
-        type="button"
-        class="p-button-sm"
-        label="بدء الطلب المحدد"
-        (click)="startSelectedRequest()"></button>
     </div>
   </div>
 
-  <div class="tree-panel" *ngIf="!loading; else loadingState">
-    <ng-container *ngIf="treeNodes.length > 0; else emptyState">
-      <p-tree
-        [value]="treeNodes"
-        selectionMode="single"
-        [(selection)]="selectedNode"
-        (onNodeSelect)="onNodeSelect($event)">
-        <ng-template pTemplate="default" let-node>
-          <div class="tree-node-layout">
-            <div class="tree-node-main">
-              <strong>{{ node.label }}</strong>
-              <span class="node-meta" *ngIf="node.data?.startStageName">مرحلة البداية: {{ node.data?.startStageName }}</span>
-              <span class="node-meta" *ngIf="node.data?.organizationalScopeLabel">{{ node.data?.organizationalScopeLabel }}</span>
-              <span class="node-reason" *ngIf="(node.data?.reasons?.length ?? 0) > 0">{{ node.data?.reasons?.[0] }}</span>
-            </div>
-            <button
-              *ngIf="node.data?.canStart"
-              pButton
-              type="button"
-              class="p-button-sm p-button-outlined"
-              label="بدء الطلب"
-              (click)="onStartRequestFromNode(node, $event)"></button>
+  <div class="workspace-layout">
+    <section class="workspace-main">
+      <ng-container *ngIf="hasSelectedRequest; else selectRequestState">
+        <div class="request-header">
+          <div>
+            <h2>{{ selectedRequestLabel }}</h2>
+            <p>أكمل البيانات التالية ثم اضغط تسجيل الطلب.</p>
           </div>
-        </ng-template>
-      </p-tree>
-    </ng-container>
+          <button
+            pButton
+            type="button"
+            class="p-button-sm"
+            label="تسجيل الطلب"
+            [loading]="submittingRequest"
+            [disabled]="!canSubmitRequest"
+            (click)="submitRequest()">
+          </button>
+        </div>
+
+        <div class="state-box" *ngIf="runtimeLoading">
+          <p-progressSpinner styleClass="small-spinner" strokeWidth="4"></p-progressSpinner>
+          <span>جاري بناء نموذج الطلب...</span>
+        </div>
+
+        <form class="request-form" [formGroup]="requestForm" *ngIf="!runtimeLoading" novalidate>
+          <div class="base-grid">
+            <div class="field" *ngIf="showDirectionSelector">
+              <label>اتجاه الطلب</label>
+              <p-dropdown
+                formControlName="documentDirection"
+                [options]="directionOptions"
+                optionLabel="label"
+                optionValue="value"
+                appendTo="body"
+                [showClear]="false"
+                (onChange)="onDirectionChange()">
+              </p-dropdown>
+            </div>
+
+            <div class="field readonly" *ngIf="showDirectionReadonly">
+              <label>اتجاه الطلب</label>
+              <div class="readonly-value">{{ directionReadonlyLabel }}</div>
+            </div>
+
+            <div class="field">
+              <label for="requestSubject">عنوان الطلب</label>
+              <input id="requestSubject" pInputText type="text" formControlName="subject" placeholder="عنوان مختصر للطلب" />
+            </div>
+
+            <div class="field full-width">
+              <label for="requestDescription">وصف الطلب</label>
+              <textarea
+                id="requestDescription"
+                pInputTextarea
+                rows="3"
+                formControlName="description"
+                placeholder="اكتب وصفًا موجزًا للطلب"></textarea>
+            </div>
+
+            <div class="field full-width envelope-field">
+              <div class="envelope-header">
+                <label>{{ envelopeTerminology.selectLabel }}</label>
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-text p-button-sm"
+                  [label]="envelopeTerminology.addButtonLabel"
+                  (click)="openNewEnvelopeDialog()">
+                </button>
+              </div>
+              <p-dropdown
+                formControlName="envelopeId"
+                [options]="availableEnvelopes"
+                optionLabel="envelopeRef"
+                optionValue="envelopeId"
+                [showClear]="true"
+                [filter]="true"
+                [disabled]="envelopeLoading"
+                appendTo="body"
+                [placeholder]="envelopeTerminology.selectLabel">
+                <ng-template pTemplate="selectedItem" let-selected>
+                  <span *ngIf="selected?.envelopeRef; else emptySelected">
+                    {{ selected.envelopeRef }}
+                  </span>
+                </ng-template>
+                <ng-template #emptySelected>
+                  <span>بدون اختيار</span>
+                </ng-template>
+                <ng-template pTemplate="item" let-item>
+                  <div class="envelope-option">
+                    <strong>{{ item.envelopeRef }}</strong>
+                    <small>{{ item.incomingDate | date:'shortDate' }}</small>
+                  </div>
+                </ng-template>
+              </p-dropdown>
+              <small class="hint" *ngIf="envelopeLoading">
+                جاري تحميل قائمة {{ envelopeTerminology.displayName }}...
+              </small>
+              <small class="hint" *ngIf="!envelopeLoading && availableEnvelopes.length === 0">
+                {{ envelopeTerminology.listEmptyMessage }}
+              </small>
+            </div>
+          </div>
+
+          <section class="dynamic-fields" formGroupName="dynamicFields">
+            <div class="group-card" *ngFor="let group of runtimeFieldGroups">
+              <h3>{{ group.groupName }}</h3>
+
+              <div class="field-grid">
+                <div class="field" *ngFor="let field of group.fields">
+                  <label [attr.for]="field.controlName">
+                    {{ field.label }}
+                    <span class="required" *ngIf="field.required">*</span>
+                  </label>
+
+                  <input
+                    *ngIf="field.inputType === 'text' || field.inputType === 'number'"
+                    [id]="field.controlName"
+                    pInputText
+                    [type]="field.inputType === 'number' ? 'number' : 'text'"
+                    [formControlName]="field.controlName"
+                    [placeholder]="field.placeholder || ''" />
+
+                  <textarea
+                    *ngIf="field.inputType === 'textarea'"
+                    [id]="field.controlName"
+                    pInputTextarea
+                    rows="3"
+                    [formControlName]="field.controlName"
+                    [placeholder]="field.placeholder || ''"></textarea>
+
+                  <p-dropdown
+                    *ngIf="field.inputType === 'dropdown'"
+                    [id]="field.controlName"
+                    [formControlName]="field.controlName"
+                    [options]="field.options"
+                    optionLabel="label"
+                    optionValue="value"
+                    [showClear]="true"
+                    appendTo="body"
+                    [placeholder]="field.placeholder || 'اختر قيمة'">
+                  </p-dropdown>
+
+                  <p-calendar
+                    *ngIf="field.inputType === 'date' || field.inputType === 'datetime'"
+                    [id]="field.controlName"
+                    [formControlName]="field.controlName"
+                    [showIcon]="true"
+                    [showTime]="field.inputType === 'datetime'"
+                    dateFormat="yy-mm-dd"
+                    [showButtonBar]="true"
+                    appendTo="body">
+                  </p-calendar>
+
+                  <p-inputSwitch *ngIf="field.inputType === 'toggle'" [formControlName]="field.controlName"></p-inputSwitch>
+
+                  <small class="field-error" *ngIf="getFieldError(field) as fieldError">{{ fieldError }}</small>
+                </div>
+              </div>
+            </div>
+
+            <p class="empty-text" *ngIf="runtimeFieldGroups.length === 0">
+              لا توجد حقول ديناميكية ظاهرة لهذا النوع في السياق الحالي.
+            </p>
+          </section>
+        </form>
+      </ng-container>
+    </section>
+
+    <aside class="tree-sidebar" *ngIf="!loading; else treeLoadingState">
+      <div class="tree-header">
+        <h3>شجرة الطلبات</h3>
+        <p>اختر الطلب من هذه الشجرة ليظهر النموذج مباشرة.</p>
+      </div>
+
+      <ng-container *ngIf="treeNodes.length > 0; else emptyTreeState">
+        <p-tree
+          [value]="treeNodes"
+          selectionMode="single"
+          [(selection)]="selectedNode"
+          (onNodeSelect)="onNodeSelect($event)">
+          <ng-template pTemplate="default" let-node>
+            <div class="tree-node-layout">
+              <div class="tree-node-main">
+                <strong>{{ node.label }}</strong>
+                <span class="node-meta" *ngIf="node.data?.startStageName">مرحلة البداية: {{ node.data?.startStageName }}</span>
+                <span class="node-meta" *ngIf="node.data?.organizationalScopeLabel">{{ node.data?.organizationalScopeLabel }}</span>
+                <span class="node-reason" *ngIf="(node.data?.reasons?.length ?? 0) > 0">{{ node.data?.reasons?.[0] }}</span>
+              </div>
+              <button
+                *ngIf="node.data?.canStart"
+                pButton
+                type="button"
+                class="p-button-sm p-button-outlined"
+                label="فتح النموذج"
+                (click)="onStartRequestFromNode(node, $event)">
+              </button>
+            </div>
+          </ng-template>
+        </p-tree>
+      </ng-container>
+    </aside>
   </div>
 
-  <ng-template #loadingState>
+  <ng-template #selectRequestState>
     <div class="state-box">
-      <p-progressSpinner styleClass="small-spinner" strokeWidth="4"></p-progressSpinner>
-      <span>جاري تحميل الشجرة...</span>
+      <i class="pi pi-sitemap"></i>
+      <span>اختر طلبًا متاحًا من الشجرة اليمنى لبدء التسجيل.</span>
     </div>
   </ng-template>
 
-  <ng-template #emptyState>
-    <div class="state-box">
+  <ng-template #treeLoadingState>
+    <aside class="tree-sidebar">
+      <div class="state-box compact">
+        <p-progressSpinner styleClass="small-spinner" strokeWidth="4"></p-progressSpinner>
+        <span>جاري تحميل الشجرة...</span>
+      </div>
+    </aside>
+  </ng-template>
+
+  <ng-template #emptyTreeState>
+    <div class="state-box compact">
       <i class="pi pi-sitemap"></i>
       <span>لا توجد طلبات متاحة للتسجيل بالمرشحات الحالية.</span>
     </div>
   </ng-template>
+
+  <p-dialog
+    [(visible)]="showNewEnvelopeDialog"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [dismissableMask]="!creatingEnvelope"
+    [closable]="!creatingEnvelope"
+    [style]="{ width: '34rem', maxWidth: '95vw' }"
+    appendTo="body">
+    <ng-template pTemplate="header">
+      {{ envelopeTerminology.dialogTitle }}
+    </ng-template>
+
+    <form class="new-envelope-form" [formGroup]="newEnvelopeForm" novalidate>
+      <div class="field">
+        <label for="newEnvelopeRef">{{ envelopeTerminology.nameLabel }} <span class="required">*</span></label>
+        <input id="newEnvelopeRef" pInputText type="text" formControlName="envelopeRef" />
+      </div>
+
+      <div class="field">
+        <label for="newEnvelopeDate">تاريخ الورود <span class="required">*</span></label>
+        <p-calendar
+          inputId="newEnvelopeDate"
+          formControlName="incomingDate"
+          dateFormat="yy-mm-dd"
+          [showIcon]="true"
+          [showButtonBar]="true"
+          appendTo="body">
+        </p-calendar>
+      </div>
+
+      <div class="field">
+        <label for="newEnvelopeSource">الجهة المرسلة</label>
+        <input id="newEnvelopeSource" pInputText type="text" formControlName="sourceEntity" />
+      </div>
+
+      <div class="field">
+        <label for="newEnvelopeDelegate">مندوب التسليم</label>
+        <input id="newEnvelopeDelegate" pInputText type="text" formControlName="deliveryDelegate" />
+      </div>
+
+      <div class="field">
+        <label for="newEnvelopeNotes">ملاحظات</label>
+        <textarea id="newEnvelopeNotes" pInputTextarea rows="3" formControlName="notes"></textarea>
+      </div>
+    </form>
+
+    <ng-template pTemplate="footer">
+      <button
+        pButton
+        type="button"
+        class="p-button-text"
+        label="إلغاء"
+        [disabled]="creatingEnvelope"
+        (click)="showNewEnvelopeDialog = false">
+      </button>
+      <button
+        pButton
+        type="button"
+        label="حفظ"
+        [loading]="creatingEnvelope"
+        (click)="createEnvelope()">
+      </button>
+    </ng-template>
+  </p-dialog>
 </div>

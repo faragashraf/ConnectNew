@@ -21,6 +21,8 @@ type SelectOption<T = string> = {
   value: T;
 };
 
+const DEFAULT_ENVELOPE_DISPLAY_NAME = 'حزمة طلبات جديدة';
+
 @Component({
   selector: 'app-admin-control-center-catalog-display-settings-workspace',
   templateUrl: './admin-control-center-catalog-display-settings-workspace.component.html',
@@ -32,7 +34,8 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
 
   readonly settingsForm: FormGroup = this.fb.group({
     defaultViewMode: [REQUEST_VIEW_MODE_STANDARD, [Validators.required]],
-    allowRequesterOverride: [false]
+    allowRequesterOverride: [false],
+    envelopeDisplayName: [DEFAULT_ENVELOPE_DISPLAY_NAME, [Validators.maxLength(80)]]
   });
 
   readonly viewModeOptions: SelectOption<RequestViewMode>[] = [...REQUEST_VIEW_MODE_OPTIONS_AR];
@@ -122,6 +125,10 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
     return this.settingsForm.get('allowRequesterOverride')?.value === true;
   }
 
+  get activeEnvelopeDisplayName(): string {
+    return this.normalizeEnvelopeDisplayName(this.settingsForm.get('envelopeDisplayName')?.value);
+  }
+
   onRefresh(): void {
     if (!this.canManageWorkspace || this.loading) {
       return;
@@ -137,7 +144,8 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
 
     const request: AdminCatalogCategoryDisplaySettingsUpsertRequestDto = {
       defaultViewMode: this.normalizeViewMode(this.settingsForm.get('defaultViewMode')?.value),
-      allowRequesterOverride: this.settingsForm.get('allowRequesterOverride')?.value === true
+      allowRequesterOverride: this.settingsForm.get('allowRequesterOverride')?.value === true,
+      envelopeDisplayName: this.normalizeEnvelopeDisplayName(this.settingsForm.get('envelopeDisplayName')?.value)
     };
 
     this.saving = true;
@@ -188,7 +196,8 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
     this.settingsForm.reset(
       {
         defaultViewMode: this.normalizeViewMode(data?.defaultViewMode),
-        allowRequesterOverride: data?.allowRequesterOverride === true
+        allowRequesterOverride: data?.allowRequesterOverride === true,
+        envelopeDisplayName: this.normalizeEnvelopeDisplayName(data?.envelopeDisplayName)
       },
       { emitEvent: false }
     );
@@ -200,7 +209,8 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
     this.settingsForm.reset(
       {
         defaultViewMode: REQUEST_VIEW_MODE_STANDARD,
-        allowRequesterOverride: false
+        allowRequesterOverride: false,
+        envelopeDisplayName: DEFAULT_ENVELOPE_DISPLAY_NAME
       },
       { emitEvent: false }
     );
@@ -211,7 +221,8 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
   private buildSnapshot(): string {
     const payload = {
       defaultViewMode: this.normalizeViewMode(this.settingsForm.get('defaultViewMode')?.value),
-      allowRequesterOverride: this.settingsForm.get('allowRequesterOverride')?.value === true
+      allowRequesterOverride: this.settingsForm.get('allowRequesterOverride')?.value === true,
+      envelopeDisplayName: this.normalizeEnvelopeDisplayName(this.settingsForm.get('envelopeDisplayName')?.value)
     };
 
     return JSON.stringify(payload);
@@ -219,6 +230,11 @@ export class AdminControlCenterCatalogDisplaySettingsWorkspaceComponent implemen
 
   private normalizeViewMode(value: unknown): RequestViewMode {
     return normalizeRequestViewMode(value);
+  }
+
+  private normalizeEnvelopeDisplayName(value: unknown): string {
+    const normalized = String(value ?? '').trim();
+    return normalized.length > 0 ? normalized : DEFAULT_ENVELOPE_DISPLAY_NAME;
   }
 
   private ensureSuccess<T>(response: CommonResponse<T>, fallbackMessage: string): boolean {

@@ -6,7 +6,14 @@ import {
   RequestRuntimeCatalogApplicationDto,
   RequestRuntimeCatalogDto,
   RequestRuntimeCatalogNodeDto,
+  RequestRuntimeEnvelopeDetailDto,
+  RequestRuntimeEnvelopeUpsertRequestDto,
+  RequestRuntimeFormDefinitionDto,
+  RequestRuntimePagedEnvelopeListDto,
+  RequestRuntimeSubjectDetailDto,
+  RequestRuntimeSubjectUpsertRequestDto,
   RequestRuntimeTreeNode,
+  resolveEnvelopeDisplayName,
   REQUEST_RUNTIME_ALL_APPLICATIONS_VALUE,
   RuntimeApiResponse,
   createEmptyRuntimeCatalog
@@ -26,6 +33,79 @@ export class RequestRuntimeCatalogFacadeService {
       catchError(() => of({
         data: createEmptyRuntimeCatalog(),
         errors: [{ message: 'تعذر تحميل شجرة الطلبات المتاحة في الوقت الحالي.' }]
+      }))
+    );
+  }
+
+  loadFormDefinition(
+    categoryId: number,
+    context?: { stageId?: number | null; documentDirection?: string | null }
+  ): Observable<RuntimeApiResponse<RequestRuntimeFormDefinitionDto>> {
+    return this.api.getFormDefinition(categoryId, context).pipe(
+      map(response => ({
+        data: response?.data as RequestRuntimeFormDefinitionDto,
+        errors: response?.errors ?? []
+      })),
+      catchError(() => of({
+        data: undefined,
+        errors: [{ message: 'تعذر تحميل نموذج الطلب في الوقت الحالي.' }]
+      }))
+    );
+  }
+
+  loadEnvelopes(searchText?: string | null): Observable<RuntimeApiResponse<RequestRuntimePagedEnvelopeListDto>> {
+    return this.api.listEnvelopes({
+      searchText,
+      pageNumber: 1,
+      pageSize: 200
+    }).pipe(
+      map(response => ({
+        data: response?.data ?? {
+          totalCount: 0,
+          pageNumber: 1,
+          pageSize: 200,
+          items: []
+        },
+        errors: response?.errors ?? []
+      })),
+      catchError(() => of({
+        data: {
+          totalCount: 0,
+          pageNumber: 1,
+          pageSize: 200,
+          items: []
+        },
+        errors: [{ message: 'تعذر تحميل القائمة المطلوبة حاليًا.' }]
+      }))
+    );
+  }
+
+  createEnvelope(
+    request: RequestRuntimeEnvelopeUpsertRequestDto
+  ): Observable<RuntimeApiResponse<RequestRuntimeEnvelopeDetailDto>> {
+    return this.api.createEnvelope(request).pipe(
+      map(response => ({
+        data: response?.data as RequestRuntimeEnvelopeDetailDto,
+        errors: response?.errors ?? []
+      })),
+      catchError(() => of({
+        data: undefined,
+        errors: [{ message: 'تعذر تنفيذ عملية الإضافة في الوقت الحالي.' }]
+      }))
+    );
+  }
+
+  createSubject(
+    request: RequestRuntimeSubjectUpsertRequestDto
+  ): Observable<RuntimeApiResponse<RequestRuntimeSubjectDetailDto>> {
+    return this.api.createSubject(request).pipe(
+      map(response => ({
+        data: response?.data as RequestRuntimeSubjectDetailDto,
+        errors: response?.errors ?? []
+      })),
+      catchError(() => of({
+        data: undefined,
+        errors: [{ message: 'تعذر تسجيل الطلب في الوقت الحالي.' }]
       }))
     );
   }
@@ -128,7 +208,9 @@ export class RequestRuntimeCatalogFacadeService {
         canStart: node.canStart === true,
         isRequestType: node.isRequestType === true,
         applicationId,
+        startStageId: Number(node.startStage?.stageId ?? 0) > 0 ? Number(node.startStage?.stageId ?? 0) : null,
         startStageName,
+        envelopeDisplayName: resolveEnvelopeDisplayName(node.envelopeDisplayName),
         organizationalScopeLabel,
         reasons: Array.isArray(node.availabilityReasons) ? node.availabilityReasons : []
       },

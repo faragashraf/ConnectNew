@@ -43,6 +43,8 @@ public sealed class AdminCatalogCategoryDto
     public string DefaultViewMode { get; set; } = "standard";
 
     public bool AllowRequesterOverride { get; set; }
+
+    public string EnvelopeDisplayName { get; set; } = "حزمة طلبات جديدة";
 }
 
 public sealed class AdminCatalogCategoryTreeNodeDto
@@ -61,6 +63,8 @@ public sealed class AdminCatalogCategoryTreeNodeDto
 
     public bool AllowRequesterOverride { get; set; }
 
+    public string EnvelopeDisplayName { get; set; } = "حزمة طلبات جديدة";
+
     public IReadOnlyList<AdminCatalogCategoryTreeNodeDto> Children { get; set; }
         = new List<AdminCatalogCategoryTreeNodeDto>();
 }
@@ -78,6 +82,8 @@ public sealed class AdminCatalogCategoryCreateRequestDto
     public string? DefaultViewMode { get; set; }
 
     public bool? AllowRequesterOverride { get; set; }
+
+    public string? EnvelopeDisplayName { get; set; }
 }
 
 public sealed class AdminCatalogCategoryUpdateRequestDto
@@ -91,6 +97,8 @@ public sealed class AdminCatalogCategoryUpdateRequestDto
     public string? DefaultViewMode { get; set; }
 
     public bool? AllowRequesterOverride { get; set; }
+
+    public string? EnvelopeDisplayName { get; set; }
 }
 
 public sealed class AdminCatalogCategoryDisplaySettingsDto
@@ -100,6 +108,8 @@ public sealed class AdminCatalogCategoryDisplaySettingsDto
     public string DefaultViewMode { get; set; } = "standard";
 
     public bool AllowRequesterOverride { get; set; }
+
+    public string EnvelopeDisplayName { get; set; } = "حزمة طلبات جديدة";
 
     public string? LastModifiedBy { get; set; }
 
@@ -111,6 +121,8 @@ public sealed class AdminCatalogCategoryDisplaySettingsUpsertRequestDto
     public string? DefaultViewMode { get; set; }
 
     public bool? AllowRequesterOverride { get; set; }
+
+    public string? EnvelopeDisplayName { get; set; }
 }
 
 public sealed class AdminCatalogApplicationDeleteDiagnosticsDto

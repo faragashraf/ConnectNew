@@ -100,10 +100,18 @@
   gap: 0.4rem;
 }
 
+.field.full-width {
+  grid-column: 1 / -1;
+}
+
 .field label {
   color: #304b63;
   font-size: 0.84rem;
   font-weight: 700;
+}
+
+.field input {
+  width: 100%;
 }
 
 .toggle-field {

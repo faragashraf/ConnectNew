@@ -26,6 +26,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
     private const int FieldDefaultValueMaxLength = 100;
     private const string DefaultViewModeValue = "standard";
     private const string TabbedViewModeValue = "tabbed";
+    private const string DefaultEnvelopeDisplayNameValue = "حزمة طلبات جديدة";
 
     private static readonly IReadOnlyList<string> DefaultFieldTypes = new List<string>
     {
@@ -447,10 +448,12 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
 
             var nextCategoryId = await _repository.GenerateNextCategoryIdAsync(cancellationToken);
             var hasDisplaySettingsRequest = NormalizeNullable(safeRequest.DefaultViewMode) != null
-                || safeRequest.AllowRequesterOverride.HasValue;
+                || safeRequest.AllowRequesterOverride.HasValue
+                || NormalizeNullable(safeRequest.EnvelopeDisplayName) != null;
             var targetDisplaySettings = BuildDisplaySettingsState(
                 safeRequest.DefaultViewMode,
-                safeRequest.AllowRequesterOverride);
+                safeRequest.AllowRequesterOverride,
+                safeRequest.EnvelopeDisplayName);
             var category = new Cdcategory
             {
                 CatId = nextCategoryId,
@@ -606,12 +609,14 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
 
             var hasDefaultViewModeUpdate = NormalizeNullable(safeRequest.DefaultViewMode) != null;
             var hasAllowRequesterOverrideUpdate = safeRequest.AllowRequesterOverride.HasValue;
-            if (hasDefaultViewModeUpdate || hasAllowRequesterOverrideUpdate)
+            var hasEnvelopeDisplayNameUpdate = NormalizeNullable(safeRequest.EnvelopeDisplayName) != null;
+            if (hasDefaultViewModeUpdate || hasAllowRequesterOverrideUpdate || hasEnvelopeDisplayNameUpdate)
             {
                 var currentSettings = ResolveDisplaySettingsState(categorySetting);
                 var targetSettings = BuildDisplaySettingsState(
                     hasDefaultViewModeUpdate ? safeRequest.DefaultViewMode : currentSettings.DefaultViewMode,
-                    hasAllowRequesterOverrideUpdate ? safeRequest.AllowRequesterOverride : currentSettings.AllowRequesterOverride);
+                    hasAllowRequesterOverrideUpdate ? safeRequest.AllowRequesterOverride : currentSettings.AllowRequesterOverride,
+                    hasEnvelopeDisplayNameUpdate ? safeRequest.EnvelopeDisplayName : currentSettings.EnvelopeDisplayName);
 
                 if (categorySetting == null)
                 {
@@ -678,6 +683,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
                 CategoryId = categoryId,
                 DefaultViewMode = state.DefaultViewMode,
                 AllowRequesterOverride = state.AllowRequesterOverride,
+                EnvelopeDisplayName = state.EnvelopeDisplayName,
                 LastModifiedBy = categorySetting?.LastModifiedBy,
                 LastModifiedAtUtc = categorySetting?.LastModifiedAtUtc
             };
@@ -724,7 +730,8 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             var currentSettings = ResolveDisplaySettingsState(categorySetting);
             var targetSettings = BuildDisplaySettingsState(
                 safeRequest.DefaultViewMode ?? currentSettings.DefaultViewMode,
-                safeRequest.AllowRequesterOverride ?? currentSettings.AllowRequesterOverride);
+                safeRequest.AllowRequesterOverride ?? currentSettings.AllowRequesterOverride,
+                safeRequest.EnvelopeDisplayName ?? currentSettings.EnvelopeDisplayName);
 
             if (categorySetting == null)
             {
@@ -756,6 +763,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
                 CategoryId = categoryId,
                 DefaultViewMode = targetSettings.DefaultViewMode,
                 AllowRequesterOverride = targetSettings.AllowRequesterOverride,
+                EnvelopeDisplayName = targetSettings.EnvelopeDisplayName,
                 LastModifiedBy = categorySetting.LastModifiedBy,
                 LastModifiedAtUtc = categorySetting.LastModifiedAtUtc
             };
@@ -2259,7 +2267,8 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             ApplicationId = category.ApplicationId,
             IsActive = !category.CatStatus,
             DefaultViewMode = displaySettings.DefaultViewMode,
-            AllowRequesterOverride = displaySettings.AllowRequesterOverride
+            AllowRequesterOverride = displaySettings.AllowRequesterOverride,
+            EnvelopeDisplayName = displaySettings.EnvelopeDisplayName
         };
     }
 
@@ -2297,7 +2306,8 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
                     ApplicationId = item.ApplicationId,
                     IsActive = !item.CatStatus,
                     DefaultViewMode = displaySettings.DefaultViewMode,
-                    AllowRequesterOverride = displaySettings.AllowRequesterOverride
+                    AllowRequesterOverride = displaySettings.AllowRequesterOverride,
+                    EnvelopeDisplayName = displaySettings.EnvelopeDisplayName
                 };
             });
 
@@ -2417,18 +2427,21 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             IsActive = node.IsActive,
             DefaultViewMode = node.DefaultViewMode,
             AllowRequesterOverride = node.AllowRequesterOverride,
+            EnvelopeDisplayName = node.EnvelopeDisplayName,
             Children = node.Children.Select(MapTreeNode).ToList()
         };
     }
 
     private static CategoryDisplaySettingsState BuildDisplaySettingsState(
         string? defaultViewMode,
-        bool? allowRequesterOverride)
+        bool? allowRequesterOverride,
+        string? envelopeDisplayName)
     {
         return new CategoryDisplaySettingsState
         {
             DefaultViewMode = NormalizeViewMode(defaultViewMode),
-            AllowRequesterOverride = allowRequesterOverride == true
+            AllowRequesterOverride = allowRequesterOverride == true,
+            EnvelopeDisplayName = NormalizeEnvelopeDisplayName(envelopeDisplayName)
         };
     }
 
@@ -2447,7 +2460,8 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
             DefaultViewMode = normalizedColumnViewMode == null
                 ? fromJson.DefaultViewMode
                 : NormalizeViewMode(setting.DefaultViewMode),
-            AllowRequesterOverride = setting.AllowRequesterOverride
+            AllowRequesterOverride = setting.AllowRequesterOverride,
+            EnvelopeDisplayName = fromJson.EnvelopeDisplayName
         };
     }
 
@@ -2479,12 +2493,18 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
                 ?? ReadBooleanFromJsonNode(rootNode["allowUserToChangeDisplayMode"])
                 ?? ReadBooleanFromJsonNode(nestedPresentationObject?["allowRequesterOverride"])
                 ?? ReadBooleanFromJsonNode(nestedPresentationObject?["allowUserToChangeDisplayMode"]);
+            var envelopeDisplayNameCandidate =
+                ReadStringFromJsonNode(rootNode["envelopeDisplayName"])
+                ?? ReadStringFromJsonNode(rootNode["requestEnvelopeDisplayName"])
+                ?? ReadStringFromJsonNode(nestedPresentationObject?["envelopeDisplayName"]);
 
             result.DefaultViewMode = NormalizeViewMode(defaultViewModeCandidate);
             if (allowRequesterOverrideCandidate.HasValue)
             {
                 result.AllowRequesterOverride = allowRequesterOverrideCandidate.Value;
             }
+
+            result.EnvelopeDisplayName = NormalizeEnvelopeDisplayName(envelopeDisplayNameCandidate);
         }
         catch
         {
@@ -2521,6 +2541,7 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
         root["allowRequesterOverride"] = state.AllowRequesterOverride;
         root["defaultDisplayMode"] = normalizedDefaultViewMode == TabbedViewModeValue ? "Tabbed" : "Standard";
         root["allowUserToChangeDisplayMode"] = state.AllowRequesterOverride;
+        root["envelopeDisplayName"] = NormalizeEnvelopeDisplayName(state.EnvelopeDisplayName);
 
         root.Remove("presentationSettings");
 
@@ -2535,6 +2556,11 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
         return normalized == TabbedViewModeValue
             ? TabbedViewModeValue
             : DefaultViewModeValue;
+    }
+
+    private static string NormalizeEnvelopeDisplayName(string? value)
+    {
+        return NormalizeNullable(value) ?? DefaultEnvelopeDisplayNameValue;
     }
 
     private static string? ReadStringFromJsonNode(JsonNode? node)
@@ -2678,6 +2704,8 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
         public string DefaultViewMode { get; set; } = "standard";
 
         public bool AllowRequesterOverride { get; set; }
+
+        public string EnvelopeDisplayName { get; set; } = DefaultEnvelopeDisplayNameValue;
     }
 
     private sealed class CategoryTreeBuilderNode
@@ -2695,6 +2723,8 @@ public sealed class DynamicSubjectsAdminCatalogService : IDynamicSubjectsAdminCa
         public string DefaultViewMode { get; init; } = "standard";
 
         public bool AllowRequesterOverride { get; init; }
+
+        public string EnvelopeDisplayName { get; init; } = DefaultEnvelopeDisplayNameValue;
 
         public List<CategoryTreeBuilderNode> Children { get; } = new();
     }

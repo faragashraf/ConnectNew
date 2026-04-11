@@ -43,6 +43,8 @@ public sealed class RequestRuntimeCatalogNodeDto
 
     public RequestRuntimeOrganizationalUnitScopeDto OrganizationalUnitScope { get; set; } = new();
 
+    public string EnvelopeDisplayName { get; set; } = "حزمة طلبات جديدة";
+
     public List<string> AvailabilityReasons { get; set; } = new();
 
     public List<string> RuntimeWarnings { get; set; } = new();

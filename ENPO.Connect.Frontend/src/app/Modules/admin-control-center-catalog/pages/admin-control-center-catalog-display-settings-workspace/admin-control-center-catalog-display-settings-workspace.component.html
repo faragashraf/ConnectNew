@@ -65,6 +65,18 @@
         <label for="allowRequesterOverride">السماح للمستخدم بتغيير الوضع</label>
         <p-inputSwitch inputId="allowRequesterOverride" formControlName="allowRequesterOverride"></p-inputSwitch>
       </div>
+
+      <div class="field full-width">
+        <label for="envelopeDisplayName">مسمى الظرف في شاشة التسجيل</label>
+        <input
+          id="envelopeDisplayName"
+          pInputText
+          type="text"
+          formControlName="envelopeDisplayName"
+          maxlength="80"
+          placeholder="مثال: ظرف / حزمة / ملف" />
+        <small class="hint">عند ترك الحقل فارغًا سيتم استخدام الاسم الافتراضي: حزمة طلبات جديدة.</small>
+      </div>
     </div>
 
     <div class="runtime-preview-card">
@@ -75,6 +87,10 @@
       <article>
         <span>إمكانية التغيير من المستخدم</span>
         <strong>{{ allowRequesterOverride ? 'مسموح' : 'غير مسموح' }}</strong>
+      </article>
+      <article>
+        <span>مسمى الظرف المعتمد</span>
+        <strong>{{ activeEnvelopeDisplayName }}</strong>
       </article>
     </div>
 

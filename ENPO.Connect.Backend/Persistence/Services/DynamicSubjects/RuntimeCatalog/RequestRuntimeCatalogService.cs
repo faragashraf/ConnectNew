@@ -19,6 +19,7 @@ namespace Persistence.Services.DynamicSubjects.RuntimeCatalog;
 public sealed class RequestRuntimeCatalogService : IRequestRuntimeCatalogService
 {
     private const string UnassignedApplicationKey = "__UNASSIGNED_APPLICATION__";
+    private const string DefaultEnvelopeDisplayName = "حزمة طلبات جديدة";
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -301,6 +302,9 @@ public sealed class RequestRuntimeCatalogService : IRequestRuntimeCatalogService
                             requestPolicy,
                             availabilityRow,
                             categoryById),
+                        EnvelopeDisplayName = categorySettingsMap.TryGetValue(category.CatId, out var categorySetting)
+                            ? ResolveEnvelopeDisplayName(categorySetting.SettingsJson)
+                            : DefaultEnvelopeDisplayName,
                         StartStage = canStart
                             ? (startStageMap.TryGetValue(category.CatId, out var startStage)
                                 ? startStage
@@ -812,6 +816,48 @@ public sealed class RequestRuntimeCatalogService : IRequestRuntimeCatalogService
         }
 
         return null;
+    }
+
+    private static string ResolveEnvelopeDisplayName(string? settingsJson)
+    {
+        var payload = (settingsJson ?? string.Empty).Trim();
+        if (payload.Length == 0)
+        {
+            return DefaultEnvelopeDisplayName;
+        }
+
+        try
+        {
+            var rootNode = JsonNode.Parse(payload);
+            if (rootNode is not JsonObject rootObject)
+            {
+                return DefaultEnvelopeDisplayName;
+            }
+
+            var nestedPresentationObject = rootObject["presentationSettings"] as JsonObject;
+            var candidate =
+                ReadStringFromJsonNode(rootObject["envelopeDisplayName"])
+                ?? ReadStringFromJsonNode(rootObject["requestEnvelopeDisplayName"])
+                ?? ReadStringFromJsonNode(nestedPresentationObject?["envelopeDisplayName"]);
+
+            return NormalizeNullable(candidate) ?? DefaultEnvelopeDisplayName;
+        }
+        catch
+        {
+            return DefaultEnvelopeDisplayName;
+        }
+    }
+
+    private static string? ReadStringFromJsonNode(JsonNode? node)
+    {
+        if (node is not JsonValue value)
+        {
+            return null;
+        }
+
+        return value.TryGetValue<string>(out var parsed)
+            ? NormalizeNullable(parsed)
+            : null;
     }
 
     private static int ResolveRootCategoryId(int categoryId, IReadOnlyDictionary<int, Cdcategory> byId)
