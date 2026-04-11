@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { Subscription, combineLatest, firstValueFrom } from 'rxjs';
 import { auditTime } from 'rxjs/operators';
@@ -139,7 +139,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   reusableFields: ReadonlyArray<ReusableFieldLibraryItem> = [];
   bindings: BoundFieldItem[] = [];
   validation: FieldLibraryBindingValidationResult = { isValid: false, blockingIssues: [], warnings: [] };
-  referenceComponents: ReferenceComponentVm[] = [];
+  readonly referenceComponentsForm: FormArray = this.fb.array([]);
   referencePolicyBlockingIssues: string[] = [];
 
   groups: SubjectAdminGroupDto[] = [];
@@ -165,6 +165,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private routeApplicationId: string | null = null;
   private subjectTypeAdmin: SubjectTypeAdminDto | null = null;
   private fieldCatalogByKey = new Map<string, SubjectAdminFieldDto>();
+  private loadedBindingsSnapshot = '';
 
   constructor(
     private readonly fb: FormBuilder,
@@ -176,7 +177,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   ) {}
 
   ngOnInit(): void {
-    this.referenceComponents = [this.createReferenceComponent('sequence')];
+    this.setReferenceComponents([this.createReferenceComponent('sequence')], false);
     this.vm = { context: { categoryId: null, applicationId: null } };
     this.step = { requiredCompleted: 0, requiredTotal: 1, isCompleted: false };
 
@@ -202,6 +203,18 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     this.subscriptions.add(
       this.presentationForm.valueChanges
+        .pipe(auditTime(80))
+        .subscribe(() => {
+          if (this.syncingFromStore) {
+            return;
+          }
+
+          this.evaluateBindings(true, true);
+        })
+    );
+
+    this.subscriptions.add(
+      this.referenceComponentsForm.valueChanges
         .pipe(auditTime(80))
         .subscribe(() => {
           if (this.syncingFromStore) {
@@ -246,6 +259,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     );
   }
 
+  get referenceComponentRows(): FormGroup[] {
+    return this.referenceComponentsForm.controls as FormGroup[];
+  }
+
   get referencePreview(): string {
     const raw = this.referencePolicyForm.getRawValue();
     const enabled = raw['referencePolicyEnabled'] === true;
@@ -265,7 +282,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
 
     const today = new Date();
-    const parts = this.referenceComponents.map(component => {
+    const components = this.getNormalizedReferenceComponents();
+    const parts = components.map(component => {
       switch (component.type) {
         case 'static_text':
           return this.normalizeNullable(component.value) ?? '...';
@@ -462,64 +480,80 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   onAddReferenceComponent(): void {
-    const sequenceIndex = this.referenceComponents.findIndex(component => component.type === 'sequence');
-    const insertIndex = sequenceIndex >= 0 ? sequenceIndex : this.referenceComponents.length;
-    this.referenceComponents.splice(insertIndex, 0, this.createReferenceComponent('static_text'));
-    this.referenceComponents = this.normalizeReferenceComponentsStructure(this.referenceComponents);
+    const components = this.getNormalizedReferenceComponents();
+    const sequenceIndex = components.findIndex(component => component.type === 'sequence');
+    const insertIndex = sequenceIndex >= 0 ? sequenceIndex : components.length;
+    components.splice(insertIndex, 0, this.createReferenceComponent('static_text'));
+    this.setReferenceComponents(components);
     this.evaluateBindings(true, true);
   }
 
-  onDeleteReferenceComponent(component: ReferenceComponentVm): void {
-    if (component.type === 'sequence') {
+  onDeleteReferenceComponent(index: number): void {
+    const components = this.getNormalizedReferenceComponents();
+    const target = components[index];
+    if (!target) {
+      return;
+    }
+
+    if (target.type === 'sequence') {
       this.stepMessageSeverity = 'warn';
       this.stepMessage = 'لا يمكن حذف مكوّن المسلسل لأنه إلزامي.';
       return;
     }
 
-    this.referenceComponents = this.referenceComponents.filter(item => item.id !== component.id);
-    this.referenceComponents = this.normalizeReferenceComponentsStructure(this.referenceComponents);
+    components.splice(index, 1);
+    this.setReferenceComponents(components);
     this.evaluateBindings(true, true);
   }
 
-  onMoveReferenceComponentUp(component: ReferenceComponentVm): void {
-    const index = this.referenceComponents.findIndex(item => item.id === component.id);
-    if (index <= 0 || component.type === 'sequence') {
+  onMoveReferenceComponentUp(index: number): void {
+    const components = this.getNormalizedReferenceComponents();
+    const target = components[index];
+    if (!target || index <= 0 || target.type === 'sequence') {
       return;
     }
 
-    const reordered = [...this.referenceComponents];
+    const reordered = [...components];
     [reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]];
-    this.referenceComponents = this.normalizeReferenceComponentsStructure(reordered);
+    this.setReferenceComponents(reordered);
     this.evaluateBindings(true, true);
   }
 
-  onMoveReferenceComponentDown(component: ReferenceComponentVm): void {
-    const index = this.referenceComponents.findIndex(item => item.id === component.id);
-    if (index < 0 || index >= this.referenceComponents.length - 1 || component.type === 'sequence') {
+  onMoveReferenceComponentDown(index: number): void {
+    const components = this.getNormalizedReferenceComponents();
+    const target = components[index];
+    if (!target || index < 0 || index >= components.length - 1 || target.type === 'sequence') {
       return;
     }
 
-    const reordered = [...this.referenceComponents];
+    const reordered = [...components];
     [reordered[index + 1], reordered[index]] = [reordered[index], reordered[index + 1]];
-    this.referenceComponents = this.normalizeReferenceComponentsStructure(reordered);
+    this.setReferenceComponents(reordered);
     this.evaluateBindings(true, true);
   }
 
-  onReferenceComponentTypeChanged(component: ReferenceComponentVm): void {
-    if (component.type !== 'static_text') {
-      component.value = undefined;
+  onReferenceComponentTypeChanged(index: number, nextTypeRaw: unknown): void {
+    const components = this.getRawReferenceComponentsFromForm();
+    if (index < 0 || index >= components.length) {
+      return;
     }
 
-    if (component.type !== 'field') {
-      component.fieldKey = undefined;
+    const nextType = this.normalizeReferenceComponentType(nextTypeRaw);
+    const target = components[index];
+    target.type = nextType;
+    if (nextType !== 'static_text') {
+      target.value = undefined;
     }
 
-    this.referenceComponents = this.normalizeReferenceComponentsStructure(this.referenceComponents);
+    if (nextType !== 'field') {
+      target.fieldKey = undefined;
+    }
+
+    this.setReferenceComponents(components);
     this.evaluateBindings(true, true);
   }
 
   onReferenceComponentValueChanged(): void {
-    this.referenceComponents = this.normalizeReferenceComponentsStructure(this.referenceComponents);
     this.evaluateBindings(true, true);
   }
 
@@ -676,7 +710,23 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       const groupTree = this.readArrayResponse(groupsResponse, 'تعذر تحميل شجرة الجروبات من قاعدة البيانات.');
       const groups = this.flattenAdminCatalogGroups(groupTree);
       const links = this.readArrayResponse(linksResponse, 'تعذر تحميل روابط الحقول من قاعدة البيانات.');
-      const subjectTypes = this.readArrayResponse(subjectTypesResponse, 'تعذر تحميل إعدادات النوع من قاعدة البيانات.');
+      const scopedSubjectTypes = this.readArrayResponse(subjectTypesResponse, 'تعذر تحميل إعدادات النوع من قاعدة البيانات.');
+      let subjectTypes = scopedSubjectTypes;
+      let resolvedSubjectType = scopedSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
+      if (!resolvedSubjectType) {
+        const fallbackSubjectTypesResponse = await firstValueFrom(
+          this.dynamicSubjectsController.getSubjectTypesAdminConfig(undefined)
+        );
+        const fallbackSubjectTypes = this.readArrayResponse(
+          fallbackSubjectTypesResponse,
+          'تعذر تحميل إعدادات النوع من قاعدة البيانات.'
+        );
+        const matchedFromFallback = fallbackSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
+        if (matchedFromFallback) {
+          subjectTypes = fallbackSubjectTypes;
+          resolvedSubjectType = matchedFromFallback;
+        }
+      }
 
       this.groups = [...groups].sort((left, right) => left.groupId - right.groupId);
       this.groupOptions = this.groups.map(group => ({
@@ -725,9 +775,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.bindings = this.bindingEngine.normalizeDisplayOrder(
         activeLinks.map(link => this.mapLinkToBinding(link))
       );
+      this.loadedBindingsSnapshot = this.bindingEngine.serializeBindingsPayload(this.bindings);
 
       this.serialOptions = this.buildSerialOptions(subjectTypes);
-      this.subjectTypeAdmin = subjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
+      this.subjectTypeAdmin = resolvedSubjectType;
       this.patchReferencePolicyFormFromAdminType(this.subjectTypeAdmin);
       this.patchPresentationFormFromAdminType(this.subjectTypeAdmin);
       this.patchPresentationFormDefaultsIfMissing();
@@ -749,6 +800,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.reusableFields = [];
       this.serialOptions = [];
       this.fieldCatalogByKey.clear();
+      this.loadedBindingsSnapshot = '';
       this.evaluateBindings(true, false);
 
       this.stepMessageSeverity = 'warn';
@@ -822,71 +874,77 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         defaultValue: String(binding.defaultValue ?? '').trim()
       }))
     );
+    const shouldSyncBindings = this.hasBindingChangesSinceBackend(normalizedBindings);
 
-    const [latestFieldsResponse, latestLinksResponse, latestSubjectTypesResponse] = await Promise.all([
-      firstValueFrom(this.dynamicSubjectsController.getAdminFields(applicationId ?? undefined)),
-      firstValueFrom(this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId)),
-      firstValueFrom(this.dynamicSubjectsController.getSubjectTypesAdminConfig(applicationId ?? undefined))
-    ]);
-
-    const latestFields = this.readArrayResponse(latestFieldsResponse, 'تعذر تحميل الحقول قبل الحفظ.');
-    const latestLinks = this.readArrayResponse(latestLinksResponse, 'تعذر تحميل روابط الحقول قبل الحفظ.');
+    const latestSubjectTypesResponse = await firstValueFrom(
+      this.dynamicSubjectsController.getSubjectTypesAdminConfig(applicationId ?? undefined)
+    );
     const latestSubjectTypes = this.readArrayResponse(latestSubjectTypesResponse, 'تعذر تحميل إعدادات النوع قبل الحفظ.');
 
-    const latestFieldsByKey = new Map<string, SubjectAdminFieldDto>(
-      latestFields.map(item => [this.normalizeFieldKey(item.fieldKey), item] as const)
-    );
-    const latestLinksByKey = new Map<string, SubjectCategoryFieldLinkAdminDto>(
-      latestLinks.map(item => [this.normalizeFieldKey(item.fieldKey), item] as const)
-    );
+    if (shouldSyncBindings) {
+      const [latestFieldsResponse, latestLinksResponse] = await Promise.all([
+        firstValueFrom(this.dynamicSubjectsController.getAdminFields(applicationId ?? undefined)),
+        firstValueFrom(this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId))
+      ]);
 
-    for (const binding of normalizedBindings) {
-      const normalizedFieldKey = this.normalizeFieldKey(binding.fieldKey);
-      if (!normalizedFieldKey) {
-        throw new Error('يوجد حقل بدون مفتاح صالح.');
+      const latestFields = this.readArrayResponse(latestFieldsResponse, 'تعذر تحميل الحقول قبل الحفظ.');
+      const latestLinks = this.readArrayResponse(latestLinksResponse, 'تعذر تحميل روابط الحقول قبل الحفظ.');
+
+      const latestFieldsByKey = new Map<string, SubjectAdminFieldDto>(
+        latestFields.map(item => [this.normalizeFieldKey(item.fieldKey), item] as const)
+      );
+      const latestLinksByKey = new Map<string, SubjectCategoryFieldLinkAdminDto>(
+        latestLinks.map(item => [this.normalizeFieldKey(item.fieldKey), item] as const)
+      );
+
+      for (const binding of normalizedBindings) {
+        const normalizedFieldKey = this.normalizeFieldKey(binding.fieldKey);
+        if (!normalizedFieldKey) {
+          throw new Error('يوجد حقل بدون مفتاح صالح.');
+        }
+
+        const groupId = this.toPositiveInt(binding.groupId);
+        if (!groupId) {
+          throw new Error(`يرجى اختيار مجموعة صالحة للحقل ${binding.fieldKey}.`);
+        }
+
+        const existing = latestFieldsByKey.get(normalizedFieldKey) ?? null;
+        const request = this.buildFieldUpsertRequest(binding, existing, applicationId);
+
+        const savedField = existing
+          ? this.readSingleResponse(
+              await firstValueFrom(this.dynamicSubjectsController.updateAdminField(existing.fieldKey, request)),
+              `تعذر تحديث الحقل ${existing.fieldKey}.`
+            )
+          : this.readSingleResponse(
+              await firstValueFrom(this.dynamicSubjectsController.createAdminField(request)),
+              `تعذر إنشاء الحقل ${binding.fieldKey}.`
+            );
+
+        latestFieldsByKey.set(normalizedFieldKey, savedField);
       }
 
-      const groupId = this.toPositiveInt(binding.groupId);
-      if (!groupId) {
-        throw new Error(`يرجى اختيار مجموعة صالحة للحقل ${binding.fieldKey}.`);
-      }
+      const linkPayload: SubjectCategoryFieldLinkUpsertItemDto[] = normalizedBindings.map(binding => {
+        const normalizedFieldKey = this.normalizeFieldKey(binding.fieldKey);
+        const existingLink = latestLinksByKey.get(normalizedFieldKey) ?? null;
+        const displaySettingsJson = this.buildDisplaySettingsJson(existingLink?.displaySettingsJson, binding);
 
-      const existing = latestFieldsByKey.get(normalizedFieldKey) ?? null;
-      const request = this.buildFieldUpsertRequest(binding, existing, applicationId);
+        return {
+          mendSql: this.toPositiveInt(existingLink?.mendSql) ?? this.toPositiveInt(binding.mendSql) ?? undefined,
+          fieldKey: binding.fieldKey,
+          groupId: this.toPositiveInt(binding.groupId) ?? this.resolveDefaultGroupId() ?? 0,
+          isActive: true,
+          displayOrder: binding.displayOrder,
+          isVisible: binding.visible !== false,
+          displaySettingsJson
+        };
+      });
 
-      const savedField = existing
-        ? this.readSingleResponse(
-            await firstValueFrom(this.dynamicSubjectsController.updateAdminField(existing.fieldKey, request)),
-            `تعذر تحديث الحقل ${existing.fieldKey}.`
-          )
-        : this.readSingleResponse(
-            await firstValueFrom(this.dynamicSubjectsController.createAdminField(request)),
-            `تعذر إنشاء الحقل ${binding.fieldKey}.`
-          );
-
-      latestFieldsByKey.set(normalizedFieldKey, savedField);
+      this.readArrayResponse(
+        await firstValueFrom(this.dynamicSubjectsController.upsertAdminCategoryFieldLinks(categoryId, { links: linkPayload })),
+        'تعذر حفظ روابط الحقول في قاعدة البيانات.'
+      );
     }
-
-    const linkPayload: SubjectCategoryFieldLinkUpsertItemDto[] = normalizedBindings.map(binding => {
-      const normalizedFieldKey = this.normalizeFieldKey(binding.fieldKey);
-      const existingLink = latestLinksByKey.get(normalizedFieldKey) ?? null;
-      const displaySettingsJson = this.buildDisplaySettingsJson(existingLink?.displaySettingsJson, binding);
-
-      return {
-        mendSql: this.toPositiveInt(existingLink?.mendSql) ?? this.toPositiveInt(binding.mendSql) ?? undefined,
-        fieldKey: binding.fieldKey,
-        groupId: this.toPositiveInt(binding.groupId) ?? this.resolveDefaultGroupId() ?? 0,
-        isActive: true,
-        displayOrder: binding.displayOrder,
-        isVisible: binding.visible !== false,
-        displaySettingsJson
-      };
-    });
-
-    this.readArrayResponse(
-      await firstValueFrom(this.dynamicSubjectsController.upsertAdminCategoryFieldLinks(categoryId, { links: linkPayload })),
-      'تعذر حفظ روابط الحقول في قاعدة البيانات.'
-    );
 
     const targetType = latestSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId)
       ?? this.subjectTypeAdmin
@@ -901,6 +959,15 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.subjectTypeAdmin = persistedType;
 
     await this.loadBackendWorkspace(categoryId, applicationId);
+  }
+
+  private hasBindingChangesSinceBackend(normalizedBindings: ReadonlyArray<BoundFieldItem>): boolean {
+    if (!this.loadedBindingsSnapshot) {
+      return true;
+    }
+
+    const currentSnapshot = this.bindingEngine.serializeBindingsPayload(normalizedBindings);
+    return currentSnapshot !== this.loadedBindingsSnapshot;
   }
 
   private buildFieldUpsertRequest(
@@ -950,8 +1017,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       : null;
     const fallbackSerialName = this.normalizeSerialName(targetType?.serialName ?? targetType?.sequenceName);
     const resolvedSequenceName = selectedSerialName ?? typedSerialName ?? fallbackSerialName ?? null;
+    const normalizedReferenceComponents = this.getNormalizedReferenceComponents();
     const referenceComponents = referenceMode === 'custom'
-      ? this.serializeReferenceComponents(this.referenceComponents)
+      ? this.serializeReferenceComponents(normalizedReferenceComponents)
       : [];
 
     return {
@@ -1156,8 +1224,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     this.syncingFromStore = true;
     this.referencePolicyForm.patchValue(nextValue, { emitEvent: false });
-    this.referenceComponents = this.normalizeReferenceComponentsStructure(
-      this.parseReferenceComponents(values['referenceComponents'])
+    this.setReferenceComponents(
+      this.parseReferenceComponents(values['referenceComponents']),
+      false
     );
     this.syncingFromStore = false;
   }
@@ -1180,8 +1249,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     this.syncingFromStore = true;
     this.referencePolicyForm.patchValue(nextValue, { emitEvent: false });
-    this.referenceComponents = this.normalizeReferenceComponentsStructure(
-      this.parseReferenceComponents(subjectType?.referenceComponents)
+    this.setReferenceComponents(
+      this.parseReferenceComponents(subjectType?.referenceComponents),
+      false
     );
     this.syncingFromStore = false;
   }
@@ -1455,8 +1525,37 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   private normalizeReferenceMode(value: unknown): ReferenceMode {
-    const normalized = String(value ?? '').trim().toLowerCase();
+    const normalized = this.readReferenceModeToken(value);
     return normalized === 'custom' ? 'custom' : 'default';
+  }
+
+  private readReferenceModeToken(value: unknown): string {
+    if (value && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      const nestedCandidate = record['value']
+        ?? record['referenceMode']
+        ?? record['mode']
+        ?? record['code']
+        ?? record['id'];
+      if (nestedCandidate != null && nestedCandidate !== value) {
+        return this.readReferenceModeToken(nestedCandidate);
+      }
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'custom'
+      || normalized === 'مخصص'
+      || normalized === 'ترقيم مخصص') {
+      return 'custom';
+    }
+
+    if (normalized === 'default'
+      || normalized === 'افتراضي'
+      || normalized === 'ترقيم افتراضي') {
+      return 'default';
+    }
+
+    return normalized;
   }
 
   private normalizeReferenceSeparator(value: unknown): ReferenceSeparator {
@@ -1496,7 +1595,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
 
     if (mode === 'custom') {
-      const components = this.normalizeReferenceComponentsStructure(this.referenceComponents);
+      const components = this.getNormalizedReferenceComponents();
       const sequenceComponents = components.filter(component => component.type === 'sequence');
       if (sequenceComponents.length === 0) {
         issues.push('لا يمكن حفظ سياسة مخصصة بدون مسلسل.');
@@ -1546,6 +1645,45 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       id: `ref-comp-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       type
     };
+  }
+
+  private createReferenceComponentFormGroup(component: ReferenceComponentVm): FormGroup {
+    return this.fb.group({
+      id: [component.id],
+      type: [component.type],
+      value: [component.value ?? ''],
+      fieldKey: [component.fieldKey ?? '']
+    });
+  }
+
+  private getRawReferenceComponentsFromForm(): ReferenceComponentVm[] {
+    const raw = this.referenceComponentsForm.getRawValue() as Array<Record<string, unknown>>;
+    return (raw ?? []).map((item, index) => ({
+      id: this.normalizeNullable(item['id']) ?? `ref-comp-${Date.now()}-${index}`,
+      type: this.normalizeReferenceComponentType(item['type']),
+      value: this.normalizeNullable(item['value']) ?? undefined,
+      fieldKey: this.normalizeNullable(item['fieldKey']) ?? undefined
+    }));
+  }
+
+  private getNormalizedReferenceComponents(): ReferenceComponentVm[] {
+    return this.normalizeReferenceComponentsStructure(this.getRawReferenceComponentsFromForm());
+  }
+
+  private setReferenceComponents(
+    components: ReadonlyArray<ReferenceComponentVm> | null | undefined,
+    emitEvent: boolean = false
+  ): void {
+    const normalized = this.normalizeReferenceComponentsStructure(components ?? []);
+    while (this.referenceComponentsForm.length > 0) {
+      this.referenceComponentsForm.removeAt(this.referenceComponentsForm.length - 1, { emitEvent: false });
+    }
+
+    for (const component of normalized) {
+      this.referenceComponentsForm.push(this.createReferenceComponentFormGroup(component));
+    }
+
+    this.referenceComponentsForm.updateValueAndValidity({ emitEvent });
   }
 
   private normalizeReferenceComponentsStructure(
@@ -1773,7 +1911,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       referenceStartingValue: this.toSafeStartingValue(referenceValue['referenceStartingValue']),
       referenceSequencePaddingLength: this.toSafeSequenceLength(referenceValue['referenceSequencePaddingLength']),
       referenceSequenceResetScope: this.normalizeSequenceResetScope(referenceValue['referenceSequenceResetScope']),
-      referenceComponents: this.serializeReferenceComponents(this.referenceComponents),
+      referenceComponents: this.serializeReferenceComponents(this.getNormalizedReferenceComponents()),
       defaultDisplayMode: this.normalizeDisplayMode(presentationValue['defaultDisplayMode']),
       allowUserToChangeDisplayMode: presentationValue['allowUserToChangeDisplayMode'] === true
     };
@@ -1831,6 +1969,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.groupOptions = [];
     this.serialOptions = [];
     this.fieldCatalogByKey.clear();
+    this.loadedBindingsSnapshot = '';
     this.subjectTypeAdmin = null;
     this.reusableFields = [];
 
@@ -1860,7 +1999,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       visible: true,
       defaultValue: ''
     }, { emitEvent: false });
-    this.referenceComponents = [this.createReferenceComponent('sequence')];
+    this.setReferenceComponents([this.createReferenceComponent('sequence')], false);
     this.syncingFromStore = false;
     this.refreshStepState('draft');
   }

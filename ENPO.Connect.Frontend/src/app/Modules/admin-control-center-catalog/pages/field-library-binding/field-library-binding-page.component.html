@@ -206,7 +206,7 @@
               </div>
 
               <div class="table-wrapper reference-components-wrap">
-                <p-table [value]="referenceComponents" styleClass="p-datatable-sm reference-components-table">
+                <p-table [value]="referenceComponentRows" styleClass="p-datatable-sm reference-components-table">
                   <ng-template pTemplate="header">
                     <tr>
                       <th>نوع الجزء</th>
@@ -214,8 +214,8 @@
                       <th>إجراءات</th>
                     </tr>
                   </ng-template>
-                  <ng-template pTemplate="body" let-component>
-                    <tr>
+                  <ng-template pTemplate="body" let-componentForm let-rowIndex="rowIndex">
+                    <tr [formGroup]="componentForm">
                       <td>
                         <p-dropdown
                           appendTo="body"
@@ -223,48 +223,45 @@
                           optionLabel="label"
                           optionValue="value"
                           [showClear]="false"
-                          [(ngModel)]="component.type"
-                          [ngModelOptions]="{ standalone: true }"
-                          (onChange)="onReferenceComponentTypeChanged(component)">
+                          formControlName="type"
+                          (onChange)="onReferenceComponentTypeChanged(rowIndex, $event?.value)">
                         </p-dropdown>
                       </td>
                       <td>
                         <input
-                          *ngIf="component.type === 'static_text'"
+                          *ngIf="componentForm.get('type')?.value === 'static_text'"
                           pInputText
                           type="text"
                           placeholder="أدخل النص الثابت"
-                          [(ngModel)]="component.value"
-                          [ngModelOptions]="{ standalone: true }"
-                          (ngModelChange)="onReferenceComponentValueChanged()" />
+                          formControlName="value"
+                          (input)="onReferenceComponentValueChanged()" />
                         <p-dropdown
-                          *ngIf="component.type === 'field'"
+                          *ngIf="componentForm.get('type')?.value === 'field'"
                           appendTo="body"
                           [options]="requiredReferenceFieldOptions"
                           optionLabel="label"
                           optionValue="value"
                           [showClear]="false"
                           placeholder="اختر حقلًا إلزاميًا"
-                          [(ngModel)]="component.fieldKey"
-                          [ngModelOptions]="{ standalone: true }"
+                          formControlName="fieldKey"
                           (onChange)="onReferenceComponentValueChanged()">
                         </p-dropdown>
-                        <span class="component-fixed" *ngIf="component.type === 'year'">السنة</span>
-                        <span class="component-fixed" *ngIf="component.type === 'month'">الشهر</span>
-                        <span class="component-fixed" *ngIf="component.type === 'day'">اليوم</span>
-                        <span class="component-fixed" *ngIf="component.type === 'sequence'">المسلسل (إجباري وآخر جزء)</span>
+                        <span class="component-fixed" *ngIf="componentForm.get('type')?.value === 'year'">السنة</span>
+                        <span class="component-fixed" *ngIf="componentForm.get('type')?.value === 'month'">الشهر</span>
+                        <span class="component-fixed" *ngIf="componentForm.get('type')?.value === 'day'">اليوم</span>
+                        <span class="component-fixed" *ngIf="componentForm.get('type')?.value === 'sequence'">المسلسل (إجباري وآخر جزء)</span>
                       </td>
                       <td>
                         <div class="row-actions">
-                          <button pButton type="button" icon="pi pi-arrow-up" class="p-button-text p-button-sm" (click)="onMoveReferenceComponentUp(component)"></button>
-                          <button pButton type="button" icon="pi pi-arrow-down" class="p-button-text p-button-sm" (click)="onMoveReferenceComponentDown(component)"></button>
+                          <button pButton type="button" icon="pi pi-arrow-up" class="p-button-text p-button-sm" (click)="onMoveReferenceComponentUp(rowIndex)"></button>
+                          <button pButton type="button" icon="pi pi-arrow-down" class="p-button-text p-button-sm" (click)="onMoveReferenceComponentDown(rowIndex)"></button>
                           <button
                             pButton
                             type="button"
                             icon="pi pi-trash"
                             class="p-button-text p-button-danger p-button-sm"
-                            [disabled]="component.type === 'sequence'"
-                            (click)="onDeleteReferenceComponent(component)">
+                            [disabled]="componentForm.get('type')?.value === 'sequence'"
+                            (click)="onDeleteReferenceComponent(rowIndex)">
                           </button>
                         </div>
                       </td>

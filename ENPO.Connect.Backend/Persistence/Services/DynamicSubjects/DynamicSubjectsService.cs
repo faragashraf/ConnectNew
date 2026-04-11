@@ -2411,10 +2411,10 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     : currentPresentationSettings.AllowRequesterOverride
             };
 
-            var requestedReferenceMode = NormalizeNullable(safeRequest.ReferenceMode)
-                ?? ((safeRequest.ReferenceComponents?.Count ?? 0) > 0 ? "custom" : "default");
-            var referenceMode = NormalizeReferenceMode(requestedReferenceMode);
-            if (referenceMode == null)
+            var normalizedComponents = NormalizeReferenceComponents(safeRequest.ReferenceComponents);
+            var requestedReferenceModeToken = NormalizeNullable(safeRequest.ReferenceMode);
+            var referenceMode = NormalizeReferenceMode(requestedReferenceModeToken);
+            if (referenceMode == null && requestedReferenceModeToken != null)
             {
                 response.Errors.Add(new Error
                 {
@@ -2422,6 +2422,12 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                     Message = "وضع سياسة الرقم المرجعي غير صالح. القيم المدعومة: default أو custom."
                 });
                 return response;
+            }
+            referenceMode ??= normalizedComponents.Count > 0 ? "custom" : "default";
+            if (referenceMode == "default" && normalizedComponents.Count > 0)
+            {
+                // Preserve custom configurations when the client sends components but mode is omitted/default.
+                referenceMode = "custom";
             }
 
             var prefix = NormalizeNullable(safeRequest.ReferencePrefix) ?? string.Empty;
@@ -2482,7 +2488,6 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
                 return response;
             }
 
-            var normalizedComponents = NormalizeReferenceComponents(safeRequest.ReferenceComponents);
             if (referenceMode == "custom" && normalizedComponents.Any(component => !component.IsTypeValid))
             {
                 response.Errors.Add(new Error
@@ -3516,9 +3521,15 @@ public sealed partial class DynamicSubjectsService : IDynamicSubjectsService
     {
         var requestPolicy = TryReadRequestPolicyFromSettingsJson(settings?.SettingsJson);
         var presentationSettings = ResolvePresentationSettings(settings);
+        var parsedReferenceComponents = ParseReferenceComponents(policy?.ComponentsJson);
         var referenceMode = NormalizeReferenceMode(policy?.Mode) ?? "default";
+        if (referenceMode == "default" && parsedReferenceComponents.Count > 0)
+        {
+            // Keep the UI/API aligned with persisted custom components even when legacy data has mode drift.
+            referenceMode = "custom";
+        }
         var referenceComponents = referenceMode == "custom"
-            ? ParseReferenceComponents(policy?.ComponentsJson)
+            ? parsedReferenceComponents
             : new List<SubjectReferencePolicyComponentDto>();
         var sequenceName = NormalizeSerialNameValue(policy?.SequenceName)
             ?? NormalizeSerialNameValue(serialNameOverride);
