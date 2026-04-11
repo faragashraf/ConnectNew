@@ -33,6 +33,11 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
   private readonly controlNamesByFieldKey = new Map<string, string[]>();
   private readonly optionLoaderSourceMap = new Map<string, string[]>();
   private readonly requestTokenByFieldKey = new Map<string, number>();
+  private readonly optionLoaderExecutionSignatureByFieldKey = new Map<string, string>();
+  private readonly actionRequestTokenByActionKey = new Map<string, number>();
+  private readonly actionExecutionSignatureByActionKey = new Map<string, string>();
+  private readonly asyncValidationRequestTokenByFieldKey = new Map<string, number>();
+  private readonly asyncValidationResultCacheByFieldKey = new Map<string, { value: string; result: ValidationErrors | null }>();
   private readonly lastEventTypeByFieldKey = new Map<string, RuntimeDynamicEventType>();
   private readonly managedRuntimeSelectionFields = new Set<string>();
 
@@ -68,6 +73,11 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
     this.controlNamesByFieldKey.clear();
     this.optionLoaderSourceMap.clear();
     this.requestTokenByFieldKey.clear();
+    this.optionLoaderExecutionSignatureByFieldKey.clear();
+    this.actionRequestTokenByActionKey.clear();
+    this.actionExecutionSignatureByActionKey.clear();
+    this.asyncValidationRequestTokenByFieldKey.clear();
+    this.asyncValidationResultCacheByFieldKey.clear();
     this.lastEventTypeByFieldKey.clear();
     this.managedRuntimeSelectionFields.clear();
   }
@@ -161,6 +171,7 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
       const value = this.normalizeDynamicValue(control.value);
       const minLength = Number(config.minValueLength ?? 0);
       if (value.length < minLength) {
+        this.asyncValidationResultCacheByFieldKey.set(fieldKey, { value, result: null });
         return of(null);
       }
 
@@ -168,6 +179,14 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
       if (trigger === 'blur' && this.lastEventTypeByFieldKey.get(fieldKey) !== 'blur') {
         return of(null);
       }
+
+      const cached = this.asyncValidationResultCacheByFieldKey.get(fieldKey);
+      if (cached && cached.value === value) {
+        return of(cached.result);
+      }
+
+      const requestToken = (this.asyncValidationRequestTokenByFieldKey.get(fieldKey) ?? 0) + 1;
+      this.asyncValidationRequestTokenByFieldKey.set(fieldKey, requestToken);
 
       const debounceMs = Number(config.debounceMs ?? 320);
       return timer(debounceMs).pipe(
@@ -185,7 +204,15 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
             ?? 'القيمة المدخلة غير صالحة حسب التحقق الخارجي.';
           return { runtimeExternalValidation: message };
         }),
-        catchError(() => of({ runtimeExternalValidation: config.defaultErrorMessage ?? 'تعذر التحقق من صحة القيمة.' }))
+        map(result => this.finalizeAsyncValidationResult(fieldKey, value, requestToken, result)),
+        catchError(() =>
+          of(this.finalizeAsyncValidationResult(
+            fieldKey,
+            value,
+            requestToken,
+            { runtimeExternalValidation: config.defaultErrorMessage ?? 'تعذر التحقق من صحة القيمة.' }
+          ))
+        )
       );
     };
   }
@@ -240,6 +267,7 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
 
     const minLength = Number(optionLoader.minQueryLength ?? 0);
     if (sourceValue.length < minLength) {
+      this.optionLoaderExecutionSignatureByFieldKey.delete(targetFieldKey);
       if (optionLoader.clearWhenSourceEmpty === true) {
         this.genericFormService.setRuntimeSelectionForField(targetFieldKey, []);
       }
@@ -247,9 +275,16 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
     }
 
     if (!sourceValue && optionLoader.clearWhenSourceEmpty === true) {
+      this.optionLoaderExecutionSignatureByFieldKey.delete(targetFieldKey);
       this.genericFormService.setRuntimeSelectionForField(targetFieldKey, []);
       return;
     }
+
+    const executionSignature = `${sourceFieldKey}|${sourceValue}`;
+    if (this.optionLoaderExecutionSignatureByFieldKey.get(targetFieldKey) === executionSignature) {
+      return;
+    }
+    this.optionLoaderExecutionSignatureByFieldKey.set(targetFieldKey, executionSignature);
 
     const requestToken = (this.requestTokenByFieldKey.get(targetFieldKey) ?? 0) + 1;
     this.requestTokenByFieldKey.set(targetFieldKey, requestToken);
@@ -272,11 +307,18 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
     }
 
     const sourceValue = this.readFieldValue(sourceFieldKey);
-    behavior.actions.forEach(action => {
+    behavior.actions.forEach((action, actionIndex) => {
       const trigger = action.trigger ?? 'change';
       if (trigger !== eventType) {
         return;
       }
+
+      const actionKey = this.buildActionKey(sourceFieldKey, actionIndex);
+      const executionSignature = this.buildActionExecutionSignature(eventType, sourceValue, action);
+      if (this.actionExecutionSignatureByActionKey.get(actionKey) === executionSignature) {
+        return;
+      }
+      this.actionExecutionSignatureByActionKey.set(actionKey, executionSignature);
 
       if (!sourceValue && action.clearTargetsWhenEmpty === true) {
         this.applyActionPatches(action, null, sourceFieldKey, sourceValue);
@@ -292,7 +334,13 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
         return;
       }
 
+      const requestToken = (this.actionRequestTokenByActionKey.get(actionKey) ?? 0) + 1;
+      this.actionRequestTokenByActionKey.set(actionKey, requestToken);
+
       this.executeRequest(action.request, sourceFieldKey, sourceValue).subscribe(response => {
+        if (this.actionRequestTokenByActionKey.get(actionKey) !== requestToken) {
+          return;
+        }
         this.applyActionPatches(action, response, sourceFieldKey, sourceValue);
       });
     });
@@ -331,12 +379,12 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
       }
 
       if ((nextValue == null || nextValue === '') && patch.clearWhenMissing === true) {
-        targetControl.patchValue('', { emitEvent: false });
+        this.patchControlValueIfChanged(targetControl, '');
         return;
       }
 
       if (nextValue != null) {
-        targetControl.patchValue(nextValue, { emitEvent: false });
+        this.patchControlValueIfChanged(targetControl, nextValue);
       }
     });
   }
@@ -432,7 +480,7 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
 
   private normalizeCurrentSelectionValue(targetFieldKey: string, options: selection[]): void {
     const targetControlName = (this.controlNamesByFieldKey.get(targetFieldKey) ?? [])[0];
-    if (!targetControlName || options.length === 0) {
+    if (!targetControlName) {
       return;
     }
 
@@ -441,10 +489,15 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
       return;
     }
 
+    if (options.length === 0) {
+      this.patchControlValueIfChanged(control, '');
+      return;
+    }
+
     const currentValue = this.normalizeDynamicValue(control.value);
     const exists = options.some(item => this.normalizeDynamicValue(item.key) === currentValue);
     if (!exists) {
-      control.patchValue('', { emitEvent: false });
+      this.patchControlValueIfChanged(control, '');
     }
   }
 
@@ -563,7 +616,20 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
     if (normalized === 'blur') {
       return 'blur';
     }
-    if (normalized === 'change' || normalized === 'input' || normalized === 'treeselect') {
+
+    if (
+      normalized === 'change'
+      || normalized === 'input'
+      || normalized === 'onchange'
+      || normalized === 'oninput'
+      || normalized === 'treeselect'
+      || normalized === 'treeunselect'
+      || normalized === 'select'
+      || normalized === 'click'
+      || normalized === 'userselected'
+      || normalized === 'filechange'
+      || normalized === 'fileclear'
+    ) {
       return 'change';
     }
 
@@ -599,5 +665,40 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
   private normalizeString(value: unknown): string | null {
     const normalized = String(value ?? '').trim();
     return normalized.length > 0 ? normalized : null;
+  }
+
+  private finalizeAsyncValidationResult(
+    fieldKey: string,
+    value: string,
+    requestToken: number,
+    result: ValidationErrors | null
+  ): ValidationErrors | null {
+    if (this.asyncValidationRequestTokenByFieldKey.get(fieldKey) !== requestToken) {
+      return this.asyncValidationResultCacheByFieldKey.get(fieldKey)?.result ?? null;
+    }
+
+    this.asyncValidationResultCacheByFieldKey.set(fieldKey, { value, result });
+    return result;
+  }
+
+  private patchControlValueIfChanged(control: AbstractControl, value: unknown): void {
+    if (this.normalizeDynamicValue(control.value) === this.normalizeDynamicValue(value)) {
+      return;
+    }
+
+    control.patchValue(value, { emitEvent: false });
+    control.updateValueAndValidity({ emitEvent: false, onlySelf: true });
+  }
+
+  private buildActionKey(sourceFieldKey: string, actionIndex: number): string {
+    return `${sourceFieldKey}::${actionIndex}`;
+  }
+
+  private buildActionExecutionSignature(
+    eventType: RuntimeDynamicEventType,
+    sourceValue: string,
+    action: RequestRuntimeDynamicActionConfig
+  ): string {
+    return `${eventType}|${sourceValue}|${String(action.whenEquals ?? '')}`;
   }
 }

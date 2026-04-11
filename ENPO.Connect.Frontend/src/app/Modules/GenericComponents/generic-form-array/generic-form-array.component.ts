@@ -1,7 +1,7 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, Output } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup } from '@angular/forms';
 import { GenericFormsService } from '../GenericForms.service';
-import { debounceTime } from 'rxjs';
+import { Subject, debounceTime, takeUntil } from 'rxjs';
 import { CdCategoryMandDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 
 @Component({
@@ -9,7 +9,7 @@ import { CdCategoryMandDto } from 'src/app/shared/services/BackendServices/Dynam
   templateUrl: './generic-form-array.component.html',
   styleUrls: ['./generic-form-array.component.scss']
 })
-export class GenericFormArrayComponent {
+export class GenericFormArrayComponent implements OnDestroy {
 
   @Input() filtered_CategoryMand: CdCategoryMandDto[] = [];
   @Input() index: number = 0;
@@ -28,6 +28,7 @@ export class GenericFormArrayComponent {
 
 
   @Output() genericEvent = new EventEmitter<{ event: any, controlFullName: string, control: any, eventType: string }>();
+  private readonly destroy$ = new Subject<void>();
 
   constructor(public genericFormService: GenericFormsService, private fb: FormBuilder) { }
 
@@ -36,10 +37,16 @@ export class GenericFormArrayComponent {
   ngOnInit(): void {
     this.control = this.genericFormService.GetControl(this.mandFileds, this.controlFullName)
     this.ticketForm.valueChanges.pipe(
-      debounceTime(500)
+      debounceTime(500),
+      takeUntil(this.destroy$)
     ).subscribe(() => {
       this.genericFormService.logValidationErrors(this.ticketForm);
     });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   // Handler to receive events from child components and emit to parent

@@ -128,6 +128,7 @@ export class GenericFormsService {
     this.treeBoundFieldKeys.clear();
     if (clearSelections) {
       this.selectionArrays = [];
+      this.staticSelectionCache.clear();
     }
   }
 
@@ -550,36 +551,47 @@ export class GenericFormsService {
 
   implementControlSelection(filedName: string): selection[] {
     const _filedName = this.nameIndexes(filedName).name;
+    const normalizedFieldKey = this.normalizeDynamicFieldKey(_filedName);
+    if (!normalizedFieldKey) {
+      return [];
+    }
 
-    const _apiSelection = this.selectionArrays.find(arr => arr.nameProp === _filedName);
+    const _apiSelection = this.selectionArrays.find(arr =>
+      this.normalizeDynamicFieldKey(arr?.nameProp) === normalizedFieldKey
+    );
     if (_apiSelection != undefined) {
       return _apiSelection.items;
     }
     
     // Check cache for static metadata selections
-    if (this.staticSelectionCache.has(_filedName)) {
-      return this.staticSelectionCache.get(_filedName)!;
+    if (this.staticSelectionCache.has(normalizedFieldKey)) {
+      return this.staticSelectionCache.get(normalizedFieldKey)!;
     }
 
     // Default logic
-    let _mandData = this.cdmendDto.find(f => f.cdmendTxt == _filedName)
+    let _mandData = this.cdmendDto.find(f =>
+      this.normalizeDynamicFieldKey(f.cdmendTxt) === normalizedFieldKey
+    );
+    if (!_mandData) {
+      _mandData = this.cdmendDto.find(f => f.cdmendTxt == _filedName);
+    }
     if (_mandData) {
       const raw = String(_mandData.cdmendTbl ?? '');
       try {
         const parsed = JSON.parse(raw) as selection[];
-        this.staticSelectionCache.set(_filedName, parsed);
+        this.staticSelectionCache.set(normalizedFieldKey, parsed);
         return parsed;
       } catch (e) {
         try {
           // tolerate single-quoted JSON stored in DB: replace single quotes with double quotes
           const fixed = raw.replace(/\'/g, '"');
           const parsed = JSON.parse(fixed) as selection[];
-          this.staticSelectionCache.set(_filedName, parsed);
+          this.staticSelectionCache.set(normalizedFieldKey, parsed);
           return parsed;
         } catch (e2) {
           console.warn('implementControlSelection: failed to parse cdmendTbl for', _filedName, raw);
           const empty: selection[] = [];
-          this.staticSelectionCache.set(_filedName, empty);
+          this.staticSelectionCache.set(normalizedFieldKey, empty);
           return empty;
         }
       }
@@ -604,7 +616,9 @@ export class GenericFormsService {
         name: item.name.length > 0 ? item.name : item.key
       }));
 
-    const existingIndex = this.selectionArrays.findIndex(entry => entry.nameProp === normalizedFieldKey);
+    const existingIndex = this.selectionArrays.findIndex(entry =>
+      this.normalizeDynamicFieldKey(entry?.nameProp) === normalizedFieldKey
+    );
     const nextPayload = {
       keyProp: 'key',
       nameProp: normalizedFieldKey,
@@ -626,7 +640,9 @@ export class GenericFormsService {
       return;
     }
 
-    this.selectionArrays = this.selectionArrays.filter(entry => entry.nameProp !== normalizedFieldKey);
+    this.selectionArrays = this.selectionArrays.filter(entry =>
+      this.normalizeDynamicFieldKey(entry?.nameProp) !== normalizedFieldKey
+    );
     this.staticSelectionCache.delete(normalizedFieldKey);
   }
   getRequesterFieldTxt(message: MessageDto, fieldValue: string): string | '' {

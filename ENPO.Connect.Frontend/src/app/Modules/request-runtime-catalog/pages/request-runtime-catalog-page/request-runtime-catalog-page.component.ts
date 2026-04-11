@@ -1670,7 +1670,7 @@ export class RequestRuntimeCatalogPageComponent implements OnInit, OnDestroy {
     this.renderGroupTree = [];
     this.controlMap.clear();
 
-    this.genericFormService.resetDynamicRuntimeState();
+    this.genericFormService.resetDynamicRuntimeState(true);
     this.genericFormService.cdmendDto = [];
     this.genericFormService.cdCategoryMandDto = [];
   }
