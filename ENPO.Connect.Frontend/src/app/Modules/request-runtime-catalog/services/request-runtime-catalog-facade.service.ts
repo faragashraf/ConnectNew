@@ -7,6 +7,7 @@ import {
   RequestRuntimeCatalogApplicationDto,
   RequestRuntimeCatalogDto,
   RequestRuntimeCatalogNodeDto,
+  RequestRuntimeDynamicHttpRequestConfig,
   RequestRuntimeEnvelopeDetailDto,
   RequestRuntimeEnvelopeUpsertRequestDto,
   RequestRuntimeFormDefinitionDto,
@@ -139,6 +140,21 @@ export class RequestRuntimeCatalogFacadeService {
       catchError(() => of({
         data: undefined,
         errors: [{ message: 'تعذر تسجيل الطلب في الوقت الحالي.' }]
+      }))
+    );
+  }
+
+  executeDynamicRequest(
+    request: RequestRuntimeDynamicHttpRequestConfig
+  ): Observable<RuntimeApiResponse<unknown>> {
+    return this.api.executeDynamicRequest(request).pipe(
+      map(response => ({
+        data: response,
+        errors: []
+      })),
+      catchError(() => of({
+        data: undefined,
+        errors: [{ message: 'تعذر تنفيذ التكامل الخارجي للحقل المطلوب.' }]
       }))
     );
   }

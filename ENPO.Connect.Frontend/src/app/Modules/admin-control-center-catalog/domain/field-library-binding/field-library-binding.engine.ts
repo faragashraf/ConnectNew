@@ -22,7 +22,8 @@ export class FieldLibraryBindingEngine {
       visible: true,
       required: reusableField.requiredByDefault,
       readonly: reusableField.readonlyByDefault,
-      defaultValue: reusableField.defaultValue ?? ''
+      defaultValue: reusableField.defaultValue ?? '',
+      dynamicRuntimeJson: ''
     };
   }
 
@@ -169,6 +170,7 @@ export class FieldLibraryBindingEngine {
     const groupId = Number(candidate['groupId'] ?? 0);
     const groupName = String(candidate['groupName'] ?? '').trim();
     const displaySettingsJson = String(candidate['displaySettingsJson'] ?? '').trim();
+    const dynamicRuntimeJson = String(candidate['dynamicRuntimeJson'] ?? '').trim();
 
     if (!bindingId || !fieldKey || !label || !this.isValidType(type) || !Number.isFinite(displayOrder)) {
       return null;
@@ -189,7 +191,8 @@ export class FieldLibraryBindingEngine {
       cdmendSql: Number.isFinite(cdmendSql) && cdmendSql > 0 ? Math.trunc(cdmendSql) : undefined,
       groupId: Number.isFinite(groupId) && groupId > 0 ? Math.trunc(groupId) : undefined,
       groupName: groupName.length > 0 ? groupName : undefined,
-      displaySettingsJson: displaySettingsJson.length > 0 ? displaySettingsJson : undefined
+      displaySettingsJson: displaySettingsJson.length > 0 ? displaySettingsJson : undefined,
+      dynamicRuntimeJson: dynamicRuntimeJson.length > 0 ? dynamicRuntimeJson : ''
     };
   }
 

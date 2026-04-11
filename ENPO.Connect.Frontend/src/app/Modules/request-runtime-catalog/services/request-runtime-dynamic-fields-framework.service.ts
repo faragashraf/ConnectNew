@@ -1,0 +1,603 @@
+import { Injectable, OnDestroy } from '@angular/core';
+import { AbstractControl, AsyncValidatorFn, FormGroup, ValidationErrors } from '@angular/forms';
+import { Observable, of, timer } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
+import { GenericFormsService, selection } from 'src/app/Modules/GenericComponents/GenericForms.service';
+import {
+  RequestRuntimeDynamicActionConfig,
+  RequestRuntimeDynamicAsyncValidationConfig,
+  RequestRuntimeDynamicFieldBehaviorConfig,
+  RequestRuntimeDynamicHttpRequestConfig,
+  RequestRuntimeDynamicOptionLoaderConfig,
+  RequestRuntimeFieldDefinitionDto,
+  getRuntimeValueByPath,
+  parseRequestRuntimeDynamicFieldBehavior
+} from '../models/request-runtime-catalog.models';
+import { RequestRuntimeCatalogFacadeService } from './request-runtime-catalog-facade.service';
+
+type RuntimeDynamicEventType = 'init' | 'change' | 'blur';
+
+interface RuntimeDynamicBindInput {
+  dynamicControls: FormGroup;
+  genericFormService: GenericFormsService;
+  fieldDefinitions: RequestRuntimeFieldDefinitionDto[];
+  controlMap: Map<string, { fieldKey: string; instanceGroupId: number }>;
+}
+
+@Injectable()
+export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
+  private dynamicControls: FormGroup | null = null;
+  private genericFormService: GenericFormsService | null = null;
+
+  private readonly behaviorByFieldKey = new Map<string, RequestRuntimeDynamicFieldBehaviorConfig>();
+  private readonly controlNamesByFieldKey = new Map<string, string[]>();
+  private readonly optionLoaderSourceMap = new Map<string, string[]>();
+  private readonly requestTokenByFieldKey = new Map<string, number>();
+  private readonly lastEventTypeByFieldKey = new Map<string, RuntimeDynamicEventType>();
+  private readonly managedRuntimeSelectionFields = new Set<string>();
+
+  constructor(private readonly facade: RequestRuntimeCatalogFacadeService) {}
+
+  ngOnDestroy(): void {
+    this.reset();
+  }
+
+  bind(input: RuntimeDynamicBindInput): void {
+    this.reset();
+
+    this.dynamicControls = input.dynamicControls;
+    this.genericFormService = input.genericFormService;
+
+    this.mapControlsByFieldKey(input.controlMap);
+    this.mapBehaviors(input.fieldDefinitions);
+    this.attachAsyncValidators();
+    this.runInitOptionLoaders();
+  }
+
+  reset(): void {
+    if (this.genericFormService) {
+      Array.from(this.managedRuntimeSelectionFields).forEach(fieldKey => {
+        this.genericFormService?.clearRuntimeSelectionForField(fieldKey);
+      });
+    }
+
+    this.dynamicControls = null;
+    this.genericFormService = null;
+
+    this.behaviorByFieldKey.clear();
+    this.controlNamesByFieldKey.clear();
+    this.optionLoaderSourceMap.clear();
+    this.requestTokenByFieldKey.clear();
+    this.lastEventTypeByFieldKey.clear();
+    this.managedRuntimeSelectionFields.clear();
+  }
+
+  handleGenericEvent(event: unknown): void {
+    const parsed = event as { controlFullName?: string; eventType?: string } | null | undefined;
+    const controlFullName = String(parsed?.controlFullName ?? '').trim();
+    if (!controlFullName) {
+      return;
+    }
+
+    const normalizedEvent = this.normalizeEventType(parsed?.eventType);
+    if (!normalizedEvent) {
+      return;
+    }
+
+    const fieldKey = this.resolveFieldKeyByControlName(controlFullName);
+    if (!fieldKey) {
+      return;
+    }
+
+    this.lastEventTypeByFieldKey.set(fieldKey, normalizedEvent);
+    this.runOptionLoadersForSourceField(fieldKey, normalizedEvent);
+    this.runActions(fieldKey, normalizedEvent);
+    this.triggerBlurValidation(fieldKey, normalizedEvent);
+  }
+
+  private mapControlsByFieldKey(controlMap: Map<string, { fieldKey: string; instanceGroupId: number }>): void {
+    controlMap.forEach((value, controlName) => {
+      const normalizedFieldKey = this.normalizeFieldKey(value?.fieldKey);
+      if (!normalizedFieldKey) {
+        return;
+      }
+
+      const current = this.controlNamesByFieldKey.get(normalizedFieldKey) ?? [];
+      current.push(controlName);
+      this.controlNamesByFieldKey.set(normalizedFieldKey, current);
+    });
+  }
+
+  private mapBehaviors(fieldDefinitions: RequestRuntimeFieldDefinitionDto[]): void {
+    (fieldDefinitions ?? []).forEach(field => {
+      const fieldKey = this.normalizeFieldKey(field.fieldKey);
+      if (!fieldKey) {
+        return;
+      }
+
+      const behavior = parseRequestRuntimeDynamicFieldBehavior(field.displaySettingsJson);
+      if (!behavior) {
+        return;
+      }
+
+      this.behaviorByFieldKey.set(fieldKey, behavior);
+      if (behavior.optionLoader) {
+        this.managedRuntimeSelectionFields.add(fieldKey);
+        const sourceFieldKey = this.normalizeFieldKey(behavior.optionLoader.sourceFieldKey) || fieldKey;
+        const targets = this.optionLoaderSourceMap.get(sourceFieldKey) ?? [];
+        targets.push(fieldKey);
+        this.optionLoaderSourceMap.set(sourceFieldKey, targets);
+      }
+    });
+  }
+
+  private attachAsyncValidators(): void {
+    this.behaviorByFieldKey.forEach((behavior, fieldKey) => {
+      if (!behavior.asyncValidation) {
+        return;
+      }
+
+      const controlNames = this.controlNamesByFieldKey.get(fieldKey) ?? [];
+      controlNames.forEach(controlName => {
+        const control = this.getControlByName(controlName);
+        if (!control) {
+          return;
+        }
+
+        const existing = control.asyncValidator;
+        const dynamicValidator = this.buildAsyncValidator(fieldKey, behavior.asyncValidation!);
+        if (existing) {
+          control.setAsyncValidators([existing, dynamicValidator]);
+        } else {
+          control.setAsyncValidators(dynamicValidator);
+        }
+        control.updateValueAndValidity({ emitEvent: false });
+      });
+    });
+  }
+
+  private buildAsyncValidator(fieldKey: string, config: RequestRuntimeDynamicAsyncValidationConfig): AsyncValidatorFn {
+    return (control: AbstractControl): Observable<ValidationErrors | null> => {
+      const value = this.normalizeDynamicValue(control.value);
+      const minLength = Number(config.minValueLength ?? 0);
+      if (value.length < minLength) {
+        return of(null);
+      }
+
+      const trigger = config.trigger ?? 'blur';
+      if (trigger === 'blur' && this.lastEventTypeByFieldKey.get(fieldKey) !== 'blur') {
+        return of(null);
+      }
+
+      const debounceMs = Number(config.debounceMs ?? 320);
+      return timer(debounceMs).pipe(
+        switchMap(() => this.executeRequest(config.request, fieldKey, value)),
+        map(response => {
+          const rawValid = getRuntimeValueByPath(response, config.responseValidPath ?? 'data.isValid');
+          const hasExplicitValid = typeof rawValid === 'boolean';
+          const isValid = hasExplicitValid ? rawValid === true : true;
+          if (isValid) {
+            return null;
+          }
+
+          const message = this.normalizeString(getRuntimeValueByPath(response, config.responseMessagePath ?? 'data.message'))
+            ?? config.defaultErrorMessage
+            ?? 'القيمة المدخلة غير صالحة حسب التحقق الخارجي.';
+          return { runtimeExternalValidation: message };
+        }),
+        catchError(() => of({ runtimeExternalValidation: config.defaultErrorMessage ?? 'تعذر التحقق من صحة القيمة.' }))
+      );
+    };
+  }
+
+  private runInitOptionLoaders(): void {
+    this.optionLoaderSourceMap.forEach((targetFieldKeys, sourceFieldKey) => {
+      targetFieldKeys.forEach(targetFieldKey => {
+        const behavior = this.behaviorByFieldKey.get(targetFieldKey);
+        const optionLoader = behavior?.optionLoader;
+        if (!optionLoader) {
+          return;
+        }
+
+        if ((optionLoader.trigger ?? 'change') !== 'init') {
+          return;
+        }
+
+        const sourceValue = this.readFieldValue(sourceFieldKey);
+        this.runOptionLoader(targetFieldKey, sourceFieldKey, sourceValue, optionLoader);
+      });
+    });
+  }
+
+  private runOptionLoadersForSourceField(sourceFieldKey: string, eventType: RuntimeDynamicEventType): void {
+    const targetFieldKeys = this.optionLoaderSourceMap.get(sourceFieldKey) ?? [];
+    targetFieldKeys.forEach(targetFieldKey => {
+      const behavior = this.behaviorByFieldKey.get(targetFieldKey);
+      const optionLoader = behavior?.optionLoader;
+      if (!optionLoader) {
+        return;
+      }
+
+      const trigger = optionLoader.trigger ?? 'change';
+      if (trigger === 'init' || trigger !== eventType) {
+        return;
+      }
+
+      const sourceValue = this.readFieldValue(sourceFieldKey);
+      this.runOptionLoader(targetFieldKey, sourceFieldKey, sourceValue, optionLoader);
+    });
+  }
+
+  private runOptionLoader(
+    targetFieldKey: string,
+    sourceFieldKey: string,
+    sourceValue: string,
+    optionLoader: RequestRuntimeDynamicOptionLoaderConfig
+  ): void {
+    if (!this.genericFormService) {
+      return;
+    }
+
+    const minLength = Number(optionLoader.minQueryLength ?? 0);
+    if (sourceValue.length < minLength) {
+      if (optionLoader.clearWhenSourceEmpty === true) {
+        this.genericFormService.setRuntimeSelectionForField(targetFieldKey, []);
+      }
+      return;
+    }
+
+    if (!sourceValue && optionLoader.clearWhenSourceEmpty === true) {
+      this.genericFormService.setRuntimeSelectionForField(targetFieldKey, []);
+      return;
+    }
+
+    const requestToken = (this.requestTokenByFieldKey.get(targetFieldKey) ?? 0) + 1;
+    this.requestTokenByFieldKey.set(targetFieldKey, requestToken);
+
+    this.executeRequest(optionLoader.request, sourceFieldKey, sourceValue).subscribe(response => {
+      if (this.requestTokenByFieldKey.get(targetFieldKey) !== requestToken) {
+        return;
+      }
+
+      const mappedOptions = this.mapOptions(response, optionLoader);
+      this.genericFormService?.setRuntimeSelectionForField(targetFieldKey, mappedOptions);
+      this.normalizeCurrentSelectionValue(targetFieldKey, mappedOptions);
+    });
+  }
+
+  private runActions(sourceFieldKey: string, eventType: RuntimeDynamicEventType): void {
+    const behavior = this.behaviorByFieldKey.get(sourceFieldKey);
+    if (!behavior?.actions || behavior.actions.length === 0) {
+      return;
+    }
+
+    const sourceValue = this.readFieldValue(sourceFieldKey);
+    behavior.actions.forEach(action => {
+      const trigger = action.trigger ?? 'change';
+      if (trigger !== eventType) {
+        return;
+      }
+
+      if (!sourceValue && action.clearTargetsWhenEmpty === true) {
+        this.applyActionPatches(action, null, sourceFieldKey, sourceValue);
+        return;
+      }
+
+      if (action.whenEquals != null && sourceValue !== String(action.whenEquals)) {
+        return;
+      }
+
+      if (!action.request) {
+        this.applyActionPatches(action, null, sourceFieldKey, sourceValue);
+        return;
+      }
+
+      this.executeRequest(action.request, sourceFieldKey, sourceValue).subscribe(response => {
+        this.applyActionPatches(action, response, sourceFieldKey, sourceValue);
+      });
+    });
+  }
+
+  private applyActionPatches(
+    action: RequestRuntimeDynamicActionConfig,
+    response: unknown,
+    sourceFieldKey: string,
+    sourceValue: string
+  ): void {
+    const context = this.buildInterpolationContext(sourceFieldKey, sourceValue);
+    action.patches.forEach(patch => {
+      const targetFieldKey = this.normalizeFieldKey(patch.targetFieldKey);
+      if (!targetFieldKey) {
+        return;
+      }
+
+      const targetControlName = (this.controlNamesByFieldKey.get(targetFieldKey) ?? [])[0];
+      if (!targetControlName) {
+        return;
+      }
+
+      const targetControl = this.getControlByName(targetControlName);
+      if (!targetControl) {
+        return;
+      }
+
+      let nextValue: unknown = undefined;
+      if (patch.valueTemplate) {
+        nextValue = this.interpolateTemplate(patch.valueTemplate, context);
+      } else if (patch.valuePath) {
+        nextValue = getRuntimeValueByPath(response, patch.valuePath);
+      } else if (response != null) {
+        nextValue = response;
+      }
+
+      if ((nextValue == null || nextValue === '') && patch.clearWhenMissing === true) {
+        targetControl.patchValue('', { emitEvent: false });
+        return;
+      }
+
+      if (nextValue != null) {
+        targetControl.patchValue(nextValue, { emitEvent: false });
+      }
+    });
+  }
+
+  private triggerBlurValidation(fieldKey: string, eventType: RuntimeDynamicEventType): void {
+    if (eventType !== 'blur') {
+      return;
+    }
+
+    const behavior = this.behaviorByFieldKey.get(fieldKey);
+    if (!behavior?.asyncValidation || (behavior.asyncValidation.trigger ?? 'blur') !== 'blur') {
+      return;
+    }
+
+    const controlNames = this.controlNamesByFieldKey.get(fieldKey) ?? [];
+    controlNames.forEach(controlName => {
+      this.getControlByName(controlName)?.updateValueAndValidity({ emitEvent: false });
+    });
+  }
+
+  private executeRequest(
+    request: RequestRuntimeDynamicHttpRequestConfig,
+    sourceFieldKey: string,
+    sourceValue: string
+  ): Observable<unknown> {
+    const context = this.buildInterpolationContext(sourceFieldKey, sourceValue);
+    const payload: RequestRuntimeDynamicHttpRequestConfig = {
+      url: this.interpolateTemplate(request.url, context),
+      method: request.method,
+      query: this.interpolateRecord(request.query, context) ?? undefined,
+      headers: this.interpolateRecord(request.headers, context) ?? undefined,
+      body: this.interpolateUnknown(request.body, context)
+    };
+
+    return this.facade.executeDynamicRequest(payload).pipe(
+      map(response => response?.data),
+      catchError(() => of(undefined))
+    );
+  }
+
+  private mapOptions(payload: unknown, config: RequestRuntimeDynamicOptionLoaderConfig): selection[] {
+    const listSource = config.responseListPath
+      ? getRuntimeValueByPath(payload, config.responseListPath)
+      : this.resolveFallbackArray(payload);
+
+    if (!Array.isArray(listSource)) {
+      return [];
+    }
+
+    return listSource
+      .map(item => this.mapOptionItem(item, config))
+      .filter((item): item is selection => item != null);
+  }
+
+  private mapOptionItem(item: unknown, config: RequestRuntimeDynamicOptionLoaderConfig): selection | null {
+    if (item == null) {
+      return null;
+    }
+
+    if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+      const value = String(item);
+      return { key: value, name: value };
+    }
+
+    if (typeof item !== 'object' || Array.isArray(item)) {
+      return null;
+    }
+
+    const valueCandidate = this.normalizeString(
+      getRuntimeValueByPath(item, config.responseValuePath)
+      ?? (item as Record<string, unknown>)['value']
+      ?? (item as Record<string, unknown>)['id']
+      ?? (item as Record<string, unknown>)['key']
+      ?? (item as Record<string, unknown>)['code']
+    );
+    const labelCandidate = this.normalizeString(
+      getRuntimeValueByPath(item, config.responseLabelPath)
+      ?? (item as Record<string, unknown>)['label']
+      ?? (item as Record<string, unknown>)['name']
+      ?? (item as Record<string, unknown>)['text']
+      ?? valueCandidate
+    );
+
+    if (!valueCandidate && !labelCandidate) {
+      return null;
+    }
+
+    return {
+      key: valueCandidate ?? labelCandidate ?? '',
+      name: labelCandidate ?? valueCandidate ?? ''
+    };
+  }
+
+  private normalizeCurrentSelectionValue(targetFieldKey: string, options: selection[]): void {
+    const targetControlName = (this.controlNamesByFieldKey.get(targetFieldKey) ?? [])[0];
+    if (!targetControlName || options.length === 0) {
+      return;
+    }
+
+    const control = this.getControlByName(targetControlName);
+    if (!control) {
+      return;
+    }
+
+    const currentValue = this.normalizeDynamicValue(control.value);
+    const exists = options.some(item => this.normalizeDynamicValue(item.key) === currentValue);
+    if (!exists) {
+      control.patchValue('', { emitEvent: false });
+    }
+  }
+
+  private buildInterpolationContext(sourceFieldKey: string, sourceValue: string): Record<string, string> {
+    const context: Record<string, string> = {
+      value: sourceValue,
+      sourceFieldKey
+    };
+
+    this.controlNamesByFieldKey.forEach((controlNames, fieldKey) => {
+      const controlName = controlNames[0];
+      const value = controlName ? this.normalizeDynamicValue(this.getControlByName(controlName)?.value) : '';
+      context[fieldKey] = value;
+      context[fieldKey.toUpperCase()] = value;
+      context[fieldKey.toLowerCase()] = value;
+    });
+
+    return context;
+  }
+
+  private interpolateRecord(source: Record<string, string> | undefined, context: Record<string, string>): Record<string, string> | null {
+    if (!source) {
+      return null;
+    }
+
+    const result: Record<string, string> = {};
+    Object.entries(source).forEach(([key, value]) => {
+      const normalizedKey = String(key ?? '').trim();
+      if (!normalizedKey) {
+        return;
+      }
+
+      result[normalizedKey] = this.interpolateTemplate(value, context);
+    });
+
+    return Object.keys(result).length > 0 ? result : null;
+  }
+
+  private interpolateUnknown(value: unknown, context: Record<string, string>): unknown {
+    if (typeof value === 'string') {
+      return this.interpolateTemplate(value, context);
+    }
+
+    if (Array.isArray(value)) {
+      return value.map(item => this.interpolateUnknown(item, context));
+    }
+
+    if (value && typeof value === 'object') {
+      const mapped: Record<string, unknown> = {};
+      Object.entries(value as Record<string, unknown>).forEach(([key, candidate]) => {
+        mapped[key] = this.interpolateUnknown(candidate, context);
+      });
+      return mapped;
+    }
+
+    return value;
+  }
+
+  private interpolateTemplate(template: string, context: Record<string, string>): string {
+    const raw = String(template ?? '');
+    return raw.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_segment, token) => context[String(token).trim()] ?? '');
+  }
+
+  private resolveFallbackArray(payload: unknown): unknown[] {
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    const candidates = [
+      getRuntimeValueByPath(payload, 'data.items'),
+      getRuntimeValueByPath(payload, 'data'),
+      getRuntimeValueByPath(payload, 'items'),
+      getRuntimeValueByPath(payload, 'result.items')
+    ];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        return candidate;
+      }
+    }
+
+    return [];
+  }
+
+  private readFieldValue(fieldKey: string): string {
+    const controlName = (this.controlNamesByFieldKey.get(fieldKey) ?? [])[0];
+    return controlName ? this.normalizeDynamicValue(this.getControlByName(controlName)?.value) : '';
+  }
+
+  private getControlByName(controlName: string): AbstractControl | null {
+    if (!this.dynamicControls || !this.genericFormService) {
+      return null;
+    }
+
+    return this.genericFormService.GetControl(this.dynamicControls, controlName);
+  }
+
+  private resolveFieldKeyByControlName(controlName: string): string | null {
+    const normalizedControlName = String(controlName ?? '').trim();
+    if (!normalizedControlName) {
+      return null;
+    }
+
+    for (const [fieldKey, controlNames] of this.controlNamesByFieldKey.entries()) {
+      if (controlNames.includes(normalizedControlName)) {
+        return fieldKey;
+      }
+    }
+
+    const direct = this.normalizeFieldKey(normalizedControlName.split('|')[0]);
+    return direct.length > 0 ? direct : null;
+  }
+
+  private normalizeEventType(value: unknown): RuntimeDynamicEventType | null {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'blur') {
+      return 'blur';
+    }
+    if (normalized === 'change' || normalized === 'input' || normalized === 'treeselect') {
+      return 'change';
+    }
+
+    return null;
+  }
+
+  private normalizeFieldKey(value: unknown): string {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  private normalizeDynamicValue(value: unknown): string {
+    if (value == null) {
+      return '';
+    }
+
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? '' : value.toISOString();
+    }
+
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      const payload = value as Record<string, unknown>;
+      if (payload['key'] != null) {
+        return String(payload['key']);
+      }
+      if (payload['value'] != null) {
+        return String(payload['value']);
+      }
+    }
+
+    return String(value);
+  }
+
+  private normalizeString(value: unknown): string | null {
+    const normalized = String(value ?? '').trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+}

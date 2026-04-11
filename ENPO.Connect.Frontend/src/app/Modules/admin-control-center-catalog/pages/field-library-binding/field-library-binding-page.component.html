@@ -463,6 +463,7 @@
                 <th class="switch-col">إلزامي</th>
                 <th class="switch-col">قراءة فقط</th>
                 <th class="default-col">القيمة الافتراضية</th>
+                <th class="dynamic-col">السلوك الديناميكي</th>
                 <th class="actions-col">إجراءات</th>
               </tr>
             </ng-template>
@@ -543,6 +544,17 @@
                     [ngModelOptions]="{ standalone: true }"
                     (ngModelChange)="onBindingChanged()" />
                 </td>
+                <td class="dynamic-col">
+                  <textarea
+                    pInputTextarea
+                    rows="4"
+                    [autoResize]="true"
+                    [(ngModel)]="row.dynamicRuntimeJson"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()"
+                    placeholder='مثال: {"optionLoader":{"request":{"url":"/api/..."}}}'>
+                  </textarea>
+                </td>
                 <td class="actions-col">
                   <div class="row-actions">
                     <button pButton type="button" icon="pi pi-arrow-up" class="p-button-text p-button-sm" (click)="onMoveBindingUp(row)"></button>
@@ -553,6 +565,17 @@
               </tr>
             </ng-template>
           </p-table>
+        </div>
+
+        <div class="dynamic-runtime-guide">
+          <h4>دليل السلوك الديناميكي</h4>
+          <p>
+            عمود <strong>السلوك الديناميكي</strong> يقبل JSON Object فقط (بدون غلاف
+            <code>dynamicRuntime</code>)، ويتم دمجه تلقائيًا داخل
+            <code>displaySettingsJson</code>
+            عند الحفظ.
+          </p>
+          <pre class="runtime-json-sample"><code [innerText]="dynamicRuntimeSampleJson"></code></pre>
         </div>
       </section>
     </main>

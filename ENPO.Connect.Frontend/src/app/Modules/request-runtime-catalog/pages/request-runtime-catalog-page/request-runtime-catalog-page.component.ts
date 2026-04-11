@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { GenericFormsService } from 'src/app/Modules/GenericComponents/GenericForms.service';
 import {
@@ -28,6 +28,7 @@ import {
   createEmptyRuntimeCatalog
 } from '../../models/request-runtime-catalog.models';
 import { RequestRuntimeCatalogFacadeService } from '../../services/request-runtime-catalog-facade.service';
+import { RequestRuntimeDynamicFieldsFrameworkService } from '../../services/request-runtime-dynamic-fields-framework.service';
 
 type RuntimeDirectionMode = 'none' | 'selectable' | 'fixed';
 
@@ -65,7 +66,7 @@ interface RuntimeWorkspaceSnapshot {
   templateUrl: './request-runtime-catalog-page.component.html',
   styleUrls: ['./request-runtime-catalog-page.component.scss']
 })
-export class RequestRuntimeCatalogPageComponent implements OnInit {
+export class RequestRuntimeCatalogPageComponent implements OnInit, OnDestroy {
   private static readonly DIRECTION_FIELD_KEY = 'TOPICDIRECTION';
 
   readonly allApplicationsValue = REQUEST_RUNTIME_ALL_APPLICATIONS_VALUE;
@@ -141,11 +142,16 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
     private readonly facade: RequestRuntimeCatalogFacadeService,
     private readonly appNotification: AppNotificationService,
     private readonly genericFormService: GenericFormsService,
-    private readonly fb: FormBuilder
+    private readonly fb: FormBuilder,
+    private readonly dynamicFieldFramework: RequestRuntimeDynamicFieldsFrameworkService
   ) {}
 
   ngOnInit(): void {
     this.loadCatalog();
+  }
+
+  ngOnDestroy(): void {
+    this.dynamicFieldFramework.reset();
   }
 
   get hasSelectedRequest(): boolean {
@@ -205,8 +211,8 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
     return [];
   }
 
-  onDynamicFieldGenericEvent(_event: unknown): void {
-    // reserved for future cross-field runtime interactions
+  onDynamicFieldGenericEvent(event: unknown): void {
+    this.dynamicFieldFramework.handleGenericEvent(event);
   }
 
   onDisplayModeChanged(mode: RequestViewMode | null | undefined): void {
@@ -995,6 +1001,12 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
 
     this.genericFormService.cdmendDto = mappedMendDefinitions;
     this.genericFormService.cdCategoryMandDto = mappedCategoryMandDefinitions;
+    this.dynamicFieldFramework.bind({
+      dynamicControls: this.dynamicControls,
+      genericFormService: this.genericFormService,
+      fieldDefinitions: fieldsToRender,
+      controlMap: this.controlMap
+    });
     this.lastResolvedDirectionKey = this.resolveDocumentDirectionForForm();
   }
 
@@ -1653,6 +1665,7 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
   }
 
   private resetDynamicFormState(): void {
+    this.dynamicFieldFramework.reset();
     this.dynamicControls = this.fb.group({});
     this.renderGroupTree = [];
     this.controlMap.clear();

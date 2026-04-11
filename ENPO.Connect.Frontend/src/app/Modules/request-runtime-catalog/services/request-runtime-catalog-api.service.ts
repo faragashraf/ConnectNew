@@ -1,10 +1,11 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import {
   RequestRuntimeAdminGroupTreeNodeDto,
   RequestRuntimeCatalogDto,
+  RequestRuntimeDynamicHttpRequestConfig,
   RequestRuntimeEnvelopeDetailDto,
   RequestRuntimeEnvelopeUpsertRequestDto,
   RequestRuntimeFormDefinitionDto,
@@ -124,5 +125,63 @@ export class RequestRuntimeCatalogApiService {
       `${this.dynamicSubjectsBaseUrl}/Subjects`,
       formData
     );
+  }
+
+  executeDynamicRequest(request: RequestRuntimeDynamicHttpRequestConfig): Observable<unknown> {
+    const url = this.resolveDynamicRequestUrl(request.url);
+    const method = this.normalizeHttpMethod(request.method);
+
+    let params = new HttpParams();
+    Object.entries(request.query ?? {}).forEach(([key, value]) => {
+      const normalizedKey = String(key ?? '').trim();
+      if (!normalizedKey) {
+        return;
+      }
+
+      params = params.set(normalizedKey, String(value ?? ''));
+    });
+
+    let headers = new HttpHeaders();
+    Object.entries(request.headers ?? {}).forEach(([key, value]) => {
+      const normalizedKey = String(key ?? '').trim();
+      if (!normalizedKey) {
+        return;
+      }
+
+      headers = headers.set(normalizedKey, String(value ?? ''));
+    });
+
+    return this.http.request(method, url, {
+      params,
+      headers,
+      body: request.body,
+      responseType: 'json'
+    });
+  }
+
+  private resolveDynamicRequestUrl(value: string): string {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return environment.ConnectApiURL;
+    }
+
+    if (/^https?:\/\//i.test(normalized)) {
+      return normalized;
+    }
+
+    if (normalized.startsWith('/')) {
+      return `${environment.ConnectApiURL}${normalized}`;
+    }
+
+    return `${environment.ConnectApiURL}/${normalized}`;
+  }
+
+  private normalizeHttpMethod(value: unknown): 'GET' | 'POST' | 'PUT' | 'PATCH' {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    if (normalized === 'POST' || normalized === 'PUT' || normalized === 'PATCH') {
+      return normalized;
+    }
+
+    return 'GET';
   }
 }

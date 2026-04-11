@@ -26,6 +26,7 @@ export interface BoundFieldItem {
   groupId?: number;
   groupName?: string;
   displaySettingsJson?: string;
+  dynamicRuntimeJson?: string;
 }
 
 export interface FieldLibraryBindingValidationResult {

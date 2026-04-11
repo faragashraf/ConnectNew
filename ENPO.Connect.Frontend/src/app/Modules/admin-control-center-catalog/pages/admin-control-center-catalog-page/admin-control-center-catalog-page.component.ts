@@ -22,6 +22,14 @@ import {
 type MessageSeverity = 'success' | 'warn' | 'error';
 type UiPhase = 1 | 2;
 type ParentGroupOption = { label: string; value: number | null };
+type ControlPanelSectionKey =
+  | 'basic'
+  | 'lifecycle'
+  | 'availabilityPermissions'
+  | 'fieldsForm'
+  | 'dynamicIntegrations'
+  | 'notifications';
+type ControlPanelSection = { key: ControlPanelSectionKey; label: string; anchorId: string };
 
 @Component({
   selector: 'app-admin-control-center-catalog-page',
@@ -30,6 +38,14 @@ type ParentGroupOption = { label: string; value: number | null };
 })
 export class AdminControlCenterCatalogPageComponent implements OnInit {
   private static readonly CATALOG_CONTEXT_STORAGE_KEY = 'connect:control-center-catalog:context:v1';
+  readonly controlPanelSections: ReadonlyArray<ControlPanelSection> = [
+    { key: 'basic', label: 'المعلومات الأساسية', anchorId: 'catalog-section-basic' },
+    { key: 'lifecycle', label: 'دورة الطلب', anchorId: 'catalog-section-lifecycle' },
+    { key: 'availabilityPermissions', label: 'الإتاحة والصلاحيات', anchorId: 'catalog-section-availability-permissions' },
+    { key: 'fieldsForm', label: 'الحقول والنموذج', anchorId: 'catalog-section-fields-form' },
+    { key: 'dynamicIntegrations', label: 'السلوك الديناميكي والتكاملات', anchorId: 'catalog-section-dynamic-integrations' },
+    { key: 'notifications', label: 'الإشعارات', anchorId: 'catalog-section-notifications' }
+  ];
 
   readonly applicationForm: FormGroup = this.fb.group({
     applicationId: ['', [Validators.required, Validators.maxLength(10)]],
@@ -79,6 +95,7 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
   deletingGroup = false;
 
   activePhase: UiPhase = 1;
+  activeControlPanelSection: ControlPanelSectionKey = 'basic';
   groupsLoadedForCategoryId: number | null = null;
   routingMandatoryCompletionPercent = 0;
   fieldAccessMandatoryCompletionPercent = 0;
@@ -240,6 +257,21 @@ export class AdminControlCenterCatalogPageComponent implements OnInit {
     }
 
     this.activePhase = phase;
+  }
+
+  onJumpToControlPanelSection(sectionKey: ControlPanelSectionKey): void {
+    const target = this.controlPanelSections.find(item => item.key === sectionKey);
+    if (!target) {
+      return;
+    }
+
+    this.activeControlPanelSection = sectionKey;
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const host = document.getElementById(target.anchorId);
+    host?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
   }
 
   onSelectApplication(application: AdminCatalogApplicationDto): void {

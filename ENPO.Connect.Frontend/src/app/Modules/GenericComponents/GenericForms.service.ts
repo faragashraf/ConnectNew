@@ -477,8 +477,10 @@ export class GenericFormsService {
 
         for (const errorKey in abstractControl.errors) {
           if (errorKey) {
+            const errorPayload = (abstractControl.errors as Record<string, unknown>)[errorKey];
             const configuredMessage = String(messages_X?.find(f => f.key == errorKey)?.value ?? '').trim();
-            const resolvedMessage = configuredMessage || this.resolveFallbackValidationMessage(errorKey);
+            const payloadMessage = this.extractValidationErrorMessage(errorPayload);
+            const resolvedMessage = configuredMessage || payloadMessage || this.resolveFallbackValidationMessage(errorKey);
             if (!resolvedMessage) {
               continue;
             }
@@ -507,6 +509,20 @@ export class GenericFormsService {
 
   returnFormErrors(key: string) {
     return this.formErrors?.find(f => f.key == key)?.value
+  }
+
+  private extractValidationErrorMessage(errorPayload: unknown): string | null {
+    if (typeof errorPayload === 'string') {
+      const normalized = errorPayload.trim();
+      return normalized.length > 0 ? normalized : null;
+    }
+
+    if (!errorPayload || typeof errorPayload !== 'object' || Array.isArray(errorPayload)) {
+      return null;
+    }
+
+    const messageCandidate = String((errorPayload as Record<string, unknown>)['message'] ?? '').trim();
+    return messageCandidate.length > 0 ? messageCandidate : null;
   }
 
   private resolveFallbackValidationMessage(errorKey: string): string {
@@ -569,6 +585,49 @@ export class GenericFormsService {
       }
     }
     return []
+  }
+
+  setRuntimeSelectionForField(fieldKey: string, items: selection[]): void {
+    const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
+    if (!normalizedFieldKey) {
+      return;
+    }
+
+    const normalizedItems = (items ?? [])
+      .map(item => ({
+        key: String(item?.key ?? '').trim(),
+        name: String(item?.name ?? '').trim()
+      }))
+      .filter(item => item.key.length > 0 || item.name.length > 0)
+      .map(item => ({
+        key: item.key.length > 0 ? item.key : item.name,
+        name: item.name.length > 0 ? item.name : item.key
+      }));
+
+    const existingIndex = this.selectionArrays.findIndex(entry => entry.nameProp === normalizedFieldKey);
+    const nextPayload = {
+      keyProp: 'key',
+      nameProp: normalizedFieldKey,
+      items: normalizedItems
+    };
+
+    if (existingIndex >= 0) {
+      this.selectionArrays[existingIndex] = nextPayload;
+    } else {
+      this.selectionArrays.push(nextPayload);
+    }
+
+    this.staticSelectionCache.delete(normalizedFieldKey);
+  }
+
+  clearRuntimeSelectionForField(fieldKey: string): void {
+    const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
+    if (!normalizedFieldKey) {
+      return;
+    }
+
+    this.selectionArrays = this.selectionArrays.filter(entry => entry.nameProp !== normalizedFieldKey);
+    this.staticSelectionCache.delete(normalizedFieldKey);
   }
   getRequesterFieldTxt(message: MessageDto, fieldValue: string): string | '' {
     const requesterField = message.fields?.find(field => field.fildKind === fieldValue);

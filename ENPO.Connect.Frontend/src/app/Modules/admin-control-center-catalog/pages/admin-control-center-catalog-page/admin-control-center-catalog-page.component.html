@@ -51,7 +51,34 @@
     {{ message }}
   </div>
 
-  <section class="progress-card">
+  <section class="card structure-card">
+    <header class="card-header">
+      <div>
+        <h3>هيكلة لوحة التحكم</h3>
+        <small>تنقل سريع بين أقسام تعريف الطلب والإعدادات التشغيلية</small>
+      </div>
+    </header>
+
+    <div class="structure-shortcuts">
+      <button
+        *ngFor="let section of controlPanelSections"
+        pButton
+        type="button"
+        class="p-button-outlined p-button-sm shortcut-btn"
+        [class.active]="activeControlPanelSection === section.key"
+        [label]="section.label"
+        (click)="onJumpToControlPanelSection(section.key)">
+      </button>
+    </div>
+  </section>
+
+  <section class="catalog-area" id="catalog-section-basic">
+    <header class="area-header">
+      <h3>المعلومات الأساسية</h3>
+      <small>تعريف التطبيق، شجرة أنواع الطلب، وتكوين المجموعات</small>
+    </header>
+
+    <section class="progress-card">
     <div class="progress-row">
       <span>اكتمال المرحلة الأولى</span>
       <strong>{{ phase1CompletionPercent }}%</strong>
@@ -69,9 +96,9 @@
       <strong>{{ overallCompletionPercent }}%</strong>
     </div>
     <p-progressBar [value]="overallCompletionPercent"></p-progressBar>
-  </section>
+    </section>
 
-  <div class="phase-switch">
+    <div class="phase-switch">
     <button
       pButton
       type="button"
@@ -89,7 +116,7 @@
       label="المرحلة 2: المجموعات"
       (click)="onActivatePhase(2)">
     </button>
-  </div>
+    </div>
 
   <section class="card phase-card" [class.dimmed]="activePhase !== 1">
     <header class="card-header">
@@ -539,7 +566,15 @@
     </ng-template>
   </section>
 
-  <section class="card routing-card">
+  </section>
+
+  <section class="catalog-area" id="catalog-section-lifecycle">
+    <header class="area-header">
+      <h3>دورة الطلب</h3>
+      <small>إدارة مسار التنفيذ وخطوات التوجيه والتدقيق</small>
+    </header>
+
+    <section class="card routing-card">
     <header class="card-header">
       <div>
         <h3>إدارة التوجيه الذكي</h3>
@@ -572,7 +607,15 @@
     </ng-template>
   </section>
 
-  <section class="card access-policy-card">
+  </section>
+
+  <section class="catalog-area" id="catalog-section-availability-permissions">
+    <header class="area-header">
+      <h3>الإتاحة والصلاحيات</h3>
+      <small>تحديد من يمكنه الوصول، وما الذي يمكنه رؤيته أو تعديله</small>
+    </header>
+
+    <section class="card access-policy-card">
     <header class="card-header">
       <div>
         <h3>إدارة سياسة وصول الحقول والمجموعات</h3>
@@ -604,7 +647,15 @@
     </ng-template>
   </section>
 
-  <section class="card display-settings-card">
+  </section>
+
+  <section class="catalog-area" id="catalog-section-fields-form">
+    <header class="area-header">
+      <h3>الحقول والنموذج</h3>
+      <small>وضع العرض، ربط الحقول، وإدارة تصميم النموذج داخل مسار موحد</small>
+    </header>
+
+    <section class="card display-settings-card">
     <header class="card-header">
       <div>
         <h3>إعدادات طريقة العرض (قياسي / مبوب)</h3>
@@ -627,5 +678,86 @@
         لا يمكن إعداد طريقة العرض قبل اختيار عقدة (نوع طلب) من الشجرة في المرحلة الأولى.
       </div>
     </ng-template>
+  </section>
+
+    <section class="card model-tools-card">
+      <header class="card-header">
+        <div>
+          <h3>أدوات تصميم الحقول</h3>
+          <small>الدخول إلى مكتبة الحقول وربطها بنوع الطلب المحدد</small>
+        </div>
+      </header>
+
+      <div class="tool-links">
+        <button
+          pButton
+          type="button"
+          class="p-button-outlined"
+          icon="pi pi-th-large"
+          label="فتح مكتبة الحقول"
+          [routerLink]="['/Admin/ControlCenterCatalog/field-library']"
+          [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
+        </button>
+        <button
+          pButton
+          type="button"
+          class="p-button-outlined"
+          icon="pi pi-link"
+          label="فتح شاشة الربط"
+          [routerLink]="['/Admin/ControlCenterCatalog/field-library-binding']"
+          [disabled]="selectedCategoryId == null || selectedApplicationId == null"
+          [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
+        </button>
+      </div>
+    </section>
+
+  </section>
+
+  <section class="catalog-area" id="catalog-section-dynamic-integrations">
+    <header class="area-header">
+      <h3>السلوك الديناميكي والتكاملات</h3>
+      <small>المكان الموحّد لإعداد تحميل الخيارات والتحقق الخارجي والملء التلقائي</small>
+    </header>
+
+    <section class="card reserved-card">
+      <h4>تجهيز المرحلة القادمة</h4>
+      <p>
+        يتم اعتماد إعدادات السلوك الديناميكي لكل حقل عبر
+        <code>displaySettingsJson</code>
+        داخل شاشة ربط مكتبة الحقول، ليُطبّق نفس التعريف مباشرة في شاشة التشغيل.
+      </p>
+      <div class="tool-links">
+        <button
+          pButton
+          type="button"
+          class="p-button-outlined"
+          icon="pi pi-cog"
+          label="إدارة تكاملات الحقول"
+          [routerLink]="['/Admin/ControlCenterCatalog/field-library-binding']"
+          [disabled]="selectedCategoryId == null || selectedApplicationId == null"
+          [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
+        </button>
+      </div>
+      <small class="reserved-note">
+        لن يتم إنشاء مسار موازٍ، وسيبقى هذا القسم هو المرجع الوحيد لسلوك الحقول الديناميكية.
+      </small>
+    </section>
+  </section>
+
+  <section class="catalog-area" id="catalog-section-notifications">
+    <header class="area-header">
+      <h3>الإشعارات</h3>
+      <small>مكان محجوز الآن لضبط التنبيهات والقنوات لاحقًا بدون إعادة ترتيب اللوحة</small>
+    </header>
+
+    <section class="card reserved-card">
+      <h4>قسم محجوز</h4>
+      <p>
+        سيتم هنا لاحقًا ضبط قواعد الإشعار (قبل الإجراء/بعد الإجراء/الفشل) مع قنوات التنفيذ المعتمدة.
+      </p>
+      <small class="reserved-note">
+        القسم محجوز ضمن الهيكل النهائي من الآن لتجنب أي إعادة ترتيب في المراحل التالية.
+      </small>
+    </section>
   </section>
 </section>

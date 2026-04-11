@@ -88,6 +88,51 @@
   color: #991b1b;
 }
 
+.structure-card {
+  gap: 0.65rem;
+}
+
+.structure-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.shortcut-btn {
+  white-space: nowrap;
+}
+
+.shortcut-btn.active {
+  background: #0f6f8d;
+  border-color: #0f6f8d;
+  color: #ffffff;
+}
+
+.catalog-area {
+  display: grid;
+  gap: 0.8rem;
+  scroll-margin-top: 0.8rem;
+}
+
+.area-header {
+  border: 1px solid #dbe8ef;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #f8fcff 0%, #f1f8fd 100%);
+  padding: 0.7rem 0.85rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.area-header h3 {
+  margin: 0;
+  color: #12354a;
+  font-size: 1rem;
+}
+
+.area-header small {
+  color: #587187;
+}
+
 .progress-card {
   border: 1px solid #d9e5ec;
   border-radius: 14px;
@@ -615,6 +660,37 @@
 
 .display-settings-card {
   gap: 0.9rem;
+}
+
+.model-tools-card {
+  gap: 0.75rem;
+}
+
+.tool-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.reserved-card {
+  gap: 0.65rem;
+}
+
+.reserved-card h4 {
+  margin: 0;
+  color: #12354a;
+  font-size: 0.95rem;
+}
+
+.reserved-card p {
+  margin: 0;
+  color: #4a6478;
+  line-height: 1.45;
+}
+
+.reserved-note {
+  color: #5f768a;
+  font-size: 0.8rem;
 }
 
 .routing-tags {

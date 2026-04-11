@@ -7,6 +7,7 @@ import { RequestRuntimeCatalogPageComponent } from './pages/request-runtime-cata
 import { RequestRuntimeCatalogRoutingModule } from './request-runtime-catalog-routing.module';
 import { RequestRuntimeCatalogApiService } from './services/request-runtime-catalog-api.service';
 import { RequestRuntimeCatalogFacadeService } from './services/request-runtime-catalog-facade.service';
+import { RequestRuntimeDynamicFieldsFrameworkService } from './services/request-runtime-dynamic-fields-framework.service';
 
 @NgModule({
   declarations: [RequestRuntimeCatalogPageComponent],
@@ -20,7 +21,8 @@ import { RequestRuntimeCatalogFacadeService } from './services/request-runtime-c
   ],
   providers: [
     RequestRuntimeCatalogApiService,
-    RequestRuntimeCatalogFacadeService
+    RequestRuntimeCatalogFacadeService,
+    RequestRuntimeDynamicFieldsFrameworkService
   ]
 })
 export class RequestRuntimeCatalogModule {}

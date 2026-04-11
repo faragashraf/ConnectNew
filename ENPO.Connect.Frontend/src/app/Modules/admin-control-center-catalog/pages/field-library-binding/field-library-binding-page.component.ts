@@ -104,6 +104,32 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     { label: 'عرض قياسي', value: 'Standard' },
     { label: 'عرض بعلامات تبويب', value: 'Tabbed' }
   ];
+  readonly dynamicRuntimeSampleJson = `{
+  "optionLoader": {
+    "sourceFieldKey": "customerCode",
+    "trigger": "blur",
+    "request": { "url": "/api/DynamicSubjects/Lookup", "query": { "code": "{{customerCode}}" } },
+    "responseListPath": "data.items",
+    "responseValuePath": "id",
+    "responseLabelPath": "name"
+  },
+  "asyncValidation": {
+    "trigger": "blur",
+    "request": { "url": "/api/DynamicSubjects/Validate", "query": { "value": "{{value}}" } },
+    "responseValidPath": "data.isValid",
+    "responseMessagePath": "data.message"
+  },
+  "actions": [
+    {
+      "trigger": "blur",
+      "request": { "url": "/api/DynamicSubjects/CustomerProfile", "query": { "code": "{{value}}" } },
+      "patches": [
+        { "targetFieldKey": "customerName", "valuePath": "data.name", "clearWhenMissing": true },
+        { "targetFieldKey": "customerAddress", "valuePath": "data.address", "clearWhenMissing": true }
+      ]
+    }
+  ]
+}`;
 
   readonly referencePolicyForm: FormGroup = this.fb.group({
     referencePolicyEnabled: [true],
@@ -359,7 +385,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       defaultValue: existingField?.defaultValue ?? newBinding.defaultValue,
       required: existingField?.required === true ? true : newBinding.required,
       readonly: existingField?.isDisabledInit === true ? true : newBinding.readonly,
-      sourceFieldId: existingField?.cdmendSql ? `fld-${existingField.cdmendSql}` : newBinding.sourceFieldId
+      sourceFieldId: existingField?.cdmendSql ? `fld-${existingField.cdmendSql}` : newBinding.sourceFieldId,
+      dynamicRuntimeJson: ''
     };
 
     this.bindings = this.bindingEngine.normalizeDisplayOrder([...this.bindings, enriched]);
@@ -422,7 +449,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       readonly: raw['readonly'] === true,
       defaultValue: String(raw['defaultValue'] ?? '').trim(),
       groupId,
-      groupName: this.resolveGroupName(groupId)
+      groupName: this.resolveGroupName(groupId),
+      dynamicRuntimeJson: ''
     };
 
     this.bindings = this.bindingEngine.normalizeDisplayOrder([...this.bindings, createdBinding]);
@@ -470,6 +498,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
           label: normalizedLabel,
           type: this.normalizeBindingType(item.type),
           defaultValue: String(item.defaultValue ?? '').trim(),
+          dynamicRuntimeJson: String(item.dynamicRuntimeJson ?? '').trim(),
           displayOrder,
           groupId,
           groupName: this.resolveGroupName(groupId)
@@ -663,12 +692,13 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private evaluateBindings(syncToStore: boolean, markBackendDirty = false): void {
     const baseValidation = this.bindingEngine.validateBindings(this.bindings);
     const groupIssues = this.collectGroupValidationIssues(this.bindings);
+    const dynamicRuntimeIssues = this.collectDynamicRuntimeValidationIssues(this.bindings);
     const referenceIssues = this.validateReferencePolicy();
     this.referencePolicyBlockingIssues = referenceIssues;
 
     this.validation = {
-      isValid: baseValidation.isValid && groupIssues.length === 0 && referenceIssues.length === 0,
-      blockingIssues: [...baseValidation.blockingIssues, ...groupIssues, ...referenceIssues],
+      isValid: baseValidation.isValid && groupIssues.length === 0 && dynamicRuntimeIssues.length === 0 && referenceIssues.length === 0,
+      blockingIssues: [...baseValidation.blockingIssues, ...groupIssues, ...dynamicRuntimeIssues, ...referenceIssues],
       warnings: baseValidation.warnings
     };
 
@@ -847,7 +877,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       cdmendSql: this.toPositiveInt(fieldMetadata?.cdmendSql) ?? undefined,
       groupId,
       groupName: this.resolveGroupName(groupId),
-      displaySettingsJson: link.displaySettingsJson ?? undefined
+      displaySettingsJson: link.displaySettingsJson ?? undefined,
+      dynamicRuntimeJson: this.extractDynamicRuntimeJson(link.displaySettingsJson)
     };
   }
 
@@ -1091,14 +1122,57 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   private buildDisplaySettingsJson(existingRaw: string | undefined, binding: BoundFieldItem): string | undefined {
-    const parsed = this.parseDisplaySettings(existingRaw) ?? {};
+    const parsed = this.parseDisplaySettings(binding.displaySettingsJson ?? existingRaw) ?? {};
     parsed['readonly'] = binding.readonly === true;
     parsed['isReadonly'] = binding.readonly === true;
+
+    const dynamicRuntime = this.parseDynamicRuntimeJson(binding.dynamicRuntimeJson);
+    if (dynamicRuntime) {
+      parsed['dynamicRuntime'] = dynamicRuntime;
+    } else if (Object.prototype.hasOwnProperty.call(parsed, 'dynamicRuntime')) {
+      delete parsed['dynamicRuntime'];
+    }
 
     try {
       return JSON.stringify(parsed);
     } catch {
       return JSON.stringify({ readonly: binding.readonly === true, isReadonly: binding.readonly === true });
+    }
+  }
+
+  private extractDynamicRuntimeJson(raw: string | undefined): string {
+    const parsed = this.parseDisplaySettings(raw);
+    if (!parsed) {
+      return '';
+    }
+
+    const dynamicRuntime = parsed['dynamicRuntime'];
+    if (!dynamicRuntime || typeof dynamicRuntime !== 'object' || Array.isArray(dynamicRuntime)) {
+      return '';
+    }
+
+    try {
+      return JSON.stringify(dynamicRuntime, null, 2);
+    } catch {
+      return '';
+    }
+  }
+
+  private parseDynamicRuntimeJson(raw: unknown): Record<string, unknown> | null {
+    const payload = this.normalizeNullable(raw);
+    if (!payload) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(payload);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
     }
   }
 
@@ -1298,7 +1372,12 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       return;
     }
 
-    this.bindings = parsed;
+    this.bindings = parsed.map(item => ({
+      ...item,
+      dynamicRuntimeJson: this.normalizeNullable(item.dynamicRuntimeJson)
+        ?? this.extractDynamicRuntimeJson(item.displaySettingsJson)
+        ?? ''
+    }));
   }
 
   private moveBinding(binding: BoundFieldItem, direction: -1 | 1): void {
@@ -1333,6 +1412,28 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       const knownGroup = this.groups.some(group => group.groupId === groupId);
       if (!knownGroup && this.groupOptions.length > 0) {
         issues.push(`المجموعة رقم ${groupId} غير موجودة ضمن المجموعات المتاحة للحقل "${item.label || item.fieldKey}".`);
+      }
+    }
+
+    return issues;
+  }
+
+  private collectDynamicRuntimeValidationIssues(bindings: ReadonlyArray<BoundFieldItem>): string[] {
+    const issues: string[] = [];
+
+    for (const item of bindings ?? []) {
+      const payload = this.normalizeNullable(item.dynamicRuntimeJson);
+      if (!payload) {
+        continue;
+      }
+
+      try {
+        const parsed = JSON.parse(payload);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          issues.push(`تهيئة السلوك الديناميكي للحقل "${item.label || item.fieldKey}" يجب أن تكون JSON Object صالح.`);
+        }
+      } catch {
+        issues.push(`تهيئة السلوك الديناميكي للحقل "${item.label || item.fieldKey}" تحتوي JSON غير صالح.`);
       }
     }
 
