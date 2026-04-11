@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import {
+  RequestRuntimeAdminGroupTreeNodeDto,
   RequestRuntimeCatalogDto,
   RequestRuntimeEnvelopeDetailDto,
   RequestRuntimeEnvelopeUpsertRequestDto,
@@ -17,6 +18,7 @@ import {
 export class RequestRuntimeCatalogApiService {
   private readonly runtimeCatalogBaseUrl = `${environment.ConnectApiURL}/api/RequestRuntimeCatalog`;
   private readonly dynamicSubjectsBaseUrl = `${environment.ConnectApiURL}/api/DynamicSubjects`;
+  private readonly dynamicSubjectsAdminCatalogBaseUrl = `${environment.ConnectApiURL}/api/DynamicSubjectsAdminCatalog`;
 
   constructor(private readonly http: HttpClient) {}
 
@@ -32,11 +34,12 @@ export class RequestRuntimeCatalogApiService {
 
   getFormDefinition(
     categoryId: number,
-    context?: { stageId?: number | null; documentDirection?: string | null }
+    context?: { stageId?: number | null; documentDirection?: string | null; appId?: string | null }
   ): Observable<RuntimeApiResponse<RequestRuntimeFormDefinitionDto>> {
     let params = new HttpParams();
     const normalizedStageId = Number(context?.stageId ?? 0);
     const normalizedDirection = String(context?.documentDirection ?? '').trim();
+    const normalizedAppId = String(context?.appId ?? '').trim();
 
     if (normalizedStageId > 0) {
       params = params.set('stageId', String(normalizedStageId));
@@ -46,9 +49,19 @@ export class RequestRuntimeCatalogApiService {
       params = params.set('documentDirection', normalizedDirection);
     }
 
+    if (normalizedAppId.length > 0) {
+      params = params.set('appId', normalizedAppId);
+    }
+
     return this.http.get<RuntimeApiResponse<RequestRuntimeFormDefinitionDto>>(
       `${this.dynamicSubjectsBaseUrl}/FormDefinition/${categoryId}`,
       { params }
+    );
+  }
+
+  getCategoryGroups(categoryId: number): Observable<RuntimeApiResponse<RequestRuntimeAdminGroupTreeNodeDto[]>> {
+    return this.http.get<RuntimeApiResponse<RequestRuntimeAdminGroupTreeNodeDto[]>>(
+      `${this.dynamicSubjectsAdminCatalogBaseUrl}/Categories/${categoryId}/Groups`
     );
   }
 

@@ -1,14 +1,27 @@
 import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { GenericFormsService } from 'src/app/Modules/GenericComponents/GenericForms.service';
+import {
+  CdCategoryMandDto,
+  CdmendDto
+} from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
+import {
+  normalizeRequestViewMode,
+  RequestViewMode,
+  REQUEST_VIEW_MODE_OPTIONS_AR,
+  REQUEST_VIEW_MODE_STANDARD
+} from 'src/app/shared/models/request-view-mode';
 import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
 import {
   REQUEST_RUNTIME_ALL_APPLICATIONS_VALUE,
+  RequestRuntimeAdminGroupTreeNodeDto,
   RequestRuntimeApplicationOption,
   RequestRuntimeCatalogDto,
   RequestRuntimeEnvelopeSummaryDto,
   RequestRuntimeEnvelopeTerminology,
   RequestRuntimeFieldDefinitionDto,
   RequestRuntimeFormDefinitionDto,
+  RequestRuntimeFormGroupDefinitionDto,
   RequestRuntimeSubjectFieldValueDto,
   RequestRuntimeTreeNode,
   buildEnvelopeTerminology,
@@ -17,30 +30,26 @@ import {
 import { RequestRuntimeCatalogFacadeService } from '../../services/request-runtime-catalog-facade.service';
 
 type RuntimeDirectionMode = 'none' | 'selectable' | 'fixed';
-type RuntimeFieldInputType = 'text' | 'textarea' | 'dropdown' | 'date' | 'datetime' | 'toggle' | 'number';
 
-interface RuntimeFieldOption {
-  label: string;
-  value: string;
-}
-
-interface RuntimeFieldViewModel {
-  controlName: string;
-  label: string;
-  placeholder: string;
-  required: boolean;
-  inputType: RuntimeFieldInputType;
-  options: RuntimeFieldOption[];
+interface RuntimeGroupHierarchyMeta {
+  parentGroupId: number | null;
   displayOrder: number;
-  groupId: number;
-  groupName: string;
-  source: RequestRuntimeFieldDefinitionDto;
+  hierarchyOrder?: number;
 }
 
-interface RuntimeFieldGroupViewModel {
+interface RuntimeCanonicalGroupMeta extends RuntimeGroupHierarchyMeta {
+  groupName: string;
+  groupDescription?: string;
+}
+
+interface RuntimeGroupRenderNode {
   groupId: number;
   groupName: string;
-  fields: RuntimeFieldViewModel[];
+  groupDescription?: string;
+  formArrayName: string | null;
+  fields: CdCategoryMandDto[];
+  totalVisibleFieldsCount: number;
+  children: RuntimeGroupRenderNode[];
 }
 
 interface RuntimeWorkspaceSnapshot {
@@ -48,7 +57,7 @@ interface RuntimeWorkspaceSnapshot {
   description: string;
   documentDirection: string;
   envelopeId: number | null;
-  dynamicValues: Record<string, unknown>;
+  dynamicValues: RequestRuntimeSubjectFieldValueDto[];
 }
 
 @Component({
@@ -57,19 +66,20 @@ interface RuntimeWorkspaceSnapshot {
   styleUrls: ['./request-runtime-catalog-page.component.scss']
 })
 export class RequestRuntimeCatalogPageComponent implements OnInit {
-  readonly allApplicationsValue = REQUEST_RUNTIME_ALL_APPLICATIONS_VALUE;
+  private static readonly DIRECTION_FIELD_KEY = 'TOPICDIRECTION';
 
+  readonly allApplicationsValue = REQUEST_RUNTIME_ALL_APPLICATIONS_VALUE;
   readonly directionOptions: Array<{ label: string; value: string }> = [
     { label: 'وارد', value: 'incoming' },
     { label: 'صادر', value: 'outgoing' }
   ];
+  readonly formDisplayModeOptions: Array<{ label: string; value: RequestViewMode }> = [...REQUEST_VIEW_MODE_OPTIONS_AR];
 
   readonly requestForm: FormGroup = this.fb.group({
     subject: [''],
     description: [''],
     documentDirection: [''],
-    envelopeId: [null],
-    dynamicFields: this.fb.group({})
+    envelopeId: [null]
   });
 
   readonly newEnvelopeForm: FormGroup = this.fb.group({
@@ -79,6 +89,8 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
     deliveryDelegate: ['', Validators.maxLength(120)],
     notes: ['', Validators.maxLength(300)]
   });
+
+  dynamicControls: FormGroup = this.fb.group({});
 
   loading = false;
   runtimeLoading = false;
@@ -105,16 +117,30 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
   availableEnvelopes: RequestRuntimeEnvelopeSummaryDto[] = [];
   showNewEnvelopeDialog = false;
 
-  activeDefinition: RequestRuntimeFormDefinitionDto | null = null;
-  runtimeFieldGroups: RuntimeFieldGroupViewModel[] = [];
-  runtimeFields: RuntimeFieldViewModel[] = [];
+  rawFormDefinition: RequestRuntimeFormDefinitionDto | null = null;
+  formDefinition: RequestRuntimeFormDefinitionDto | null = null;
+  renderGroupTree: RuntimeGroupRenderNode[] = [];
 
-  directionMode: RuntimeDirectionMode = 'none';
-  fixedDirection: string | null = null;
+  allowRequesterOverride = false;
+  currentDisplayMode: RequestViewMode = REQUEST_VIEW_MODE_STANDARD;
+  rootGroupTabIndex = 0;
+
+  private directionSelectionMode: RuntimeDirectionMode = 'none';
+  private fixedDocumentDirection: string | null = null;
+  private suppressDirectionRebuild = false;
+  private lastResolvedDirectionKey: string | null = null;
+
+  private readonly controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>();
+
+  private canonicalGroupHierarchyCategoryId: number | null = null;
+  private canonicalGroupHierarchyRequestToken = 0;
+  private canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+  private readonly canonicalGroupHierarchyCache = new Map<number, Map<number, RuntimeCanonicalGroupMeta>>();
 
   constructor(
     private readonly facade: RequestRuntimeCatalogFacadeService,
     private readonly appNotification: AppNotificationService,
+    private readonly genericFormService: GenericFormsService,
     private readonly fb: FormBuilder
   ) {}
 
@@ -134,20 +160,65 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
     return this.hasSelectedRequest && !this.runtimeLoading && !this.submittingRequest;
   }
 
+  get shouldShowDisplayModeSelector(): boolean {
+    return this.allowRequesterOverride;
+  }
+
+  get isTabbedDisplayModeActive(): boolean {
+    return this.currentDisplayMode === 'tabbed' && this.renderGroupTree.length > 0;
+  }
+
+  get hasDirectionCapability(): boolean {
+    const hasDirectionField = (this.rawFormDefinition?.fields ?? []).some(field =>
+      String(field.fieldKey ?? '').trim().toUpperCase() === RequestRuntimeCatalogPageComponent.DIRECTION_FIELD_KEY);
+    return hasDirectionField || this.fixedDocumentDirection != null;
+  }
+
   get showDirectionSelector(): boolean {
-    return this.directionMode === 'selectable';
+    return this.hasDirectionCapability && this.directionSelectionMode === 'selectable';
   }
 
   get showDirectionReadonly(): boolean {
-    return this.directionMode === 'fixed' && this.fixedDirection != null;
+    return this.hasDirectionCapability && this.directionSelectionMode === 'fixed';
   }
 
   get directionReadonlyLabel(): string {
-    return this.resolveDirectionLabel(this.fixedDirection);
+    return this.resolveDirectionLabel(this.resolveDocumentDirectionForForm());
   }
 
-  get dynamicFieldsGroup(): FormGroup {
-    return this.requestForm.get('dynamicFields') as FormGroup;
+  trackByGroupNode = (_index: number, groupNode: RuntimeGroupRenderNode): number => groupNode.groupId;
+
+  getFormArrayControls(formArrayName: string): AbstractControl[] {
+    return this.getFormArrayInstance(formArrayName)?.controls ?? [];
+  }
+
+  getFormArrayInstance(formArrayName: string): FormArray | null {
+    const control = this.dynamicControls?.get(formArrayName);
+    return control instanceof FormArray ? control : null;
+  }
+
+  getControlNamesFromGroup(groupControl: AbstractControl): string[] {
+    if (groupControl instanceof FormGroup) {
+      return Object.keys(groupControl.controls);
+    }
+
+    return [];
+  }
+
+  onDynamicFieldGenericEvent(_event: unknown): void {
+    // reserved for future cross-field runtime interactions
+  }
+
+  onDisplayModeChanged(mode: RequestViewMode | null | undefined): void {
+    this.currentDisplayMode = normalizeRequestViewMode(mode);
+    this.rootGroupTabIndex = 0;
+  }
+
+  onRootGroupTabChange(nextIndex: number | null | undefined): void {
+    const normalized = Number(nextIndex ?? 0);
+    this.rootGroupTabIndex = Number.isFinite(normalized) && normalized >= 0
+      ? Math.trunc(normalized)
+      : 0;
   }
 
   loadCatalog(): void {
@@ -232,7 +303,7 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
   }
 
   onDirectionChange(): void {
-    if (!this.hasSelectedRequest || this.runtimeLoading || this.directionMode !== 'selectable') {
+    if (!this.hasSelectedRequest || this.runtimeLoading || this.directionSelectionMode !== 'selectable' || this.suppressDirectionRebuild) {
       return;
     }
 
@@ -309,10 +380,11 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
     }
 
     this.requestForm.markAllAsTouched();
-    Object.values(this.dynamicFieldsGroup.controls).forEach(control => control.markAsTouched());
+    this.dynamicControls.markAllAsTouched();
 
-    if (this.requestForm.invalid || this.dynamicFieldsGroup.invalid) {
-      this.appNotification.warning('يرجى استكمال الحقول الإلزامية قبل تسجيل الطلب.');
+    if (this.dynamicControls.invalid) {
+      this.focusFirstInvalidDynamicControl();
+      this.appNotification.warning('يرجى استكمال الحقول الديناميكية المطلوبة قبل تسجيل الطلب.');
       return;
     }
 
@@ -322,19 +394,27 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
       return;
     }
 
+    const dynamicFields = this.buildDynamicFieldValues();
+    const documentDirection = this.resolveDocumentDirectionForSave(dynamicFields);
+    if (this.hasDirectionCapability && !documentDirection) {
+      this.requestForm.get('documentDirection')?.markAsTouched();
+      this.appNotification.warning('يرجى تحديد اتجاه الطلب (وارد/صادر).');
+      return;
+    }
+
     const stageId = Number(this.selectedRequestNode?.data?.startStageId ?? 0);
     const envelopeId = Number(this.requestForm.get('envelopeId')?.value ?? 0);
 
     const payload = {
       categoryId,
       stageId: stageId > 0 ? stageId : undefined,
-      documentDirection: this.normalizeDirectionValue(this.requestForm.get('documentDirection')?.value) ?? undefined,
+      documentDirection: documentDirection ?? undefined,
       subject: this.normalizeNullable(this.requestForm.get('subject')?.value) ?? undefined,
       description: this.normalizeNullable(this.requestForm.get('description')?.value) ?? undefined,
       saveAsDraft: false,
       submit: true,
       envelopeId: envelopeId > 0 ? envelopeId : undefined,
-      dynamicFields: this.buildDynamicFieldsPayload(),
+      dynamicFields,
       stakeholders: [],
       tasks: []
     };
@@ -366,31 +446,6 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
         this.submittingRequest = false;
       }
     });
-  }
-
-  getFieldError(field: RuntimeFieldViewModel): string | null {
-    const control = this.dynamicFieldsGroup.get(field.controlName);
-    if (!control || !(control.touched || control.dirty)) {
-      return null;
-    }
-
-    if (control.hasError('required') || control.hasError('requiredTrue')) {
-      return `${field.label} حقل إلزامي.`;
-    }
-
-    if (control.hasError('email')) {
-      return 'صيغة البريد الإلكتروني غير صحيحة.';
-    }
-
-    if (control.hasError('pattern')) {
-      return 'القيمة لا تطابق النمط المطلوب.';
-    }
-
-    if (control.hasError('min') || control.hasError('max')) {
-      return 'القيمة خارج النطاق المسموح.';
-    }
-
-    return 'قيمة غير صالحة.';
   }
 
   private refreshTree(): void {
@@ -434,29 +489,36 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
       ? this.captureWorkspaceSnapshot()
       : this.createEmptySnapshot();
 
+    this.loadCanonicalGroupHierarchy(categoryId);
     this.runtimeLoading = true;
 
     this.facade.loadFormDefinition(categoryId, {
       stageId: Number(node.data.startStageId ?? 0) > 0 ? Number(node.data.startStageId ?? 0) : undefined,
-      documentDirection: this.normalizeDirectionValue(snapshot.documentDirection)
+      documentDirection: this.normalizeDirectionValue(snapshot.documentDirection),
+      appId: this.normalizeNullable(node.data.applicationId)
     }).subscribe({
       next: response => {
-        if ((response.errors ?? []).length > 0 || !response.data) {
-          this.activeDefinition = null;
-          this.runtimeFieldGroups = [];
-          this.runtimeFields = [];
-          this.requestForm.setControl('dynamicFields', this.fb.group({}));
+        if ((response.errors ?? []).length > 0 || !response.data || Number(response.data.fields?.length ?? 0) === 0) {
+          this.clearLoadedDefinitionState();
           this.appNotification.showApiErrors(response.errors ?? [], 'تعذر تحميل نموذج الطلب المختار.');
           return;
         }
 
-        this.activeDefinition = response.data;
-        this.rebuildDynamicFields(response.data, snapshot.dynamicValues);
-        this.configureDirectionState(response.data, snapshot.documentDirection);
+        this.rawFormDefinition = response.data;
+        this.applyPresentationSettingsFromDefinition(this.rawFormDefinition);
+        this.applyDirectionPolicyFromDefinition(this.resolveInitialDirectionCandidate(snapshot.documentDirection));
+        this.formDefinition = this.resolveDefinitionByPolicy(
+          this.rawFormDefinition,
+          this.resolveDocumentDirectionForForm()
+        );
+
+        this.rebuildDynamicControls(this.formDefinition, snapshot.dynamicValues);
 
         this.requestForm.patchValue(
           {
-            subject: this.normalizeNullable(snapshot.subject) ?? this.normalizeNullable(response.data.categoryName) ?? '',
+            subject: this.normalizeNullable(snapshot.subject)
+              ?? this.normalizeNullable(response.data.categoryName)
+              ?? '',
             description: snapshot.description,
             envelopeId: snapshot.envelopeId
           },
@@ -464,10 +526,7 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
         );
       },
       error: () => {
-        this.activeDefinition = null;
-        this.runtimeFieldGroups = [];
-        this.runtimeFields = [];
-        this.requestForm.setControl('dynamicFields', this.fb.group({}));
+        this.clearLoadedDefinitionState();
         this.appNotification.error('حدث خطأ أثناء تحميل نموذج الطلب.');
       },
       complete: () => {
@@ -476,6 +535,1021 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
     });
 
     this.loadEnvelopes(snapshot.envelopeId);
+  }
+
+  private applyPresentationSettingsFromDefinition(definition: RequestRuntimeFormDefinitionDto | null): void {
+    this.allowRequesterOverride = (definition?.allowRequesterOverride ?? definition?.allowUserToChangeDisplayMode) === true;
+    this.currentDisplayMode = normalizeRequestViewMode(
+      definition?.defaultViewMode ?? definition?.defaultDisplayMode
+    );
+    this.rootGroupTabIndex = 0;
+  }
+
+  private resolveDefinitionByPolicy(
+    source: RequestRuntimeFormDefinitionDto,
+    _documentDirection: string | null
+  ): RequestRuntimeFormDefinitionDto {
+    return {
+      ...source,
+      groups: (source.groups ?? []).map(group => ({ ...group })),
+      fields: (source.fields ?? []).map(field => ({
+        ...field,
+        group: field.group ? { ...field.group } : undefined
+      }))
+    };
+  }
+
+  private resolveInitialDirectionCandidate(preferredDirection?: string): string | null {
+    const preferred = this.normalizeDirectionValue(preferredDirection);
+    if (preferred) {
+      return preferred;
+    }
+
+    return this.normalizeDirectionValue(this.requestForm.get('documentDirection')?.value);
+  }
+
+  private applyDirectionPolicyFromDefinition(initialDirection: string | null): void {
+    const workflow = this.rawFormDefinition?.requestPolicy?.workflowPolicy;
+    const modeFromPolicy = String(workflow?.directionMode ?? '').trim().toLowerCase();
+    const fixedDirection = modeFromPolicy === 'fixed'
+      ? this.normalizeDirectionValue(workflow?.fixedDirection)
+      : null;
+
+    this.fixedDocumentDirection = fixedDirection;
+
+    if (fixedDirection) {
+      this.directionSelectionMode = 'fixed';
+    } else if (this.hasDirectionCapability) {
+      this.directionSelectionMode = 'selectable';
+    } else {
+      this.directionSelectionMode = 'none';
+    }
+
+    const directionControl = this.requestForm.get('documentDirection');
+    if (!directionControl) {
+      return;
+    }
+
+    const preferredDirection = this.fixedDocumentDirection
+      ?? initialDirection
+      ?? this.normalizeDirectionValue(directionControl.value)
+      ?? null;
+
+    this.suppressDirectionRebuild = true;
+    directionControl.patchValue(preferredDirection ?? '', { emitEvent: false });
+
+    if (this.directionSelectionMode === 'fixed') {
+      directionControl.disable({ emitEvent: false });
+    } else {
+      directionControl.enable({ emitEvent: false });
+    }
+
+    const requiresDirectionSelection = this.hasDirectionCapability && this.directionSelectionMode === 'selectable';
+    directionControl.setValidators(requiresDirectionSelection ? [Validators.required] : []);
+    directionControl.updateValueAndValidity({ emitEvent: false });
+    this.suppressDirectionRebuild = false;
+    this.lastResolvedDirectionKey = preferredDirection;
+  }
+
+  private resolveDocumentDirectionForForm(): string | null {
+    if (this.directionSelectionMode === 'fixed' && this.fixedDocumentDirection) {
+      return this.fixedDocumentDirection;
+    }
+
+    return this.normalizeDirectionValue(this.requestForm.get('documentDirection')?.value);
+  }
+
+  private resolveDocumentDirectionForSave(dynamicFields: RequestRuntimeSubjectFieldValueDto[]): string | null {
+    const fixedDirection = this.directionSelectionMode === 'fixed'
+      ? this.normalizeDirectionValue(this.fixedDocumentDirection)
+      : null;
+    if (fixedDirection) {
+      return fixedDirection;
+    }
+
+    const explicitDirection = this.resolveDocumentDirectionForForm();
+    if (explicitDirection) {
+      return explicitDirection;
+    }
+
+    const directionFieldValue = (dynamicFields ?? [])
+      .find(field => String(field.fieldKey ?? '').trim().toUpperCase() === RequestRuntimeCatalogPageComponent.DIRECTION_FIELD_KEY)
+      ?.value;
+
+    return this.normalizeDirectionValue(directionFieldValue);
+  }
+
+  private loadCanonicalGroupHierarchy(categoryId: number): void {
+    const normalizedCategoryId = this.normalizePositiveInt(categoryId);
+    if (!normalizedCategoryId) {
+      this.canonicalGroupHierarchyCategoryId = null;
+      this.canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+      return;
+    }
+
+    this.canonicalGroupHierarchyCategoryId = normalizedCategoryId;
+    const cached = this.canonicalGroupHierarchyCache.get(normalizedCategoryId);
+    if (cached) {
+      this.canonicalGroupHierarchyByGroupId = this.cloneCanonicalGroupHierarchyMap(cached);
+      return;
+    }
+
+    this.canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+    const requestToken = ++this.canonicalGroupHierarchyRequestToken;
+    this.facade.loadCategoryGroups(normalizedCategoryId).subscribe({
+      next: response => {
+        if (requestToken !== this.canonicalGroupHierarchyRequestToken
+          || this.canonicalGroupHierarchyCategoryId !== normalizedCategoryId) {
+          return;
+        }
+
+        const hierarchyMap = this.buildCanonicalGroupHierarchyMap(response?.data ?? []);
+        this.canonicalGroupHierarchyByGroupId = hierarchyMap;
+        this.canonicalGroupHierarchyCache.set(normalizedCategoryId, this.cloneCanonicalGroupHierarchyMap(hierarchyMap));
+
+        if (Number(this.formDefinition?.categoryId ?? 0) === normalizedCategoryId) {
+          this.rebuildDynamicControls(
+            this.formDefinition,
+            this.buildDynamicFieldValues()
+          );
+        }
+      },
+      error: () => {
+        if (requestToken !== this.canonicalGroupHierarchyRequestToken
+          || this.canonicalGroupHierarchyCategoryId !== normalizedCategoryId) {
+          return;
+        }
+
+        this.canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+      }
+    });
+  }
+
+  private buildCanonicalGroupHierarchyMap(nodes: ReadonlyArray<RequestRuntimeAdminGroupTreeNodeDto>): Map<number, RuntimeCanonicalGroupMeta> {
+    const result = new Map<number, RuntimeCanonicalGroupMeta>();
+    let sequence = 0;
+
+    const walk = (items: ReadonlyArray<RequestRuntimeAdminGroupTreeNodeDto>, parentGroupId: number | null): void => {
+      const sorted = [...(items ?? [])]
+        .sort((left, right) => {
+          const orderDiff = Number(left.displayOrder ?? 0) - Number(right.displayOrder ?? 0);
+          if (orderDiff !== 0) {
+            return orderDiff;
+          }
+
+          return Number(left.groupId ?? 0) - Number(right.groupId ?? 0);
+        });
+
+      sorted.forEach(item => {
+        const groupId = Number(item.groupId ?? 0);
+        if (!Number.isFinite(groupId) || groupId <= 0) {
+          return;
+        }
+
+        sequence++;
+        const parentCandidate = this.normalizePositiveInt(item.parentGroupId) ?? parentGroupId ?? null;
+        result.set(groupId, {
+          parentGroupId: parentCandidate && parentCandidate !== groupId ? parentCandidate : null,
+          displayOrder: Number(item.displayOrder ?? sequence) || sequence,
+          hierarchyOrder: sequence,
+          groupName: String(item.groupName ?? '').trim(),
+          groupDescription: String(item.groupDescription ?? '').trim() || undefined
+        });
+
+        walk(item.children ?? [], groupId);
+      });
+    };
+
+    walk(nodes ?? [], null);
+    return result;
+  }
+
+  private cloneCanonicalGroupHierarchyMap(source: Map<number, RuntimeCanonicalGroupMeta>): Map<number, RuntimeCanonicalGroupMeta> {
+    const cloned = new Map<number, RuntimeCanonicalGroupMeta>();
+    source.forEach((value, key) => {
+      cloned.set(key, { ...value });
+    });
+
+    return cloned;
+  }
+
+  private getActiveCanonicalGroupHierarchyMap(categoryId: number): Map<number, RuntimeCanonicalGroupMeta> {
+    if (!categoryId || this.canonicalGroupHierarchyCategoryId !== categoryId) {
+      return new Map<number, RuntimeCanonicalGroupMeta>();
+    }
+
+    return this.canonicalGroupHierarchyByGroupId;
+  }
+
+  private rebuildDynamicControls(definition: RequestRuntimeFormDefinitionDto | null, values: RequestRuntimeSubjectFieldValueDto[]): void {
+    this.resetDynamicFormState();
+
+    const allFields = [...(definition?.fields ?? [])]
+      .sort((left, right) => this.compareFieldsByDisplayOrder(left, right));
+    const fieldsToRender = allFields.filter(field =>
+      field.isVisible !== false
+      && field.canView !== false
+      && field.isHidden !== true);
+
+    if (!definition || fieldsToRender.length === 0) {
+      return;
+    }
+
+    const canonicalHierarchyMap = this.getActiveCanonicalGroupHierarchyMap(Number(definition.categoryId ?? 0));
+    const definitionGroups = (definition.groups ?? []).filter(group => this.isGroupVisible(group));
+    const definitionGroupById = new Map<number, RequestRuntimeFormGroupDefinitionDto>();
+
+    definitionGroups.forEach(group => {
+      const groupId = Number(group.groupId ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      definitionGroupById.set(groupId, group);
+    });
+
+    canonicalHierarchyMap.forEach((groupMeta, groupId) => {
+      const current = definitionGroupById.get(groupId);
+      if (!current) {
+        definitionGroupById.set(groupId, {
+          groupId,
+          groupName: groupMeta.groupName,
+          groupDescription: groupMeta.groupDescription,
+          isExtendable: false,
+          groupWithInRow: 12
+        });
+        return;
+      }
+
+      if (!String(current.groupName ?? '').trim() && String(groupMeta.groupName ?? '').trim()) {
+        current.groupName = groupMeta.groupName;
+      }
+      if (!String(current.groupDescription ?? '').trim() && String(groupMeta.groupDescription ?? '').trim()) {
+        current.groupDescription = groupMeta.groupDescription;
+      }
+    });
+
+    fieldsToRender.forEach(field => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0 || definitionGroupById.has(groupId)) {
+        return;
+      }
+
+      definitionGroupById.set(groupId, {
+        groupId,
+        groupName: String(field.group?.groupName ?? '').trim(),
+        groupDescription: String(field.group?.groupDescription ?? '').trim(),
+        isExtendable: Boolean(field.group?.isExtendable),
+        groupWithInRow: Number(field.group?.groupWithInRow ?? 12)
+      });
+    });
+
+    const fieldsByGroup = new Map<number, RequestRuntimeFieldDefinitionDto[]>();
+    fieldsToRender.forEach(field => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      if (!fieldsByGroup.has(groupId)) {
+        fieldsByGroup.set(groupId, []);
+      }
+
+      fieldsByGroup.get(groupId)?.push(field);
+    });
+
+    const groupHierarchyMap = this.buildRuntimeGroupHierarchy(
+      Array.from(definitionGroupById.values()),
+      fieldsToRender
+    );
+
+    const groupIdsToRender = new Set<number>(Array.from(fieldsByGroup.keys()));
+    Array.from(fieldsByGroup.keys()).forEach(groupId => {
+      const visited = new Set<number>([groupId]);
+      let parentGroupId = groupHierarchyMap.get(groupId)?.parentGroupId ?? null;
+      while (parentGroupId && !visited.has(parentGroupId)) {
+        if (!groupHierarchyMap.has(parentGroupId)) {
+          break;
+        }
+
+        const parentMeta = definitionGroupById.get(parentGroupId);
+        if (parentMeta && !this.isGroupVisible(parentMeta)) {
+          break;
+        }
+
+        groupIdsToRender.add(parentGroupId);
+        visited.add(parentGroupId);
+        parentGroupId = groupHierarchyMap.get(parentGroupId)?.parentGroupId ?? null;
+      }
+    });
+
+    const safeParentByGroupId = this.buildSanitizedParentGroupMap(groupIdsToRender, groupHierarchyMap);
+    const orderedGroupIds = Array.from(groupIdsToRender.values())
+      .sort((left, right) => this.compareGroupsByDisplayOrder(left, right, groupHierarchyMap));
+
+    const mappedMendDefinitions: CdmendDto[] = [];
+    const mappedCategoryMandDefinitions: CdCategoryMandDto[] = [];
+    const renderNodesByGroupId = new Map<number, RuntimeGroupRenderNode>();
+    let nextControlIndex = 0;
+
+    orderedGroupIds.forEach(groupId => {
+      const groupFields = [...(fieldsByGroup.get(groupId) ?? [])]
+        .sort((left, right) => this.compareFieldsByDisplayOrder(left, right));
+      const groupDefinition = definitionGroupById.get(groupId) ?? groupFields[0]?.group;
+      const groupName = this.resolveRuntimeGroupDisplayName(groupId, groupDefinition, groupFields[0]);
+      const canonicalDescription = canonicalHierarchyMap.get(groupId)?.groupDescription;
+      const groupDescription = String(canonicalDescription ?? groupDefinition?.groupDescription ?? groupFields[0]?.group?.groupDescription ?? '').trim() || undefined;
+      const formArrayName = groupFields.length > 0 ? `dynamic_subject_group_${groupId}` : null;
+      const mappedGroupFields: CdCategoryMandDto[] = [];
+
+      if (formArrayName) {
+        const formArray = this.fb.array([]);
+
+        groupFields.forEach(field => {
+          const controlIndex = nextControlIndex++;
+          const controlName = `${field.fieldKey}|${controlIndex}`;
+          const cdmendType = this.mapFieldTypeToGenericType(field.fieldType, field.fieldKey);
+          const cdmendDatatype = this.mapFieldDataType(field, cdmendType);
+          const usesSelectionTable = cdmendType === 'Dropdown' || cdmendType === 'DropdownTree' || cdmendType === 'RadioButton';
+          const cdmendTbl = usesSelectionTable
+            ? this.parseFieldOptionsAsSelectionJson(field.optionsPayload)
+            : this.resolvePatternExpression(field.optionsPayload);
+          const hasPattern = Boolean(field.pattern) && cdmendTbl.length > 0;
+
+          const mappedMendDefinition: CdmendDto = {
+            cdmendSql: Number(field.mendSql ?? 0),
+            cdmendType,
+            cdmendTxt: field.fieldKey,
+            cdMendLbl: field.fieldLabel ?? field.fieldKey,
+            placeholder: field.placeholder ?? '',
+            defaultValue: field.defaultValue ?? '',
+            cdmendTbl,
+            cdmendDatatype,
+            required: Boolean(field.required || field.requiredTrue || field.isRequired),
+            requiredTrue: Boolean(field.requiredTrue),
+            email: Boolean(field.email),
+            pattern: hasPattern,
+            min: Number.isFinite(Number(field.minValue)) ? Number(field.minValue) : undefined,
+            max: Number.isFinite(Number(field.maxValue)) ? Number(field.maxValue) : undefined,
+            minxLenght: undefined,
+            maxLenght: undefined,
+            cdmendmask: field.mask ?? '',
+            cdmendStat: true,
+            maxValue: field.maxValue ?? '',
+            minValue: field.minValue ?? '',
+            width: Number(field.width ?? 0),
+            height: Number(field.height ?? 0),
+            isDisabledInit: Boolean(field.isDisabledInit),
+            isSearchable: Boolean(field.isSearchable),
+            applicationId: field.applicationId
+          };
+
+          mappedMendDefinitions.push(mappedMendDefinition);
+          this.genericFormService.cdmendDto = mappedMendDefinitions;
+
+          const mappedGroupField: CdCategoryMandDto = {
+            mendSql: Number(field.mendSql ?? 0),
+            mendCategory: Number(field.categoryId ?? definition.categoryId),
+            mendField: field.fieldKey,
+            mendStat: true,
+            mendGroup: groupId,
+            applicationId: field.applicationId ?? definition.applicationId,
+            groupName,
+            isExtendable: Boolean(groupDefinition?.isExtendable ?? field.group?.isExtendable),
+            groupWithInRow: Number(groupDefinition?.groupWithInRow ?? field.group?.groupWithInRow ?? 12)
+          };
+
+          mappedGroupFields.push(mappedGroupField);
+          mappedCategoryMandDefinitions.push(mappedGroupField);
+
+          this.genericFormService.addFormArrayWithValidators(
+            controlName,
+            formArray,
+            this.shouldTreatFieldAsNotRequired(field)
+          );
+
+          const matchedValue = values.find(valueItem =>
+            String(valueItem.fieldKey ?? '').trim().toLowerCase() === String(field.fieldKey ?? '').trim().toLowerCase()
+            && Number(valueItem.instanceGroupId ?? 1) === 1);
+
+          const initialValue = this.normalizeInitialDynamicValue(
+            field,
+            cdmendType,
+            matchedValue?.value ?? field.defaultValue
+          );
+          const control = this.genericFormService.GetControl(formArray, controlName);
+          control?.patchValue(initialValue, { emitEvent: false });
+
+          const shouldDisable = Boolean(
+            field.isDisabledInit
+            || field.isReadOnly
+            || field.isLocked
+            || field.canEdit === false
+          );
+          if (shouldDisable) {
+            control?.disable({ emitEvent: false });
+          }
+
+          this.controlMap.set(controlName, {
+            fieldKey: field.fieldKey,
+            instanceGroupId: 1
+          });
+        });
+
+        this.dynamicControls.addControl(formArrayName, formArray);
+      }
+
+      renderNodesByGroupId.set(groupId, {
+        groupId,
+        groupName,
+        formArrayName,
+        groupDescription,
+        fields: mappedGroupFields,
+        totalVisibleFieldsCount: mappedGroupFields.length,
+        children: []
+      });
+    });
+
+    const rootNodes: RuntimeGroupRenderNode[] = [];
+    orderedGroupIds.forEach(groupId => {
+      const currentNode = renderNodesByGroupId.get(groupId);
+      if (!currentNode) {
+        return;
+      }
+
+      const parentGroupId = safeParentByGroupId.get(groupId) ?? null;
+      const parentNode = parentGroupId ? renderNodesByGroupId.get(parentGroupId) : null;
+      if (parentNode) {
+        parentNode.children.push(currentNode);
+        return;
+      }
+
+      rootNodes.push(currentNode);
+    });
+
+    rootNodes.forEach(node => this.recomputeGroupTreeFieldCounts(node));
+    this.renderGroupTree = rootNodes;
+    if (this.rootGroupTabIndex >= this.renderGroupTree.length) {
+      this.rootGroupTabIndex = 0;
+    }
+
+    this.genericFormService.cdmendDto = mappedMendDefinitions;
+    this.genericFormService.cdCategoryMandDto = mappedCategoryMandDefinitions;
+    this.lastResolvedDirectionKey = this.resolveDocumentDirectionForForm();
+  }
+
+  private shouldTreatFieldAsNotRequired(field: RequestRuntimeFieldDefinitionDto): boolean {
+    return Boolean(field.isReadOnly || field.isLocked || field.canEdit === false);
+  }
+
+  private isGroupVisible(group?: RequestRuntimeFormGroupDefinitionDto | null): boolean {
+    if (!group) {
+      return true;
+    }
+
+    return group.canView !== false && group.isHidden !== true;
+  }
+
+  private compareFieldsByDisplayOrder(left: RequestRuntimeFieldDefinitionDto, right: RequestRuntimeFieldDefinitionDto): number {
+    const leftOrder = Number(left.displayOrder ?? 0);
+    const rightOrder = Number(right.displayOrder ?? 0);
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    return Number(left.mendSql ?? 0) - Number(right.mendSql ?? 0);
+  }
+
+  private compareGroupsByDisplayOrder(
+    leftGroupId: number,
+    rightGroupId: number,
+    hierarchy: Map<number, RuntimeGroupHierarchyMeta>
+  ): number {
+    const leftOrder = Number(hierarchy.get(leftGroupId)?.displayOrder ?? leftGroupId);
+    const rightOrder = Number(hierarchy.get(rightGroupId)?.displayOrder ?? rightGroupId);
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    const leftHierarchyOrder = Number(hierarchy.get(leftGroupId)?.hierarchyOrder ?? Number.MAX_SAFE_INTEGER);
+    const rightHierarchyOrder = Number(hierarchy.get(rightGroupId)?.hierarchyOrder ?? Number.MAX_SAFE_INTEGER);
+    if (leftHierarchyOrder !== rightHierarchyOrder) {
+      return leftHierarchyOrder - rightHierarchyOrder;
+    }
+
+    return leftGroupId - rightGroupId;
+  }
+
+  private buildRuntimeGroupHierarchy(
+    definitionGroups: RequestRuntimeFormGroupDefinitionDto[],
+    fields: RequestRuntimeFieldDefinitionDto[]
+  ): Map<number, RuntimeGroupHierarchyMeta> {
+    const hierarchy = new Map<number, RuntimeGroupHierarchyMeta>();
+    const categoryId = Number(this.rawFormDefinition?.categoryId ?? 0);
+    const canonicalHierarchy = this.getActiveCanonicalGroupHierarchyMap(categoryId);
+
+    canonicalHierarchy.forEach((canonicalItem, groupId) => {
+      hierarchy.set(groupId, {
+        parentGroupId: canonicalItem.parentGroupId,
+        displayOrder: canonicalItem.displayOrder,
+        hierarchyOrder: canonicalItem.hierarchyOrder
+      });
+    });
+
+    definitionGroups.forEach((group, index) => {
+      const groupId = Number(group.groupId ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      const current = hierarchy.get(groupId);
+      const parentFromMetadata = this.readParentGroupIdFromGroupMetadata(group);
+      hierarchy.set(groupId, {
+        parentGroupId: current?.parentGroupId ?? parentFromMetadata,
+        displayOrder: current?.displayOrder ?? this.resolveRuntimeGroupDisplayOrder(group, index + 1),
+        hierarchyOrder: current?.hierarchyOrder
+      });
+    });
+
+    fields.forEach((field, index) => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      const current = hierarchy.get(groupId) ?? {
+        parentGroupId: null,
+        displayOrder: Number(field.displayOrder ?? 0) || (index + 1)
+      };
+
+      const parentFromField = this.readParentGroupIdFromGroupMetadata(field.group)
+        ?? this.readParentGroupIdFromDisplaySettings(field.displaySettingsJson);
+      if (!current.parentGroupId && parentFromField && parentFromField !== groupId) {
+        current.parentGroupId = parentFromField;
+      }
+
+      const fieldDisplayOrder = Number(field.displayOrder ?? 0);
+      if (Number.isFinite(fieldDisplayOrder) && fieldDisplayOrder > 0) {
+        current.displayOrder = Math.min(current.displayOrder, fieldDisplayOrder);
+      }
+
+      hierarchy.set(groupId, current);
+    });
+
+    this.enrichHierarchyFromGroupNamePath(hierarchy, definitionGroups, fields);
+
+    hierarchy.forEach((meta, groupId) => {
+      if (!Number.isFinite(meta.displayOrder) || meta.displayOrder <= 0) {
+        meta.displayOrder = groupId;
+      }
+
+      if (!meta.parentGroupId || meta.parentGroupId === groupId || !hierarchy.has(meta.parentGroupId)) {
+        meta.parentGroupId = null;
+      }
+    });
+
+    return hierarchy;
+  }
+
+  private enrichHierarchyFromGroupNamePath(
+    hierarchy: Map<number, RuntimeGroupHierarchyMeta>,
+    definitionGroups: RequestRuntimeFormGroupDefinitionDto[],
+    fields: RequestRuntimeFieldDefinitionDto[]
+  ): void {
+    const knownNameByGroupId = new Map<number, string>();
+
+    definitionGroups.forEach(group => {
+      const groupId = Number(group.groupId ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      const groupName = String(group.groupName ?? '').trim();
+      if (groupName.length > 0) {
+        knownNameByGroupId.set(groupId, groupName);
+      }
+    });
+
+    fields.forEach(field => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0 || knownNameByGroupId.has(groupId)) {
+        return;
+      }
+
+      const groupName = String(field.group?.groupName ?? '').trim();
+      if (groupName.length > 0) {
+        knownNameByGroupId.set(groupId, groupName);
+      }
+    });
+
+    const fullNameLookup = new Map<string, number>();
+    const segmentLookup = new Map<string, number[]>();
+
+    knownNameByGroupId.forEach((groupName, groupId) => {
+      const segments = this.splitGroupPathSegments(groupName);
+      const normalizedFullName = this.normalizeGroupPathKey(segments.length > 0 ? segments.join(' / ') : groupName);
+      if (normalizedFullName.length > 0 && !fullNameLookup.has(normalizedFullName)) {
+        fullNameLookup.set(normalizedFullName, groupId);
+      }
+
+      const leafSegment = this.normalizeGroupPathKey(segments.length > 0 ? segments[segments.length - 1] : groupName);
+      if (leafSegment.length > 0) {
+        const existing = segmentLookup.get(leafSegment) ?? [];
+        existing.push(groupId);
+        segmentLookup.set(leafSegment, existing);
+      }
+    });
+
+    hierarchy.forEach((meta, groupId) => {
+      if (meta.parentGroupId) {
+        return;
+      }
+
+      const groupName = knownNameByGroupId.get(groupId);
+      if (!groupName) {
+        return;
+      }
+
+      const segments = this.splitGroupPathSegments(groupName);
+      if (segments.length < 2) {
+        return;
+      }
+
+      const parentPath = this.normalizeGroupPathKey(segments.slice(0, -1).join(' / '));
+      const parentLeaf = this.normalizeGroupPathKey(segments[segments.length - 2]);
+
+      const parentFromPath = fullNameLookup.get(parentPath);
+      if (parentFromPath && parentFromPath !== groupId) {
+        meta.parentGroupId = parentFromPath;
+        return;
+      }
+
+      const sameLeafCandidates = segmentLookup.get(parentLeaf) ?? [];
+      const parentFromLeaf = sameLeafCandidates.find(candidate => candidate !== groupId);
+      if (parentFromLeaf && parentFromLeaf !== groupId) {
+        meta.parentGroupId = parentFromLeaf;
+      }
+    });
+  }
+
+  private buildSanitizedParentGroupMap(
+    groupIds: Set<number>,
+    hierarchy: Map<number, RuntimeGroupHierarchyMeta>
+  ): Map<number, number | null> {
+    const safeParentByGroupId = new Map<number, number | null>();
+
+    groupIds.forEach(groupId => {
+      const candidateParent = hierarchy.get(groupId)?.parentGroupId ?? null;
+      if (!candidateParent || !groupIds.has(candidateParent) || candidateParent === groupId) {
+        safeParentByGroupId.set(groupId, null);
+        return;
+      }
+
+      const visited = new Set<number>([groupId]);
+      let hasCycle = false;
+      let cursor: number | null = candidateParent;
+      while (cursor && groupIds.has(cursor)) {
+        if (visited.has(cursor)) {
+          hasCycle = true;
+          break;
+        }
+
+        visited.add(cursor);
+        cursor = hierarchy.get(cursor)?.parentGroupId ?? null;
+      }
+
+      safeParentByGroupId.set(groupId, hasCycle ? null : candidateParent);
+    });
+
+    return safeParentByGroupId;
+  }
+
+  private resolveRuntimeGroupDisplayName(
+    groupId: number,
+    groupDefinition?: RequestRuntimeFormGroupDefinitionDto,
+    fallbackField?: RequestRuntimeFieldDefinitionDto
+  ): string {
+    const categoryId = Number(this.rawFormDefinition?.categoryId ?? 0);
+    const canonicalName = this.getActiveCanonicalGroupHierarchyMap(categoryId).get(groupId)?.groupName;
+    const resolvedName = String(canonicalName ?? groupDefinition?.groupName ?? fallbackField?.group?.groupName ?? '').trim();
+    if (!resolvedName) {
+      return `مجموعة ${groupId}`;
+    }
+
+    const segments = this.splitGroupPathSegments(resolvedName);
+    return segments.length > 0 ? segments[segments.length - 1] : resolvedName;
+  }
+
+  private recomputeGroupTreeFieldCounts(node: RuntimeGroupRenderNode): number {
+    const childrenFieldsCount = node.children
+      .map(child => this.recomputeGroupTreeFieldCounts(child))
+      .reduce((sum, value) => sum + value, 0);
+
+    node.totalVisibleFieldsCount = node.fields.length + childrenFieldsCount;
+    return node.totalVisibleFieldsCount;
+  }
+
+  private resolveRuntimeGroupDisplayOrder(group: RequestRuntimeFormGroupDefinitionDto | undefined, fallback: number): number {
+    const candidate = Number((group as Record<string, unknown> | undefined)?.['displayOrder'] ?? fallback);
+    if (!Number.isFinite(candidate) || candidate <= 0) {
+      return fallback;
+    }
+
+    return Math.trunc(candidate);
+  }
+
+  private readParentGroupIdFromGroupMetadata(group: unknown): number | null {
+    if (!group || typeof group !== 'object') {
+      return null;
+    }
+
+    const payload = group as Record<string, unknown>;
+    return this.normalizePositiveInt(payload['parentGroupId'])
+      ?? this.normalizePositiveInt(payload['parentId'])
+      ?? this.normalizePositiveInt(payload['groupParentId'])
+      ?? this.normalizePositiveInt(payload['parent_group_id'])
+      ?? this.normalizePositiveInt(payload['parentGroupID']);
+  }
+
+  private readParentGroupIdFromDisplaySettings(displaySettingsJson?: string): number | null {
+    const parsed = this.parseJsonObject(displaySettingsJson);
+    if (!parsed) {
+      return null;
+    }
+
+    const directCandidate = this.normalizePositiveInt(parsed['parentGroupId'])
+      ?? this.normalizePositiveInt(parsed['groupParentId'])
+      ?? this.normalizePositiveInt(parsed['parentId'])
+      ?? this.normalizePositiveInt(parsed['parent_group_id']);
+    if (directCandidate) {
+      return directCandidate;
+    }
+
+    const adminControlCenter = parsed['adminControlCenter'];
+    if (adminControlCenter && typeof adminControlCenter === 'object' && !Array.isArray(adminControlCenter)) {
+      const adminPayload = adminControlCenter as Record<string, unknown>;
+      const nestedCandidate = this.normalizePositiveInt(adminPayload['parentGroupId'])
+        ?? this.normalizePositiveInt(adminPayload['groupParentId'])
+        ?? this.normalizePositiveInt(adminPayload['parentId']);
+      if (nestedCandidate) {
+        return nestedCandidate;
+      }
+    }
+
+    const pathCandidateKeys = ['groupPathIds', 'groupPath', 'hierarchyPath', 'parents'];
+    for (const key of pathCandidateKeys) {
+      const parentFromPath = this.readParentGroupIdFromPathCandidate(parsed[key]);
+      if (parentFromPath) {
+        return parentFromPath;
+      }
+    }
+
+    return null;
+  }
+
+  private readParentGroupIdFromPathCandidate(candidate: unknown): number | null {
+    if (!Array.isArray(candidate)) {
+      return null;
+    }
+
+    const resolvedIds = candidate
+      .map(item => this.normalizePositiveInt(item))
+      .filter((item): item is number => item !== null);
+    if (resolvedIds.length < 2) {
+      return null;
+    }
+
+    return resolvedIds[resolvedIds.length - 2];
+  }
+
+  private parseJsonObject(raw: unknown): Record<string, unknown> | null {
+    const payload = String(raw ?? '').trim();
+    if (!payload) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(payload);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  private splitGroupPathSegments(groupName: string): string[] {
+    const normalizedName = String(groupName ?? '').trim();
+    if (!normalizedName) {
+      return [];
+    }
+
+    const unified = normalizedName
+      .replace(/\s*::\s*/g, '/')
+      .replace(/[>›»\\|]+/g, '/')
+      .replace(/\s*\/\s*/g, '/');
+
+    return unified
+      .split('/')
+      .map(segment => segment.trim())
+      .filter(segment => segment.length > 0);
+  }
+
+  private normalizeGroupPathKey(value: string): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/\s*\/\s*/g, '/');
+  }
+
+  private normalizePositiveInt(value: unknown): number | null {
+    const normalized = Number(value ?? 0);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      return null;
+    }
+
+    return Math.trunc(normalized);
+  }
+
+  private mapFieldTypeToGenericType(fieldType?: string, fieldKey?: string): string {
+    const normalized = String(fieldType ?? '').trim().toLowerCase();
+
+    if (String(normalized ?? '').includes('tree')) {
+      return 'DropdownTree';
+    }
+    if (normalized.includes('label')) {
+      return 'LABLE';
+    }
+    if (normalized.includes('textarea')) {
+      return 'Textarea';
+    }
+    if (normalized.includes('radio')) {
+      return 'RadioButton';
+    }
+    if (normalized.includes('select') || normalized.includes('drop') || normalized.includes('combo')) {
+      return 'Dropdown';
+    }
+    if (normalized.includes('toggle') || normalized.includes('bool') || normalized.includes('check') || normalized.includes('switch')) {
+      return 'ToggleSwitch';
+    }
+    if (normalized.includes('datetime') || (normalized.includes('date') && normalized.includes('time'))) {
+      return 'DateTime';
+    }
+    if (normalized.includes('date') || normalized.includes('calendar')) {
+      return 'Date';
+    }
+    if (normalized.includes('file')) {
+      return 'FileUpload';
+    }
+    if (normalized.includes('int') || normalized.includes('number')) {
+      return 'InputText-integeronly';
+    }
+
+    if (String(fieldKey ?? '').trim().toUpperCase() === RequestRuntimeCatalogPageComponent.DIRECTION_FIELD_KEY) {
+      return 'Dropdown';
+    }
+
+    return 'InputText';
+  }
+
+  private mapFieldDataType(field: RequestRuntimeFieldDefinitionDto, cdmendType: string): string {
+    const normalizedDataType = String(field.dataType ?? '').trim().toLowerCase();
+    const normalizedFieldType = String(field.fieldType ?? '').trim().toLowerCase();
+
+    if (normalizedDataType.includes('date') || normalizedDataType.includes('time')) {
+      return 'date';
+    }
+    if (normalizedDataType.includes('number') || normalizedDataType.includes('int') || normalizedDataType.includes('decimal')) {
+      return 'number';
+    }
+    if (normalizedDataType.includes('bool')) {
+      return 'boolean';
+    }
+
+    if (cdmendType === 'Date' || cdmendType === 'DateTime') {
+      return 'date';
+    }
+    if (cdmendType === 'ToggleSwitch') {
+      return 'boolean';
+    }
+    if (cdmendType === 'InputText-integeronly') {
+      return 'number';
+    }
+    if (normalizedFieldType.includes('number') || normalizedFieldType.includes('int') || normalizedFieldType.includes('decimal')) {
+      return 'number';
+    }
+
+    return 'string';
+  }
+
+  private normalizeInitialDynamicValue(field: RequestRuntimeFieldDefinitionDto, cdmendType: string, value: unknown): unknown {
+    if (value === null || value === undefined || value === '') {
+      if (cdmendType === 'ToggleSwitch') {
+        return false;
+      }
+
+      if (cdmendType === 'Date' || cdmendType === 'DateTime') {
+        return null;
+      }
+
+      return '';
+    }
+
+    if (cdmendType === 'ToggleSwitch') {
+      if (typeof value === 'boolean') {
+        return value;
+      }
+
+      const normalized = String(value).trim().toLowerCase();
+      return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+    }
+
+    if (cdmendType === 'Date' || cdmendType === 'DateTime') {
+      const parsedDate = value instanceof Date ? value : new Date(String(value));
+      return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+    }
+
+    if (cdmendType === 'Dropdown' || cdmendType === 'DropdownTree' || cdmendType === 'RadioButton') {
+      return String(value);
+    }
+
+    const looksNumeric = String(field.dataType ?? '').toLowerCase().includes('number')
+      || String(field.dataType ?? '').toLowerCase().includes('int')
+      || String(field.dataType ?? '').toLowerCase().includes('decimal');
+    if (looksNumeric) {
+      const numericValue = Number(value);
+      if (Number.isFinite(numericValue)) {
+        return numericValue;
+      }
+    }
+
+    return value;
+  }
+
+  private parseFieldOptionsAsSelectionJson(optionsPayload?: string): string {
+    const options = this.parseFieldOptions(optionsPayload);
+    return JSON.stringify(options.map(option => ({
+      key: option.value,
+      name: option.label
+    })));
+  }
+
+  private parseFieldOptions(optionsPayload?: string): Array<{ label: string; value: string }> {
+    const payload = String(optionsPayload ?? '').trim();
+    if (!payload) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(payload);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(item => this.mapOptionItem(item))
+          .filter((item): item is { label: string; value: string } => item !== null);
+      }
+    } catch {
+      // fallback to delimited payload parsing
+    }
+
+    return payload
+      .split(/[|,;\n]+/g)
+      .map(item => item.trim())
+      .filter(item => item.length > 0)
+      .map(item => ({ label: item, value: item }));
+  }
+
+  private mapOptionItem(item: unknown): { label: string; value: string } | null {
+    if (item === null || item === undefined) {
+      return null;
+    }
+    if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+      const value = String(item);
+      return { label: value, value };
+    }
+
+    const asObject = item as Record<string, unknown>;
+    const value = String(asObject['value'] ?? asObject['id'] ?? asObject['key'] ?? asObject['label'] ?? asObject['name'] ?? '');
+    const label = String(asObject['label'] ?? asObject['name'] ?? asObject['text'] ?? value);
+    if (!value && !label) {
+      return null;
+    }
+
+    return { label: label || value, value: value || label };
+  }
+
+  private resolvePatternExpression(optionsPayload?: string): string {
+    const payload = String(optionsPayload ?? '').trim();
+    if (!payload) {
+      return '';
+    }
+    if (payload.startsWith('[') || payload.startsWith('{')) {
+      return '';
+    }
+
+    return payload;
   }
 
   private loadEnvelopes(preferredEnvelopeId?: number | null): void {
@@ -510,332 +1584,40 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
     });
   }
 
-  private rebuildDynamicFields(definition: RequestRuntimeFormDefinitionDto, previousValues: Record<string, unknown>): void {
-    const dynamicGroup = this.fb.group({});
-    const fieldViewModels = (definition.fields ?? [])
-      .filter(field => field.isVisible !== false)
-      .map(field => this.mapFieldViewModel(field))
-      .filter((field): field is RuntimeFieldViewModel => field != null)
-      .sort((left, right) => {
-        if (left.groupId !== right.groupId) {
-          return left.groupId - right.groupId;
-        }
-
-        if (left.displayOrder !== right.displayOrder) {
-          return left.displayOrder - right.displayOrder;
-        }
-
-        return left.label.localeCompare(right.label, 'ar');
-      });
-
-    fieldViewModels.forEach(field => {
-      const previousValue = previousValues[field.controlName];
-      const initialValue = previousValue !== undefined
-        ? previousValue
-        : this.resolveInitialFieldValue(field.source, field.inputType);
-
-      dynamicGroup.addControl(
-        field.controlName,
-        new FormControl(initialValue, this.buildFieldValidators(field.source, field.inputType))
-      );
-    });
-
-    this.requestForm.setControl('dynamicFields', dynamicGroup);
-    this.runtimeFields = fieldViewModels;
-    this.runtimeFieldGroups = this.groupRuntimeFields(fieldViewModels);
-  }
-
-  private mapFieldViewModel(field: RequestRuntimeFieldDefinitionDto): RuntimeFieldViewModel | null {
-    const controlName = String(field.fieldKey ?? '').trim();
-    if (controlName.length === 0) {
-      return null;
-    }
-
-    const label = String(field.fieldLabel ?? '').trim() || controlName;
-    const inputType = this.resolveInputType(field);
-    const options = inputType === 'dropdown' ? this.parseFieldOptions(field.optionsPayload) : [];
-
-    return {
-      controlName,
-      label,
-      placeholder: String(field.placeholder ?? '').trim(),
-      required: field.required === true || field.requiredTrue === true,
-      inputType,
-      options,
-      displayOrder: Number(field.displayOrder ?? 0),
-      groupId: Number(field.group?.groupId ?? 0),
-      groupName: String(field.group?.groupName ?? '').trim() || 'البيانات الأساسية',
-      source: field
-    };
-  }
-
-  private resolveInputType(field: RequestRuntimeFieldDefinitionDto): RuntimeFieldInputType {
-    const normalized = String(field.fieldType ?? '').trim().toLowerCase();
-    const dataType = String(field.dataType ?? '').trim().toLowerCase();
-
-    if (normalized.includes('textarea')) {
-      return 'textarea';
-    }
-
-    if (normalized.includes('radio') || normalized.includes('select') || normalized.includes('drop') || normalized.includes('combo')) {
-      return 'dropdown';
-    }
-
-    if (normalized.includes('toggle') || normalized.includes('bool') || normalized.includes('check') || normalized.includes('switch')) {
-      return 'toggle';
-    }
-
-    if (normalized.includes('datetime') || (normalized.includes('date') && normalized.includes('time'))) {
-      return 'datetime';
-    }
-
-    if (normalized.includes('date') || normalized.includes('calendar')) {
-      return 'date';
-    }
-
-    if (normalized.includes('number')
-      || normalized.includes('int')
-      || normalized.includes('decimal')
-      || dataType.includes('number')
-      || dataType.includes('int')
-      || dataType.includes('decimal')) {
-      return 'number';
-    }
-
-    return 'text';
-  }
-
-  private resolveInitialFieldValue(field: RequestRuntimeFieldDefinitionDto, inputType: RuntimeFieldInputType): unknown {
-    const fallbackValue = String(field.defaultValue ?? '').trim();
-
-    if (inputType === 'toggle') {
-      if (fallbackValue.length === 0) {
-        return false;
-      }
-
-      const normalized = fallbackValue.toLowerCase();
-      return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
-    }
-
-    if (inputType === 'date' || inputType === 'datetime') {
-      if (fallbackValue.length === 0) {
-        return null;
-      }
-
-      const parsed = new Date(fallbackValue);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-
-    if (inputType === 'number') {
-      if (fallbackValue.length === 0) {
-        return null;
-      }
-
-      const parsed = Number(fallbackValue);
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-
-    if (inputType === 'dropdown') {
-      return fallbackValue.length > 0 ? fallbackValue : null;
-    }
-
-    return fallbackValue;
-  }
-
-  private buildFieldValidators(field: RequestRuntimeFieldDefinitionDto, inputType: RuntimeFieldInputType): ValidatorFn[] {
-    const validators: any[] = [];
-
-    if (field.requiredTrue === true && inputType === 'toggle') {
-      validators.push(Validators.requiredTrue);
-    } else if (field.required === true || field.requiredTrue === true) {
-      validators.push(Validators.required);
-    }
-
-    if (field.email === true) {
-      validators.push(Validators.email);
-    }
-
-    if (field.pattern === true) {
-      const patternExpression = this.resolvePatternExpression(field.optionsPayload);
-      if (patternExpression.length > 0) {
-        try {
-          validators.push(Validators.pattern(patternExpression));
-        } catch {
-          // Ignore invalid regex payload and rely on backend validation.
-        }
-      }
-    }
-
-    if (inputType === 'number') {
-      const minValue = Number(field.minValue ?? Number.NaN);
-      const maxValue = Number(field.maxValue ?? Number.NaN);
-
-      if (Number.isFinite(minValue)) {
-        validators.push(Validators.min(minValue));
-      }
-
-      if (Number.isFinite(maxValue)) {
-        validators.push(Validators.max(maxValue));
-      }
-    }
-
-    return validators;
-  }
-
-  private groupRuntimeFields(fields: RuntimeFieldViewModel[]): RuntimeFieldGroupViewModel[] {
-    const groups = new Map<number, RuntimeFieldGroupViewModel>();
-
-    fields.forEach(field => {
-      if (!groups.has(field.groupId)) {
-        groups.set(field.groupId, {
-          groupId: field.groupId,
-          groupName: field.groupName,
-          fields: []
-        });
-      }
-
-      groups.get(field.groupId)!.fields.push(field);
-    });
-
-    return Array.from(groups.values())
-      .map(group => ({
-        ...group,
-        fields: [...group.fields].sort((left, right) => {
-          if (left.displayOrder !== right.displayOrder) {
-            return left.displayOrder - right.displayOrder;
-          }
-
-          return left.label.localeCompare(right.label, 'ar');
-        })
-      }))
-      .sort((left, right) => left.groupId - right.groupId);
-  }
-
-  private configureDirectionState(definition: RequestRuntimeFormDefinitionDto, requestedDirection: string): void {
-    const workflow = definition.requestPolicy?.workflowPolicy;
-    const directionMode = this.normalizeDirectionMode(workflow?.directionMode);
-    const fixedDirection = this.normalizeDirectionValue(workflow?.fixedDirection);
-
-    this.fixedDirection = fixedDirection;
-
-    if (directionMode === 'fixed' && fixedDirection != null) {
-      this.directionMode = 'fixed';
-      this.requestForm.patchValue({ documentDirection: fixedDirection }, { emitEvent: false });
-      return;
-    }
-
-    const hasDirectionField = this.runtimeFields.some(field =>
-      field.controlName.toLowerCase().includes('direction'));
-
-    if (directionMode === 'selectable' || hasDirectionField) {
-      this.directionMode = 'selectable';
-      const normalizedDirection = this.normalizeDirectionValue(requestedDirection) ?? '';
-      this.requestForm.patchValue({ documentDirection: normalizedDirection }, { emitEvent: false });
-      return;
-    }
-
-    this.directionMode = 'none';
-    this.requestForm.patchValue({ documentDirection: '' }, { emitEvent: false });
-  }
-
-  private buildDynamicFieldsPayload(): RequestRuntimeSubjectFieldValueDto[] {
-    return this.runtimeFields.map(field => ({
-      fieldKey: field.controlName,
-      value: this.normalizeOutgoingDynamicValue(
-        this.dynamicFieldsGroup.get(field.controlName)?.value,
-        field.inputType
-      )
+  private buildDynamicFieldValues(): RequestRuntimeSubjectFieldValueDto[] {
+    return Array.from(this.controlMap.entries()).map(([controlName, key]) => ({
+      fieldKey: key.fieldKey,
+      value: this.normalizeOutgoingDynamicValue(this.genericFormService.GetControl(this.dynamicControls, controlName)?.value),
+      instanceGroupId: key.instanceGroupId
     }));
   }
 
-  private normalizeOutgoingDynamicValue(value: unknown, inputType: RuntimeFieldInputType): string {
+  private normalizeOutgoingDynamicValue(value: unknown): string {
     if (value === null || value === undefined) {
       return '';
     }
 
-    if ((inputType === 'date' || inputType === 'datetime') && value instanceof Date) {
+    if (value instanceof Date) {
       return Number.isNaN(value.getTime()) ? '' : value.toISOString();
     }
 
-    if (inputType === 'toggle') {
-      return value === true ? 'true' : 'false';
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      const payload = value as Record<string, unknown>;
+      if (payload['key'] != null) {
+        return String(payload['key']);
+      }
+      if (payload['value'] != null) {
+        return String(payload['value']);
+      }
     }
 
     return String(value);
   }
 
-  private parseFieldOptions(optionsPayload?: string): RuntimeFieldOption[] {
-    const payload = String(optionsPayload ?? '').trim();
-    if (payload.length === 0) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(payload);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .map(item => this.mapOptionItem(item))
-          .filter((item): item is RuntimeFieldOption => item != null);
-      }
-    } catch {
-      // fallback to delimited parsing
-    }
-
-    return payload
-      .split(/[|,;\n]+/g)
-      .map(item => item.trim())
-      .filter(item => item.length > 0)
-      .map(item => ({ label: item, value: item }));
-  }
-
-  private mapOptionItem(item: unknown): RuntimeFieldOption | null {
-    if (item == null) {
-      return null;
-    }
-
-    if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
-      const text = String(item);
-      return { label: text, value: text };
-    }
-
-    const asObject = item as Record<string, unknown>;
-    const value = String(asObject['value'] ?? asObject['id'] ?? asObject['key'] ?? asObject['label'] ?? asObject['name'] ?? '');
-    const label = String(asObject['label'] ?? asObject['name'] ?? asObject['text'] ?? value);
-
-    if (value.trim().length === 0 && label.trim().length === 0) {
-      return null;
-    }
-
-    return {
-      label: label.trim().length > 0 ? label : value,
-      value: value.trim().length > 0 ? value : label
-    };
-  }
-
-  private resolvePatternExpression(optionsPayload?: string): string {
-    const payload = String(optionsPayload ?? '').trim();
-    if (payload.length === 0 || payload.startsWith('[') || payload.startsWith('{')) {
-      return '';
-    }
-
-    return payload;
-  }
-
-  private setExpandedState(nodes: RequestRuntimeTreeNode[], expanded: boolean): void {
-    (nodes ?? []).forEach(node => {
-      node.expanded = expanded;
-      this.setExpandedState((node.children ?? []) as RequestRuntimeTreeNode[], expanded);
-    });
-  }
-
   private clearRuntimeWorkspace(): void {
     this.selectedRequestNode = null;
-    this.activeDefinition = null;
-    this.runtimeFieldGroups = [];
-    this.runtimeFields = [];
+    this.clearLoadedDefinitionState();
     this.availableEnvelopes = [];
-    this.directionMode = 'none';
-    this.fixedDirection = null;
     this.envelopeTerminology = buildEnvelopeTerminology(null);
 
     this.requestForm.reset(
@@ -847,15 +1629,67 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
       },
       { emitEvent: false }
     );
-    this.requestForm.setControl('dynamicFields', this.fb.group({}));
+  }
+
+  private clearLoadedDefinitionState(): void {
+    this.rawFormDefinition = null;
+    this.formDefinition = null;
+    this.allowRequesterOverride = false;
+    this.currentDisplayMode = REQUEST_VIEW_MODE_STANDARD;
+    this.rootGroupTabIndex = 0;
+    this.directionSelectionMode = 'none';
+    this.fixedDocumentDirection = null;
+    this.lastResolvedDirectionKey = null;
+
+    const directionControl = this.requestForm.get('documentDirection');
+    this.suppressDirectionRebuild = true;
+    directionControl?.enable({ emitEvent: false });
+    directionControl?.setValidators([]);
+    directionControl?.updateValueAndValidity({ emitEvent: false });
+    directionControl?.patchValue('', { emitEvent: false });
+    this.suppressDirectionRebuild = false;
+
+    this.resetDynamicFormState();
+  }
+
+  private resetDynamicFormState(): void {
+    this.dynamicControls = this.fb.group({});
+    this.renderGroupTree = [];
+    this.controlMap.clear();
+
+    this.genericFormService.resetDynamicRuntimeState();
+    this.genericFormService.cdmendDto = [];
+    this.genericFormService.cdCategoryMandDto = [];
+  }
+
+  private focusFirstInvalidDynamicControl(): void {
+    const host = this.findFirstInvalidDynamicControlElement();
+    if (!host) {
+      return;
+    }
+
+    host.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    host.focus?.();
+  }
+
+  private findFirstInvalidDynamicControlElement(): HTMLElement | null {
+    const candidates = [
+      '.groups-wrap [formcontrolname].ng-invalid',
+      '.groups-wrap .ng-invalid [formcontrolname]',
+      '.groups-wrap .ng-invalid'
+    ];
+
+    for (const selector of candidates) {
+      const element = document.querySelector(selector) as HTMLElement | null;
+      if (element) {
+        return element;
+      }
+    }
+
+    return null;
   }
 
   private captureWorkspaceSnapshot(): RuntimeWorkspaceSnapshot {
-    const dynamicValues: Record<string, unknown> = {};
-    Object.keys(this.dynamicFieldsGroup.controls).forEach(controlName => {
-      dynamicValues[controlName] = this.dynamicFieldsGroup.get(controlName)?.value;
-    });
-
     return {
       subject: String(this.requestForm.get('subject')?.value ?? ''),
       description: String(this.requestForm.get('description')?.value ?? ''),
@@ -863,7 +1697,7 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
       envelopeId: Number(this.requestForm.get('envelopeId')?.value ?? 0) > 0
         ? Number(this.requestForm.get('envelopeId')?.value)
         : null,
-      dynamicValues
+      dynamicValues: this.buildDynamicFieldValues()
     };
   }
 
@@ -873,30 +1707,24 @@ export class RequestRuntimeCatalogPageComponent implements OnInit {
       description: '',
       documentDirection: '',
       envelopeId: null,
-      dynamicValues: {}
+      dynamicValues: []
     };
   }
 
-  private normalizeDirectionMode(value: unknown): RuntimeDirectionMode {
-    const normalized = String(value ?? '').trim().toLowerCase();
-    if (normalized === 'fixed') {
-      return 'fixed';
-    }
-
-    if (normalized === 'selectable') {
-      return 'selectable';
-    }
-
-    return 'none';
+  private setExpandedState(nodes: RequestRuntimeTreeNode[], expanded: boolean): void {
+    (nodes ?? []).forEach(node => {
+      node.expanded = expanded;
+      this.setExpandedState((node.children ?? []) as RequestRuntimeTreeNode[], expanded);
+    });
   }
 
   private normalizeDirectionValue(value: unknown): string | null {
     const normalized = String(value ?? '').trim().toLowerCase();
-    if (normalized === 'incoming' || normalized === 'وارد') {
+    if (normalized === 'incoming' || normalized === 'وارد' || normalized === '2') {
       return 'incoming';
     }
 
-    if (normalized === 'outgoing' || normalized === 'صادر') {
+    if (normalized === 'outgoing' || normalized === 'صادر' || normalized === '1') {
       return 'outgoing';
     }
 

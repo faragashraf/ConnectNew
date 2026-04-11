@@ -222,34 +222,127 @@
   font-size: 0.75rem;
 }
 
-.dynamic-fields {
+.dynamic-fields-panel {
   border: 1px dashed #dbeafe;
   border-radius: 12px;
-  padding: 0.7rem;
+  padding: 0.75rem;
   background: #fcfdff;
   display: grid;
-  gap: 0.8rem;
+  gap: 0.75rem;
+}
+
+.dynamic-fields-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.dynamic-fields-header h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.98rem;
+}
+
+.dynamic-fields-header p {
+  margin: 0.25rem 0 0;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.display-mode-switch {
+  display: grid;
+  gap: 0.3rem;
+  justify-items: end;
+}
+
+.display-mode-label {
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.groups-wrap {
+  display: grid;
+  gap: 0.65rem;
 }
 
 .group-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border: 1px solid #dbe4f2;
+  border-radius: 12px;
   background: #ffffff;
-  padding: 0.65rem;
+  padding: 0.75rem;
   display: grid;
   gap: 0.6rem;
 }
 
-.group-card h3 {
+.group-card.group-card-nested {
+  border-color: #e2e8f0;
+  background: #f8fbff;
+}
+
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.group-heading {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.group-level-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.group-heading h4 {
   margin: 0;
   color: #0f172a;
   font-size: 0.92rem;
 }
 
-.field-grid {
+.group-count-chip {
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.group-description {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.77rem;
+}
+
+.form-array-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.65rem;
+  gap: 0.45rem;
+}
+
+.group-children {
+  display: grid;
+  gap: 0.6rem;
+  border-right: 2px solid #dbeafe;
+  padding-right: 0.65rem;
+}
+
+.root-group-tab-label {
+  font-size: 0.82rem;
 }
 
 .required {
@@ -341,6 +434,15 @@
   width: 100%;
 }
 
+:host ::ng-deep .runtime-group-tabview .p-tabview-nav {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+:host ::ng-deep .groups-wrap .form-group {
+  margin: 0;
+}
+
 @media (max-width: 1180px) {
   .workspace-layout {
     grid-template-columns: 1fr;
@@ -356,7 +458,7 @@
     grid-template-columns: 1fr;
   }
 
-  .field-grid,
+  .dynamic-fields-header,
   .base-grid,
   .stats-row {
     grid-template-columns: 1fr;
@@ -364,6 +466,14 @@
 
   .request-header {
     flex-direction: column;
+  }
+
+  .dynamic-fields-header {
+    display: grid;
+  }
+
+  .display-mode-switch {
+    justify-items: start;
   }
 }
 

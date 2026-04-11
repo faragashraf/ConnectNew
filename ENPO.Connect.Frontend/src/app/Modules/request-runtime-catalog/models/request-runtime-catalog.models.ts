@@ -89,10 +89,22 @@ export interface RequestRuntimeFormGroupDefinitionDto {
   groupId: number;
   groupName: string;
   groupDescription?: string;
+  isExtendable: boolean;
+  groupWithInRow?: number;
+  canView?: boolean;
+  canEdit?: boolean;
+  canFill?: boolean;
+  isHidden?: boolean;
+  isReadOnly?: boolean;
+  isRequired?: boolean;
+  isLocked?: boolean;
+  lockReason?: string;
 }
 
 export interface RequestRuntimeFieldDefinitionDto {
   mendSql: number;
+  categoryId: number;
+  mendGroup: number;
   fieldKey: string;
   fieldType: string;
   fieldLabel?: string;
@@ -107,9 +119,23 @@ export interface RequestRuntimeFieldDefinitionDto {
   minValue?: string;
   maxValue?: string;
   mask?: string;
+  isDisabledInit: boolean;
+  isSearchable: boolean;
+  width: number;
+  height: number;
+  applicationId?: string;
   displayOrder: number;
   isVisible: boolean;
+  displaySettingsJson?: string;
   group?: RequestRuntimeFormGroupDefinitionDto;
+  canView?: boolean;
+  canEdit?: boolean;
+  canFill?: boolean;
+  isHidden?: boolean;
+  isReadOnly?: boolean;
+  isRequired?: boolean;
+  isLocked?: boolean;
+  lockReason?: string;
 }
 
 export interface RequestRuntimeRequestPolicyWorkflowDto {
@@ -130,6 +156,22 @@ export interface RequestRuntimeFormDefinitionDto {
   groups: RequestRuntimeFormGroupDefinitionDto[];
   fields: RequestRuntimeFieldDefinitionDto[];
   requestPolicy?: RequestRuntimeRequestPolicyDto;
+  defaultViewMode?: 'standard' | 'tabbed' | string;
+  allowRequesterOverride?: boolean;
+  defaultDisplayMode?: 'standard' | 'tabbed' | string;
+  allowUserToChangeDisplayMode?: boolean;
+}
+
+export interface RequestRuntimeAdminGroupTreeNodeDto {
+  groupId: number;
+  categoryId: number;
+  applicationId: string;
+  groupName: string;
+  groupDescription?: string;
+  parentGroupId?: number;
+  displayOrder: number;
+  isActive: boolean;
+  children: RequestRuntimeAdminGroupTreeNodeDto[];
 }
 
 export interface RequestRuntimeEnvelopeSummaryDto {
@@ -169,6 +211,7 @@ export interface RequestRuntimeEnvelopeUpsertRequestDto {
 export interface RequestRuntimeSubjectFieldValueDto {
   fieldKey: string;
   value?: string;
+  instanceGroupId?: number;
 }
 
 export interface RequestRuntimeSubjectUpsertRequestDto {

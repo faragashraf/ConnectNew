@@ -171,64 +171,91 @@
             </div>
           </div>
 
-          <section class="dynamic-fields" formGroupName="dynamicFields">
-            <div class="group-card" *ngFor="let group of runtimeFieldGroups">
-              <h3>{{ group.groupName }}</h3>
-
-              <div class="field-grid">
-                <div class="field" *ngFor="let field of group.fields">
-                  <label [attr.for]="field.controlName">
-                    {{ field.label }}
-                    <span class="required" *ngIf="field.required">*</span>
-                  </label>
-
-                  <input
-                    *ngIf="field.inputType === 'text' || field.inputType === 'number'"
-                    [id]="field.controlName"
-                    pInputText
-                    [type]="field.inputType === 'number' ? 'number' : 'text'"
-                    [formControlName]="field.controlName"
-                    [placeholder]="field.placeholder || ''" />
-
-                  <textarea
-                    *ngIf="field.inputType === 'textarea'"
-                    [id]="field.controlName"
-                    pInputTextarea
-                    rows="3"
-                    [formControlName]="field.controlName"
-                    [placeholder]="field.placeholder || ''"></textarea>
-
-                  <p-dropdown
-                    *ngIf="field.inputType === 'dropdown'"
-                    [id]="field.controlName"
-                    [formControlName]="field.controlName"
-                    [options]="field.options"
-                    optionLabel="label"
-                    optionValue="value"
-                    [showClear]="true"
-                    appendTo="body"
-                    [placeholder]="field.placeholder || 'اختر قيمة'">
-                  </p-dropdown>
-
-                  <p-calendar
-                    *ngIf="field.inputType === 'date' || field.inputType === 'datetime'"
-                    [id]="field.controlName"
-                    [formControlName]="field.controlName"
-                    [showIcon]="true"
-                    [showTime]="field.inputType === 'datetime'"
-                    dateFormat="yy-mm-dd"
-                    [showButtonBar]="true"
-                    appendTo="body">
-                  </p-calendar>
-
-                  <p-inputSwitch *ngIf="field.inputType === 'toggle'" [formControlName]="field.controlName"></p-inputSwitch>
-
-                  <small class="field-error" *ngIf="getFieldError(field) as fieldError">{{ fieldError }}</small>
-                </div>
+          <section class="dynamic-fields-panel">
+            <div class="dynamic-fields-header">
+              <div>
+                <h3>الحقول الديناميكية</h3>
+                <p>تم بناء النموذج حسب إعدادات التشغيل الفعلية لنوع الطلب المختار.</p>
+              </div>
+              <div class="display-mode-switch" *ngIf="shouldShowDisplayModeSelector">
+                <span class="display-mode-label">وضع العرض</span>
+                <p-selectButton
+                  [options]="formDisplayModeOptions"
+                  optionLabel="label"
+                  optionValue="value"
+                  [ngModel]="currentDisplayMode"
+                  [ngModelOptions]="{ standalone: true }"
+                  (onChange)="onDisplayModeChanged($event.value)">
+                </p-selectButton>
               </div>
             </div>
 
-            <p class="empty-text" *ngIf="runtimeFieldGroups.length === 0">
+            <div class="groups-wrap" *ngIf="dynamicControls && renderGroupTree.length > 0" [formGroup]="dynamicControls">
+              <ng-template #runtimeGroupNodeTemplate let-groupNode let-level="level">
+                <section class="group-card" [class.group-card-nested]="level > 0">
+                  <header class="group-header">
+                    <div class="group-heading">
+                      <span class="group-level-badge" *ngIf="level > 0">مجموعة فرعية</span>
+                      <h4>{{ groupNode.groupName }}</h4>
+                    </div>
+                    <span class="group-count-chip" *ngIf="groupNode.totalVisibleFieldsCount > 0">
+                      {{ groupNode.totalVisibleFieldsCount }} حقل
+                    </span>
+                  </header>
+
+                  <p class="group-description" *ngIf="groupNode.groupDescription">{{ groupNode.groupDescription }}</p>
+
+                  <div
+                    *ngIf="groupNode.formArrayName && groupNode.fields.length > 0"
+                    [formArrayName]="groupNode.formArrayName!"
+                    class="form-array-grid">
+                    <div *ngFor="let mandFiled of getFormArrayControls(groupNode.formArrayName!); let i = index" [formGroupName]="i">
+                      <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" class="field-slot">
+                        <app-generic-form-array
+                          [controlFullName]="ctrlName"
+                          [index]="i"
+                          [filtered_CategoryMand]="groupNode.fields"
+                          [isDivDisabled]="false"
+                          [ticketForm]="dynamicControls"
+                          [mandFileds]="getFormArrayInstance(groupNode.formArrayName!)!"
+                          [tree]="[]"
+                          [showTreeButton]="false"
+                          (genericEvent)="onDynamicFieldGenericEvent($event)">
+                        </app-generic-form-array>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="group-children" *ngIf="groupNode.children.length > 0">
+                    <ng-container *ngFor="let childNode of groupNode.children; trackBy: trackByGroupNode">
+                      <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: childNode, level: level + 1 }"></ng-container>
+                    </ng-container>
+                  </div>
+                </section>
+              </ng-template>
+
+              <ng-container *ngIf="isTabbedDisplayModeActive; else standardGroupLayout">
+                <p-tabView
+                  styleClass="runtime-group-tabview"
+                  [activeIndex]="rootGroupTabIndex"
+                  (onChange)="onRootGroupTabChange($event?.index)">
+                  <p-tabPanel *ngFor="let groupNode of renderGroupTree; trackBy: trackByGroupNode">
+                    <ng-template pTemplate="header">
+                      <span class="root-group-tab-label">{{ groupNode.groupName }}</span>
+                    </ng-template>
+                    <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: groupNode, level: 0 }"></ng-container>
+                  </p-tabPanel>
+                </p-tabView>
+              </ng-container>
+
+              <ng-template #standardGroupLayout>
+                <ng-container *ngFor="let groupNode of renderGroupTree; trackBy: trackByGroupNode">
+                  <ng-container *ngTemplateOutlet="runtimeGroupNodeTemplate; context: { $implicit: groupNode, level: 0 }"></ng-container>
+                </ng-container>
+              </ng-template>
+            </div>
+
+            <p class="empty-text" *ngIf="renderGroupTree.length === 0">
               لا توجد حقول ديناميكية ظاهرة لهذا النوع في السياق الحالي.
             </p>
           </section>

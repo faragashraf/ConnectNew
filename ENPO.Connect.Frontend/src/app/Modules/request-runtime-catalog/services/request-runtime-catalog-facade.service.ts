@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, switchMap } from 'rxjs/operators';
 import {
+  RequestRuntimeAdminGroupTreeNodeDto,
   RequestRuntimeApplicationOption,
   RequestRuntimeCatalogApplicationDto,
   RequestRuntimeCatalogDto,
@@ -39,16 +40,48 @@ export class RequestRuntimeCatalogFacadeService {
 
   loadFormDefinition(
     categoryId: number,
-    context?: { stageId?: number | null; documentDirection?: string | null }
+    context?: { stageId?: number | null; documentDirection?: string | null; appId?: string | null }
   ): Observable<RuntimeApiResponse<RequestRuntimeFormDefinitionDto>> {
     return this.api.getFormDefinition(categoryId, context).pipe(
-      map(response => ({
-        data: response?.data as RequestRuntimeFormDefinitionDto,
-        errors: response?.errors ?? []
-      })),
+      switchMap(response => {
+        const hasErrors = (response?.errors?.length ?? 0) > 0;
+        const hasFields = Number(response?.data?.fields?.length ?? 0) > 0;
+        const shouldRetryWithoutAppScope = (hasErrors || !hasFields) && String(context?.appId ?? '').trim().length > 0;
+
+        if (!shouldRetryWithoutAppScope) {
+          return of({
+            data: response?.data as RequestRuntimeFormDefinitionDto,
+            errors: response?.errors ?? []
+          });
+        }
+
+        return this.api.getFormDefinition(categoryId, {
+          stageId: context?.stageId,
+          documentDirection: context?.documentDirection,
+          appId: null
+        }).pipe(
+          map(fallbackResponse => ({
+            data: fallbackResponse?.data as RequestRuntimeFormDefinitionDto,
+            errors: fallbackResponse?.errors ?? []
+          }))
+        );
+      }),
       catchError(() => of({
         data: undefined,
         errors: [{ message: 'تعذر تحميل نموذج الطلب في الوقت الحالي.' }]
+      }))
+    );
+  }
+
+  loadCategoryGroups(categoryId: number): Observable<RuntimeApiResponse<RequestRuntimeAdminGroupTreeNodeDto[]>> {
+    return this.api.getCategoryGroups(categoryId).pipe(
+      map(response => ({
+        data: response?.data ?? [],
+        errors: response?.errors ?? []
+      })),
+      catchError(() => of({
+        data: [],
+        errors: []
       }))
     );
   }
