@@ -50,6 +50,11 @@ const routes: Routes = [
   { path: 'TopManagement', loadChildren: () => import('./Modules/top-maganement/top-maganement.module').then(m => m.TopMaganementModule) },
   { path: 'EmployeeRequests', loadChildren: () => import('./Modules/EmployeeRequests/EmployeeRequests.module').then(m => m.EmployeeRequestsModule) },
   { path: 'DynamicSubjects', loadChildren: () => import('./Modules/dynamic-subjects/dynamic-subjects.module').then(m => m.DynamicSubjectsModule) },
+  {
+    path: 'RequestRuntimeCatalog',
+    loadChildren: () => import('./Modules/request-runtime-catalog/request-runtime-catalog.module')
+      .then(m => m.RequestRuntimeCatalogModule)
+  },
 ];
 
 @NgModule({

@@ -23,6 +23,7 @@ using Persistence.Services.DynamicSubjects.AdminAccessPolicy;
 using Persistence.Services.DynamicSubjects.AdminCatalog;
 using Persistence.Services.DynamicSubjects.AdminRouting;
 using Persistence.Services.DynamicSubjects.FieldAccess;
+using Persistence.Services.DynamicSubjects.RuntimeCatalog;
 using Persistence.Services.Notifications;
 using Persistence.UnitOfWorks;
 using SignalR.Notification;
@@ -87,6 +88,7 @@ builder.Services.AddScoped<IDynamicSubjectsAdminCatalogRepository, DynamicSubjec
 builder.Services.AddScoped<IDynamicSubjectsAdminCatalogService, DynamicSubjectsAdminCatalogService>();
 builder.Services.AddSingleton<IAdminControlCenterRequestPreviewCache, AdminControlCenterRequestPreviewCache>();
 builder.Services.AddScoped<IAdminControlCenterRequestPreviewResolver, AdminControlCenterRequestPreviewResolver>();
+builder.Services.AddScoped<IRequestRuntimeCatalogService, RequestRuntimeCatalogService>();
 builder.Services.AddScoped<IDynamicSubjectsAdminRoutingRepository, DynamicSubjectsAdminRoutingRepository>();
 builder.Services.AddScoped<IDynamicSubjectsAdminRoutingService, DynamicSubjectsAdminRoutingService>();
 builder.Services.AddScoped<IDynamicSubjectsAdminAccessPolicyService, DynamicSubjectsAdminAccessPolicyService>();

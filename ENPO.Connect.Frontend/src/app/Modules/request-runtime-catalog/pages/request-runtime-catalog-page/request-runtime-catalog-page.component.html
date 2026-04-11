@@ -1,0 +1,117 @@
+<div class="runtime-catalog-page" dir="rtl">
+  <div class="page-header">
+    <div>
+      <h1>شجرة الطلبات المتاحة للتسجيل</h1>
+      <p>يعرض هذا القسم الطلبات التي يمكن للمستخدم الحالي البدء بها فعليًا حسب إعدادات الـ runtime.</p>
+    </div>
+    <button pButton type="button" class="p-button-outlined p-button-sm" label="تحديث" (click)="loadCatalog()"></button>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-item">
+      <span class="label">إجمالي المتاح</span>
+      <strong>{{ totalStartableCount }}</strong>
+    </div>
+    <div class="stat-item">
+      <span class="label">المعروض حاليًا</span>
+      <strong>{{ visibleStartableCount }}</strong>
+    </div>
+  </div>
+
+  <div class="controls-row">
+    <div class="control-field">
+      <label>التطبيق</label>
+      <p-dropdown
+        [options]="applicationOptions"
+        optionLabel="label"
+        optionValue="value"
+        [(ngModel)]="selectedApplicationId"
+        appendTo="body"
+        [showClear]="false"
+        (onChange)="onApplicationChange()">
+      </p-dropdown>
+    </div>
+
+    <div class="control-field search-field">
+      <label>بحث سريع</label>
+      <span class="p-input-icon-right">
+        <i class="pi pi-search"></i>
+        <input
+          pInputText
+          type="text"
+          placeholder="اكتب اسم الطلب أو المرحلة"
+          [(ngModel)]="searchText"
+          (ngModelChange)="onSearchChange()" />
+      </span>
+    </div>
+
+    <div class="control-actions">
+      <button
+        pButton
+        type="button"
+        class="p-button-text p-button-sm"
+        label="مسح البحث"
+        (click)="clearSearch()"></button>
+      <button
+        pButton
+        type="button"
+        class="p-button-text p-button-sm"
+        label="توسيع الكل"
+        (click)="expandAll()"></button>
+      <button
+        pButton
+        type="button"
+        class="p-button-text p-button-sm"
+        label="طي الكل"
+        (click)="collapseAll()"></button>
+      <button
+        pButton
+        type="button"
+        class="p-button-sm"
+        label="بدء الطلب المحدد"
+        (click)="startSelectedRequest()"></button>
+    </div>
+  </div>
+
+  <div class="tree-panel" *ngIf="!loading; else loadingState">
+    <ng-container *ngIf="treeNodes.length > 0; else emptyState">
+      <p-tree
+        [value]="treeNodes"
+        selectionMode="single"
+        [(selection)]="selectedNode"
+        (onNodeSelect)="onNodeSelect($event)">
+        <ng-template pTemplate="default" let-node>
+          <div class="tree-node-layout">
+            <div class="tree-node-main">
+              <strong>{{ node.label }}</strong>
+              <span class="node-meta" *ngIf="node.data?.startStageName">مرحلة البداية: {{ node.data?.startStageName }}</span>
+              <span class="node-meta" *ngIf="node.data?.organizationalScopeLabel">{{ node.data?.organizationalScopeLabel }}</span>
+              <span class="node-reason" *ngIf="(node.data?.reasons?.length ?? 0) > 0">{{ node.data?.reasons?.[0] }}</span>
+            </div>
+            <button
+              *ngIf="node.data?.canStart"
+              pButton
+              type="button"
+              class="p-button-sm p-button-outlined"
+              label="بدء الطلب"
+              (click)="onStartRequestFromNode(node, $event)"></button>
+          </div>
+        </ng-template>
+      </p-tree>
+    </ng-container>
+  </div>
+
+  <ng-template #loadingState>
+    <div class="state-box">
+      <p-progressSpinner styleClass="small-spinner" strokeWidth="4"></p-progressSpinner>
+      <span>جاري تحميل الشجرة...</span>
+    </div>
+  </ng-template>
+
+  <ng-template #emptyState>
+    <div class="state-box">
+      <i class="pi pi-sitemap"></i>
+      <span>لا توجد طلبات متاحة للتسجيل بالمرشحات الحالية.</span>
+    </div>
+  </ng-template>
+</div>
