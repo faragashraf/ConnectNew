@@ -580,7 +580,7 @@
         <div class="dynamic-runtime-guide">
           <h4>دليل السلوك الديناميكي</h4>
           <p>
-            عمود <strong>السلوك الديناميكي</strong> يقبل JSON Object فقط (بدون غلاف
+            ابدأ دائمًا من <strong>منشئ التكامل</strong> لكل إعداد جديد. عمود <strong>السلوك الديناميكي</strong> يقبل JSON Object فقط (بدون غلاف
             <code>dynamicRuntime</code>)، ويتم دمجه تلقائيًا داخل
             <code>displaySettingsJson</code>
             عند الحفظ.
@@ -653,6 +653,16 @@
     header="منشئ إعدادات التكامل الديناميكي"
     appendTo="body">
     <div class="integration-builder">
+      <div class="builder-quick-actions">
+        <button
+          pButton
+          type="button"
+          class="p-button-outlined p-button-sm"
+          icon="pi pi-bolt"
+          label="تهيئة سيناريو تحميل الخيارات من Power BI"
+          (click)="onApplyDynamicRuntimePowerBiOptionLoaderPreset()">
+        </button>
+      </div>
       <div class="integration-grid">
         <div class="field">
           <label>نوع السلوك</label>
@@ -710,7 +720,7 @@
           </p-dropdown>
         </div>
         <div class="field" *ngIf="isDynamicRuntimeOptionLoaderBehavior">
-          <label>حقل المصدر</label>
+          <label>حقل المصدر (اختياري)</label>
           <input
             pInputText
             [(ngModel)]="dynamicRuntimeBuilderModel.sourceFieldKey"

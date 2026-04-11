@@ -1,4 +1,5 @@
 import { FormBuilder } from '@angular/forms';
+import { BoundFieldItem } from '../../domain/models/field-library-binding.models';
 import { FieldLibraryBindingEngine } from '../../domain/field-library-binding/field-library-binding.engine';
 import { FieldLibraryBindingPageComponent } from './field-library-binding-page.component';
 
@@ -235,5 +236,84 @@ describe('FieldLibraryBindingPageComponent - Custom Reference Components Editor'
     expect(serialized.some(item => item.type === 'month')).toBeFalse();
     expect(serialized[0].value).toBe('NEW');
     expect(component.referencePolicyForm.getRawValue()['referenceSequencePaddingLength']).toBe(7);
+  });
+});
+
+describe('FieldLibraryBindingPageComponent - Dynamic Integration Builder', () => {
+  let component: FieldLibraryBindingPageComponent;
+
+  const createBinding = (): BoundFieldItem => ({
+    bindingId: 'bind-doc-source',
+    sourceFieldId: 'field-doc-source',
+    fieldKey: 'docSource',
+    label: 'مصدر المستند',
+    type: 'Dropdown',
+    displayOrder: 1,
+    visible: true,
+    required: false,
+    readonly: false,
+    defaultValue: '',
+    dynamicRuntimeJson: ''
+  });
+
+  beforeEach(() => {
+    component = new FieldLibraryBindingPageComponent(
+      new FormBuilder(),
+      {} as any,
+      {} as any,
+      new FieldLibraryBindingEngine(),
+      {} as any,
+      {} as any
+    );
+  });
+
+  it('should build and restore powerbi optionLoader contract through builder flow', () => {
+    const binding = createBinding();
+    component.bindings = [binding];
+
+    component.onOpenDynamicRuntimeBuilder(binding);
+    component.onApplyDynamicRuntimePowerBiOptionLoaderPreset();
+
+    component.dynamicRuntimeBuilderModel.statementId = 65;
+    component.dynamicRuntimeBuilderModel.parameters = [
+      {
+        name: 'direction',
+        source: 'static',
+        staticValue: 'incoming',
+        fieldKey: '',
+        claimKey: '',
+        fallbackValue: ''
+      }
+    ];
+    component.dynamicRuntimeBuilderModel.responseListPath = 'data';
+    component.dynamicRuntimeBuilderModel.responseValuePath = 'id';
+    component.dynamicRuntimeBuilderModel.responseLabelPath = 'name';
+
+    component.onSaveDynamicRuntimeBuilder();
+
+    const savedRuntimeJson = component.bindings[0].dynamicRuntimeJson ?? '';
+    expect(savedRuntimeJson.length).toBeGreaterThan(0);
+
+    const parsed = JSON.parse(savedRuntimeJson);
+    expect(parsed.optionLoader.trigger).toBe('init');
+    expect(parsed.optionLoader.integration.sourceType).toBe('powerbi');
+    expect(parsed.optionLoader.integration.statementId).toBe(65);
+    expect(parsed.optionLoader.integration.parameters).toEqual([
+      {
+        name: 'direction',
+        value: {
+          source: 'static',
+          staticValue: 'incoming'
+        }
+      }
+    ]);
+
+    component.onOpenDynamicRuntimeBuilder(component.bindings[0]);
+    expect(component.dynamicRuntimeBuilderModel.behaviorType).toBe('optionLoader');
+    expect(component.dynamicRuntimeBuilderModel.sourceType).toBe('powerbi');
+    expect(component.dynamicRuntimeBuilderModel.statementId).toBe(65);
+    expect(component.dynamicRuntimeBuilderModel.parameters[0].name).toBe('direction');
+    expect(component.dynamicRuntimeBuilderModel.parameters[0].source).toBe('static');
+    expect(component.dynamicRuntimeBuilderModel.parameters[0].staticValue).toBe('incoming');
   });
 });

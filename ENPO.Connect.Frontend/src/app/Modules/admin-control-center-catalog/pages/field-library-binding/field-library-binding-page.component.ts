@@ -200,19 +200,17 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   ];
   readonly dynamicRuntimeSampleJson = `{
   "optionLoader": {
-    "trigger": "change",
-    "sourceFieldKey": "field_code",
+    "trigger": "init",
     "integration": {
-      "sourceType": "external",
+      "sourceType": "powerbi",
       "requestFormat": "json",
       "auth": { "mode": "bearerCurrent" },
-      "fullUrl": "https://example.com/api/lookup",
-      "method": "GET",
-      "query": [
+      "statementId": 65,
+      "parameters": [
         { "name": "code", "value": { "source": "field", "fieldKey": "field_code" } }
       ]
     },
-    "responseListPath": "items",
+    "responseListPath": "data",
     "responseValuePath": "id",
     "responseLabelPath": "name"
   }
@@ -655,6 +653,33 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
   onRemoveDynamicRuntimePatch(index: number): void {
     this.dynamicRuntimeBuilderModel.patches.splice(index, 1);
+  }
+
+  onApplyDynamicRuntimePowerBiOptionLoaderPreset(): void {
+    this.dynamicRuntimeBuilderModel.behaviorType = 'optionLoader';
+    this.dynamicRuntimeBuilderModel.trigger = 'init';
+    this.dynamicRuntimeBuilderModel.sourceType = 'powerbi';
+    this.dynamicRuntimeBuilderModel.requestFormat = 'json';
+    this.dynamicRuntimeBuilderModel.authMode = 'bearerCurrent';
+    this.dynamicRuntimeBuilderModel.sourceFieldKey = '';
+    this.dynamicRuntimeBuilderModel.fullUrl = '';
+    this.dynamicRuntimeBuilderModel.method = 'GET';
+    this.dynamicRuntimeBuilderModel.query = [];
+    this.dynamicRuntimeBuilderModel.body = [];
+    this.dynamicRuntimeBuilderModel.headers = [];
+    this.dynamicRuntimeBuilderModel.customHeaders = [];
+    this.dynamicRuntimeBuilderModel.debounceMs = null;
+    this.dynamicRuntimeBuilderModel.minValueLength = null;
+    this.dynamicRuntimeBuilderModel.responseValidPath = '';
+    this.dynamicRuntimeBuilderModel.responseMessagePath = '';
+    this.dynamicRuntimeBuilderModel.defaultErrorMessage = '';
+    this.dynamicRuntimeBuilderModel.whenEquals = '';
+    this.dynamicRuntimeBuilderModel.clearTargetsWhenEmpty = false;
+    this.dynamicRuntimeBuilderModel.patches = [this.createDefaultBuilderPatch()];
+
+    if (!Array.isArray(this.dynamicRuntimeBuilderModel.parameters) || this.dynamicRuntimeBuilderModel.parameters.length === 0) {
+      this.dynamicRuntimeBuilderModel.parameters = [this.createDefaultBuilderBinding()];
+    }
   }
 
   get isDynamicRuntimePowerBiSource(): boolean {

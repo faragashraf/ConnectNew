@@ -354,6 +354,11 @@
   gap: 1rem;
 }
 
+.builder-quick-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .integration-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
