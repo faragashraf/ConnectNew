@@ -8,6 +8,8 @@ import {
   RequestRuntimeCatalogDto,
   RequestRuntimeCatalogNodeDto,
   RequestRuntimeDynamicHttpRequestConfig,
+  RequestRuntimeDynamicResolvedExternalRequest,
+  RequestRuntimeDynamicResolvedPowerBiRequest,
   RequestRuntimeEnvelopeDetailDto,
   RequestRuntimeEnvelopeUpsertRequestDto,
   RequestRuntimeFormDefinitionDto,
@@ -155,6 +157,36 @@ export class RequestRuntimeCatalogFacadeService {
       catchError(() => of({
         data: undefined,
         errors: [{ message: 'تعذر تنفيذ التكامل الخارجي للحقل المطلوب.' }]
+      }))
+    );
+  }
+
+  executeDynamicExternalRequest(
+    request: RequestRuntimeDynamicResolvedExternalRequest
+  ): Observable<RuntimeApiResponse<unknown>> {
+    return this.api.executeDynamicExternalRequest(request).pipe(
+      map(response => ({
+        data: response,
+        errors: []
+      })),
+      catchError(() => of({
+        data: undefined,
+        errors: [{ message: 'تعذر تنفيذ التكامل الخارجي للحقل المطلوب.' }]
+      }))
+    );
+  }
+
+  executeDynamicPowerBiRequest(
+    request: RequestRuntimeDynamicResolvedPowerBiRequest
+  ): Observable<RuntimeApiResponse<unknown>> {
+    return this.api.executeDynamicPowerBiRequest(request).pipe(
+      map(response => ({
+        data: response,
+        errors: []
+      })),
+      catchError(() => of({
+        data: undefined,
+        errors: [{ message: 'تعذر تنفيذ تكامل Power BI للحقل المطلوب.' }]
       }))
     );
   }

@@ -7,8 +7,15 @@ import {
   RequestRuntimeDynamicActionConfig,
   RequestRuntimeDynamicAsyncValidationConfig,
   RequestRuntimeDynamicFieldBehaviorConfig,
+  RequestRuntimeDynamicHttpMethod,
   RequestRuntimeDynamicHttpRequestConfig,
+  RequestRuntimeDynamicIntegrationAuthMode,
+  RequestRuntimeDynamicIntegrationNameValueBinding,
+  RequestRuntimeDynamicIntegrationRequestConfig,
+  RequestRuntimeDynamicIntegrationValueBinding,
   RequestRuntimeDynamicOptionLoaderConfig,
+  RequestRuntimeDynamicResolvedExternalRequest,
+  RequestRuntimeDynamicResolvedPowerBiRequest,
   RequestRuntimeFieldDefinitionDto,
   getRuntimeValueByPath,
   parseRequestRuntimeDynamicFieldBehavior
@@ -40,6 +47,7 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
   private readonly asyncValidationResultCacheByFieldKey = new Map<string, { value: string; result: ValidationErrors | null }>();
   private readonly lastEventTypeByFieldKey = new Map<string, RuntimeDynamicEventType>();
   private readonly managedRuntimeSelectionFields = new Set<string>();
+  private readonly claimValuesByKey = new Map<string, string>();
 
   constructor(private readonly facade: RequestRuntimeCatalogFacadeService) {}
 
@@ -52,6 +60,7 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
 
     this.dynamicControls = input.dynamicControls;
     this.genericFormService = input.genericFormService;
+    this.captureClaimValues();
 
     this.mapControlsByFieldKey(input.controlMap);
     this.mapBehaviors(input.fieldDefinitions);
@@ -80,6 +89,7 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
     this.asyncValidationResultCacheByFieldKey.clear();
     this.lastEventTypeByFieldKey.clear();
     this.managedRuntimeSelectionFields.clear();
+    this.claimValuesByKey.clear();
   }
 
   handleGenericEvent(event: unknown): void {
@@ -190,7 +200,7 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
 
       const debounceMs = Number(config.debounceMs ?? 320);
       return timer(debounceMs).pipe(
-        switchMap(() => this.executeRequest(config.request, fieldKey, value)),
+        switchMap(() => this.executeBehaviorRequest(config.integration, config.request, fieldKey, value)),
         map(response => {
           const rawValid = getRuntimeValueByPath(response, config.responseValidPath ?? 'data.isValid');
           const hasExplicitValid = typeof rawValid === 'boolean';
@@ -289,7 +299,7 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
     const requestToken = (this.requestTokenByFieldKey.get(targetFieldKey) ?? 0) + 1;
     this.requestTokenByFieldKey.set(targetFieldKey, requestToken);
 
-    this.executeRequest(optionLoader.request, sourceFieldKey, sourceValue).subscribe(response => {
+    this.executeBehaviorRequest(optionLoader.integration, optionLoader.request, sourceFieldKey, sourceValue).subscribe(response => {
       if (this.requestTokenByFieldKey.get(targetFieldKey) !== requestToken) {
         return;
       }
@@ -337,7 +347,7 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
       const requestToken = (this.actionRequestTokenByActionKey.get(actionKey) ?? 0) + 1;
       this.actionRequestTokenByActionKey.set(actionKey, requestToken);
 
-      this.executeRequest(action.request, sourceFieldKey, sourceValue).subscribe(response => {
+      this.executeBehaviorRequest(action.integration, action.request, sourceFieldKey, sourceValue).subscribe(response => {
         if (this.actionRequestTokenByActionKey.get(actionKey) !== requestToken) {
           return;
         }
@@ -405,7 +415,24 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
     });
   }
 
-  private executeRequest(
+  private executeBehaviorRequest(
+    integration: RequestRuntimeDynamicIntegrationRequestConfig | undefined,
+    legacyRequest: RequestRuntimeDynamicHttpRequestConfig | undefined,
+    sourceFieldKey: string,
+    sourceValue: string
+  ): Observable<unknown> {
+    if (integration) {
+      return this.executeIntegrationRequest(integration, sourceFieldKey, sourceValue);
+    }
+
+    if (!legacyRequest) {
+      return of(undefined);
+    }
+
+    return this.executeLegacyRequest(legacyRequest, sourceFieldKey, sourceValue);
+  }
+
+  private executeLegacyRequest(
     request: RequestRuntimeDynamicHttpRequestConfig,
     sourceFieldKey: string,
     sourceValue: string
@@ -423,6 +450,180 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
       map(response => response?.data),
       catchError(() => of(undefined))
     );
+  }
+
+  private executeIntegrationRequest(
+    integration: RequestRuntimeDynamicIntegrationRequestConfig,
+    sourceFieldKey: string,
+    sourceValue: string
+  ): Observable<unknown> {
+    if (integration.sourceType === 'powerbi') {
+      const payload = this.buildResolvedPowerBiRequest(integration, sourceFieldKey, sourceValue);
+      if (!payload) {
+        return of(undefined);
+      }
+
+      return this.facade.executeDynamicPowerBiRequest(payload).pipe(
+        map(response => response?.data),
+        catchError(() => of(undefined))
+      );
+    }
+
+    const payload = this.buildResolvedExternalRequest(integration, sourceFieldKey, sourceValue);
+    if (!payload) {
+      return of(undefined);
+    }
+
+    return this.facade.executeDynamicExternalRequest(payload).pipe(
+      map(response => response?.data),
+      catchError(() => of(undefined))
+    );
+  }
+
+  private buildResolvedPowerBiRequest(
+    integration: RequestRuntimeDynamicIntegrationRequestConfig,
+    sourceFieldKey: string,
+    sourceValue: string
+  ): RequestRuntimeDynamicResolvedPowerBiRequest | null {
+    if (integration.sourceType !== 'powerbi') {
+      return null;
+    }
+
+    const statementId = Number(integration.statementId ?? 0);
+    if (!Number.isFinite(statementId) || statementId <= 0) {
+      return null;
+    }
+
+    return {
+      statementId: Math.trunc(statementId),
+      requestFormat: integration.requestFormat ?? 'json',
+      parameters: this.resolveNameValueBindingsToRecord(integration.parameters, sourceFieldKey, sourceValue)
+    };
+  }
+
+  private buildResolvedExternalRequest(
+    integration: RequestRuntimeDynamicIntegrationRequestConfig,
+    sourceFieldKey: string,
+    sourceValue: string
+  ): RequestRuntimeDynamicResolvedExternalRequest | null {
+    if (integration.sourceType !== 'external') {
+      return null;
+    }
+
+    const fullUrl = this.normalizeString(integration.fullUrl);
+    if (!fullUrl) {
+      return null;
+    }
+
+    const query = this.resolveNameValueBindingsToRecord(integration.query, sourceFieldKey, sourceValue);
+    const requestHeaders = this.resolveNameValueBindingsToRecord(integration.headers, sourceFieldKey, sourceValue);
+    const authMode = this.normalizeAuthMode(integration.auth?.mode);
+    const authHeaders = authMode === 'custom'
+      ? this.resolveNameValueBindingsToRecord(integration.auth?.customHeaders, sourceFieldKey, sourceValue)
+      : {};
+    const headers = this.mergeHeaderRecords(requestHeaders, authHeaders);
+    const bodyRecord = this.resolveNameValueBindingsToRecord(integration.body, sourceFieldKey, sourceValue);
+    const body = Object.keys(bodyRecord).length > 0 ? bodyRecord : undefined;
+
+    return {
+      fullUrl,
+      method: this.normalizeHttpMethod(integration.method),
+      requestFormat: integration.requestFormat ?? 'json',
+      authMode,
+      query: Object.keys(query).length > 0 ? query : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+      body
+    };
+  }
+
+  private resolveNameValueBindingsToRecord(
+    bindings: RequestRuntimeDynamicIntegrationNameValueBinding[] | undefined,
+    sourceFieldKey: string,
+    sourceValue: string
+  ): Record<string, string> {
+    if (!Array.isArray(bindings) || bindings.length === 0) {
+      return {};
+    }
+
+    const record: Record<string, string> = {};
+    bindings.forEach(binding => {
+      const key = this.normalizeString(binding?.name);
+      if (!key) {
+        return;
+      }
+
+      const value = this.resolveIntegrationValueBinding(binding.value, sourceFieldKey, sourceValue);
+      record[key] = value;
+    });
+
+    return record;
+  }
+
+  private resolveIntegrationValueBinding(
+    valueBinding: RequestRuntimeDynamicIntegrationValueBinding | undefined,
+    sourceFieldKey: string,
+    sourceValue: string
+  ): string {
+    if (!valueBinding) {
+      return '';
+    }
+
+    let resolved = '';
+    if (valueBinding.source === 'static') {
+      resolved = this.interpolateTemplate(valueBinding.staticValue ?? '', this.buildInterpolationContext(sourceFieldKey, sourceValue));
+    } else if (valueBinding.source === 'field') {
+      resolved = this.resolveFieldValueForBinding(valueBinding.fieldKey, sourceFieldKey, sourceValue);
+    } else if (valueBinding.source === 'claim') {
+      resolved = this.resolveClaimValue(valueBinding.claimKey);
+    }
+
+    if (!resolved) {
+      return valueBinding.fallbackValue ?? '';
+    }
+
+    return resolved;
+  }
+
+  private resolveFieldValueForBinding(fieldKey: string | undefined, sourceFieldKey: string, sourceValue: string): string {
+    const normalizedFieldKey = this.normalizeFieldKey(fieldKey);
+    if (!normalizedFieldKey) {
+      return '';
+    }
+
+    if (normalizedFieldKey === sourceFieldKey) {
+      return sourceValue;
+    }
+
+    return this.readFieldValue(normalizedFieldKey);
+  }
+
+  private resolveClaimValue(claimKey: string | undefined): string {
+    const normalized = this.normalizeString(claimKey)?.toLowerCase();
+    if (!normalized) {
+      return '';
+    }
+
+    return this.claimValuesByKey.get(normalized) ?? '';
+  }
+
+  private mergeHeaderRecords(...records: Array<Record<string, string> | undefined>): Record<string, string> {
+    const result: Record<string, string> = {};
+    records.forEach(record => {
+      if (!record) {
+        return;
+      }
+
+      Object.entries(record).forEach(([key, value]) => {
+        const normalizedKey = this.normalizeString(key);
+        if (!normalizedKey) {
+          return;
+        }
+
+        result[normalizedKey] = String(value ?? '');
+      });
+    });
+
+    return result;
   }
 
   private mapOptions(payload: unknown, config: RequestRuntimeDynamicOptionLoaderConfig): selection[] {
@@ -515,7 +716,104 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
       context[fieldKey.toLowerCase()] = value;
     });
 
+    this.claimValuesByKey.forEach((value, key) => {
+      context[`claim.${key}`] = value;
+      context[`claims.${key}`] = value;
+    });
+
     return context;
+  }
+
+  private captureClaimValues(): void {
+    this.claimValuesByKey.clear();
+
+    const token = this.readCurrentToken();
+    if (!token) {
+      return;
+    }
+
+    const claimsPayload = this.tryReadJwtPayload(token);
+    if (!claimsPayload || typeof claimsPayload !== 'object' || Array.isArray(claimsPayload)) {
+      return;
+    }
+
+    Object.entries(claimsPayload).forEach(([key, value]) => {
+      const normalizedKey = this.normalizeString(key)?.toLowerCase();
+      if (!normalizedKey) {
+        return;
+      }
+
+      const normalizedValue = this.normalizeClaimValue(value);
+      if (normalizedValue == null) {
+        return;
+      }
+
+      this.claimValuesByKey.set(normalizedKey, normalizedValue);
+
+      const alias = this.extractClaimAlias(normalizedKey);
+      if (alias && !this.claimValuesByKey.has(alias)) {
+        this.claimValuesByKey.set(alias, normalizedValue);
+      }
+    });
+  }
+
+  private readCurrentToken(): string | null {
+    try {
+      const raw = localStorage.getItem('ConnectToken');
+      const normalized = this.normalizeString(raw);
+      return normalized ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private tryReadJwtPayload(token: string): Record<string, unknown> | null {
+    const segments = String(token ?? '').split('.');
+    if (segments.length < 2) {
+      return null;
+    }
+
+    try {
+      const payload = segments[1]
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+      const normalizedPayload = payload.padEnd(Math.ceil(payload.length / 4) * 4, '=');
+      const decoded = atob(normalizedPayload);
+      const parsed = JSON.parse(decoded);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  private normalizeClaimValue(value: unknown): string | null {
+    if (value == null) {
+      return null;
+    }
+
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      const normalized = String(value).trim();
+      return normalized.length > 0 ? normalized : null;
+    }
+
+    return null;
+  }
+
+  private extractClaimAlias(claimKey: string): string | null {
+    const segments = String(claimKey ?? '')
+      .split(/[/:]/g)
+      .map(segment => segment.trim().toLowerCase())
+      .filter(segment => segment.length > 0);
+
+    if (segments.length === 0) {
+      return null;
+    }
+
+    return segments[segments.length - 1];
   }
 
   private interpolateRecord(source: Record<string, string> | undefined, context: Record<string, string>): Record<string, string> | null {
@@ -634,6 +932,28 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
     }
 
     return null;
+  }
+
+  private normalizeAuthMode(value: unknown): RequestRuntimeDynamicIntegrationAuthMode {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'none') {
+      return 'none';
+    }
+
+    if (normalized === 'custom') {
+      return 'custom';
+    }
+
+    return 'bearerCurrent';
+  }
+
+  private normalizeHttpMethod(value: unknown): RequestRuntimeDynamicHttpMethod {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    if (normalized === 'POST' || normalized === 'PUT' || normalized === 'PATCH') {
+      return normalized;
+    }
+
+    return 'GET';
   }
 
   private normalizeFieldKey(value: unknown): string {

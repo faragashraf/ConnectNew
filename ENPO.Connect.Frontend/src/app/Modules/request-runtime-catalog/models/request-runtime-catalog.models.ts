@@ -139,17 +139,64 @@ export interface RequestRuntimeFieldDefinitionDto {
 }
 
 export type RequestRuntimeDynamicTrigger = 'init' | 'change' | 'blur';
+export type RequestRuntimeDynamicHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH';
+export type RequestRuntimeDynamicIntegrationSourceType = 'powerbi' | 'external';
+export type RequestRuntimeDynamicIntegrationValueSource = 'static' | 'field' | 'claim';
+export type RequestRuntimeDynamicIntegrationAuthMode = 'none' | 'bearerCurrent' | 'custom';
+export type RequestRuntimeDynamicRequestFormat = 'json' | 'xml';
+
+export interface RequestRuntimeDynamicIntegrationValueBinding {
+  source: RequestRuntimeDynamicIntegrationValueSource;
+  staticValue?: string;
+  fieldKey?: string;
+  claimKey?: string;
+  fallbackValue?: string;
+}
+
+export interface RequestRuntimeDynamicIntegrationNameValueBinding {
+  name: string;
+  value: RequestRuntimeDynamicIntegrationValueBinding;
+}
+
+export interface RequestRuntimeDynamicIntegrationAuthConfig {
+  mode?: RequestRuntimeDynamicIntegrationAuthMode;
+  customHeaders?: RequestRuntimeDynamicIntegrationNameValueBinding[];
+}
+
+export interface RequestRuntimeDynamicPowerBiIntegrationRequestConfig {
+  sourceType: 'powerbi';
+  requestFormat?: RequestRuntimeDynamicRequestFormat;
+  auth?: RequestRuntimeDynamicIntegrationAuthConfig;
+  statementId: number;
+  parameters?: RequestRuntimeDynamicIntegrationNameValueBinding[];
+}
+
+export interface RequestRuntimeDynamicExternalIntegrationRequestConfig {
+  sourceType: 'external';
+  requestFormat?: RequestRuntimeDynamicRequestFormat;
+  auth?: RequestRuntimeDynamicIntegrationAuthConfig;
+  fullUrl: string;
+  method?: RequestRuntimeDynamicHttpMethod;
+  query?: RequestRuntimeDynamicIntegrationNameValueBinding[];
+  body?: RequestRuntimeDynamicIntegrationNameValueBinding[];
+  headers?: RequestRuntimeDynamicIntegrationNameValueBinding[];
+}
+
+export type RequestRuntimeDynamicIntegrationRequestConfig =
+  | RequestRuntimeDynamicPowerBiIntegrationRequestConfig
+  | RequestRuntimeDynamicExternalIntegrationRequestConfig;
 
 export interface RequestRuntimeDynamicHttpRequestConfig {
   url: string;
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH';
+  method?: RequestRuntimeDynamicHttpMethod;
   query?: Record<string, string>;
   headers?: Record<string, string>;
   body?: unknown;
 }
 
 export interface RequestRuntimeDynamicOptionLoaderConfig {
-  request: RequestRuntimeDynamicHttpRequestConfig;
+  integration?: RequestRuntimeDynamicIntegrationRequestConfig;
+  request?: RequestRuntimeDynamicHttpRequestConfig;
   trigger?: RequestRuntimeDynamicTrigger;
   sourceFieldKey?: string;
   minQueryLength?: number;
@@ -160,7 +207,8 @@ export interface RequestRuntimeDynamicOptionLoaderConfig {
 }
 
 export interface RequestRuntimeDynamicAsyncValidationConfig {
-  request: RequestRuntimeDynamicHttpRequestConfig;
+  integration?: RequestRuntimeDynamicIntegrationRequestConfig;
+  request?: RequestRuntimeDynamicHttpRequestConfig;
   trigger?: Exclude<RequestRuntimeDynamicTrigger, 'init'>;
   debounceMs?: number;
   minValueLength?: number;
@@ -179,9 +227,26 @@ export interface RequestRuntimeDynamicActionPatchConfig {
 export interface RequestRuntimeDynamicActionConfig {
   trigger?: Exclude<RequestRuntimeDynamicTrigger, 'init'>;
   whenEquals?: string;
+  integration?: RequestRuntimeDynamicIntegrationRequestConfig;
   request?: RequestRuntimeDynamicHttpRequestConfig;
   patches: RequestRuntimeDynamicActionPatchConfig[];
   clearTargetsWhenEmpty?: boolean;
+}
+
+export interface RequestRuntimeDynamicResolvedPowerBiRequest {
+  statementId: number;
+  requestFormat: RequestRuntimeDynamicRequestFormat;
+  parameters: Record<string, string>;
+}
+
+export interface RequestRuntimeDynamicResolvedExternalRequest {
+  fullUrl: string;
+  method: RequestRuntimeDynamicHttpMethod;
+  requestFormat: RequestRuntimeDynamicRequestFormat;
+  authMode: RequestRuntimeDynamicIntegrationAuthMode;
+  query?: Record<string, string>;
+  headers?: Record<string, string>;
+  body?: unknown;
 }
 
 export interface RequestRuntimeDynamicFieldBehaviorConfig {
@@ -363,13 +428,15 @@ function readOptionLoaderConfig(payload: Record<string, unknown>): RequestRuntim
   }
 
   const raw = candidate as Record<string, unknown>;
+  const integration = readIntegrationRequestConfig(raw['integration']);
   const request = readHttpRequestConfig(raw['request']);
-  if (!request) {
+  if (!integration && !request) {
     return null;
   }
 
   return {
-    request,
+    integration: integration ?? undefined,
+    request: request ?? undefined,
     trigger: normalizeTrigger(raw['trigger'], 'change'),
     sourceFieldKey: normalizeNullableString(raw['sourceFieldKey']) ?? undefined,
     minQueryLength: normalizeNonNegativeInt(raw['minQueryLength']),
@@ -387,8 +454,9 @@ function readAsyncValidationConfig(payload: Record<string, unknown>): RequestRun
   }
 
   const raw = candidate as Record<string, unknown>;
+  const integration = readIntegrationRequestConfig(raw['integration']);
   const request = readHttpRequestConfig(raw['request']);
-  if (!request) {
+  if (!integration && !request) {
     return null;
   }
 
@@ -396,7 +464,8 @@ function readAsyncValidationConfig(payload: Record<string, unknown>): RequestRun
   const normalizedTrigger = trigger === 'init' ? 'blur' : trigger;
 
   return {
-    request,
+    integration: integration ?? undefined,
+    request: request ?? undefined,
     trigger: normalizedTrigger,
     debounceMs: normalizePositiveInt(raw['debounceMs']),
     minValueLength: normalizeNonNegativeInt(raw['minValueLength']),
@@ -433,6 +502,7 @@ function readActionConfig(item: unknown): RequestRuntimeDynamicActionConfig | nu
     return null;
   }
 
+  const integration = readIntegrationRequestConfig(raw['integration']);
   const request = readHttpRequestConfig(raw['request']);
   const trigger = normalizeTrigger(raw['trigger'], 'change');
   const normalizedTrigger = trigger === 'init' ? 'change' : trigger;
@@ -440,6 +510,7 @@ function readActionConfig(item: unknown): RequestRuntimeDynamicActionConfig | nu
   return {
     trigger: normalizedTrigger,
     whenEquals: normalizeNullableString(raw['whenEquals']) ?? undefined,
+    integration: integration ?? undefined,
     request: request ?? undefined,
     patches,
     clearTargetsWhenEmpty: raw['clearTargetsWhenEmpty'] === true
@@ -488,6 +559,148 @@ function readHttpRequestConfig(value: unknown): RequestRuntimeDynamicHttpRequest
   };
 }
 
+function readIntegrationRequestConfig(value: unknown): RequestRuntimeDynamicIntegrationRequestConfig | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const sourceType = normalizeIntegrationSourceType(payload['sourceType']);
+  if (!sourceType) {
+    return null;
+  }
+
+  const requestFormat = normalizeRequestFormat(payload['requestFormat']) ?? 'json';
+  const auth = readAuthConfig(payload['auth']) ?? undefined;
+
+  if (sourceType === 'powerbi') {
+    const statementId = normalizePositiveInt(payload['statementId']);
+    if (!statementId) {
+      return null;
+    }
+
+    return {
+      sourceType,
+      requestFormat,
+      auth,
+      statementId,
+      parameters: readNameValueBindings(payload['parameters']) ?? undefined
+    };
+  }
+
+  const fullUrl = normalizeNullableString(payload['fullUrl']);
+  if (!fullUrl) {
+    return null;
+  }
+
+  return {
+    sourceType: 'external',
+    requestFormat,
+    auth,
+    fullUrl,
+    method: normalizeHttpMethod(payload['method']),
+    query: readNameValueBindings(payload['query']) ?? undefined,
+    body: readNameValueBindings(payload['body']) ?? undefined,
+    headers: readNameValueBindings(payload['headers']) ?? undefined
+  };
+}
+
+function readAuthConfig(value: unknown): RequestRuntimeDynamicIntegrationAuthConfig | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const mode = normalizeAuthMode(payload['mode']) ?? undefined;
+  const customHeaders = readNameValueBindings(payload['customHeaders']) ?? undefined;
+  if (!mode && !customHeaders) {
+    return null;
+  }
+
+  return {
+    mode,
+    customHeaders
+  };
+}
+
+function readNameValueBindings(value: unknown): RequestRuntimeDynamicIntegrationNameValueBinding[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const bindings = value
+    .map(item => readNameValueBinding(item))
+    .filter((item): item is RequestRuntimeDynamicIntegrationNameValueBinding => item != null);
+
+  return bindings.length > 0 ? bindings : null;
+}
+
+function readNameValueBinding(value: unknown): RequestRuntimeDynamicIntegrationNameValueBinding | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const name = normalizeNullableString(payload['name']);
+  if (!name) {
+    return null;
+  }
+
+  const valueBinding = readValueBinding(payload['value']);
+  if (!valueBinding) {
+    return null;
+  }
+
+  return {
+    name,
+    value: valueBinding
+  };
+}
+
+function readValueBinding(value: unknown): RequestRuntimeDynamicIntegrationValueBinding | null {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return {
+      source: 'static',
+      staticValue: String(value)
+    };
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const source = normalizeValueSource(payload['source']);
+  if (!source) {
+    return null;
+  }
+
+  const staticValue = normalizeNullableString(payload['staticValue']) ?? undefined;
+  const fieldKey = normalizeNullableString(payload['fieldKey']) ?? undefined;
+  const claimKey = normalizeNullableString(payload['claimKey']) ?? undefined;
+  const fallbackValue = normalizeNullableString(payload['fallbackValue']) ?? undefined;
+
+  if (source === 'static' && !staticValue) {
+    return null;
+  }
+
+  if (source === 'field' && !fieldKey) {
+    return null;
+  }
+
+  if (source === 'claim' && !claimKey) {
+    return null;
+  }
+
+  return {
+    source,
+    staticValue,
+    fieldKey,
+    claimKey,
+    fallbackValue
+  };
+}
+
 function normalizeRecord(value: unknown): Record<string, string> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
@@ -509,7 +722,7 @@ function normalizeRecord(value: unknown): Record<string, string> | null {
   return Object.keys(result).length > 0 ? result : null;
 }
 
-function normalizeHttpMethod(value: unknown): 'GET' | 'POST' | 'PUT' | 'PATCH' {
+function normalizeHttpMethod(value: unknown): RequestRuntimeDynamicHttpMethod {
   const normalized = String(value ?? '').trim().toUpperCase();
   if (normalized === 'POST' || normalized === 'PUT' || normalized === 'PATCH') {
     return normalized;
@@ -520,11 +733,91 @@ function normalizeHttpMethod(value: unknown): 'GET' | 'POST' | 'PUT' | 'PATCH' {
 
 function normalizeTrigger(value: unknown, fallback: RequestRuntimeDynamicTrigger): RequestRuntimeDynamicTrigger {
   const normalized = String(value ?? '').trim().toLowerCase();
-  if (normalized === 'init' || normalized === 'change' || normalized === 'blur') {
-    return normalized;
+  if (normalized === 'init') {
+    return 'init';
+  }
+
+  if (normalized === 'blur') {
+    return 'blur';
+  }
+
+  if (
+    normalized === 'change'
+    || normalized === 'input'
+    || normalized === 'onchange'
+    || normalized === 'oninput'
+    || normalized === 'select'
+    || normalized === 'treeselect'
+    || normalized === 'treeunselect'
+    || normalized === 'click'
+    || normalized === 'userselected'
+    || normalized === 'filechange'
+    || normalized === 'fileclear'
+  ) {
+    return 'change';
   }
 
   return fallback;
+}
+
+function normalizeIntegrationSourceType(value: unknown): RequestRuntimeDynamicIntegrationSourceType | null {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'powerbi') {
+    return 'powerbi';
+  }
+
+  if (normalized === 'external') {
+    return 'external';
+  }
+
+  return null;
+}
+
+function normalizeValueSource(value: unknown): RequestRuntimeDynamicIntegrationValueSource | null {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'static') {
+    return 'static';
+  }
+
+  if (normalized === 'field') {
+    return 'field';
+  }
+
+  if (normalized === 'claim') {
+    return 'claim';
+  }
+
+  return null;
+}
+
+function normalizeAuthMode(value: unknown): RequestRuntimeDynamicIntegrationAuthMode | null {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'none') {
+    return 'none';
+  }
+
+  if (normalized === 'bearercurrent' || normalized === 'bearer_current' || normalized === 'bearer-current') {
+    return 'bearerCurrent';
+  }
+
+  if (normalized === 'custom') {
+    return 'custom';
+  }
+
+  return null;
+}
+
+function normalizeRequestFormat(value: unknown): RequestRuntimeDynamicRequestFormat | null {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'json') {
+    return 'json';
+  }
+
+  if (normalized === 'xml') {
+    return 'xml';
+  }
+
+  return null;
 }
 
 function normalizeNonNegativeInt(value: unknown): number | undefined {

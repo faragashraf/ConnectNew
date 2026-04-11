@@ -17,8 +17,16 @@ describe('RequestRuntimeDynamicFieldsFrameworkService', () => {
   let facade: jasmine.SpyObj<RequestRuntimeCatalogFacadeService>;
 
   beforeEach(() => {
-    facade = jasmine.createSpyObj<RequestRuntimeCatalogFacadeService>('RequestRuntimeCatalogFacadeService', ['executeDynamicRequest']);
+    facade = jasmine.createSpyObj<RequestRuntimeCatalogFacadeService>('RequestRuntimeCatalogFacadeService', [
+      'executeDynamicRequest',
+      'executeDynamicExternalRequest',
+      'executeDynamicPowerBiRequest'
+    ]);
     service = new RequestRuntimeDynamicFieldsFrameworkService(facade);
+  });
+
+  afterEach(() => {
+    localStorage.removeItem('ConnectToken');
   });
 
   it('hardens optionLoader with trigger normalization, dedupe, and stale-response guard', () => {
@@ -213,6 +221,134 @@ describe('RequestRuntimeDynamicFieldsFrameworkService', () => {
     expect(targetControl.value).toBe('الاسم الصحيح');
     expect(patchSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('resolves powerbi integration bindings from static/field/claim sources', () => {
+    localStorage.setItem('ConnectToken', buildToken({ uid: 'U-1' }));
+
+    const forms = buildGenericFormsStub();
+    const dynamicControls = new FormGroup({
+      'customerCode|0': new FormControl('C-9'),
+      'target|0': new FormControl('')
+    });
+
+    const controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>([
+      ['customerCode|0', { fieldKey: 'customerCode', instanceGroupId: 1 }],
+      ['target|0', { fieldKey: 'target', instanceGroupId: 1 }]
+    ]);
+
+    const fields: RequestRuntimeFieldDefinitionDto[] = [
+      createRuntimeField('target', {
+        optionLoader: {
+          trigger: 'init',
+          integration: {
+            sourceType: 'powerbi',
+            statementId: 15,
+            parameters: [
+              { name: 'mode', value: { source: 'static', staticValue: 'lookup' } },
+              { name: 'code', value: { source: 'field', fieldKey: 'customerCode' } },
+              { name: 'userId', value: { source: 'claim', claimKey: 'uid' } }
+            ]
+          },
+          responseListPath: 'items',
+          responseValuePath: 'id',
+          responseLabelPath: 'name'
+        }
+      })
+    ];
+
+    facade.executeDynamicPowerBiRequest.and.returnValue(of({
+      data: { items: [{ id: '1', name: 'خيار' }] },
+      errors: []
+    } as any));
+
+    service.bind({
+      dynamicControls,
+      genericFormService: forms as unknown as GenericFormsService,
+      fieldDefinitions: fields,
+      controlMap
+    });
+
+    expect(facade.executeDynamicPowerBiRequest).toHaveBeenCalledTimes(1);
+    expect(facade.executeDynamicPowerBiRequest).toHaveBeenCalledWith({
+      statementId: 15,
+      requestFormat: 'json',
+      parameters: {
+        mode: 'lookup',
+        code: 'C-9',
+        userId: 'U-1'
+      }
+    });
+    expect(forms.setRuntimeSelectionForField).toHaveBeenCalledWith('target', [{ key: '1', name: 'خيار' }]);
+  });
+
+  it('resolves external integration auth mode and custom headers', () => {
+    const forms = buildGenericFormsStub();
+    const dynamicControls = new FormGroup({
+      'source|0': new FormControl('AA')
+    });
+
+    const controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>([
+      ['source|0', { fieldKey: 'source', instanceGroupId: 1 }]
+    ]);
+
+    const fields: RequestRuntimeFieldDefinitionDto[] = [
+      createRuntimeField('source', {
+        optionLoader: {
+          trigger: 'blur',
+          integration: {
+            sourceType: 'external',
+            fullUrl: 'https://example.test/api/options',
+            method: 'GET',
+            auth: {
+              mode: 'custom',
+              customHeaders: [
+                { name: 'x-tenant', value: { source: 'static', staticValue: 'TEN' } }
+              ]
+            },
+            query: [
+              { name: 'q', value: { source: 'field', fieldKey: 'source' } }
+            ]
+          },
+          responseListPath: 'items',
+          responseValuePath: 'key',
+          responseLabelPath: 'name'
+        }
+      })
+    ];
+
+    facade.executeDynamicExternalRequest.and.returnValue(of({
+      data: {
+        items: [
+          { key: '1', name: 'وارد' },
+          { key: '2', name: 'صادر' }
+        ]
+      }
+    }));
+
+    service.bind({
+      dynamicControls,
+      genericFormService: forms as unknown as GenericFormsService,
+      fieldDefinitions: fields,
+      controlMap
+    });
+
+    service.handleGenericEvent({ controlFullName: 'source|0', eventType: 'blur' });
+
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledTimes(1);
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledWith({
+      fullUrl: 'https://example.test/api/options',
+      method: 'GET',
+      requestFormat: 'json',
+      authMode: 'custom',
+      query: { q: 'AA' },
+      headers: { 'x-tenant': 'TEN' },
+      body: undefined
+    });
+    expect(forms.setRuntimeSelectionForField).toHaveBeenCalledWith('source', [
+      { key: '1', name: 'وارد' },
+      { key: '2', name: 'صادر' }
+    ]);
+  });
 });
 
 function createRuntimeField(fieldKey: string, dynamicRuntime: unknown): RequestRuntimeFieldDefinitionDto {
@@ -228,4 +364,14 @@ function buildGenericFormsStub(): GenericFormsStub {
     setRuntimeSelectionForField: jasmine.createSpy('setRuntimeSelectionForField'),
     clearRuntimeSelectionForField: jasmine.createSpy('clearRuntimeSelectionForField')
   };
+}
+
+function buildToken(payload: Record<string, unknown>): string {
+  const base64UrlEncode = (value: unknown): string =>
+    btoa(JSON.stringify(value))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/g, '');
+
+  return `${base64UrlEncode({ alg: 'none', typ: 'JWT' })}.${base64UrlEncode(payload)}.sig`;
 }

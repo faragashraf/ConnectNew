@@ -1,11 +1,17 @@
-import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
+import { HttpBackend, HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { PowerBiController } from 'src/app/shared/services/BackendServices/PowerBi/PowerBi.service';
 import { environment } from 'src/environments/environment';
 import {
   RequestRuntimeAdminGroupTreeNodeDto,
   RequestRuntimeCatalogDto,
+  RequestRuntimeDynamicResolvedExternalRequest,
   RequestRuntimeDynamicHttpRequestConfig,
+  RequestRuntimeDynamicHttpMethod,
+  RequestRuntimeDynamicResolvedPowerBiRequest,
+  RequestRuntimeDynamicRequestFormat,
   RequestRuntimeEnvelopeDetailDto,
   RequestRuntimeEnvelopeUpsertRequestDto,
   RequestRuntimeFormDefinitionDto,
@@ -20,8 +26,15 @@ export class RequestRuntimeCatalogApiService {
   private readonly runtimeCatalogBaseUrl = `${environment.ConnectApiURL}/api/RequestRuntimeCatalog`;
   private readonly dynamicSubjectsBaseUrl = `${environment.ConnectApiURL}/api/DynamicSubjects`;
   private readonly dynamicSubjectsAdminCatalogBaseUrl = `${environment.ConnectApiURL}/api/DynamicSubjectsAdminCatalog`;
+  private readonly rawHttp: HttpClient;
 
-  constructor(private readonly http: HttpClient) {}
+  constructor(
+    private readonly http: HttpClient,
+    httpBackend: HttpBackend,
+    private readonly powerBiController: PowerBiController
+  ) {
+    this.rawHttp = new HttpClient(httpBackend);
+  }
 
   getRegistrationTree(appId?: string | null): Observable<RuntimeApiResponse<RequestRuntimeCatalogDto>> {
     let params = new HttpParams();
@@ -128,11 +141,49 @@ export class RequestRuntimeCatalogApiService {
   }
 
   executeDynamicRequest(request: RequestRuntimeDynamicHttpRequestConfig): Observable<unknown> {
-    const url = this.resolveDynamicRequestUrl(request.url);
-    const method = this.normalizeHttpMethod(request.method);
+    return this.executeDynamicExternalRequest({
+      fullUrl: request.url,
+      method: this.normalizeHttpMethod(request.method),
+      requestFormat: 'json',
+      authMode: 'bearerCurrent',
+      query: request.query,
+      headers: request.headers,
+      body: request.body
+    });
+  }
 
+  executeDynamicExternalRequest(request: RequestRuntimeDynamicResolvedExternalRequest): Observable<unknown> {
+    const url = this.resolveDynamicRequestUrl(request.fullUrl);
+    const method = this.normalizeHttpMethod(request.method);
+    const params = this.buildHttpParams(request.query);
+    const headers = this.buildHttpHeaders(request.headers, request.requestFormat);
+    const client = request.authMode === 'bearerCurrent'
+      ? this.http
+      : this.rawHttp;
+
+    return client.request(method, url, {
+      params,
+      headers,
+      body: request.body,
+      responseType: 'json'
+    });
+  }
+
+  executeDynamicPowerBiRequest(request: RequestRuntimeDynamicResolvedPowerBiRequest): Observable<unknown> {
+    const statementId = Number(request.statementId ?? 0);
+    if (!Number.isFinite(statementId) || statementId <= 0) {
+      return of(undefined);
+    }
+
+    const parametersPayload = JSON.stringify(request.parameters ?? {});
+    return this.powerBiController.excuteGenericStatmentById(Math.trunc(statementId), parametersPayload).pipe(
+      map(response => this.parsePowerBiResponseData(response?.data))
+    );
+  }
+
+  private buildHttpParams(record: Record<string, string> | undefined): HttpParams {
     let params = new HttpParams();
-    Object.entries(request.query ?? {}).forEach(([key, value]) => {
+    Object.entries(record ?? {}).forEach(([key, value]) => {
       const normalizedKey = String(key ?? '').trim();
       if (!normalizedKey) {
         return;
@@ -141,8 +192,16 @@ export class RequestRuntimeCatalogApiService {
       params = params.set(normalizedKey, String(value ?? ''));
     });
 
+    return params;
+  }
+
+  private buildHttpHeaders(
+    record: Record<string, string> | undefined,
+    requestFormat: RequestRuntimeDynamicRequestFormat
+  ): HttpHeaders {
     let headers = new HttpHeaders();
-    Object.entries(request.headers ?? {}).forEach(([key, value]) => {
+    const normalizedRecord = record ?? {};
+    Object.entries(normalizedRecord).forEach(([key, value]) => {
       const normalizedKey = String(key ?? '').trim();
       if (!normalizedKey) {
         return;
@@ -151,12 +210,29 @@ export class RequestRuntimeCatalogApiService {
       headers = headers.set(normalizedKey, String(value ?? ''));
     });
 
-    return this.http.request(method, url, {
-      params,
-      headers,
-      body: request.body,
-      responseType: 'json'
-    });
+    if (!this.hasHeader(normalizedRecord, 'Accept')) {
+      headers = headers.set('Accept', requestFormat === 'xml' ? 'application/xml, text/plain, */*' : 'application/json');
+    }
+
+    return headers;
+  }
+
+  private hasHeader(headers: Record<string, string>, targetName: string): boolean {
+    const normalizedTarget = String(targetName ?? '').trim().toLowerCase();
+    return Object.keys(headers ?? {}).some(key => String(key ?? '').trim().toLowerCase() === normalizedTarget);
+  }
+
+  private parsePowerBiResponseData(payload: unknown): unknown {
+    const normalized = String(payload ?? '').trim();
+    if (!normalized) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(normalized);
+    } catch {
+      return payload;
+    }
   }
 
   private resolveDynamicRequestUrl(value: string): string {
@@ -176,7 +252,7 @@ export class RequestRuntimeCatalogApiService {
     return `${environment.ConnectApiURL}/${normalized}`;
   }
 
-  private normalizeHttpMethod(value: unknown): 'GET' | 'POST' | 'PUT' | 'PATCH' {
+  private normalizeHttpMethod(value: unknown): RequestRuntimeDynamicHttpMethod {
     const normalized = String(value ?? '').trim().toUpperCase();
     if (normalized === 'POST' || normalized === 'PUT' || normalized === 'PATCH') {
       return normalized;

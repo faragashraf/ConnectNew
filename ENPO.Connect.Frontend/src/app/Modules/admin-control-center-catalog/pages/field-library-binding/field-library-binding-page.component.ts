@@ -23,6 +23,18 @@ import {
   ReusableFieldLibraryItem
 } from '../../domain/models/field-library-binding.models';
 import { FieldLibraryBindingEngine } from '../../domain/field-library-binding/field-library-binding.engine';
+import {
+  RequestRuntimeDynamicActionConfig,
+  RequestRuntimeDynamicFieldBehaviorConfig,
+  RequestRuntimeDynamicIntegrationAuthMode,
+  RequestRuntimeDynamicIntegrationNameValueBinding,
+  RequestRuntimeDynamicIntegrationRequestConfig,
+  RequestRuntimeDynamicIntegrationSourceType,
+  RequestRuntimeDynamicIntegrationValueBinding,
+  RequestRuntimeDynamicRequestFormat,
+  RequestRuntimeDynamicTrigger,
+  parseRequestRuntimeDynamicFieldBehavior
+} from '../../../request-runtime-catalog/models/request-runtime-catalog.models';
 
 type SequenceResetScope = 'none' | 'yearly' | 'monthly';
 type FormDisplayMode = 'Standard' | 'Tabbed';
@@ -49,6 +61,54 @@ type FieldBindingStepVm = {
   requiredTotal: number;
   isCompleted: boolean;
 };
+
+type DynamicRuntimeBehaviorType = 'optionLoader' | 'asyncValidation' | 'autofill';
+
+interface DynamicRuntimeBuilderBindingVm {
+  name: string;
+  source: 'static' | 'field' | 'claim';
+  staticValue: string;
+  fieldKey: string;
+  claimKey: string;
+  fallbackValue: string;
+}
+
+interface DynamicRuntimeBuilderPatchVm {
+  targetFieldKey: string;
+  valuePath: string;
+  valueTemplate: string;
+  clearWhenMissing: boolean;
+}
+
+interface DynamicRuntimeBuilderVm {
+  behaviorType: DynamicRuntimeBehaviorType;
+  trigger: RequestRuntimeDynamicTrigger;
+  sourceFieldKey: string;
+  sourceType: RequestRuntimeDynamicIntegrationSourceType;
+  requestFormat: RequestRuntimeDynamicRequestFormat;
+  authMode: RequestRuntimeDynamicIntegrationAuthMode;
+  statementId: number | null;
+  fullUrl: string;
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH';
+  parameters: DynamicRuntimeBuilderBindingVm[];
+  query: DynamicRuntimeBuilderBindingVm[];
+  body: DynamicRuntimeBuilderBindingVm[];
+  headers: DynamicRuntimeBuilderBindingVm[];
+  customHeaders: DynamicRuntimeBuilderBindingVm[];
+  responseListPath: string;
+  responseValuePath: string;
+  responseLabelPath: string;
+  clearWhenSourceEmpty: boolean;
+  minQueryLength: number | null;
+  responseValidPath: string;
+  responseMessagePath: string;
+  defaultErrorMessage: string;
+  debounceMs: number | null;
+  minValueLength: number | null;
+  whenEquals: string;
+  clearTargetsWhenEmpty: boolean;
+  patches: DynamicRuntimeBuilderPatchVm[];
+}
 
 @Component({
   selector: 'app-field-library-binding-page',
@@ -104,31 +164,58 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     { label: 'عرض قياسي', value: 'Standard' },
     { label: 'عرض بعلامات تبويب', value: 'Tabbed' }
   ];
+  readonly dynamicRuntimeBehaviorOptions: Array<{ label: string; value: DynamicRuntimeBehaviorType }> = [
+    { label: 'تحميل خيارات', value: 'optionLoader' },
+    { label: 'تحقق غير متزامن', value: 'asyncValidation' },
+    { label: 'تعبئة تلقائية', value: 'autofill' }
+  ];
+  readonly dynamicRuntimeTriggerOptions: Array<{ label: string; value: RequestRuntimeDynamicTrigger }> = [
+    { label: 'عند التهيئة', value: 'init' },
+    { label: 'عند التغيير', value: 'change' },
+    { label: 'عند فقدان التركيز', value: 'blur' }
+  ];
+  readonly dynamicRuntimeSourceTypeOptions: Array<{ label: string; value: RequestRuntimeDynamicIntegrationSourceType }> = [
+    { label: 'Power BI داخلي', value: 'powerbi' },
+    { label: 'مصدر خارجي', value: 'external' }
+  ];
+  readonly dynamicRuntimeRequestFormatOptions: Array<{ label: string; value: RequestRuntimeDynamicRequestFormat }> = [
+    { label: 'JSON', value: 'json' },
+    { label: 'XML (لاحقًا)', value: 'xml' }
+  ];
+  readonly dynamicRuntimeAuthModeOptions: Array<{ label: string; value: RequestRuntimeDynamicIntegrationAuthMode }> = [
+    { label: 'Bearer الحالي', value: 'bearerCurrent' },
+    { label: 'بدون مصادقة', value: 'none' },
+    { label: 'رؤوس مخصصة', value: 'custom' }
+  ];
+  readonly dynamicRuntimeHttpMethodOptions: Array<{ label: string; value: 'GET' | 'POST' | 'PUT' | 'PATCH' }> = [
+    { label: 'GET', value: 'GET' },
+    { label: 'POST', value: 'POST' },
+    { label: 'PUT', value: 'PUT' },
+    { label: 'PATCH', value: 'PATCH' }
+  ];
+  readonly dynamicRuntimeValueSourceOptions: Array<{ label: string; value: DynamicRuntimeBuilderBindingVm['source'] }> = [
+    { label: 'قيمة ثابتة', value: 'static' },
+    { label: 'من حقل', value: 'field' },
+    { label: 'من مطالبة المستخدم', value: 'claim' }
+  ];
   readonly dynamicRuntimeSampleJson = `{
   "optionLoader": {
-    "sourceFieldKey": "customerCode",
-    "trigger": "blur",
-    "request": { "url": "/api/DynamicSubjects/Lookup", "query": { "code": "{{customerCode}}" } },
-    "responseListPath": "data.items",
+    "trigger": "change",
+    "sourceFieldKey": "field_code",
+    "integration": {
+      "sourceType": "external",
+      "requestFormat": "json",
+      "auth": { "mode": "bearerCurrent" },
+      "fullUrl": "https://example.com/api/lookup",
+      "method": "GET",
+      "query": [
+        { "name": "code", "value": { "source": "field", "fieldKey": "field_code" } }
+      ]
+    },
+    "responseListPath": "items",
     "responseValuePath": "id",
     "responseLabelPath": "name"
-  },
-  "asyncValidation": {
-    "trigger": "blur",
-    "request": { "url": "/api/DynamicSubjects/Validate", "query": { "value": "{{value}}" } },
-    "responseValidPath": "data.isValid",
-    "responseMessagePath": "data.message"
-  },
-  "actions": [
-    {
-      "trigger": "blur",
-      "request": { "url": "/api/DynamicSubjects/CustomerProfile", "query": { "code": "{{value}}" } },
-      "patches": [
-        { "targetFieldKey": "customerName", "valuePath": "data.name", "clearWhenMissing": true },
-        { "targetFieldKey": "customerAddress", "valuePath": "data.address", "clearWhenMissing": true }
-      ]
-    }
-  ]
+  }
 }`;
 
   readonly referencePolicyForm: FormGroup = this.fb.group({
@@ -181,6 +268,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   backendWorkspaceLoaded = false;
   libraryLoadedFromDb = false;
   hasPendingBackendChanges = false;
+  dynamicRuntimeBuilderVisible = false;
+  dynamicRuntimeBuilderTargetBindingId: string | null = null;
+  dynamicRuntimeBuilderModel: DynamicRuntimeBuilderVm = this.createDefaultDynamicRuntimeBuilder();
 
   private readonly subscriptions = new Subscription();
   private syncingFromStore = false;
@@ -506,6 +596,89 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       })
     );
     this.evaluateBindings(true, true);
+  }
+
+  onOpenDynamicRuntimeBuilder(binding: BoundFieldItem): void {
+    this.dynamicRuntimeBuilderTargetBindingId = binding.bindingId;
+    this.dynamicRuntimeBuilderModel = this.createBuilderModelFromRuntimeJson(binding.dynamicRuntimeJson);
+    this.dynamicRuntimeBuilderVisible = true;
+  }
+
+  onCancelDynamicRuntimeBuilder(): void {
+    this.dynamicRuntimeBuilderVisible = false;
+    this.dynamicRuntimeBuilderTargetBindingId = null;
+  }
+
+  onSaveDynamicRuntimeBuilder(): void {
+    if (!this.dynamicRuntimeBuilderTargetBindingId) {
+      this.onCancelDynamicRuntimeBuilder();
+      return;
+    }
+
+    const runtimeConfig = this.buildRuntimeConfigFromBuilder(this.dynamicRuntimeBuilderModel);
+    if (!runtimeConfig) {
+      return;
+    }
+
+    const runtimeJson = JSON.stringify(runtimeConfig, null, 2);
+    this.bindings = this.bindings.map(binding => {
+      if (binding.bindingId !== this.dynamicRuntimeBuilderTargetBindingId) {
+        return binding;
+      }
+
+      return {
+        ...binding,
+        dynamicRuntimeJson: runtimeJson
+      };
+    });
+
+    this.onCancelDynamicRuntimeBuilder();
+    this.onBindingChanged();
+  }
+
+  onAddDynamicRuntimeBinding(
+    listName: 'parameters' | 'query' | 'body' | 'headers' | 'customHeaders'
+  ): void {
+    this.dynamicRuntimeBuilderModel[listName].push(this.createDefaultBuilderBinding());
+  }
+
+  onRemoveDynamicRuntimeBinding(
+    listName: 'parameters' | 'query' | 'body' | 'headers' | 'customHeaders',
+    index: number
+  ): void {
+    this.dynamicRuntimeBuilderModel[listName].splice(index, 1);
+  }
+
+  onAddDynamicRuntimePatch(): void {
+    this.dynamicRuntimeBuilderModel.patches.push(this.createDefaultBuilderPatch());
+  }
+
+  onRemoveDynamicRuntimePatch(index: number): void {
+    this.dynamicRuntimeBuilderModel.patches.splice(index, 1);
+  }
+
+  get isDynamicRuntimePowerBiSource(): boolean {
+    return this.dynamicRuntimeBuilderModel.sourceType === 'powerbi';
+  }
+
+  get isDynamicRuntimeExternalSource(): boolean {
+    return this.dynamicRuntimeBuilderModel.sourceType === 'external';
+  }
+
+  get isDynamicRuntimeCustomAuth(): boolean {
+    return this.dynamicRuntimeBuilderModel.authMode === 'custom';
+  }
+
+  get isDynamicRuntimeOptionLoaderBehavior(): boolean {
+    return this.dynamicRuntimeBuilderModel.behaviorType === 'optionLoader';
+  }
+
+  get isDynamicRuntimeAsyncValidationBehavior(): boolean {
+    return this.dynamicRuntimeBuilderModel.behaviorType === 'asyncValidation';
+  }
+
+  get isDynamicRuntimeAutofillBehavior(): boolean {
+    return this.dynamicRuntimeBuilderModel.behaviorType === 'autofill';
   }
 
   onAddReferenceComponent(): void {
@@ -1176,6 +1349,418 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
   }
 
+  private createDefaultBuilderBinding(): DynamicRuntimeBuilderBindingVm {
+    return {
+      name: '',
+      source: 'static',
+      staticValue: '',
+      fieldKey: '',
+      claimKey: '',
+      fallbackValue: ''
+    };
+  }
+
+  private createDefaultBuilderPatch(): DynamicRuntimeBuilderPatchVm {
+    return {
+      targetFieldKey: '',
+      valuePath: '',
+      valueTemplate: '',
+      clearWhenMissing: false
+    };
+  }
+
+  private createDefaultDynamicRuntimeBuilder(): DynamicRuntimeBuilderVm {
+    return {
+      behaviorType: 'optionLoader',
+      trigger: 'change',
+      sourceFieldKey: '',
+      sourceType: 'external',
+      requestFormat: 'json',
+      authMode: 'bearerCurrent',
+      statementId: null,
+      fullUrl: '',
+      method: 'GET',
+      parameters: [this.createDefaultBuilderBinding()],
+      query: [this.createDefaultBuilderBinding()],
+      body: [],
+      headers: [],
+      customHeaders: [],
+      responseListPath: '',
+      responseValuePath: '',
+      responseLabelPath: '',
+      clearWhenSourceEmpty: false,
+      minQueryLength: null,
+      responseValidPath: '',
+      responseMessagePath: '',
+      defaultErrorMessage: '',
+      debounceMs: null,
+      minValueLength: null,
+      whenEquals: '',
+      clearTargetsWhenEmpty: false,
+      patches: [this.createDefaultBuilderPatch()]
+    };
+  }
+
+  private createBuilderModelFromRuntimeJson(raw: unknown): DynamicRuntimeBuilderVm {
+    const model = this.createDefaultDynamicRuntimeBuilder();
+    const runtimeConfig = this.parseDynamicRuntimeJson(raw);
+    if (!runtimeConfig) {
+      return model;
+    }
+
+    const behavior = parseRequestRuntimeDynamicFieldBehavior(JSON.stringify({ dynamicRuntime: runtimeConfig }));
+    if (!behavior) {
+      return model;
+    }
+
+    if (behavior.optionLoader) {
+      model.behaviorType = 'optionLoader';
+      model.trigger = behavior.optionLoader.trigger ?? 'change';
+      model.sourceFieldKey = behavior.optionLoader.sourceFieldKey ?? '';
+      model.minQueryLength = this.toNonNegativeInt(behavior.optionLoader.minQueryLength) ?? null;
+      model.responseListPath = behavior.optionLoader.responseListPath ?? '';
+      model.responseValuePath = behavior.optionLoader.responseValuePath ?? '';
+      model.responseLabelPath = behavior.optionLoader.responseLabelPath ?? '';
+      model.clearWhenSourceEmpty = behavior.optionLoader.clearWhenSourceEmpty === true;
+      this.applyRequestConfigurationToBuilder(model, behavior.optionLoader.integration, behavior.optionLoader.request);
+      return model;
+    }
+
+    if (behavior.asyncValidation) {
+      model.behaviorType = 'asyncValidation';
+      model.trigger = behavior.asyncValidation.trigger ?? 'blur';
+      model.debounceMs = this.toPositiveInt(behavior.asyncValidation.debounceMs) ?? null;
+      model.minValueLength = this.toNonNegativeInt(behavior.asyncValidation.minValueLength) ?? null;
+      model.responseValidPath = behavior.asyncValidation.responseValidPath ?? '';
+      model.responseMessagePath = behavior.asyncValidation.responseMessagePath ?? '';
+      model.defaultErrorMessage = behavior.asyncValidation.defaultErrorMessage ?? '';
+      this.applyRequestConfigurationToBuilder(model, behavior.asyncValidation.integration, behavior.asyncValidation.request);
+      return model;
+    }
+
+    const firstAction = behavior.actions?.[0];
+    if (firstAction) {
+      model.behaviorType = 'autofill';
+      model.trigger = firstAction.trigger ?? 'change';
+      model.whenEquals = firstAction.whenEquals ?? '';
+      model.clearTargetsWhenEmpty = firstAction.clearTargetsWhenEmpty === true;
+      model.patches = (firstAction.patches ?? []).map(patch => ({
+        targetFieldKey: patch.targetFieldKey ?? '',
+        valuePath: patch.valuePath ?? '',
+        valueTemplate: patch.valueTemplate ?? '',
+        clearWhenMissing: patch.clearWhenMissing === true
+      }));
+      if (model.patches.length === 0) {
+        model.patches = [this.createDefaultBuilderPatch()];
+      }
+      this.applyRequestConfigurationToBuilder(model, firstAction.integration, firstAction.request);
+    }
+
+    return model;
+  }
+
+  private applyRequestConfigurationToBuilder(
+    model: DynamicRuntimeBuilderVm,
+    integration: RequestRuntimeDynamicIntegrationRequestConfig | undefined,
+    legacyRequest: {
+      url: string;
+      method?: 'GET' | 'POST' | 'PUT' | 'PATCH';
+      query?: Record<string, string>;
+      headers?: Record<string, string>;
+      body?: unknown;
+    } | undefined
+  ): void {
+    if (integration) {
+      model.sourceType = integration.sourceType;
+      model.requestFormat = integration.requestFormat ?? 'json';
+      model.authMode = integration.auth?.mode ?? 'bearerCurrent';
+      model.customHeaders = this.mapContractBindingsToBuilder(integration.auth?.customHeaders);
+      if (integration.sourceType === 'powerbi') {
+        model.statementId = this.toPositiveInt(integration.statementId) ?? null;
+        model.parameters = this.mapContractBindingsToBuilder(integration.parameters);
+      } else {
+        model.fullUrl = integration.fullUrl ?? '';
+        model.method = integration.method ?? 'GET';
+        model.query = this.mapContractBindingsToBuilder(integration.query);
+        model.body = this.mapContractBindingsToBuilder(integration.body);
+        model.headers = this.mapContractBindingsToBuilder(integration.headers);
+      }
+
+      return;
+    }
+
+    if (!legacyRequest) {
+      return;
+    }
+
+    model.sourceType = 'external';
+    model.requestFormat = 'json';
+    model.authMode = 'bearerCurrent';
+    model.fullUrl = legacyRequest.url ?? '';
+    model.method = legacyRequest.method ?? 'GET';
+    model.query = this.mapRecordToBuilderBindings(legacyRequest.query);
+    model.headers = this.mapRecordToBuilderBindings(legacyRequest.headers);
+    model.body = this.mapLegacyBodyToBuilderBindings(legacyRequest.body);
+  }
+
+  private mapContractBindingsToBuilder(
+    bindings: RequestRuntimeDynamicIntegrationNameValueBinding[] | undefined
+  ): DynamicRuntimeBuilderBindingVm[] {
+    const mapped = (bindings ?? [])
+      .map(binding => this.mapContractBindingToBuilder(binding))
+      .filter((binding): binding is DynamicRuntimeBuilderBindingVm => binding != null);
+    return mapped.length > 0 ? mapped : [this.createDefaultBuilderBinding()];
+  }
+
+  private mapContractBindingToBuilder(
+    binding: RequestRuntimeDynamicIntegrationNameValueBinding | undefined
+  ): DynamicRuntimeBuilderBindingVm | null {
+    const name = this.normalizeNullable(binding?.name);
+    if (!name) {
+      return null;
+    }
+
+    const valueBinding = binding?.value;
+    const source = this.normalizeDynamicRuntimeValueSource(valueBinding?.source);
+    if (!source) {
+      return null;
+    }
+
+    return {
+      name,
+      source,
+      staticValue: valueBinding?.staticValue ?? '',
+      fieldKey: valueBinding?.fieldKey ?? '',
+      claimKey: valueBinding?.claimKey ?? '',
+      fallbackValue: valueBinding?.fallbackValue ?? ''
+    };
+  }
+
+  private mapRecordToBuilderBindings(record: Record<string, string> | undefined): DynamicRuntimeBuilderBindingVm[] {
+    const entries = Object.entries(record ?? {});
+    if (entries.length === 0) {
+      return [this.createDefaultBuilderBinding()];
+    }
+
+    return entries.map(([name, value]) => ({
+      name,
+      source: 'static',
+      staticValue: String(value ?? ''),
+      fieldKey: '',
+      claimKey: '',
+      fallbackValue: ''
+    }));
+  }
+
+  private mapLegacyBodyToBuilderBindings(body: unknown): DynamicRuntimeBuilderBindingVm[] {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return [];
+    }
+
+    const source = body as Record<string, unknown>;
+    const entries = Object.entries(source).map(([key, value]) => ({
+      name: key,
+      source: 'static' as const,
+      staticValue: typeof value === 'string' ? value : JSON.stringify(value),
+      fieldKey: '',
+      claimKey: '',
+      fallbackValue: ''
+    }));
+
+    return entries.length > 0 ? entries : [];
+  }
+
+  private buildRuntimeConfigFromBuilder(model: DynamicRuntimeBuilderVm): RequestRuntimeDynamicFieldBehaviorConfig | null {
+    const integration = this.buildIntegrationConfigFromBuilder(model);
+    if (!integration) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'تهيئة التكامل غير مكتملة. راجع نوع المصدر ومعلمات الاستدعاء.';
+      return null;
+    }
+
+    if (model.behaviorType === 'optionLoader') {
+      return {
+        optionLoader: {
+          trigger: model.trigger === 'blur' ? 'blur' : model.trigger,
+          sourceFieldKey: this.normalizeNullable(model.sourceFieldKey) ?? undefined,
+          integration,
+          minQueryLength: this.toNonNegativeInt(model.minQueryLength) ?? undefined,
+          responseListPath: this.normalizeNullable(model.responseListPath) ?? undefined,
+          responseValuePath: this.normalizeNullable(model.responseValuePath) ?? undefined,
+          responseLabelPath: this.normalizeNullable(model.responseLabelPath) ?? undefined,
+          clearWhenSourceEmpty: model.clearWhenSourceEmpty === true
+        }
+      };
+    }
+
+    if (model.behaviorType === 'asyncValidation') {
+      const trigger = model.trigger === 'init' ? 'blur' : model.trigger;
+      return {
+        asyncValidation: {
+          trigger,
+          integration,
+          debounceMs: this.toPositiveInt(model.debounceMs) ?? undefined,
+          minValueLength: this.toNonNegativeInt(model.minValueLength) ?? undefined,
+          responseValidPath: this.normalizeNullable(model.responseValidPath) ?? undefined,
+          responseMessagePath: this.normalizeNullable(model.responseMessagePath) ?? undefined,
+          defaultErrorMessage: this.normalizeNullable(model.defaultErrorMessage) ?? undefined
+        }
+      };
+    }
+
+    const patches = (model.patches ?? [])
+      .map(patch => ({
+        targetFieldKey: this.normalizeNullable(patch.targetFieldKey) ?? '',
+        valuePath: this.normalizeNullable(patch.valuePath) ?? undefined,
+        valueTemplate: this.normalizeNullable(patch.valueTemplate) ?? undefined,
+        clearWhenMissing: patch.clearWhenMissing === true
+      }))
+      .filter(patch => patch.targetFieldKey.length > 0);
+
+    if (patches.length === 0) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'يجب إضافة Patch واحدة على الأقل في وضع التعبئة التلقائية.';
+      return null;
+    }
+
+    const trigger = model.trigger === 'init' ? 'change' : model.trigger;
+    const action: RequestRuntimeDynamicActionConfig = {
+      trigger,
+      whenEquals: this.normalizeNullable(model.whenEquals) ?? undefined,
+      integration,
+      patches,
+      clearTargetsWhenEmpty: model.clearTargetsWhenEmpty === true
+    };
+
+    return {
+      actions: [action]
+    };
+  }
+
+  private buildIntegrationConfigFromBuilder(
+    model: DynamicRuntimeBuilderVm
+  ): RequestRuntimeDynamicIntegrationRequestConfig | null {
+    const auth = {
+      mode: model.authMode,
+      customHeaders: model.authMode === 'custom'
+        ? this.mapBuilderBindingsToContract(model.customHeaders)
+        : undefined
+    };
+
+    if (model.sourceType === 'powerbi') {
+      const statementId = this.toPositiveInt(model.statementId);
+      if (!statementId) {
+        return null;
+      }
+
+      return {
+        sourceType: 'powerbi',
+        requestFormat: model.requestFormat,
+        auth,
+        statementId,
+        parameters: this.mapBuilderBindingsToContract(model.parameters)
+      };
+    }
+
+    const fullUrl = this.normalizeNullable(model.fullUrl);
+    if (!fullUrl) {
+      return null;
+    }
+
+    return {
+      sourceType: 'external',
+      requestFormat: model.requestFormat,
+      auth,
+      fullUrl,
+      method: model.method,
+      query: this.mapBuilderBindingsToContract(model.query),
+      body: this.mapBuilderBindingsToContract(model.body),
+      headers: this.mapBuilderBindingsToContract(model.headers)
+    };
+  }
+
+  private mapBuilderBindingsToContract(
+    bindings: DynamicRuntimeBuilderBindingVm[] | undefined
+  ): RequestRuntimeDynamicIntegrationNameValueBinding[] | undefined {
+    const mapped = (bindings ?? [])
+      .map(binding => this.mapBuilderBindingToContract(binding))
+      .filter((binding): binding is RequestRuntimeDynamicIntegrationNameValueBinding => binding != null);
+    return mapped.length > 0 ? mapped : undefined;
+  }
+
+  private mapBuilderBindingToContract(
+    binding: DynamicRuntimeBuilderBindingVm | undefined
+  ): RequestRuntimeDynamicIntegrationNameValueBinding | null {
+    const name = this.normalizeNullable(binding?.name);
+    if (!name) {
+      return null;
+    }
+
+    const value = this.mapBuilderValueToContract(binding);
+    if (!value) {
+      return null;
+    }
+
+    return {
+      name,
+      value
+    };
+  }
+
+  private mapBuilderValueToContract(
+    binding: DynamicRuntimeBuilderBindingVm | undefined
+  ): RequestRuntimeDynamicIntegrationValueBinding | null {
+    if (!binding) {
+      return null;
+    }
+
+    if (binding.source === 'field') {
+      const fieldKey = this.normalizeNullable(binding.fieldKey);
+      if (!fieldKey) {
+        return null;
+      }
+
+      return {
+        source: 'field',
+        fieldKey,
+        fallbackValue: this.normalizeNullable(binding.fallbackValue) ?? undefined
+      };
+    }
+
+    if (binding.source === 'claim') {
+      const claimKey = this.normalizeNullable(binding.claimKey);
+      if (!claimKey) {
+        return null;
+      }
+
+      return {
+        source: 'claim',
+        claimKey,
+        fallbackValue: this.normalizeNullable(binding.fallbackValue) ?? undefined
+      };
+    }
+
+    const staticValue = this.normalizeNullable(binding.staticValue);
+    if (staticValue == null) {
+      return null;
+    }
+
+    return {
+      source: 'static',
+      staticValue,
+      fallbackValue: this.normalizeNullable(binding.fallbackValue) ?? undefined
+    };
+  }
+
+  private normalizeDynamicRuntimeValueSource(value: unknown): DynamicRuntimeBuilderBindingVm['source'] | null {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'static' || normalized === 'field' || normalized === 'claim') {
+      return normalized;
+    }
+
+    return null;
+  }
+
   private flattenAdminCatalogGroups(nodes: ReadonlyArray<AdminCatalogGroupTreeNodeDto>): SubjectAdminGroupDto[] {
     const flattened: SubjectAdminGroupDto[] = [];
 
@@ -1431,6 +2016,14 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         const parsed = JSON.parse(payload);
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
           issues.push(`تهيئة السلوك الديناميكي للحقل "${item.label || item.fieldKey}" يجب أن تكون JSON Object صالح.`);
+          continue;
+        }
+
+        const parsedBehavior = parseRequestRuntimeDynamicFieldBehavior(
+          JSON.stringify({ dynamicRuntime: parsed })
+        );
+        if (!parsedBehavior) {
+          issues.push(`تهيئة السلوك الديناميكي للحقل "${item.label || item.fieldKey}" لا تطابق عقد التكامل المدعوم.`);
         }
       } catch {
         issues.push(`تهيئة السلوك الديناميكي للحقل "${item.label || item.fieldKey}" تحتوي JSON غير صالح.`);
@@ -2108,6 +2701,15 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private toPositiveInt(value: unknown): number | null {
     const normalized = Number(value ?? 0);
     if (!Number.isFinite(normalized) || normalized <= 0) {
+      return null;
+    }
+
+    return Math.trunc(normalized);
+  }
+
+  private toNonNegativeInt(value: unknown): number | null {
+    const normalized = Number(value ?? 0);
+    if (!Number.isFinite(normalized) || normalized < 0) {
       return null;
     }
 
