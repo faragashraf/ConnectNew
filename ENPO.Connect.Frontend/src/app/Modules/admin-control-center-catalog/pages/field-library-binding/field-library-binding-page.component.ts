@@ -378,8 +378,21 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       return 'جاري تحميل بيانات الربط من قاعدة البيانات؛ زر الحفظ سيعمل تلقائيًا بعد اكتمال التحميل.';
     }
 
+    const preSaveBlockingReasons = this.collectPreSaveBlockingReasons();
+    if (preSaveBlockingReasons.length > 0) {
+      return `الحفظ محجوب حاليًا بسبب: ${preSaveBlockingReasons[0]}`;
+    }
+
+    if (!this.currentCategoryId) {
+      return 'الحفظ محجوب لأن التصنيف الحالي غير صالح أو غير محدد.';
+    }
+
+    if (!this.currentApplicationId) {
+      return 'الحفظ محجوب لأن التطبيق الحالي غير صالح أو غير محدد.';
+    }
+
     if (!this.backendWorkspaceLoaded) {
-      return 'زر "حفظ في قاعدة البيانات" معطّل لأن بيانات الربط الفعلية لم تُحمّل من قاعدة البيانات بعد.';
+      return 'الحفظ محجوب لأن بيانات الربط الفعلية لم تُحمّل من قاعدة البيانات بعد.';
     }
 
     if (this.hasPendingBackendChanges) {
@@ -993,22 +1006,25 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     const preSaveBlockingReasons = this.collectPreSaveBlockingReasons();
     if (preSaveBlockingReasons.length > 0) {
-      this.setSaveGuardBlockedMessage(preSaveBlockingReasons);
+      this.setSaveGuardBlockedMessage(
+        'collectPreSaveBlockingReasons()',
+        preSaveBlockingReasons
+      );
       return;
     }
 
     if (!this.currentCategoryId) {
-      this.setSaveGuardBlockedMessage(['التصنيف الحالي غير صالح أو غير محدد.']);
+      this.setSaveGuardBlockedMessage('!currentCategoryId', ['التصنيف الحالي غير صالح أو غير محدد.']);
       return;
     }
 
     if (!this.currentApplicationId) {
-      this.setSaveGuardBlockedMessage(['التطبيق الحالي غير صالح أو غير محدد.']);
+      this.setSaveGuardBlockedMessage('!currentApplicationId', ['التطبيق الحالي غير صالح أو غير محدد.']);
       return;
     }
 
     if (!this.backendWorkspaceLoaded) {
-      this.setSaveGuardBlockedMessage(['لم يتم تحميل بيانات الربط الفعلية من قاعدة البيانات بعد.']);
+      this.setSaveGuardBlockedMessage('!backendWorkspaceLoaded', ['لم يتم تحميل بيانات الربط الفعلية من قاعدة البيانات بعد.']);
       return;
     }
 
@@ -1029,25 +1045,29 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
   }
 
-  private setSaveGuardBlockedMessage(reasons: ReadonlyArray<string>): void {
+  private setSaveGuardBlockedMessage(
+    guardName: 'collectPreSaveBlockingReasons()' | '!currentCategoryId' | '!currentApplicationId' | '!backendWorkspaceLoaded',
+    reasons: ReadonlyArray<string>
+  ): void {
     const compactReasons = reasons
       .map(reason => String(reason ?? '').trim())
       .filter(reason => reason.length > 0);
+    const diagnostics = this.buildSaveGuardSnapshot();
 
     this.stepMessageSeverity = 'warn';
     if (compactReasons.length === 0) {
-      this.stepMessage = 'تعذر تنفيذ "حفظ في قاعدة البيانات" بسبب مانع غير محدد.';
+      this.stepMessage = `تعذر تنفيذ "حفظ في قاعدة البيانات" عند ${guardName}. ${diagnostics}`;
       return;
     }
 
-    this.stepMessage = `تعذر تنفيذ "حفظ في قاعدة البيانات". الأسباب: ${compactReasons.join(' | ')}`;
+    this.stepMessage = `تعذر تنفيذ "حفظ في قاعدة البيانات" عند ${guardName}. الأسباب: ${compactReasons.join(' | ')}. ${diagnostics}`;
   }
 
   private collectPreSaveBlockingReasons(): string[] {
     const reasons: string[] = [];
 
     if (this.referencePolicyForm.invalid) {
-      const invalidReferenceFields = this.collectInvalidControlLabels(
+      const invalidReferenceFields = this.collectInvalidControlDetails(
         this.referencePolicyForm,
         this.referencePolicyControlLabels
       );
@@ -1059,7 +1079,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
 
     if (this.presentationForm.invalid) {
-      const invalidPresentationFields = this.collectInvalidControlLabels(
+      const invalidPresentationFields = this.collectInvalidControlDetails(
         this.presentationForm,
         this.presentationControlLabels
       );
@@ -1071,10 +1091,13 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
 
     if (!this.validation.isValid) {
-      const firstBlockingIssue = this.validation.blockingIssues[0];
+      const blockingIssuesPreview = this.validation.blockingIssues
+        .map(issue => String(issue ?? '').trim())
+        .filter(issue => issue.length > 0)
+        .slice(0, 3);
       reasons.push(
-        firstBlockingIssue
-          ? `يوجد مانع ربط: ${firstBlockingIssue}`
+        blockingIssuesPreview.length > 0
+          ? `يوجد مانع ربط: ${blockingIssuesPreview.join(' | ')}`
           : 'يوجد مانع في ربط الحقول يمنع الحفظ.'
       );
     }
@@ -1082,18 +1105,32 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     return reasons;
   }
 
-  private collectInvalidControlLabels(form: FormGroup, labelByControlName: Readonly<Record<string, string>>): string[] {
-    const labels: string[] = [];
+  private collectInvalidControlDetails(form: FormGroup, labelByControlName: Readonly<Record<string, string>>): string[] {
+    const details: string[] = [];
 
     for (const [controlName, control] of Object.entries(form.controls)) {
       if (!control || control.valid) {
         continue;
       }
 
-      labels.push(labelByControlName[controlName] ?? controlName);
+      const label = labelByControlName[controlName] ?? controlName;
+      const errorKeys = Object.keys(control.errors ?? {}).filter(key => key.trim().length > 0);
+      if (errorKeys.length === 0) {
+        details.push(label);
+        continue;
+      }
+
+      details.push(`${label} (${errorKeys.join(', ')})`);
     }
 
-    return labels;
+    return details;
+  }
+
+  private buildSaveGuardSnapshot(): string {
+    const category = this.currentCategoryId ?? 'null';
+    const application = this.currentApplicationId ?? 'null';
+
+    return `الحالة الحالية => referencePolicyForm.invalid=${this.referencePolicyForm.invalid}, presentationForm.invalid=${this.presentationForm.invalid}, validation.isValid=${this.validation.isValid}, backendWorkspaceLoaded=${this.backendWorkspaceLoaded}, currentCategoryId=${category}, currentApplicationId=${application}`;
   }
 
   onSaveDraft(): void {
@@ -1159,11 +1196,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.stepMessage = '';
 
     try {
-      const [fieldsResponse, groupsResponse, linksResponse, subjectTypesResponse] = await Promise.all([
+      const [fieldsResponse, groupsResponse, linksResponse] = await Promise.all([
         firstValueFrom(this.dynamicSubjectsController.getAdminFields(applicationId ?? undefined)),
         firstValueFrom(this.adminCatalogController.getGroupsByCategory(categoryId)),
-        firstValueFrom(this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId)),
-        firstValueFrom(this.dynamicSubjectsController.getSubjectTypesAdminConfig(applicationId ?? undefined))
+        firstValueFrom(this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId))
       ]);
 
       if (loadToken !== this.activeLoadToken) {
@@ -1174,22 +1210,13 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       const groupTree = this.readArrayResponse(groupsResponse, 'تعذر تحميل شجرة الجروبات من قاعدة البيانات.');
       const groups = this.flattenAdminCatalogGroups(groupTree);
       const links = this.readArrayResponse(linksResponse, 'تعذر تحميل روابط الحقول من قاعدة البيانات.');
-      const scopedSubjectTypes = this.readArrayResponse(subjectTypesResponse, 'تعذر تحميل إعدادات النوع من قاعدة البيانات.');
-      let subjectTypes = scopedSubjectTypes;
-      let resolvedSubjectType = scopedSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
-      if (!resolvedSubjectType) {
-        const fallbackSubjectTypesResponse = await firstValueFrom(
-          this.dynamicSubjectsController.getSubjectTypesAdminConfig(undefined)
-        );
-        const fallbackSubjectTypes = this.readArrayResponse(
-          fallbackSubjectTypesResponse,
-          'تعذر تحميل إعدادات النوع من قاعدة البيانات.'
-        );
-        const matchedFromFallback = fallbackSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
-        if (matchedFromFallback) {
-          subjectTypes = fallbackSubjectTypes;
-          resolvedSubjectType = matchedFromFallback;
-        }
+      const {
+        subjectTypes,
+        resolvedSubjectType,
+        loadWarning: subjectTypesLoadWarning
+      } = await this.loadSubjectTypesForWorkspace(categoryId, applicationId);
+      if (loadToken !== this.activeLoadToken) {
+        return;
       }
 
       this.groups = [...groups].sort((left, right) => left.groupId - right.groupId);
@@ -1253,8 +1280,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.hasPendingBackendChanges = false;
       this.evaluateBindings(true, false);
 
-      this.stepMessageSeverity = 'success';
-      this.stepMessage = 'تم تحميل مكتبة الحقول والروابط الفعلية من قاعدة البيانات.';
+      this.stepMessageSeverity = subjectTypesLoadWarning ? 'warn' : 'success';
+      this.stepMessage = subjectTypesLoadWarning
+        ? `تم تحميل مكتبة الحقول والروابط الفعلية من قاعدة البيانات، لكن تعذر تحميل إعدادات النوع: ${subjectTypesLoadWarning}`
+        : 'تم تحميل مكتبة الحقول والروابط الفعلية من قاعدة البيانات.';
     } catch (error) {
       if (loadToken !== this.activeLoadToken) {
         return;
@@ -1275,6 +1304,63 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       if (loadToken === this.activeLoadToken) {
         this.loadingLibrary = false;
       }
+    }
+  }
+
+  private async loadSubjectTypesForWorkspace(
+    categoryId: number,
+    applicationId: string | null
+  ): Promise<{ subjectTypes: SubjectTypeAdminDto[]; resolvedSubjectType: SubjectTypeAdminDto | null; loadWarning: string | null }> {
+    let scopedSubjectTypes: SubjectTypeAdminDto[] = [];
+
+    try {
+      const scopedResponse = await firstValueFrom(
+        this.dynamicSubjectsController.getSubjectTypesAdminConfig(applicationId ?? undefined)
+      );
+      scopedSubjectTypes = this.readArrayResponse(scopedResponse, 'تعذر تحميل إعدادات النوع من قاعدة البيانات.');
+    } catch (error) {
+      return {
+        subjectTypes: [],
+        resolvedSubjectType: null,
+        loadWarning: this.toErrorMessage(error, 'تعذر تحميل إعدادات النوع من قاعدة البيانات.')
+      };
+    }
+
+    let subjectTypes = scopedSubjectTypes;
+    let resolvedSubjectType = scopedSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
+    if (resolvedSubjectType) {
+      return {
+        subjectTypes,
+        resolvedSubjectType,
+        loadWarning: null
+      };
+    }
+
+    try {
+      const fallbackResponse = await firstValueFrom(
+        this.dynamicSubjectsController.getSubjectTypesAdminConfig(undefined)
+      );
+      const fallbackSubjectTypes = this.readArrayResponse(
+        fallbackResponse,
+        'تعذر تحميل إعدادات النوع من قاعدة البيانات.'
+      );
+      const fallbackMatch = fallbackSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId) ?? null;
+      if (fallbackMatch) {
+        subjectTypes = fallbackSubjectTypes;
+        resolvedSubjectType = fallbackMatch;
+      }
+
+      return {
+        subjectTypes,
+        resolvedSubjectType,
+        loadWarning: null
+      };
+    } catch (error) {
+      return {
+        subjectTypes,
+        resolvedSubjectType,
+        loadWarning: this.toErrorMessage(error, 'تعذر تحميل إعدادات النوع من قاعدة البيانات.')
+      };
     }
   }
 
@@ -1729,7 +1815,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       }
     }
 
-    return direct ?? '';
+    return '';
   }
 
   private parseSupportedDynamicRuntimeJson(raw: unknown): Record<string, unknown> | null {

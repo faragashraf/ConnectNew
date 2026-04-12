@@ -1,5 +1,5 @@
 import { FormBuilder } from '@angular/forms';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { BoundFieldItem } from '../../domain/models/field-library-binding.models';
 import { FieldLibraryBindingEngine } from '../../domain/field-library-binding/field-library-binding.engine';
 import { FieldLibraryBindingPageComponent } from './field-library-binding-page.component';
@@ -921,5 +921,192 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     expect(String(reloadedBinding.dynamicRuntimeJson ?? '')).toContain('"optionLoader"');
     expect(String(reloadedBinding.dynamicRuntimeJson ?? '')).toContain('"statementId": 65');
     expect(localStorage.getItem(draftStorageKey)).toBeNull();
+  });
+
+  it('keeps save path reachable when fallback subject-type lookup fails during workspace load', async () => {
+    const categoryId = 100;
+    const appId = 'APP-UNIT';
+    const fieldKey = 'DOC_SOURCE';
+
+    const dynamicSubjectsController = jasmine.createSpyObj('DynamicSubjectsController', [
+      'getAdminFields',
+      'getAdminCategoryFieldLinks',
+      'getSubjectTypesAdminConfig',
+      'updateAdminField',
+      'createAdminField',
+      'upsertAdminCategoryFieldLinks',
+      'upsertSubjectTypeAdminConfig'
+    ]);
+    const adminCatalogController = jasmine.createSpyObj('DynamicSubjectsAdminCatalogController', [
+      'getGroupsByCategory'
+    ]);
+
+    dynamicSubjectsController.getAdminFields.and.returnValue(of(createResponse([
+      {
+        cdmendSql: 501,
+        fieldKey,
+        fieldType: 'Dropdown',
+        fieldLabel: 'مصدر المستند',
+        defaultValue: '',
+        required: false,
+        requiredTrue: false,
+        email: false,
+        pattern: false,
+        isActive: true,
+        width: 0,
+        height: 0,
+        isDisabledInit: false,
+        isSearchable: true,
+        linkedCategoriesCount: 1,
+        applicationId: appId
+      }
+    ])));
+
+    adminCatalogController.getGroupsByCategory.and.returnValue(of(createResponse([
+      {
+        groupId: 1,
+        categoryId,
+        applicationId: appId,
+        groupName: 'البيانات الأساسية',
+        groupDescription: '',
+        parentGroupId: null,
+        displayOrder: 1,
+        isActive: true,
+        children: []
+      }
+    ])));
+
+    dynamicSubjectsController.getAdminCategoryFieldLinks.and.returnValue(of(createResponse([
+      {
+        mendSql: 7001,
+        categoryId,
+        fieldKey,
+        fieldLabel: 'مصدر المستند',
+        fieldType: 'Dropdown',
+        groupId: 1,
+        groupName: 'البيانات الأساسية',
+        isActive: true,
+        displayOrder: 1,
+        isVisible: true,
+        displaySettingsJson: JSON.stringify({ readonly: false }),
+        applicationId: appId
+      }
+    ])));
+
+    dynamicSubjectsController.getSubjectTypesAdminConfig.and.callFake((applicationIdArg?: string) => {
+      if (applicationIdArg == null) {
+        return throwError(() => new Error('fallback failed'));
+      }
+
+      return of(createResponse([]));
+    });
+
+    dynamicSubjectsController.updateAdminField.and.returnValue(of(createResponse({
+      cdmendSql: 501,
+      fieldKey,
+      fieldType: 'Dropdown',
+      fieldLabel: 'مصدر المستند',
+      defaultValue: '',
+      required: false,
+      requiredTrue: false,
+      email: false,
+      pattern: false,
+      isActive: true,
+      width: 0,
+      height: 0,
+      isDisabledInit: false,
+      isSearchable: true,
+      linkedCategoriesCount: 1,
+      applicationId: appId
+    })));
+
+    dynamicSubjectsController.createAdminField.and.returnValue(of(createResponse({
+      cdmendSql: 501,
+      fieldKey,
+      fieldType: 'Dropdown',
+      fieldLabel: 'مصدر المستند',
+      defaultValue: '',
+      required: false,
+      requiredTrue: false,
+      email: false,
+      pattern: false,
+      isActive: true,
+      width: 0,
+      height: 0,
+      isDisabledInit: false,
+      isSearchable: true,
+      linkedCategoriesCount: 1,
+      applicationId: appId
+    })));
+
+    dynamicSubjectsController.upsertAdminCategoryFieldLinks.and.returnValue(of(createResponse([
+      {
+        mendSql: 7001,
+        categoryId,
+        fieldKey,
+        fieldLabel: 'مصدر المستند',
+        fieldType: 'Dropdown',
+        groupId: 1,
+        groupName: 'البيانات الأساسية',
+        isActive: true,
+        displayOrder: 1,
+        isVisible: true,
+        displaySettingsJson: JSON.stringify({ readonly: false }),
+        applicationId: appId
+      }
+    ])));
+
+    dynamicSubjectsController.upsertSubjectTypeAdminConfig.and.returnValue(of(createResponse({
+      categoryId,
+      parentCategoryId: 0,
+      categoryName: 'طلب تجريبي',
+      applicationId: appId,
+      catMend: '',
+      catWorkFlow: 0,
+      catSms: false,
+      catMailNotification: false,
+      isActive: true,
+      hasDynamicFields: true,
+      canCreate: true,
+      displayOrder: 1,
+      referencePolicyEnabled: true,
+      referenceMode: 'default',
+      referenceSeparator: '-',
+      referenceStartingValue: 1,
+      includeYear: false,
+      useSequence: true,
+      sequencePaddingLength: 6,
+      sequenceResetScope: 'none',
+      defaultDisplayMode: 'Standard',
+      allowUserToChangeDisplayMode: false
+    })));
+
+    const component = new FieldLibraryBindingPageComponent(
+      new FormBuilder(),
+      { paramMap: of({} as any), queryParamMap: of({} as any), snapshot: { queryParamMap: {} } } as any,
+      { navigate: () => Promise.resolve(true) } as any,
+      new FieldLibraryBindingEngine(),
+      dynamicSubjectsController,
+      adminCatalogController
+    );
+
+    (component as any).setReferenceComponents([
+      {
+        id: 'sequence-1',
+        type: 'sequence'
+      }
+    ], false);
+    (component as any).currentCategoryId = categoryId;
+    (component as any).currentApplicationId = appId;
+
+    await (component as any).loadBackendWorkspace(categoryId, appId);
+    expect(component.backendWorkspaceLoaded).toBeTrue();
+    expect(component.stepMessage).toContain('تعذر تحميل إعدادات النوع');
+
+    const persistBindingsSpy = spyOn<any>(component, 'persistBindingsToBackend').and.callThrough();
+    await component.onSaveToBackend();
+
+    expect(persistBindingsSpy).toHaveBeenCalledTimes(1);
+    expect(dynamicSubjectsController.upsertSubjectTypeAdminConfig).toHaveBeenCalled();
   });
 });

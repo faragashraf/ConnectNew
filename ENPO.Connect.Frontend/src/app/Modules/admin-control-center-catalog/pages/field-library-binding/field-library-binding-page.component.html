@@ -671,7 +671,7 @@
           label="حفظ في قاعدة البيانات"
           icon="pi pi-save"
           [loading]="savingToBackend"
-          [disabled]="savingToBackend || loadingLibrary || !backendWorkspaceLoaded"
+          [disabled]="savingToBackend || loadingLibrary"
           (click)="onSaveToBackend()">
         </button>
         <button pButton type="button" label="العودة إلى لوحة التحكم الجديدة" icon="pi pi-arrow-left" iconPos="left" (click)="onBackToCatalogDashboard()"></button>
