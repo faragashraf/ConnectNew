@@ -881,8 +881,14 @@ function upsertSelectionArray(
         genericFormService.selectionArrays = [];
     }
 
-    const normalizedField = String(fieldName).trim();
-    const index = genericFormService.selectionArrays.findIndex(arr => String(arr?.nameProp ?? '').trim() === normalizedField);
+    const normalizedField = normalizeDynamicFieldKey(fieldName);
+    if (!normalizedField) {
+        return;
+    }
+
+    const index = genericFormService.selectionArrays.findIndex(
+        arr => normalizeDynamicFieldKey(arr?.nameProp) === normalizedField
+    );
     const normalized = { keyProp: 'key', nameProp: normalizedField, items: items ?? [] };
     if (index >= 0) {
         genericFormService.selectionArrays[index] = normalized;

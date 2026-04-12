@@ -631,7 +631,7 @@ describe('FieldLibraryBindingPageComponent - Save Pipeline Guards', () => {
     component.onBindingChanged();
   });
 
-  it('blocks save when advanced runtime draft has unapplied local changes', async () => {
+  it('allows save even when advanced runtime draft has unapplied local changes (binding is link/order only)', async () => {
     const persistSpy = spyOn<any>(component, 'persistBindingsToBackend').and.resolveTo();
     const binding = component.bindings[0];
 
@@ -640,11 +640,11 @@ describe('FieldLibraryBindingPageComponent - Save Pipeline Guards', () => {
 
     await component.onSaveToBackend();
 
-    expect(persistSpy).not.toHaveBeenCalled();
-    expect(component.stepMessage).toContain('JSON متقدم غير مطبّق');
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+    expect(component.stepMessage).toContain('تم حفظ ربط الحقول وترتيبها في قاعدة البيانات بنجاح.');
   });
 
-  it('blocks save when integration builder has unapplied local edits', async () => {
+  it('allows save even when integration builder has unapplied local edits (binding is link/order only)', async () => {
     const persistSpy = spyOn<any>(component, 'persistBindingsToBackend').and.resolveTo();
 
     component.onOpenDynamicRuntimeBuilder(component.bindings[0]);
@@ -656,8 +656,8 @@ describe('FieldLibraryBindingPageComponent - Save Pipeline Guards', () => {
 
     await component.onSaveToBackend();
 
-    expect(persistSpy).not.toHaveBeenCalled();
-    expect(component.stepMessage).toContain('منشئ التكامل');
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+    expect(component.stepMessage).toContain('تم حفظ ربط الحقول وترتيبها في قاعدة البيانات بنجاح.');
   });
 });
 
@@ -676,7 +676,7 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     localStorage.removeItem('connect:field-library-binding:APP-UNIT:100');
   });
 
-  it('persists DOC_SOURCE optionLoader through backend payload and restores it after reload', async () => {
+  it('keeps backend displaySettings canonical even if local dynamic runtime edits exist in binding screen', async () => {
     let latestDisplaySettingsJson = JSON.stringify({
       readonly: false,
       isReadonly: false
@@ -924,52 +924,25 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     component.onSaveDynamicRuntimeBuilder();
     expect(component.dynamicRuntimeBuilderVisible).toBeFalse();
     expect(component.bindings[0].dynamicRuntimeJson).toContain('"optionLoader"');
-    expect(component.bindings[0].dynamicRuntimeJson).toContain('"statementId": 65');
     expect(String(component.bindings[0].displaySettingsJson ?? '')).toContain('"dynamicRuntime"');
-    expect(String(component.bindings[0].displaySettingsJson ?? '')).toContain('"statementId":65');
     expect(component.stepMessage).toContain('محليًا فقط');
     expect(dynamicSubjectsController.upsertAdminCategoryFieldLinks).not.toHaveBeenCalled();
-
-    // Simulate invalid advanced JSON draft without applying it.
-    component.toggleDynamicRuntimeAdvancedMode(component.bindings[0]);
-    component.onDynamicRuntimeAdvancedDraftChange(component.bindings[0], '{ invalid json from raw textarea');
-    component.onBindingChanged();
-    expect(component.validation.isValid).toBeTrue();
-    // Explicitly close advanced mode to discard unapplied local draft before Save All.
-    component.toggleDynamicRuntimeAdvancedMode(component.bindings[0]);
-
-    // Trace point #1: row model right before Save All.
-    const rowBeforeSave = {
-      dynamicRuntimeJson: '',
-      displaySettingsJson: String(component.bindings[0].displaySettingsJson ?? '')
-    };
-    // Simulate a transient drift where raw runtime mirror is empty while displaySettings still holds dynamicRuntime.
-    component.bindings[0] = {
-      ...component.bindings[0],
-      dynamicRuntimeJson: ''
-    };
-    rowBeforeSave.dynamicRuntimeJson = String(component.bindings[0].dynamicRuntimeJson ?? '');
 
     await component.onSaveToBackend();
     expect(onSaveToBackendSpy).toHaveBeenCalledTimes(1);
     expect(persistBindingsSpy).toHaveBeenCalledTimes(1);
-    expect(component.stepMessage).toContain('تم حفظ الحقول وسياسة الرقم المرجعي في قاعدة البيانات بنجاح');
+    expect(component.stepMessage).toContain('تم حفظ ربط الحقول وترتيبها في قاعدة البيانات بنجاح');
 
     expect(dynamicSubjectsController.upsertAdminCategoryFieldLinks).toHaveBeenCalledTimes(1);
     const upsertRequest = dynamicSubjectsController.upsertAdminCategoryFieldLinks.calls.mostRecent().args[1];
     const sentDisplaySettings = String(upsertRequest?.links?.[0]?.displaySettingsJson ?? '');
-    expect(sentDisplaySettings).toContain('"dynamicRuntime"');
-    expect(sentDisplaySettings).toContain('"optionLoader"');
-    expect(sentDisplaySettings).toContain('"statementId":65');
-    expect(sentDisplaySettings).toContain('"sourceType":"powerbi"');
-    // Trace point #2: backend payload + stored backend value.
-    expect(docSourcePayloadDisplaySettingsJson).toContain('"dynamicRuntime"');
-    expect(docSourcePayloadDisplaySettingsJson).toContain('"statementId":65');
-    expect(backendStoredDisplaySettingsJson).toContain('"dynamicRuntime"');
-    expect(backendStoredDisplaySettingsJson).toContain('"statementId":65');
-    // Ensure we did not lose runtime even when row.dynamicRuntimeJson was transiently empty.
-    expect(rowBeforeSave.dynamicRuntimeJson).toBe('');
-    expect(rowBeforeSave.displaySettingsJson).toContain('"dynamicRuntime"');
+    expect(JSON.parse(sentDisplaySettings)).toEqual({ readonly: false, isReadonly: false });
+    expect(JSON.parse(docSourcePayloadDisplaySettingsJson)).toEqual({ readonly: false, isReadonly: false });
+    expect(JSON.parse(backendStoredDisplaySettingsJson)).toEqual({ readonly: false, isReadonly: false });
+    expect(sentDisplaySettings).not.toContain('"dynamicRuntime"');
+    expect(docSourcePayloadDisplaySettingsJson).not.toContain('"dynamicRuntime"');
+    expect(backendStoredDisplaySettingsJson).not.toContain('"dynamicRuntime"');
+    expect(dynamicSubjectsController.upsertSubjectTypeAdminConfig).not.toHaveBeenCalled();
 
     const reloadedBinding = component.bindings.find(item => item.fieldKey === fieldKey);
     expect(reloadedBinding).toBeTruthy();
@@ -977,17 +950,8 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
       return;
     }
 
-    component.onOpenDynamicRuntimeBuilder(reloadedBinding);
-    expect(component.dynamicRuntimeBuilderModel.behaviorType).toBe('optionLoader');
-    expect(component.dynamicRuntimeBuilderModel.sourceType).toBe('powerbi');
-    expect(component.dynamicRuntimeBuilderModel.statementId).toBe(65);
-    expect(component.dynamicRuntimeBuilderModel.parameters[0].name).toBe('direction');
-    expect(component.dynamicRuntimeBuilderModel.parameters[0].source).toBe('static');
-    expect(component.dynamicRuntimeBuilderModel.parameters[0].staticValue).toBe('incoming');
-    // Trace point #3: hydrated row after backend reload.
-    expect(String(reloadedBinding.displaySettingsJson ?? '')).toContain('"dynamicRuntime"');
-    expect(String(reloadedBinding.dynamicRuntimeJson ?? '')).toContain('"optionLoader"');
-    expect(String(reloadedBinding.dynamicRuntimeJson ?? '')).toContain('"statementId": 65');
+    expect(String(reloadedBinding.displaySettingsJson ?? '')).not.toContain('"dynamicRuntime"');
+    expect(String(reloadedBinding.dynamicRuntimeJson ?? '')).toBe('');
     expect(localStorage.getItem(draftStorageKey)).toBeNull();
   });
 
@@ -1176,7 +1140,7 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
 
     expect(persistBindingsSpy).toHaveBeenCalledTimes(1);
     expect(dynamicSubjectsController.upsertAdminCategoryFieldLinks).toHaveBeenCalled();
-    expect(dynamicSubjectsController.upsertSubjectTypeAdminConfig).toHaveBeenCalled();
+    expect(dynamicSubjectsController.upsertSubjectTypeAdminConfig).not.toHaveBeenCalled();
   });
 
   it('shows clear save error when backend returns isSuccess=false even with empty errors array', async () => {

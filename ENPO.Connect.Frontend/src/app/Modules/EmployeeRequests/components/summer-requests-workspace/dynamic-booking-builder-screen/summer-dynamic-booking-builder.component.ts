@@ -33,6 +33,11 @@ import {
 import { deriveStayModeControlPolicy } from '../../summer-shared/core/summer-pricing-ui-rules';
 import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
 import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
+import {
+  canRegisterForSummerDestination,
+  filterSummerDestinationsForBooking,
+  SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE
+} from '../../summer-shared/core/summer-destination-access.policy';
 import Swal from 'sweetalert2';
 
 type OwnerDefaults = {
@@ -88,6 +93,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   pricingQuoteError = '';
   pricingQuote: SummerPricingQuoteDto | null = null;
   myRequests: SummerRequestSummaryDto[] = [];
+  readonly destinationAccessDeniedMessage = SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE;
   readonly membershipTypeOptions: Array<{ label: string; value: string }> = [
     { label: 'عضو عامل', value: 'WORKER_MEMBER' },
     { label: 'عضو غير عامل', value: 'NON_WORKER_MEMBER' }
@@ -154,6 +160,14 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return undefined;
     }
     return this.destinations.find(item => item.categoryId === this.selectedDestinationId);
+  }
+
+  get destinationSelectionOptions(): SummerDestinationConfig[] {
+    if (this.isEditMode) {
+      return this.destinations;
+    }
+
+    return filterSummerDestinationsForBooking(this.destinations, this.canUseProxyRegistration);
   }
 
   get bookingCapacitySummary(): SummerWaveCapacityDto[] {
@@ -223,6 +237,16 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     const destination = this.selectedDestination;
     if (!destination) {
       this.customFilteredCategoryMand = [];
+      if (!this.isEditMode && this.selectedDestinationId) {
+        this.resetUnavailableDestinationSelection();
+        this.showDestinationAccessDeniedMessage();
+      }
+      return;
+    }
+
+    if (!this.isEditMode && !this.canRegisterForDestination(destination)) {
+      this.resetUnavailableDestinationSelection();
+      this.showDestinationAccessDeniedMessage();
       return;
     }
 
@@ -413,6 +437,12 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     if (!destination) {
       this.bookingValidationAlerts = ['يرجى اختيار المصيف أولاً.'];
       this.msg.msgError('خطأ', '<h5>يرجى اختيار المصيف أولاً.</h5>', true);
+      return;
+    }
+
+    if (!this.isEditMode && !this.canRegisterForDestination(destination)) {
+      this.resetUnavailableDestinationSelection();
+      this.showDestinationAccessDeniedMessage();
       return;
     }
 
@@ -1288,6 +1318,25 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return aliases.some(alias => alias.toLowerCase() === lowered);
   }
 
+  private canRegisterForDestination(destination: SummerDestinationConfig | undefined): boolean {
+    return canRegisterForSummerDestination(destination, this.canUseProxyRegistration);
+  }
+
+  private resetUnavailableDestinationSelection(): void {
+    this.selectedDestinationId = null;
+    this.customFilteredCategoryMand = [];
+    this.bookingWaveCapacities = [];
+    this.fileParameters = [];
+    this.ticketForm = this.fb.group({});
+    this.genericFormService.dynamicGroups = [];
+    this.clearPricingQuote(true);
+    this.bookingValidationAlerts = [this.destinationAccessDeniedMessage];
+  }
+
+  private showDestinationAccessDeniedMessage(): void {
+    this.msg.msgError('غير متاح', `<h5>${this.destinationAccessDeniedMessage}</h5>`, true);
+  }
+
   private syncMembershipTypeAccessAndDefaults(): void {
     const requested = this.normalizeMembershipType(this.membershipTypeValue);
     const enforced = this.canSelectMembershipType ? requested : 'WORKER_MEMBER';
@@ -1440,6 +1489,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       this.canSelectMembershipType = false;
       this.canUseFrozenUnitsInCurrentFlow = false;
       this.includeFrozenUnitsInBooking = false;
+    }
+
+    if (!this.isEditMode && this.selectedDestination && !this.canRegisterForDestination(this.selectedDestination)) {
+      this.resetUnavailableDestinationSelection();
     }
   }
 

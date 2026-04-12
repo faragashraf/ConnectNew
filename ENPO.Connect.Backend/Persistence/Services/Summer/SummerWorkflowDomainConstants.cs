@@ -12,6 +12,7 @@ namespace Persistence.Services.Summer
 
         public const string TransferReviewRequiredCode = "TRANSFER_REVIEW_REQUIRED";
         public const string TransferReviewResolvedCode = "TRANSFER_REVIEW_RESOLVED";
+        public const string DestinationAccessDeniedMessage = "غير مسموح لك بالتسجيل على هذا المصيف";
         public const string RequestCreatedAtUtcFieldKind = "Summer_RequestCreatedAtUtc";
         public const string PaymentDueAtUtcFieldKind = "Summer_PaymentDueAtUtc";
         public const string PaidAtUtcFieldKind = "Summer_PaidAtUtc";
@@ -40,6 +41,13 @@ namespace Persistence.Services.Summer
         {
             public const string ResidenceOnly = "RESIDENCE_ONLY";
             public const string ResidenceWithTransport = "RESIDENCE_WITH_TRANSPORT";
+        }
+
+        public static class DestinationCategoryIds
+        {
+            public const int Matrouh = 147;
+            public const int RasElBar = 148;
+            public const int PortFouad = 149;
         }
 
         public static class PricingModes

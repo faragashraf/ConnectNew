@@ -1,7 +1,7 @@
 <section class="field-library-page" dir="rtl">
   <header class="page-header">
     <div>
-      <p class="eyebrow">Progressive Replacement - ControlCenterCatalog</p>
+      <p class="eyebrow">تحديث تدريجي - لوحة كتالوج التحكم</p>
       <h2>المرحلة التالية: إدارة مكتبة الحقول</h2>
       <p>
         إدارة كاملة لمكتبة الحقول من جدول <code>CDMend</code> (تحميل، بحث، فلترة، إضافة، تعديل، حذف آمن) مع حفظ فعلي في قاعدة البيانات.
@@ -48,7 +48,7 @@
           pInputText
           type="text"
           [(ngModel)]="searchTerm"
-          placeholder="بحث بـ CDMendTxt / CDMendLbl / النوع / التطبيق"
+          placeholder="بحث بالمفتاح أو الاسم أو النوع أو التطبيق"
           (keyup.enter)="onSearch()" />
       </span>
 
@@ -94,13 +94,13 @@
       styleClass="p-datatable-sm">
       <ng-template pTemplate="header">
         <tr>
-          <th pSortableColumn="fieldKey">CDMendTxt <p-sortIcon field="fieldKey"></p-sortIcon></th>
-          <th pSortableColumn="fieldLabel">CDMendLbl <p-sortIcon field="fieldLabel"></p-sortIcon></th>
-          <th pSortableColumn="fieldType">CDMendType <p-sortIcon field="fieldType"></p-sortIcon></th>
-          <th pSortableColumn="dataType">CDMendDatatype <p-sortIcon field="dataType"></p-sortIcon></th>
+          <th pSortableColumn="fieldKey">مفتاح الحقل <p-sortIcon field="fieldKey"></p-sortIcon></th>
+          <th pSortableColumn="fieldLabel">اسم الحقل <p-sortIcon field="fieldLabel"></p-sortIcon></th>
+          <th pSortableColumn="fieldType">نوع الحقل <p-sortIcon field="fieldType"></p-sortIcon></th>
+          <th pSortableColumn="dataType">نوع البيانات <p-sortIcon field="dataType"></p-sortIcon></th>
           <th>إلزامي</th>
           <th pSortableColumn="isActive">الحالة <p-sortIcon field="isActive"></p-sortIcon></th>
-          <th pSortableColumn="applicationId">ApplicationID <p-sortIcon field="applicationId"></p-sortIcon></th>
+          <th pSortableColumn="applicationId">التطبيق <p-sortIcon field="applicationId"></p-sortIcon></th>
           <th>مؤشر الاستخدام</th>
           <th class="action-col">إجراءات</th>
         </tr>
@@ -113,8 +113,8 @@
           (click)="onSelectField(row)">
           <td><code>{{ row.fieldKey }}</code></td>
           <td>{{ row.fieldLabel }}</td>
-          <td>{{ row.fieldType }}</td>
-          <td>{{ row.dataType || '-' }}</td>
+          <td>{{ resolveFieldTypeLabel(row.fieldType) }}</td>
+          <td>{{ row.dataType ? resolveDataTypeLabel(row.dataType) : '-' }}</td>
           <td>
             <p-tag [value]="row.required ? 'إلزامي' : 'اختياري'" [severity]="row.required ? 'danger' : 'info'"></p-tag>
           </td>
@@ -181,7 +181,7 @@
         <h4>1) البيانات الأساسية</h4>
         <div class="grid two-cols">
           <div class="field">
-            <label for="fieldAppId">ApplicationID <span class="required">*</span></label>
+            <label for="fieldAppId">التطبيق <span class="required">*</span></label>
             <p-dropdown
               inputId="fieldAppId"
               [options]="applicationSelectOptions"
@@ -192,23 +192,23 @@
               [showClear]="false"
               placeholder="اختر التطبيق">
             </p-dropdown>
-            <small class="field-error" *ngIf="isInvalid('applicationId')">{{ validationMessage('applicationId', 'ApplicationID') }}</small>
+            <small class="field-error" *ngIf="isInvalid('applicationId')">{{ validationMessage('applicationId', 'التطبيق') }}</small>
           </div>
 
           <div class="field">
-            <label for="fieldKey">CDMendTxt <span class="required">*</span></label>
+            <label for="fieldKey">مفتاح الحقل <span class="required">*</span></label>
             <input pInputText id="fieldKey" formControlName="fieldKey" placeholder="مفتاح الحقل" />
-            <small class="field-error" *ngIf="isInvalid('fieldKey')">{{ validationMessage('fieldKey', 'CDMendTxt') }}</small>
+            <small class="field-error" *ngIf="isInvalid('fieldKey')">{{ validationMessage('fieldKey', 'مفتاح الحقل') }}</small>
           </div>
 
           <div class="field">
-            <label for="fieldLabel">CDMendLbl <span class="required">*</span></label>
+            <label for="fieldLabel">اسم الحقل <span class="required">*</span></label>
             <input pInputText id="fieldLabel" formControlName="fieldLabel" placeholder="عنوان العرض" />
-            <small class="field-error" *ngIf="isInvalid('fieldLabel')">{{ validationMessage('fieldLabel', 'CDMendLbl') }}</small>
+            <small class="field-error" *ngIf="isInvalid('fieldLabel')">{{ validationMessage('fieldLabel', 'اسم الحقل') }}</small>
           </div>
 
           <div class="field">
-            <label for="fieldType">CDMendType <span class="required">*</span></label>
+            <label for="fieldType">نوع الحقل <span class="required">*</span></label>
             <p-dropdown
               inputId="fieldType"
               [options]="fieldTypeOptions"
@@ -219,11 +219,11 @@
               [showClear]="false"
               placeholder="اختر النوع">
             </p-dropdown>
-            <small class="field-error" *ngIf="isInvalid('fieldType')">{{ validationMessage('fieldType', 'CDMendType') }}</small>
+            <small class="field-error" *ngIf="isInvalid('fieldType')">{{ validationMessage('fieldType', 'نوع الحقل') }}</small>
           </div>
 
           <div class="field">
-            <label for="fieldDataType">CDMendDatatype</label>
+            <label for="fieldDataType">نوع البيانات</label>
             <p-dropdown
               inputId="fieldDataType"
               [options]="dataTypeOptions"
@@ -234,11 +234,11 @@
               [showClear]="true"
               placeholder="نوع البيانات">
             </p-dropdown>
-            <small class="field-error" *ngIf="isInvalid('dataType')">{{ validationMessage('dataType', 'CDMendDatatype') }}</small>
+            <small class="field-error" *ngIf="isInvalid('dataType')">{{ validationMessage('dataType', 'نوع البيانات') }}</small>
           </div>
 
           <div class="field">
-            <label for="fieldStatus">CDMendStat (الحالة)</label>
+            <label for="fieldStatus">حالة الحقل</label>
             <p-inputSwitch inputId="fieldStatus" formControlName="isActive"></p-inputSwitch>
           </div>
         </div>
@@ -248,36 +248,36 @@
         <h4>2) العرض والقيم الافتراضية</h4>
         <div class="grid two-cols">
           <div class="field">
-            <label for="placeholder">Placeholder</label>
+            <label for="placeholder">النص الإرشادي</label>
             <input pInputText id="placeholder" formControlName="placeholder" placeholder="نص إرشادي" />
-            <small class="field-error" *ngIf="isInvalid('placeholder')">{{ validationMessage('placeholder', 'Placeholder') }}</small>
+            <small class="field-error" *ngIf="isInvalid('placeholder')">{{ validationMessage('placeholder', 'النص الإرشادي') }}</small>
           </div>
 
           <div class="field">
-            <label for="defaultValue">DefaultValue</label>
+            <label for="defaultValue">القيمة الافتراضية</label>
             <input pInputText id="defaultValue" formControlName="defaultValue" placeholder="قيمة افتراضية" />
-            <small class="field-error" *ngIf="isInvalid('defaultValue')">{{ validationMessage('defaultValue', 'DefaultValue') }}</small>
+            <small class="field-error" *ngIf="isInvalid('defaultValue')">{{ validationMessage('defaultValue', 'القيمة الافتراضية') }}</small>
           </div>
 
           <div class="field">
-            <label for="width">Width</label>
+            <label for="width">العرض</label>
             <input pInputText id="width" type="number" formControlName="width" min="0" />
-            <small class="field-error" *ngIf="isInvalid('width')">{{ validationMessage('width', 'Width') }}</small>
+            <small class="field-error" *ngIf="isInvalid('width')">{{ validationMessage('width', 'العرض') }}</small>
           </div>
 
           <div class="field">
-            <label for="height">Height</label>
+            <label for="height">الارتفاع</label>
             <input pInputText id="height" type="number" formControlName="height" min="0" />
-            <small class="field-error" *ngIf="isInvalid('height')">{{ validationMessage('height', 'Height') }}</small>
+            <small class="field-error" *ngIf="isInvalid('height')">{{ validationMessage('height', 'الارتفاع') }}</small>
           </div>
 
           <div class="field toggle-field">
-            <label for="disabledInit">IsDisabledInit</label>
+            <label for="disabledInit">قراءة فقط عند البداية</label>
             <p-inputSwitch inputId="disabledInit" formControlName="isDisabledInit"></p-inputSwitch>
           </div>
 
           <div class="field toggle-field">
-            <label for="isSearchable">IsSearchable</label>
+            <label for="isSearchable">قابل للبحث</label>
             <p-inputSwitch inputId="isSearchable" formControlName="isSearchable"></p-inputSwitch>
           </div>
         </div>
@@ -287,46 +287,46 @@
         <h4>3) التحقق</h4>
         <div class="grid two-cols">
           <div class="field toggle-field">
-            <label for="required">Required</label>
+            <label for="required">إلزامي</label>
             <p-inputSwitch inputId="required" formControlName="required"></p-inputSwitch>
           </div>
 
           <div class="field toggle-field">
-            <label for="requiredTrue">RequiredTrue</label>
+            <label for="requiredTrue">إلزامي عند قيمة نعم/صح</label>
             <p-inputSwitch inputId="requiredTrue" formControlName="requiredTrue"></p-inputSwitch>
           </div>
 
           <div class="field toggle-field" *ngIf="showEmailPatternControls">
-            <label for="emailValidation">email</label>
+            <label for="emailValidation">تحقق بريد إلكتروني</label>
             <p-inputSwitch inputId="emailValidation" formControlName="email"></p-inputSwitch>
           </div>
 
           <div class="field toggle-field" *ngIf="showEmailPatternControls">
-            <label for="patternValidation">Pattern</label>
+            <label for="patternValidation">نمط مخصص</label>
             <p-inputSwitch inputId="patternValidation" formControlName="pattern"></p-inputSwitch>
           </div>
 
           <div class="field" *ngIf="showRangeControls">
-            <label for="minValue">MinValue</label>
+            <label for="minValue">الحد الأدنى</label>
             <input pInputText id="minValue" formControlName="minValue" />
-            <small class="field-error" *ngIf="isInvalid('minValue')">{{ validationMessage('minValue', 'MinValue') }}</small>
+            <small class="field-error" *ngIf="isInvalid('minValue')">{{ validationMessage('minValue', 'الحد الأدنى') }}</small>
           </div>
 
           <div class="field" *ngIf="showRangeControls">
-            <label for="maxValue">MaxValue</label>
+            <label for="maxValue">الحد الأقصى</label>
             <input pInputText id="maxValue" formControlName="maxValue" />
-            <small class="field-error" *ngIf="isInvalid('maxValue')">{{ validationMessage('maxValue', 'MaxValue') }}</small>
+            <small class="field-error" *ngIf="isInvalid('maxValue')">{{ validationMessage('maxValue', 'الحد الأقصى') }}</small>
           </div>
 
           <div class="field" *ngIf="showMaskControl">
-            <label for="mask">CDMendmask</label>
+            <label for="mask">قناع الإدخال</label>
             <input pInputText id="mask" formControlName="mask" />
-            <small class="field-error" *ngIf="isInvalid('mask')">{{ validationMessage('mask', 'CDMendmask') }}</small>
+            <small class="field-error" *ngIf="isInvalid('mask')">{{ validationMessage('mask', 'قناع الإدخال') }}</small>
           </div>
         </div>
 
         <small class="field-error" *ngIf="fieldForm.hasError('rangeError')">
-          MinValue يجب أن تكون أقل من أو تساوي MaxValue.
+          يجب أن تكون قيمة الحد الأدنى أقل من أو تساوي الحد الأقصى.
         </small>
       </section>
 
@@ -335,7 +335,7 @@
         <div class="grid two-cols">
           <div class="field span-two advanced-data-editor">
             <div class="advanced-data-header">
-              <label>CDMendTbl <span class="required" *ngIf="requiresOptionsPayload">*</span></label>
+              <label>مصدر خيارات الحقل <span class="required" *ngIf="requiresOptionsPayload">*</span></label>
               <button
                 pButton
                 type="button"
@@ -347,7 +347,7 @@
             </div>
 
             <p class="advanced-data-hint">
-              أدخل البيانات بصيغة Key / Value. سيتم الحفظ تلقائيًا كـ JSON منظم ومتوافق مع النظام الحالي.
+              أدخل البيانات بصيغة مفتاح/قيمة. سيتم الحفظ تلقائيًا بصيغة جيسون منظمة ومتوافقة مع النظام الحالي.
             </p>
 
             <div class="advanced-data-warning" *ngIf="advancedDataParseMessage.length > 0">
@@ -358,8 +358,8 @@
               <table class="advanced-data-table">
                 <thead>
                   <tr>
-                    <th>Key</th>
-                    <th>Value</th>
+                    <th>المفتاح</th>
+                    <th>القيمة</th>
                     <th class="remove-col">حذف</th>
                   </tr>
                 </thead>
@@ -402,15 +402,15 @@
             </small>
 
             <div class="field payload-preview">
-              <label>معاينة JSON الناتج</label>
+              <label>معاينة الجيسون الناتج</label>
               <textarea pInputTextarea rows="3" [readonly]="true" [value]="advancedDataPreviewValue"></textarea>
             </div>
           </div>
 
           <div class="field">
-            <label for="cdmendSql">CDMendSQL</label>
+            <label for="cdmendSql">رقم الحقل</label>
             <input pInputText id="cdmendSql" type="number" formControlName="cdmendSql" min="1" placeholder="يُولّد تلقائيًا عند الإضافة إذا تُرك فارغًا" />
-            <small class="field-error" *ngIf="isInvalid('cdmendSql')">{{ validationMessage('cdmendSql', 'CDMendSQL') }}</small>
+            <small class="field-error" *ngIf="isInvalid('cdmendSql')">{{ validationMessage('cdmendSql', 'رقم الحقل') }}</small>
           </div>
         </div>
       </section>

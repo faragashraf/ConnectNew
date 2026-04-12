@@ -28,10 +28,15 @@ import { SummerRequestRowRefreshService } from '../../summer-shared/core/summer-
 import { SummerRequestsListPatchService } from '../../summer-shared/core/summer-requests-list-patch.service';
 import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
 import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
+import { AuthObjectsService } from 'src/app/shared/services/helper/auth-objects.service';
 import {
   buildSummerCancelDeductionMessage,
   resolveSummerCancelDeductionAmount
 } from '../../summer-shared/core/summer-cancel-deduction.policy';
+import {
+  filterSummerDestinationsForBooking,
+  SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE
+} from '../../summer-shared/core/summer-destination-access.policy';
 import {
   parseSummerDestinationCatalog,
   SUMMER_PDF_REFERENCE_TITLE,
@@ -72,7 +77,9 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   readonly dynamicSummerConfigRouteKey = 'admins/summer-requests/dynamic-booking';
   readonly paymentInFutureMessage = SUMMER_UI_TEXTS_AR.errors.paymentInFuture;
+  readonly destinationAccessDeniedMessage = SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE;
   destinations: SummerDestinationConfig[] = [];
+  hasSummerAdminPermission = false;
   loadingDestinations = false;
   destinationsError = '';
 
@@ -140,6 +147,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     private readonly spinner: SpinnerService,
     private readonly signalRService: SignalRService,
     private readonly summerRealtimeService: SummerRequestsRealtimeService,
+    private readonly authObjectsService: AuthObjectsService,
     private readonly rowRefreshService: SummerRequestRowRefreshService,
     private readonly listPatchService: SummerRequestsListPatchService
   ) {
@@ -163,11 +171,17 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.refreshDestinationAccess();
     this.bindRouteMode();
     this.bindTransferRules();
     this.bindSignalRRefresh();
     this.loadDestinationCatalog();
     this.loadMyRequests();
+
+    const authSub = this.authObjectsService.authObject$.subscribe(() => {
+      this.refreshDestinationAccess();
+    });
+    this.subscriptions.add(authSub);
   }
 
   ngOnDestroy(): void {
@@ -179,6 +193,28 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return undefined;
     }
     return this.myRequests.find(item => item.messageId === this.selectedRequestId);
+  }
+
+  get bookingDestinations(): SummerDestinationConfig[] {
+    return filterSummerDestinationsForBooking(this.destinations, this.hasSummerAdminPermission);
+  }
+
+  get canShowCreateBuilder(): boolean {
+    return this.isEditMode
+      ? this.destinations.length > 0
+      : this.bookingDestinations.length > 0;
+  }
+
+  get destinationCatalogEmptyStateMessage(): string {
+    if (this.destinationsError.length > 0) {
+      return this.destinationsError;
+    }
+
+    if (!this.loadingDestinations && this.destinations.length > 0 && this.bookingDestinations.length === 0) {
+      return this.destinationAccessDeniedMessage;
+    }
+
+    return '';
   }
 
   get isEditMode(): boolean {
@@ -1476,6 +1512,14 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   private getSelectedCancelReason(): string {
     const fields = this.selectedRequestDetails?.fields ?? [];
     return String(getFieldValueByKeys(fields, ['Summer_CancelReason']) ?? '').trim();
+  }
+
+  private refreshDestinationAccess(): void {
+    try {
+      this.hasSummerAdminPermission = this.authObjectsService.checkAuthFun('SummerAdminFunc');
+    } catch {
+      this.hasSummerAdminPermission = false;
+    }
   }
 
   private toFileParameters(files: File[]): FileParameter[] {

@@ -4,7 +4,7 @@
       <p class="eyebrow">لوحة الكتالوج - ربط مكتبة الحقول</p>
       <h2>ربط مكتبة الحقول</h2>
       <p>
-        إدارة الحقول الفعلية المرتبطة بالنوع الحالي مباشرة من قاعدة البيانات مع دعم الخصائص والجروبات وسياسة الرقم المرجعي.
+        هذه الشاشة مخصصة لربط الحقول بالنوع الحالي وترتيب عرضها فقط.
       </p>
     </div>
 
@@ -46,9 +46,13 @@
     </p-tag>
   </section>
 
+  <section class="step-message">
+    تم نقل تعريف الحقول وإعدادات السياسات إلى شاشاتها المخصصة. شاشة الربط تحفظ الربط والترتيب فقط.
+  </section>
+
   <div class="layout">
     <main class="workspace">
-      <section class="card">
+      <section class="card" *ngIf="false">
         <header class="card-head">
           <h3>سياسة الرقم المرجعي</h3>
           <small>إدارة فعلية مرتبطة بجدول سياسة الرقم المرجعي</small>
@@ -286,7 +290,7 @@
         </form>
       </section>
 
-      <section class="card">
+      <section class="card" *ngIf="false">
         <header class="card-head">
           <h3>إعدادات عرض النموذج</h3>
           <small>إعدادات العرض على مستوى نوع الطلب</small>
@@ -367,7 +371,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" *ngIf="false">
         <header class="card-head">
           <h3>إضافة حقل جديد</h3>
           <small>ينشأ في جدول تعريف الحقول ثم يُربط بالنوع الحالي عند الحفظ</small>
@@ -519,6 +523,7 @@
                 <td class="switch-col">
                   <p-inputSwitch
                     [(ngModel)]="row.visible"
+                    [disabled]="true"
                     [ngModelOptions]="{ standalone: true }"
                     (ngModelChange)="onBindingChanged()">
                   </p-inputSwitch>
@@ -526,6 +531,7 @@
                 <td class="switch-col">
                   <p-inputSwitch
                     [(ngModel)]="row.required"
+                    [disabled]="true"
                     [ngModelOptions]="{ standalone: true }"
                     (ngModelChange)="onBindingChanged()">
                   </p-inputSwitch>
@@ -533,6 +539,7 @@
                 <td class="switch-col">
                   <p-inputSwitch
                     [(ngModel)]="row.readonly"
+                    [disabled]="true"
                     [ngModelOptions]="{ standalone: true }"
                     (ngModelChange)="onBindingChanged()">
                   </p-inputSwitch>
@@ -541,6 +548,7 @@
                   <input
                     pInputText
                     [(ngModel)]="row.defaultValue"
+                    [disabled]="true"
                     [ngModelOptions]="{ standalone: true }"
                     (ngModelChange)="onBindingChanged()" />
                 </td>
@@ -552,6 +560,7 @@
                       class="p-button-text p-button-sm"
                       label="مُنشئ التكامل"
                       icon="pi pi-sliders-h"
+                      [disabled]="true"
                       (click)="onOpenDynamicRuntimeBuilder(row)">
                     </button>
                     <button
@@ -560,10 +569,12 @@
                       class="p-button-text p-button-sm"
                       [label]="isDynamicRuntimeAdvancedModeOpen(row) ? 'إخفاء JSON المتقدم' : 'وضع JSON المتقدم'"
                       icon="pi pi-code"
+                      [disabled]="true"
                       (click)="toggleDynamicRuntimeAdvancedMode(row)">
                     </button>
                   </div>
-                  <pre class="dynamic-runtime-mirror"><code [innerText]="getDynamicRuntimeReadonlyMirror(row) || '{}'"></code></pre>
+                  <pre class="dynamic-runtime-mirror"><code [innerText]="getDynamicRuntimeMirrorSummary(row)"></code></pre>
+                  <small class="field-note">{{ getBindingOptionSourceSummary(row) }}</small>
                   <div class="dynamic-runtime-advanced" *ngIf="isDynamicRuntimeAdvancedModeOpen(row)">
                     <label>JSON متقدم (اختياري)</label>
                     <textarea
@@ -614,14 +625,20 @@
         </div>
 
         <div class="dynamic-runtime-guide">
-          <h4>دليل السلوك الديناميكي</h4>
+          <h4>توجيه إعدادات الحقول</h4>
           <p>
-            ابدأ دائمًا من <strong>منشئ التكامل</strong> لكل إعداد جديد. عمود <strong>السلوك الديناميكي</strong> يقبل JSON Object فقط (بدون غلاف
-            <code>dynamicRuntime</code>)، ويتم دمجه تلقائيًا داخل
-            <code>displaySettingsJson</code>
-            عند الحفظ.
+            تم نقل إعدادات الحقول (الإلزامية، الظهور، المصدر الديناميكي، القيم الافتراضية، وسلوك التكامل) إلى شاشة مكتبة الحقول.
+            هذه الشاشة مخصصة للربط والترتيب فقط.
           </p>
-          <pre class="runtime-json-sample"><code [innerText]="dynamicRuntimeSampleJson"></code></pre>
+          <button
+            pButton
+            type="button"
+            class="p-button-outlined p-button-sm"
+            label="فتح مكتبة الحقول"
+            icon="pi pi-external-link"
+            [routerLink]="['/Admin/ControlCenterCatalog/field-library']"
+            [queryParams]="fieldLibraryNavigationQueryParams">
+          </button>
         </div>
       </section>
     </main>

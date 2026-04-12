@@ -15,7 +15,7 @@
         قاعدة الاعتذار: لا يمكن الاعتذار عن أي حجز قبل موعد الفوج بأقل من 14 يوم.
       </p>
 
-      <article class="destination-card" *ngFor="let destination of destinations; trackBy: destinationTrackBy">
+      <article class="destination-card" *ngFor="let destination of bookingDestinations; trackBy: destinationTrackBy">
         <header>
           <h3>{{ destination.name }}</h3>
           <span class="pill">{{ destination.waves.length }} فوج</span>
@@ -67,10 +67,10 @@
             </button>
           </div>
 
-          <ng-container *ngIf="destinations.length > 0; else destinationCatalogState">
+          <ng-container *ngIf="canShowCreateBuilder; else destinationCatalogState">
             <ng-container *ngIf="!isEditMode || editRequestId; else editBuilderLoadingState">
               <app-summer-dynamic-booking-builder
-                [destinations]="destinations"
+                [destinations]="isEditMode ? destinations : bookingDestinations"
                 [seasonYear]="seasonYear"
                 [applicationId]="dynamicSummerApplicationId"
                 [configRouteKey]="dynamicSummerConfigRouteKey"
@@ -95,8 +95,10 @@
                 [showTitle]="false"
                 [ariaLabel]="'جاري تحميل إعدادات المصايف'">
               </app-summer-skeleton>
-              <h3 *ngIf="!loadingDestinations && destinationsError.length > 0">تعذر تحميل إعدادات المصايف</h3>
-              <p *ngIf="!loadingDestinations && destinationsError.length > 0">{{ destinationsError }}</p>
+              <h3 *ngIf="!loadingDestinations && destinationCatalogEmptyStateMessage.length > 0">
+                {{ destinationsError.length > 0 ? 'تعذر تحميل إعدادات المصايف' : 'غير متاح' }}
+              </h3>
+              <p *ngIf="!loadingDestinations && destinationCatalogEmptyStateMessage.length > 0">{{ destinationCatalogEmptyStateMessage }}</p>
             </div>
           </ng-template>
         </p-tabPanel>

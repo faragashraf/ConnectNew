@@ -435,6 +435,13 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     return 'لا توجد تعديلات جديدة للحفظ في قاعدة البيانات.';
   }
 
+  get fieldLibraryNavigationQueryParams(): { categoryId: number | null; applicationId: string | null } {
+    return {
+      categoryId: this.currentCategoryId,
+      applicationId: this.currentApplicationId
+    };
+  }
+
   get filteredReusableFields(): ReusableFieldLibraryItem[] {
     const term = this.librarySearchTerm.trim().toLowerCase();
     if (!term) {
@@ -557,78 +564,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   async onCreateField(): Promise<void> {
-    if (this.groupOptions.length === 0) {
-      try {
-        await this.ensureAtLeastOneGroupExists();
-        const defaultGroupId = this.resolveDefaultGroupId();
-        if (defaultGroupId) {
-          this.newFieldForm.patchValue({ groupId: defaultGroupId }, { emitEvent: false });
-        }
-      } catch (error) {
-        this.stepMessageSeverity = 'warn';
-        this.stepMessage = this.toErrorMessage(error, 'تعذر تجهيز مجموعة افتراضية لإضافة الحقل.');
-        return;
-      }
-    }
-
-    this.newFieldForm.markAllAsTouched();
-    if (this.newFieldForm.invalid) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'يرجى استكمال بيانات الحقل الجديد بشكل صحيح.';
-      return;
-    }
-
-    const raw = this.newFieldForm.getRawValue();
-    const fieldKey = this.normalizeNullable(raw['fieldKey']);
-    const label = this.normalizeNullable(raw['label']);
-    const groupId = this.toPositiveInt(raw['groupId']);
-
-    if (!fieldKey || !label || !groupId) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'يرجى إدخال مفتاح حقل واسم حقل ومجموعة صالحين.';
-      return;
-    }
-
-    const normalizedFieldKey = this.normalizeFieldKey(fieldKey);
-    const duplicated = this.bindings.some(item => this.normalizeFieldKey(item.fieldKey) === normalizedFieldKey);
-    if (duplicated) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = `الحقل ${fieldKey} مرتبط بالفعل بالنوع الحالي.`;
-      return;
-    }
-
-    const nextDisplayOrder = (this.bindings.reduce((max, item) => Math.max(max, item.displayOrder), 0) || 0) + 1;
-    const type = this.normalizeBindingType(raw['type']);
-
-    const createdBinding: BoundFieldItem = {
-      bindingId: `bind-local-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      sourceFieldId: `local-${fieldKey}`,
-      fieldKey,
-      label,
-      type,
-      displayOrder: nextDisplayOrder,
-      visible: raw['visible'] !== false,
-      required: raw['required'] === true,
-      readonly: raw['readonly'] === true,
-      defaultValue: String(raw['defaultValue'] ?? '').trim(),
-      groupId,
-      groupName: this.resolveGroupName(groupId),
-      dynamicRuntimeJson: ''
-    };
-
-    this.bindings = this.bindingEngine.normalizeDisplayOrder([...this.bindings, createdBinding]);
-    this.newFieldForm.reset({
-      fieldKey: '',
-      label: '',
-      type: 'InputText',
-      groupId,
-      required: false,
-      readonly: false,
-      visible: true,
-      defaultValue: ''
-    });
-
-    this.evaluateBindings(true, true);
+    this.stepMessageSeverity = 'warn';
+    this.stepMessage = 'إنشاء الحقول تم نقله إلى شاشة مكتبة الحقول فقط. يمكنك إنشاء الحقل من هناك ثم العودة لربطه هنا.';
   }
 
   onDeleteBinding(binding: BoundFieldItem): void {
@@ -693,6 +630,39 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
   getDynamicRuntimeReadonlyMirror(binding: BoundFieldItem): string {
     return this.resolveBindingRuntimeJson(binding);
+  }
+
+  getBindingOptionSourceSummary(binding: BoundFieldItem): string {
+    const existingField = this.fieldCatalogByKey.get(this.normalizeFieldKey(binding.fieldKey)) ?? null;
+    const decision = this.resolveBindingOptionSourceDecision(binding, existingField);
+    const staticCount = decision.staticOptionsCount;
+    const sourceLabel = decision.source === 'Static'
+      ? 'ثابت'
+      : decision.source === 'Internal'
+        ? 'داخلي'
+        : decision.source === 'External'
+          ? 'خارجي'
+          : 'غير محدد';
+
+    if (decision.source === 'Static') {
+      const countLabel = staticCount > 0 ? ` (${staticCount} خيار)` : '';
+      if (existingField?.isActive === false) {
+        return `مصدر الخيارات الفعلي: ${sourceLabel}${countLabel} من تعريف الحقل (تعريف الحقل غير مفعّل ويعمل عبر التوافق القديم).`;
+      }
+
+      return `مصدر الخيارات الفعلي: ${sourceLabel}${countLabel} من تعريف الحقل.`;
+    }
+
+    if (decision.source === 'Internal' || decision.source === 'External') {
+      return `مصدر الخيارات الفعلي: ${sourceLabel} عبر السلوك الديناميكي.`;
+    }
+
+    return 'مصدر الخيارات الفعلي: غير محدد. هذا الحقل لن يعرض خيارات صالحة وقت التنفيذ.';
+  }
+
+  getDynamicRuntimeMirrorSummary(binding: BoundFieldItem): string {
+    const runtimeJson = this.normalizeNullable(this.getDynamicRuntimeReadonlyMirror(binding));
+    return runtimeJson ?? 'لا يوجد إعداد ديناميكي.';
   }
 
   getDynamicRuntimeAdvancedDraft(binding: BoundFieldItem): string {
@@ -1038,8 +1008,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   async onSaveToBackend(): Promise<void> {
-    this.referencePolicyForm.markAllAsTouched();
-    this.presentationForm.markAllAsTouched();
     this.evaluateBindings(true, false);
 
     const preSaveBlockingReasons = this.collectPreSaveBlockingReasons();
@@ -1074,8 +1042,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.hasPendingBackendChanges = false;
       this.clearDraftFromLocalStorage();
       this.stepMessageSeverity = 'success';
-      this.stepMessage = 'تم حفظ الحقول وسياسة الرقم المرجعي في قاعدة البيانات بنجاح.';
-      this.msgsService?.msgSuccess('تم حفظ الحقول وسياسة الرقم المرجعي في قاعدة البيانات بنجاح.', 3000, true);
+      this.stepMessage = 'تم حفظ ربط الحقول وترتيبها في قاعدة البيانات بنجاح.';
+      this.msgsService?.msgSuccess('تم حفظ ربط الحقول وترتيبها في قاعدة البيانات بنجاح.', 3000, true);
     } catch (error) {
       this.stepMessageSeverity = 'warn';
       this.stepMessage = this.toErrorMessage(error, 'تعذر حفظ التعديلات في قاعدة البيانات.');
@@ -1106,30 +1074,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private collectPreSaveBlockingReasons(): string[] {
     const reasons: string[] = [];
 
-    if (this.referencePolicyForm.invalid) {
-      const invalidReferenceFields = this.collectInvalidControlDetails(
-        this.referencePolicyForm,
-        this.referencePolicyControlLabels
-      );
-      reasons.push(
-        invalidReferenceFields.length > 0
-          ? `نموذج سياسة الرقم المرجعي غير صالح: ${invalidReferenceFields.join('، ')}.`
-          : 'نموذج سياسة الرقم المرجعي يحتوي مدخلات غير صالحة.'
-      );
-    }
-
-    if (this.presentationForm.invalid) {
-      const invalidPresentationFields = this.collectInvalidControlDetails(
-        this.presentationForm,
-        this.presentationControlLabels
-      );
-      reasons.push(
-        invalidPresentationFields.length > 0
-          ? `نموذج العرض غير صالح: ${invalidPresentationFields.join('، ')}.`
-          : 'نموذج العرض يحتوي مدخلات غير صالحة.'
-      );
-    }
-
     if (!this.validation.isValid) {
       const blockingIssuesPreview = this.validation.blockingIssues
         .map(issue => String(issue ?? '').trim())
@@ -1141,8 +1085,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
           : 'يوجد مانع في ربط الحقول يمنع الحفظ.'
       );
     }
-
-    reasons.push(...this.collectLocalRuntimeDraftBlockingReasons());
 
     return reasons;
   }
@@ -1271,18 +1213,12 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private evaluateBindings(syncToStore: boolean, markBackendDirty = false): void {
     const baseValidation = this.bindingEngine.validateBindings(this.bindings);
     const groupIssues = this.collectGroupValidationIssues(this.bindings);
-    const dynamicRuntimeIssues = this.collectDynamicRuntimeValidationIssues(this.bindings);
-    const optionSourceIssues = this.collectOptionSourceValidationIssues(this.bindings);
-    const referenceIssues = this.validateReferencePolicy();
-    this.referencePolicyBlockingIssues = referenceIssues;
+    this.referencePolicyBlockingIssues = [];
 
     this.validation = {
       isValid: baseValidation.isValid
-        && groupIssues.length === 0
-        && dynamicRuntimeIssues.length === 0
-        && optionSourceIssues.length === 0
-        && referenceIssues.length === 0,
-      blockingIssues: [...baseValidation.blockingIssues, ...groupIssues, ...dynamicRuntimeIssues, ...optionSourceIssues, ...referenceIssues],
+        && groupIssues.length === 0,
+      blockingIssues: [...baseValidation.blockingIssues, ...groupIssues],
       warnings: baseValidation.warnings
     };
 
@@ -1536,28 +1472,17 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.bindings = normalizedBindings;
       this.pruneDynamicRuntimeAdvancedState();
 
-      const latestSubjectTypesResponse = await firstValueFrom(
-        this.dynamicSubjectsController.getSubjectTypesAdminConfig(applicationId ?? undefined)
+      const latestLinksResponse = await firstValueFrom(
+        this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId)
       );
-      const latestSubjectTypes = this.readArrayResponse(latestSubjectTypesResponse, 'تعذر تحميل إعدادات النوع قبل الحفظ.');
-
-      const [latestFieldsResponse, latestLinksResponse] = await Promise.all([
-        firstValueFrom(this.dynamicSubjectsController.getAdminFields(applicationId ?? undefined)),
-        firstValueFrom(this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId))
-      ]);
-
-      const latestFields = this.readArrayResponse(latestFieldsResponse, 'تعذر تحميل الحقول قبل الحفظ.');
       const latestLinks = this.readArrayResponse(latestLinksResponse, 'تعذر تحميل روابط الحقول قبل الحفظ.');
 
-      const latestFieldsByKey = new Map<string, SubjectAdminFieldDto>(
-        latestFields.map(item => [this.normalizeFieldKey(item.fieldKey), item] as const)
-      );
       const latestLinksByKey = new Map<string, SubjectCategoryFieldLinkAdminDto>(
         latestLinks.map(item => [this.normalizeFieldKey(item.fieldKey), item] as const)
       );
 
       this.traceSaveDiagnostics('save.payload.before-field-upsert', normalizedBindings.map(binding => {
-        const existing = latestFieldsByKey.get(this.normalizeFieldKey(binding.fieldKey)) ?? null;
+        const existing = this.fieldCatalogByKey.get(this.normalizeFieldKey(binding.fieldKey)) ?? null;
         return this.buildBindingSaveTraceRecord(binding, existing, null);
       }));
 
@@ -1571,24 +1496,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         if (!groupId) {
           throw new Error(`يرجى اختيار مجموعة صالحة للحقل ${binding.fieldKey}.`);
         }
-
-        const existing = latestFieldsByKey.get(normalizedFieldKey) ?? null;
-        const request = this.buildFieldUpsertRequest(binding, existing, applicationId);
-        saveTraceContext.stage = existing ? 'تحديث تعريف الحقل' : 'إنشاء تعريف الحقل';
-        saveTraceContext.fieldKey = binding.fieldKey;
-        this.traceSaveDiagnostics('save.payload.field-upsert', this.buildBindingSaveTraceRecord(binding, existing, null));
-
-        const savedField = existing
-          ? this.readSingleResponse(
-              await firstValueFrom(this.dynamicSubjectsController.updateAdminField(existing.fieldKey, request)),
-              `تعذر تحديث الحقل ${existing.fieldKey}.`
-            )
-          : this.readSingleResponse(
-              await firstValueFrom(this.dynamicSubjectsController.createAdminField(request)),
-              `تعذر إنشاء الحقل ${binding.fieldKey}.`
-            );
-
-        latestFieldsByKey.set(normalizedFieldKey, savedField);
       }
 
       const linkPayload: SubjectCategoryFieldLinkUpsertItemDto[] = normalizedBindings.map(binding => {
@@ -1601,8 +1508,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
           groupId: this.toPositiveInt(binding.groupId) ?? this.resolveDefaultGroupId() ?? 0,
           isActive: true,
           displayOrder: binding.displayOrder,
-          isVisible: binding.visible !== false,
-          displaySettingsJson: binding.displaySettingsJson
+          isVisible: existingLink?.isVisible ?? true,
+          displaySettingsJson: existingLink?.displaySettingsJson ?? undefined
         };
       });
 
@@ -1610,31 +1517,13 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       saveTraceContext.fieldKey = null;
       this.traceSaveDiagnostics('save.payload.field-links-upsert', linkPayload.map(item => {
         const binding = normalizedBindings.find(candidate => this.normalizeFieldKey(candidate.fieldKey) === this.normalizeFieldKey(item.fieldKey));
-        const existingField = latestFieldsByKey.get(this.normalizeFieldKey(item.fieldKey)) ?? null;
+        const existingField = this.fieldCatalogByKey.get(this.normalizeFieldKey(item.fieldKey)) ?? null;
         return this.buildBindingSaveTraceRecord(binding ?? null, existingField, item);
       }));
       this.readArrayResponse(
         await firstValueFrom(this.dynamicSubjectsController.upsertAdminCategoryFieldLinks(categoryId, { links: linkPayload })),
         'تعذر حفظ روابط الحقول في قاعدة البيانات.'
       );
-
-      const targetType = latestSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId)
-        ?? this.subjectTypeAdmin
-        ?? null;
-
-      const typeRequest = this.buildSubjectTypeUpsertRequest(targetType, normalizedBindings);
-      saveTraceContext.stage = 'حفظ إعدادات النوع';
-      this.traceSaveDiagnostics('save.payload.subject-type-upsert', {
-        categoryId,
-        applicationId,
-        request: typeRequest
-      });
-      const persistedType = this.readSingleResponse(
-        await firstValueFrom(this.dynamicSubjectsController.upsertSubjectTypeAdminConfig(categoryId, typeRequest)),
-        'تعذر حفظ سياسة الرقم المرجعي في قاعدة البيانات.'
-      );
-
-      this.subjectTypeAdmin = persistedType;
 
       saveTraceContext.stage = 'إعادة تحميل مساحة العمل';
       await this.loadBackendWorkspace(categoryId, applicationId);

@@ -560,7 +560,12 @@ export class GenericFormsService {
       this.normalizeDynamicFieldKey(arr?.nameProp) === normalizedFieldKey
     );
     if (_apiSelection != undefined) {
-      return _apiSelection.items;
+      const runtimeItems = Array.isArray(_apiSelection.items) ? _apiSelection.items : [];
+      // Runtime arrays should override static options only when they actually provide values.
+      // This prevents stale/empty runtime payloads from hiding valid CDMendTbl choices.
+      if (runtimeItems.length > 0) {
+        return runtimeItems;
+      }
     }
     
     // Check cache for static metadata selections

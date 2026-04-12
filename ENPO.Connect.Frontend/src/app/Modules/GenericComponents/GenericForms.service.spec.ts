@@ -48,4 +48,89 @@ describe('GenericFormsService runtime selection normalization', () => {
     expect(service.selectionArrays.length).toBe(0);
     expect(service.implementControlSelection('customer_code')).toEqual([]);
   });
+
+  it('falls back to static CDMend options when runtime selection exists but is empty', () => {
+    service.cdmendDto = [{
+      cdmendSql: 1,
+      cdmendType: 'Dropdown',
+      cdmendTxt: 'Status',
+      cdMendLbl: 'Status',
+      placeholder: '',
+      defaultValue: '',
+      cdmendTbl: '[{\"key\":\"open\",\"name\":\"مفتوح\"},{\"key\":\"closed\",\"name\":\"مغلق\"}]',
+      cdmendDatatype: 'string',
+      required: false,
+      requiredTrue: false,
+      email: false,
+      pattern: false,
+      min: undefined,
+      max: undefined,
+      minxLenght: undefined,
+      maxLenght: undefined,
+      cdmendmask: '',
+      cdmendStat: false,
+      maxValue: '',
+      minValue: '',
+      width: 0,
+      height: 0,
+      isDisabledInit: false,
+      isSearchable: false,
+      applicationId: '60'
+    }];
+
+    service.selectionArrays = [{
+      keyProp: 'key',
+      nameProp: 'status',
+      items: []
+    }];
+
+    expect(service.implementControlSelection('Status|0')).toEqual([
+      { key: 'open', name: 'مفتوح' },
+      { key: 'closed', name: 'مغلق' }
+    ]);
+  });
+
+  it('loads TOPIC_STATUS legacy name/key options from CDMendTbl when runtime options are empty', () => {
+    service.cdmendDto = [{
+      cdmendSql: 100,
+      cdmendType: 'Dropdown',
+      cdmendTxt: 'TOPIC_STATUS',
+      cdMendLbl: 'موقف الموضوع',
+      placeholder: '',
+      defaultValue: '',
+      cdmendTbl: '[{\"name\":\"تم\",\"key\":\"تم\"},{\"name\":\"جاري\",\"key\":\"جاري\"},{\"name\":\"لم يرد رد\",\"key\":\"لم يرد رد\"},{\"name\":\"متوقف\",\"key\":\"متوقف\"},{\"name\":\"رفض\",\"key\":\"رفض\"}]',
+      cdmendDatatype: 'string',
+      required: true,
+      requiredTrue: true,
+      email: false,
+      pattern: false,
+      min: undefined,
+      max: undefined,
+      minxLenght: undefined,
+      maxLenght: undefined,
+      cdmendmask: '',
+      cdmendStat: true,
+      maxValue: '',
+      minValue: '',
+      width: 0,
+      height: 0,
+      isDisabledInit: false,
+      isSearchable: false,
+      applicationId: '60'
+    }];
+
+    service.selectionArrays = [{
+      keyProp: 'key',
+      nameProp: 'topic_status',
+      items: []
+    }];
+
+    expect(service.implementControlSelection('TOPIC_STATUS|0')).toEqual([
+      { key: 'تم', name: 'تم' },
+      { key: 'جاري', name: 'جاري' },
+      { key: 'لم يرد رد', name: 'لم يرد رد' },
+      { key: 'متوقف', name: 'متوقف' },
+      { key: 'رفض', name: 'رفض' }
+    ]);
+  });
 });

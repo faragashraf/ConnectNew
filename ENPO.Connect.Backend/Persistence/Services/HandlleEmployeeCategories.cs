@@ -216,6 +216,21 @@ namespace Persistence.Services
                 return;
             }
 
+            var isEditOperation = messageRequest.MessageId.GetValueOrDefault() > 0;
+            if (!isEditOperation
+                && !CanCreateSummerRequestForDestination(
+                    categoryInfo.Category?.CatId ?? 0,
+                    categoryInfo.Category?.CatName,
+                    runtime.HasSummerAdminPermission))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "403",
+                    Message = SummerWorkflowDomainConstants.DestinationAccessDeniedMessage
+                });
+                return;
+            }
+
             var normalizedActorUserId = string.IsNullOrWhiteSpace(actingUserId)
                 ? (messageRequest.CreatedBy ?? string.Empty).Trim()
                 : actingUserId.Trim();
@@ -306,7 +321,6 @@ namespace Persistence.Services
 
             messageRequest.Type = (byte)parentCategory.CatId;
             var editMessageId = messageRequest.MessageId.GetValueOrDefault();
-            var isEditOperation = editMessageId > 0;
 
 
             var allowed = await IsWithinCategoryIntervalLimitAsync(
@@ -1194,6 +1208,64 @@ SELECT @result;
         private static int ParseInt(string? value, int fallback = 0)
         {
             return int.TryParse((value ?? string.Empty).Trim(), out var parsed) ? parsed : fallback;
+        }
+
+        private static bool CanCreateSummerRequestForDestination(
+            int categoryId,
+            string? categoryName,
+            bool hasSummerAdminPermission)
+        {
+            if (!IsSummerDestinationRestrictedToSummerAdmin(categoryId, categoryName))
+            {
+                return true;
+            }
+
+            return hasSummerAdminPermission;
+        }
+
+        private static bool IsSummerDestinationRestrictedToSummerAdmin(int categoryId, string? categoryName)
+        {
+            if (categoryId == SummerWorkflowDomainConstants.DestinationCategoryIds.Matrouh
+                || categoryId == SummerWorkflowDomainConstants.DestinationCategoryIds.RasElBar)
+            {
+                return true;
+            }
+
+            if (categoryId == SummerWorkflowDomainConstants.DestinationCategoryIds.PortFouad)
+            {
+                return false;
+            }
+
+            var normalizedName = NormalizeArabicLookup(categoryName);
+            if (normalizedName.Contains("مرسي مطروح", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (normalizedName.Contains("راس البر", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (normalizedName.Contains("بور فواد", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return false;
+        }
+
+        private static string NormalizeArabicLookup(string? value)
+        {
+            return (value ?? string.Empty)
+                .Trim()
+                .Replace("أ", "ا", StringComparison.Ordinal)
+                .Replace("إ", "ا", StringComparison.Ordinal)
+                .Replace("آ", "ا", StringComparison.Ordinal)
+                .Replace("ى", "ي", StringComparison.Ordinal)
+                .Replace("ؤ", "و", StringComparison.Ordinal)
+                .Replace("ئ", "ي", StringComparison.Ordinal)
+                .ToLowerInvariant();
         }
 
         private async Task<bool> CanUserManageSummerCategoryAsync(string userId, int categoryId)

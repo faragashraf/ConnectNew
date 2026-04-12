@@ -716,15 +716,13 @@
   <section class="catalog-area" id="catalog-section-dynamic-integrations">
     <header class="area-header">
       <h3>السلوك الديناميكي والتكاملات</h3>
-      <small>المكان الموحّد لإعداد تحميل الخيارات والتحقق الخارجي والملء التلقائي</small>
+      <small>تُدار تعريفات السلوك على مستوى الحقل من مكتبة الحقول</small>
     </header>
 
     <section class="card reserved-card">
-      <h4>تجهيز المرحلة القادمة</h4>
+      <h4>توجيه معماري معتمد</h4>
       <p>
-        يتم اعتماد إعدادات السلوك الديناميكي لكل حقل عبر
-        <code>displaySettingsJson</code>
-        داخل شاشة ربط مكتبة الحقول، ليُطبّق نفس التعريف مباشرة في شاشة التشغيل.
+        تعريف الحقول وإعداداتها يتم حصريًا عبر شاشة مكتبة الحقول، بينما شاشة الربط مخصّصة لربط الحقول وترتيبها فقط.
       </p>
       <div class="tool-links">
         <button
@@ -732,14 +730,14 @@
           type="button"
           class="p-button-outlined"
           icon="pi pi-cog"
-          label="إدارة تكاملات الحقول"
-          [routerLink]="['/Admin/ControlCenterCatalog/field-library-binding']"
-          [disabled]="selectedCategoryId == null || selectedApplicationId == null"
+          label="فتح مكتبة الحقول"
+          [routerLink]="['/Admin/ControlCenterCatalog/field-library']"
+          [disabled]="selectedApplicationId == null"
           [queryParams]="{ categoryId: selectedCategoryId ?? null, applicationId: selectedApplicationId ?? null }">
         </button>
       </div>
       <small class="reserved-note">
-        لن يتم إنشاء مسار موازٍ، وسيبقى هذا القسم هو المرجع الوحيد لسلوك الحقول الديناميكية.
+        سياسات الطلب والجهات والوحدات التنظيمية تُدار عبر أقسام إعدادات الطلب داخل لوحة الكتالوج.
       </small>
     </section>
   </section>

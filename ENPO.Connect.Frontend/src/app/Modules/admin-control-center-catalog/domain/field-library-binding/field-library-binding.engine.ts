@@ -81,7 +81,6 @@ export class FieldLibraryBindingEngine {
 
     const keyMap = new Map<string, number>();
     const displayOrderSet = new Set<number>();
-    let visibleCount = 0;
 
     for (const binding of bindings) {
       const fieldKey = binding.fieldKey.trim().toLowerCase();
@@ -101,23 +100,8 @@ export class FieldLibraryBindingEngine {
       if (binding.displayOrder <= 0) {
         blockingIssues.push(`الحقل "${binding.label || binding.fieldKey}" يملك ترتيب عرض غير صالح.`);
       }
-
-      if (binding.required && !binding.visible) {
-        blockingIssues.push(`الحقل "${binding.label || binding.fieldKey}" إلزامي لكنه مخفي.`);
-      }
-
-      if (binding.readonly && binding.required && !binding.defaultValue.trim()) {
-        blockingIssues.push(`الحقل "${binding.label || binding.fieldKey}" للقراءة فقط وإلزامي ويحتاج قيمة افتراضية.`);
-      }
-
-      if (!binding.visible) {
-        continue;
-      }
-
-      visibleCount++;
-      const defaultValidationIssue = this.validateDefaultValueByType(binding.type, binding.defaultValue);
-      if (defaultValidationIssue) {
-        warnings.push(`${binding.label || binding.fieldKey}: ${defaultValidationIssue}`);
+      if (!binding.groupId || binding.groupId <= 0) {
+        blockingIssues.push(`الحقل "${binding.label || binding.fieldKey}" غير مرتبط بمجموعة صالحة.`);
       }
     }
 
@@ -125,10 +109,6 @@ export class FieldLibraryBindingEngine {
       if (count > 1) {
         blockingIssues.push(`مفتاح الحقل "${fieldKey}" مكرر داخل الربط.`);
       }
-    }
-
-    if (visibleCount === 0) {
-      blockingIssues.push('لا يمكن حفظ الربط بدون أي حقل مرئي.');
     }
 
     return {

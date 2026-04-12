@@ -1640,6 +1640,9 @@ public sealed partial class DynamicSubjectsService
                     DisplaySettingsJson = NormalizeNullable(item.DisplaySettingsJson)
                 })
                 .ToList();
+            var containsLegacyFieldLevelPayload = normalizedIncomingItems.Any(item =>
+                item.IsVisible == false
+                || item.DisplaySettingsJson != null);
 
             var invalidFieldKeyRow = normalizedIncomingItems
                 .FirstOrDefault(item => string.IsNullOrWhiteSpace(item.FieldKey));
@@ -1685,10 +1688,17 @@ public sealed partial class DynamicSubjectsService
                     GroupId = item.GroupId,
                     IsActive = item.IsActive,
                     DisplayOrder = item.DisplayOrder,
-                    IsVisible = item.IsVisible,
-                    DisplaySettingsJson = item.DisplaySettingsJson
+                    IsVisible = true,
+                    DisplaySettingsJson = null
                 })
                 .ToList();
+
+            if (containsLegacyFieldLevelPayload)
+            {
+                _logger?.LogInformation(
+                    "Ignoring legacy field-level payload during field-links upsert for category {CategoryId}; binding endpoint now accepts linking/order only.",
+                    categoryId);
+            }
 
             var duplicatedField = safeItems
                 .GroupBy(item => item.FieldKey, StringComparer.OrdinalIgnoreCase)
@@ -1806,92 +1816,6 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
-            var fieldValidationErrors = new List<Error>();
-            foreach (var item in safeItems)
-            {
-                saveStage = "التحقق قبل الحفظ";
-                saveFieldKey = item.FieldKey;
-
-                if (!existingFieldsSet.Contains(item.FieldKey))
-                {
-                    fieldValidationErrors.Add(new Error
-                    {
-                        Code = "400",
-                        Message = $"فشل حفظ الحقل '{item.FieldKey}' لأنه غير موجود أو غير مفعل."
-                    });
-                    continue;
-                }
-
-                var matchedField = existingFields.FirstOrDefault(field =>
-                    string.Equals(field.CdmendTxt, item.FieldKey, StringComparison.OrdinalIgnoreCase));
-                if (matchedField == null)
-                {
-                    continue;
-                }
-
-                if (!TryInspectDisplaySettingsPayload(
-                    item.DisplaySettingsJson,
-                    out var runtimeInspection,
-                    out var displaySettingsValidationError))
-                {
-                    fieldValidationErrors.Add(new Error
-                    {
-                        Code = "400",
-                        Message = $"فشل حفظ الحقل '{item.FieldKey}' بسبب {displaySettingsValidationError ?? "JSON غير صالح في إعدادات العرض"}."
-                    });
-                    continue;
-                }
-
-                var (fieldRuleError, optionSourceDiagnostics) = ValidateAdminFieldBusinessRules(
-                    fieldKey: item.FieldKey,
-                    fieldLabel: NormalizeNullable(matchedField.CDMendLbl) ?? item.FieldKey,
-                    fieldType: NormalizeNullable(matchedField.CdmendType) ?? string.Empty,
-                    dataType: NormalizeNullable(matchedField.CdmendDatatype),
-                    defaultValue: NormalizeNullable(matchedField.DefaultValue),
-                    optionsPayload: NormalizeNullable(matchedField.OptionsPayload),
-                    displaySettingsJson: item.DisplaySettingsJson,
-                    runtimeInspection: runtimeInspection);
-
-                _logger?.LogInformation(
-                    "Admin category field-links binding snapshot: {Payload}",
-                    JsonSerializer.Serialize(
-                        new
-                        {
-                            binding = BuildFieldUpsertDiagnosticsSnapshot(
-                                item.FieldKey,
-                                NormalizeNullable(matchedField.CDMendLbl) ?? item.FieldKey,
-                                NormalizeNullable(matchedField.CdmendType),
-                                NormalizeNullable(matchedField.CdmendDatatype),
-                                NormalizeNullable(matchedField.DefaultValue),
-                                NormalizeNullable(matchedField.OptionsPayload),
-                                item.DisplaySettingsJson,
-                                runtimeInspection.DynamicRuntimePayloadPreview,
-                                item.GroupId,
-                                item.DisplayOrder,
-                                item.MendSql,
-                                optionSourceDiagnostics: optionSourceDiagnostics,
-                                runtimeInspection: runtimeInspection),
-                            validationMessage = fieldRuleError?.Message
-                        },
-                        SerializerOptions));
-
-                if (fieldRuleError != null)
-                {
-                    fieldValidationErrors.Add(fieldRuleError);
-                    continue;
-                }
-            }
-
-            if (fieldValidationErrors.Count > 0)
-            {
-                foreach (var validationError in fieldValidationErrors.Take(20))
-                {
-                    response.Errors.Add(validationError);
-                }
-
-                return response;
-            }
-
             var existingLinks = await _connectContext.AdminCatalogCategoryFieldBindings
                 .Where(item => item.CategoryId == categoryId)
                 .ToListAsync(cancellationToken);
@@ -1954,7 +1878,7 @@ public sealed partial class DynamicSubjectsService
 
             foreach (var item in safeItems)
             {
-                saveStage = "حفظ إعدادات العرض";
+                saveStage = "حفظ إعدادات الربط";
                 saveFieldKey = item.FieldKey;
                 var canonicalGroupId = item.GroupId;
                 AdminCatalogCategoryFieldBinding? link = null;
@@ -1983,8 +1907,8 @@ public sealed partial class DynamicSubjectsService
                     {
                         MendSql = link.MendSql,
                         DisplayOrder = item.DisplayOrder,
-                        IsVisible = item.IsVisible,
-                        DisplaySettingsJson = NormalizeNullable(item.DisplaySettingsJson),
+                        IsVisible = true,
+                        DisplaySettingsJson = null,
                         LastModifiedBy = normalizedUserId,
                         LastModifiedAtUtc = DateTime.UtcNow
                     };
@@ -1993,8 +1917,6 @@ public sealed partial class DynamicSubjectsService
                 else
                 {
                     setting.DisplayOrder = item.DisplayOrder;
-                    setting.IsVisible = item.IsVisible;
-                    setting.DisplaySettingsJson = NormalizeNullable(item.DisplaySettingsJson);
                     setting.LastModifiedBy = normalizedUserId;
                     setting.LastModifiedAtUtc = DateTime.UtcNow;
                 }

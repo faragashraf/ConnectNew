@@ -70,6 +70,29 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     { label: 'غير مفعل', value: 'inactive' }
   ];
 
+  private readonly fieldTypeLabelLookup: Readonly<Record<string, string>> = {
+    inputtext: 'نص قصير',
+    textarea: 'نص طويل',
+    dropdown: 'قائمة اختيار',
+    dropdowntree: 'شجرة اختيار',
+    radiobutton: 'اختيار منفرد',
+    date: 'تاريخ',
+    datetime: 'تاريخ ووقت',
+    toggleswitch: 'مفتاح تبديل',
+    fileupload: 'رفع ملف',
+    domainuser: 'مستخدم نطاق',
+    jsondata: 'بيانات JSON'
+  };
+
+  private readonly dataTypeLabelLookup: Readonly<Record<string, string>> = {
+    string: 'نص',
+    number: 'رقم',
+    date: 'تاريخ',
+    boolean: 'منطقي',
+    json: 'بيانات JSON',
+    nvarchar: 'نص ممتد'
+  };
+
   selectedApplicationFilter = '';
   statusFilter: AdminCatalogFieldStatusFilter = 'all';
   searchTerm = '';
@@ -702,37 +725,55 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       .filter((item): item is string => item != null);
 
     this.fieldTypeOptions = (fieldTypes.length > 0 ? fieldTypes : this.fallbackFieldTypeOptions().map(item => item.value))
-      .map(item => ({ label: item, value: item }));
+      .map(item => ({ label: this.resolveFieldTypeLabel(item), value: item }));
 
     this.dataTypeOptions = (dataTypes.length > 0 ? dataTypes : this.fallbackDataTypeOptions().map(item => item.value))
-      .map(item => ({ label: item, value: item }));
+      .map(item => ({ label: this.resolveDataTypeLabel(item), value: item }));
   }
 
   private fallbackFieldTypeOptions(): SelectOption[] {
     return [
-      { label: 'InputText', value: 'InputText' },
-      { label: 'Textarea', value: 'Textarea' },
-      { label: 'Dropdown', value: 'Dropdown' },
-      { label: 'DropdownTree', value: 'DropdownTree' },
-      { label: 'RadioButton', value: 'RadioButton' },
-      { label: 'Date', value: 'Date' },
-      { label: 'DateTime', value: 'DateTime' },
-      { label: 'ToggleSwitch', value: 'ToggleSwitch' },
-      { label: 'FileUpload', value: 'FileUpload' },
-      { label: 'DomainUser', value: 'DomainUser' },
-      { label: 'JsonData', value: 'JsonData' }
+      { label: 'نص قصير', value: 'InputText' },
+      { label: 'نص طويل', value: 'Textarea' },
+      { label: 'قائمة اختيار', value: 'Dropdown' },
+      { label: 'شجرة اختيار', value: 'DropdownTree' },
+      { label: 'اختيار منفرد', value: 'RadioButton' },
+      { label: 'تاريخ', value: 'Date' },
+      { label: 'تاريخ ووقت', value: 'DateTime' },
+      { label: 'مفتاح تبديل', value: 'ToggleSwitch' },
+      { label: 'رفع ملف', value: 'FileUpload' },
+      { label: 'مستخدم نطاق', value: 'DomainUser' },
+      { label: 'بيانات JSON', value: 'JsonData' }
     ];
   }
 
   private fallbackDataTypeOptions(): SelectOption[] {
     return [
-      { label: 'string', value: 'string' },
-      { label: 'number', value: 'number' },
-      { label: 'date', value: 'date' },
-      { label: 'boolean', value: 'boolean' },
-      { label: 'json', value: 'json' },
-      { label: 'nvarchar', value: 'nvarchar' }
+      { label: 'نص', value: 'string' },
+      { label: 'رقم', value: 'number' },
+      { label: 'تاريخ', value: 'date' },
+      { label: 'منطقي', value: 'boolean' },
+      { label: 'بيانات JSON', value: 'json' },
+      { label: 'نص ممتد', value: 'nvarchar' }
     ];
+  }
+
+  resolveFieldTypeLabel(fieldType: string | undefined): string {
+    const normalized = this.normalizeText(fieldType)?.toLowerCase();
+    if (!normalized) {
+      return 'غير محدد';
+    }
+
+    return this.fieldTypeLabelLookup[normalized] ?? 'نوع مخصص';
+  }
+
+  resolveDataTypeLabel(dataType: string | undefined): string {
+    const normalized = this.normalizeText(dataType)?.toLowerCase();
+    if (!normalized) {
+      return 'غير محدد';
+    }
+
+    return this.dataTypeLabelLookup[normalized] ?? 'نوع بيانات مخصص';
   }
 
   private buildApplicationFilterOptions(): void {

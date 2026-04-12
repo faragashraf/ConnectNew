@@ -15,11 +15,14 @@
         (ngModelChange)="onDestinationChanged($event)"
         [disabled]="loadingMetadata || submitting || isEditMode">
         <option [ngValue]="null">اختر</option>
-        <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">
+        <option *ngFor="let destination of destinationSelectionOptions" [ngValue]="destination.categoryId">
           {{ destination.name }}
         </option>
       </select>
     </label>
+    <small class="meta-error" *ngIf="!isEditMode && !loadingMetadata && destinationSelectionOptions.length === 0">
+      {{ destinationAccessDeniedMessage }}
+    </small>
     <label *ngIf="canSelectMembershipType" class="membership-select">
       <span class="required-label">نوع العضوية</span>
       <p-dropdown
