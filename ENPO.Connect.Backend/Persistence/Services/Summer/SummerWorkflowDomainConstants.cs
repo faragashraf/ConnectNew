@@ -96,7 +96,12 @@ namespace Persistence.Services.Summer
         public static class AuthorizationFunctions
         {
             public const string SummerAdmin = "SummerAdminFunc";
-            public const string SummerPricing = "SummerPricingFunc";
+            public const string SummerPricing = "SummerGeneralManagerFunc";
+        }
+
+        public static class AuthorizationRoles
+        {
+            public const string SummerGeneralManager = "2021";
         }
     }
 }

@@ -58,7 +58,7 @@ const routes: Routes = [
     path: SUMMER_FEATURE_ROUTES.unitFreezeList,
     component: SummerUnitFreezeListPageComponent,
     canActivate: [AuthNewGuardService], data: {
-      func: 'SummerAdminFunc',
+      func: 'SummerGeneralManagerFunc',
       configRouteKey: 'Admin/SummerRequestsManagement'
     }
   },
@@ -66,7 +66,7 @@ const routes: Routes = [
     path: SUMMER_FEATURE_ROUTES.unitFreezeCreate,
     component: SummerUnitFreezeCreatePageComponent,
     canActivate: [AuthNewGuardService], data: {
-      func: 'SummerAdminFunc',
+      func: 'SummerGeneralManagerFunc',
       configRouteKey: 'Admin/SummerRequestsManagement'
     }
   },
@@ -74,7 +74,7 @@ const routes: Routes = [
     path: SUMMER_FEATURE_ROUTES.unitFreezeDetails,
     component: SummerUnitFreezeDetailsPageComponent,
     canActivate: [AuthNewGuardService], data: {
-      func: 'SummerAdminFunc',
+      func: 'SummerGeneralManagerFunc',
       configRouteKey: 'Admin/SummerRequestsManagement'
     }
   }, {

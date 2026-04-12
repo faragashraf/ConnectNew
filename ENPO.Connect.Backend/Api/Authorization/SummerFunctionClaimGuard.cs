@@ -23,7 +23,7 @@ namespace Api.Authorization
             new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
             {
                 // Summer pricing admins in current production authorization matrix.
-                ["SummerPricingFunc"] = new[] { "2021" }
+                ["SummerGeneralManagerFunc"] = new[] { "2021" }
             };
         private static readonly string[] UserIdClaimTypes =
         {

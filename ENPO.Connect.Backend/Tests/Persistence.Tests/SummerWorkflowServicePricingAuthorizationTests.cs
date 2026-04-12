@@ -138,7 +138,7 @@ public class SummerWorkflowServicePricingAuthorizationTests
     }
 
     [Fact]
-    public async Task GetUnitFreezesAsync_AdminWithoutSummerPricingFunc_NotBlocked()
+    public async Task GetUnitFreezesAsync_AdminWithoutSummerPricingFunc_Returns403()
     {
         await using var connectContext = CreateConnectContext();
         await using var gpaContext = CreateGpaContext();
@@ -153,10 +153,11 @@ public class SummerWorkflowServicePricingAuthorizationTests
         var service = CreateService(connectContext, gpaContext);
         var response = await service.GetUnitFreezesAsync(
             new SummerUnitFreezeQuery(),
-            "summer-admin");
+            "summer-admin",
+            hasSummerPricingPermission: false);
 
-        Assert.True(response.IsSuccess);
-        Assert.Empty(response.Errors);
+        Assert.False(response.IsSuccess);
+        Assert.Contains(response.Errors, error => error.Code == "403");
     }
 
     [Fact]
@@ -182,7 +183,7 @@ public class SummerWorkflowServicePricingAuthorizationTests
                 MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
             },
             userId: "employee-user",
-            hasSummerAdminPermission: false);
+            hasSummerPricingPermission: false);
 
         Assert.True(response.IsSuccess);
         Assert.NotNull(response.Data);
@@ -191,7 +192,7 @@ public class SummerWorkflowServicePricingAuthorizationTests
     }
 
     [Fact]
-    public async Task GetPricingQuoteAsync_Admin_CanSelectNonWorkerMembership()
+    public async Task GetPricingQuoteAsync_SummerPricingUser_CanSelectNonWorkerMembership()
     {
         await using var connectContext = CreateConnectContext();
         await using var gpaContext = CreateGpaContext();
@@ -212,7 +213,7 @@ public class SummerWorkflowServicePricingAuthorizationTests
                 MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
             },
             userId: "summer-admin",
-            hasSummerAdminPermission: true);
+            hasSummerPricingPermission: true);
 
         Assert.True(response.IsSuccess);
         Assert.NotNull(response.Data);
@@ -221,7 +222,7 @@ public class SummerWorkflowServicePricingAuthorizationTests
     }
 
     [Fact]
-    public async Task GetPricingQuoteAsync_ManagedCategoryUser_CanSelectNonWorkerMembership_WhenClaimFlagUnavailable()
+    public async Task GetPricingQuoteAsync_ManagedCategoryUser_WithoutSummerPricingFunc_CannotSelectNonWorkerMembership()
     {
         await using var connectContext = CreateConnectContext();
         await using var gpaContext = CreateGpaContext();
@@ -245,12 +246,12 @@ public class SummerWorkflowServicePricingAuthorizationTests
                 MembershipType = SummerWorkflowDomainConstants.MembershipTypes.NonWorker
             },
             userId: "summer-manager",
-            hasSummerAdminPermission: false);
+            hasSummerPricingPermission: false);
 
         Assert.True(response.IsSuccess);
         Assert.NotNull(response.Data);
-        Assert.Equal(SummerWorkflowDomainConstants.MembershipTypes.NonWorker, response.Data!.MembershipType);
-        Assert.Equal(1000m, response.Data.AppliedInsuranceAmount);
+        Assert.Equal(SummerWorkflowDomainConstants.MembershipTypes.Worker, response.Data!.MembershipType);
+        Assert.Equal(500m, response.Data.AppliedInsuranceAmount);
     }
 
     private static SummerWorkflowService CreateService(ConnectContext connectContext, GPAContext gpaContext)

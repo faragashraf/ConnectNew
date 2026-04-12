@@ -10,7 +10,7 @@ namespace Persistence.Tests;
 public class SummerFunctionClaimGuardTests
 {
     private const string RequiredFunction = "SummerAdminFunc";
-    private const string SummerPricingFunction = "SummerPricingFunc";
+    private const string SummerPricingFunction = "SummerGeneralManagerFunc";
     private const string SummerPricingRoleId = "2021";
     private const string SigningKey = "SummerAuthGuardTests_SigningKey_AtLeast_32_Bytes";
 

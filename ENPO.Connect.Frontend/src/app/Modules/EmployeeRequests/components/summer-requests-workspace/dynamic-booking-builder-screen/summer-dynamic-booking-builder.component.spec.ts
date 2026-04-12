@@ -3,11 +3,26 @@ import { of } from 'rxjs';
 import { SummerDynamicBookingBuilderComponent } from './summer-dynamic-booking-builder.component';
 
 describe('SummerDynamicBookingBuilderComponent - Frozen Units Permission', () => {
-  function createComponent(hasSummerAdminPermission: boolean): {
+  function createComponent(options?: {
+    hasSummerAdminPermission?: boolean;
+    hasSummerGeneralManagerPermission?: boolean;
+  }): {
     component: SummerDynamicBookingBuilderComponent;
     checkAuthFunSpy: jasmine.Spy;
   } {
-    const checkAuthFunSpy = jasmine.createSpy('checkAuthFun').and.returnValue(hasSummerAdminPermission);
+    const hasSummerAdminPermission = options?.hasSummerAdminPermission ?? false;
+    const hasSummerGeneralManagerPermission = options?.hasSummerGeneralManagerPermission ?? false;
+    const checkAuthFunSpy = jasmine.createSpy('checkAuthFun').and.callFake((func: string) => {
+      if (func === 'SummerGeneralManagerFunc') {
+        return hasSummerGeneralManagerPermission;
+      }
+
+      if (func === 'SummerAdminFunc') {
+        return hasSummerAdminPermission;
+      }
+
+      return false;
+    });
 
     const component = new SummerDynamicBookingBuilderComponent(
       new FormBuilder(),
@@ -46,31 +61,41 @@ describe('SummerDynamicBookingBuilderComponent - Frozen Units Permission', () =>
     return { component, checkAuthFunSpy };
   }
 
-  it('enables frozen-units mode when SummerAdminFunc is granted', () => {
-    const { component, checkAuthFunSpy } = createComponent(true);
+  it('enables membership and frozen-units mode when SummerGeneralManagerFunc is granted', () => {
+    const { component, checkAuthFunSpy } = createComponent({
+      hasSummerAdminPermission: false,
+      hasSummerGeneralManagerPermission: true
+    });
 
     (component as any).refreshProxyModeAccess();
 
     expect(checkAuthFunSpy).toHaveBeenCalledWith('SummerAdminFunc');
-    expect(component.canUseProxyRegistration).toBeTrue();
+    expect(checkAuthFunSpy).toHaveBeenCalledWith('SummerGeneralManagerFunc');
+    expect(component.canUseProxyRegistration).toBeFalse();
     expect(component.canSelectMembershipType).toBeTrue();
     expect(component.canUseFrozenUnitsInCurrentFlow).toBeTrue();
   });
 
-  it('disables frozen-units mode and resets include flag when SummerAdminFunc is missing', () => {
-    const { component } = createComponent(false);
+  it('disables frozen-units mode and resets include flag when SummerGeneralManagerFunc is missing', () => {
+    const { component } = createComponent({
+      hasSummerAdminPermission: true,
+      hasSummerGeneralManagerPermission: false
+    });
     component.includeFrozenUnitsInBooking = true;
 
     (component as any).refreshProxyModeAccess();
 
-    expect(component.canUseProxyRegistration).toBeFalse();
+    expect(component.canUseProxyRegistration).toBeTrue();
     expect(component.canSelectMembershipType).toBeFalse();
     expect(component.canUseFrozenUnitsInCurrentFlow).toBeFalse();
     expect(component.includeFrozenUnitsInBooking).toBeFalse();
   });
 
-  it('forces worker membership for non-admin submission', () => {
-    const { component } = createComponent(false);
+  it('forces worker membership for non-general-manager submission', () => {
+    const { component } = createComponent({
+      hasSummerAdminPermission: true,
+      hasSummerGeneralManagerPermission: false
+    });
     (component as any).refreshProxyModeAccess();
     component.membershipTypeValue = 'NON_WORKER_MEMBER';
 
@@ -79,8 +104,11 @@ describe('SummerDynamicBookingBuilderComponent - Frozen Units Permission', () =>
     expect(resolved).toBe('WORKER_MEMBER');
   });
 
-  it('allows non-worker membership for admin submission', () => {
-    const { component } = createComponent(true);
+  it('allows non-worker membership for general-manager submission', () => {
+    const { component } = createComponent({
+      hasSummerAdminPermission: false,
+      hasSummerGeneralManagerPermission: true
+    });
     (component as any).refreshProxyModeAccess();
     component.membershipTypeValue = 'NON_WORKER_MEMBER';
 
@@ -90,7 +118,10 @@ describe('SummerDynamicBookingBuilderComponent - Frozen Units Permission', () =>
   });
 
   it('hides membership field and proxy field for non-admin metadata rendering', () => {
-    const { component } = createComponent(false);
+    const { component } = createComponent({
+      hasSummerAdminPermission: false,
+      hasSummerGeneralManagerPermission: false
+    });
     (component as any).refreshProxyModeAccess();
 
     const filtered = (component as any).filterRestrictedFields([
@@ -106,7 +137,10 @@ describe('SummerDynamicBookingBuilderComponent - Frozen Units Permission', () =>
   });
 
   it('keeps proxy field for admin metadata rendering while membership stays custom-controlled', () => {
-    const { component } = createComponent(true);
+    const { component } = createComponent({
+      hasSummerAdminPermission: true,
+      hasSummerGeneralManagerPermission: false
+    });
     (component as any).refreshProxyModeAccess();
 
     const filtered = (component as any).filterRestrictedFields([

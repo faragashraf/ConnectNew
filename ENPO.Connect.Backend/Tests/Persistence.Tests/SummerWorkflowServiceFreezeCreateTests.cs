@@ -61,7 +61,7 @@ public class SummerWorkflowServiceFreezeCreateTests
         };
 
         var sw = Stopwatch.StartNew();
-        var createTask = service.CreateUnitFreezeAsync(request, "admin-freeze");
+        var createTask = service.CreateUnitFreezeAsync(request, "admin-freeze", hasSummerPricingPermission: true);
         var completed = await Task.WhenAny(createTask, Task.Delay(TimeSpan.FromSeconds(3)));
         sw.Stop();
 

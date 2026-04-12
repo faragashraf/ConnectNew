@@ -65,7 +65,8 @@ public class SummerWorkflowServiceUnitFreezeAuthorizationTests
         var service = CreateService(connectContext, gpaContext);
         var response = await service.ReleaseUnitFreezeAsync(
             new SummerUnitFreezeReleaseRequest { FreezeId = 5002 },
-            "summer-admin");
+            "summer-admin",
+            hasSummerPricingPermission: true);
 
         Assert.True(response.IsSuccess);
         Assert.NotNull(response.Data);

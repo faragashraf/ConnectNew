@@ -1514,9 +1514,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private refreshProxyModeAccess(): void {
     try {
       const hasSummerAdminPermission = this.authObjectsService.checkAuthFun('SummerAdminFunc');
+      const hasSummerGeneralManagerPermission = this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc');
       this.canUseProxyRegistration = hasSummerAdminPermission;
-      this.canSelectMembershipType = hasSummerAdminPermission;
-      this.canUseFrozenUnitsInCurrentFlow = hasSummerAdminPermission;
+      this.canSelectMembershipType = hasSummerGeneralManagerPermission;
+      this.canUseFrozenUnitsInCurrentFlow = hasSummerGeneralManagerPermission;
       if (!this.canUseFrozenUnitsInCurrentFlow) {
         this.includeFrozenUnitsInBooking = false;
       }

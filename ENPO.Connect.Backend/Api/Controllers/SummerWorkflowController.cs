@@ -80,9 +80,9 @@ namespace Api.Controllers
         [HttpPost(nameof(GetPricingQuote))]
         public Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuote([FromBody] SummerPricingQuoteRequest request)
         {
-            var hasSummerAdminPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerAdmin);
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.GetPricingQuoteAsync(request, userId, hasSummerAdminPermission);
+            return _summerWorkflowService.GetPricingQuoteAsync(request, userId, hasSummerGeneralManagerRole);
         }
 
         [HttpGet(nameof(GetPricingCatalog))]
@@ -90,16 +90,16 @@ namespace Api.Controllers
         public Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalog(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            var hasSummerPricingPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerPricing);
-            return _summerWorkflowService.GetPricingCatalogAsync(seasonYear, userId, hasSummerPricingPermission);
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
+            return _summerWorkflowService.GetPricingCatalogAsync(seasonYear, userId, hasSummerGeneralManagerRole);
         }
 
         [HttpPost(nameof(SavePricingCatalog))]
         public Task<CommonResponse<SummerPricingCatalogDto>> SavePricingCatalog([FromBody] SummerPricingCatalogUpsertRequest request)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            var hasSummerPricingPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerPricing);
-            return _summerWorkflowService.SavePricingCatalogAsync(request, userId, hasSummerPricingPermission);
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
+            return _summerWorkflowService.SavePricingCatalogAsync(request, userId, hasSummerGeneralManagerRole);
         }
 
         [HttpGet(nameof(GetAdminRequests))]
@@ -156,28 +156,32 @@ namespace Api.Controllers
         public Task<CommonResponse<IEnumerable<SummerUnitFreezeDto>>> GetUnitFreezes([FromQuery] SummerUnitFreezeQuery query)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.GetUnitFreezesAsync(query, userId);
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
+            return _summerWorkflowService.GetUnitFreezesAsync(query, userId, hasSummerGeneralManagerRole);
         }
 
         [HttpPost(nameof(CreateUnitFreeze))]
         public Task<CommonResponse<SummerUnitFreezeDto>> CreateUnitFreeze([FromBody] SummerUnitFreezeCreateRequest request)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.CreateUnitFreezeAsync(request, userId);
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
+            return _summerWorkflowService.CreateUnitFreezeAsync(request, userId, hasSummerGeneralManagerRole);
         }
 
         [HttpPost(nameof(ReleaseUnitFreeze))]
         public Task<CommonResponse<SummerUnitFreezeDto>> ReleaseUnitFreeze([FromBody] SummerUnitFreezeReleaseRequest request)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.ReleaseUnitFreezeAsync(request, userId);
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
+            return _summerWorkflowService.ReleaseUnitFreezeAsync(request, userId, hasSummerGeneralManagerRole);
         }
 
         [HttpGet(nameof(GetUnitFreezeDetails))]
         public Task<CommonResponse<SummerUnitFreezeDetailsDto>> GetUnitFreezeDetails(int freezeId)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.GetUnitFreezeDetailsAsync(freezeId, userId);
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
+            return _summerWorkflowService.GetUnitFreezeDetailsAsync(freezeId, userId, hasSummerGeneralManagerRole);
         }
 
         [HttpGet("/api/admin/units/available-count")]
@@ -197,19 +201,21 @@ namespace Api.Controllers
         public Task<CommonResponse<IEnumerable<SummerUnitFreezeDto>>> GetAdminUnitFreezes([FromQuery] AdminUnitFreezeListQuery query)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
             return _summerWorkflowService.GetUnitFreezesAsync(new SummerUnitFreezeQuery
             {
                 CategoryId = query?.ResortId,
                 WaveCode = query?.WaveId,
                 FamilyCount = query?.Capacity,
                 IsActive = query?.IsActive
-            }, userId);
+            }, userId, hasSummerGeneralManagerRole);
         }
 
         [HttpPost("/api/admin/unit-freeze")]
         public async Task<CommonResponse<SummerUnitFreezeDto>> CreateAdminUnitFreeze([FromBody] AdminUnitFreezeCreateRequest request)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
             var traceId = Guid.NewGuid().ToString("N");
             _logger.LogInformation(
                 "Admin unit-freeze create endpoint request started. TraceId={TraceId}, UserId={UserId}, ResortId={ResortId}, WaveId={WaveId}, Capacity={Capacity}, UnitsCount={UnitsCount}",
@@ -231,7 +237,7 @@ namespace Api.Controllers
                     FreezeType = request?.FreezeType,
                     Reason = request?.Reason,
                     Notes = request?.Notes
-                }, userId);
+                }, userId, hasSummerGeneralManagerRole);
 
                 _logger.LogInformation(
                     "Admin unit-freeze create endpoint completed service call. TraceId={TraceId}, IsSuccess={IsSuccess}, ErrorCount={ErrorCount}, FreezeId={FreezeId}",
@@ -262,17 +268,19 @@ namespace Api.Controllers
         public Task<CommonResponse<SummerUnitFreezeDetailsDto>> GetAdminUnitFreezeDetails(int freezeId)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.GetUnitFreezeDetailsAsync(freezeId, userId);
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
+            return _summerWorkflowService.GetUnitFreezeDetailsAsync(freezeId, userId, hasSummerGeneralManagerRole);
         }
 
         [HttpPost("/api/admin/unit-freeze/{freezeId:int}/release")]
         public Task<CommonResponse<SummerUnitFreezeDto>> ReleaseAdminUnitFreeze(int freezeId)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
             return _summerWorkflowService.ReleaseUnitFreezeAsync(new SummerUnitFreezeReleaseRequest
             {
                 FreezeId = freezeId
-            }, userId);
+            }, userId, hasSummerGeneralManagerRole);
         }
 
         private bool HasRequiredFunction(string requiredFunction)
@@ -282,6 +290,11 @@ namespace Api.Controllers
                 requiredFunction,
                 ResolveFunctionsTokenFromHeaders(),
                 _summerFunctionsTokenValidationParameters);
+        }
+
+        private bool HasRequiredRole(string requiredRoleId)
+        {
+            return SummerFunctionClaimGuard.HasRequiredRole(HttpContext?.User, requiredRoleId);
         }
 
         private string? ResolveFunctionsTokenFromHeaders()

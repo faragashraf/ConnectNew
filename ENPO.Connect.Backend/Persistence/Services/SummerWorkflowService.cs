@@ -913,20 +913,35 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<IEnumerable<SummerUnitFreezeDto>>> GetUnitFreezesAsync(SummerUnitFreezeQuery query, string userId)
+        public async Task<CommonResponse<IEnumerable<SummerUnitFreezeDto>>> GetUnitFreezesAsync(
+            SummerUnitFreezeQuery query,
+            string userId,
+            bool hasSummerPricingPermission = false)
         {
             var response = new CommonResponse<IEnumerable<SummerUnitFreezeDto>>();
             query ??= new SummerUnitFreezeQuery();
             try
             {
-                var manageableCategoryIds = await GetManageableSummerCategoryIdsAsync(userId);
-                if (manageableCategoryIds.Count == 0)
+                if (!hasSummerPricingPermission)
                 {
                     response.Errors.Add(new Error
                     {
                         Code = "403",
-                        Message = "غير مصرح لك بعرض عمليات تجميد الوحدات."
+                        Message = "غير مصرح لك بعرض عمليات تجميد الوحدات. يتطلب دور المدير العام (RoleId 2021)."
                     });
+                    return response;
+                }
+
+                var manageableCategoryIds = await GetManageableSummerCategoryIdsAsync(userId);
+                if (manageableCategoryIds.Count == 0)
+                {
+                    var summerRules = await GetSummerRulesAsync();
+                    manageableCategoryIds = summerRules.Keys.ToHashSet();
+                }
+
+                if (manageableCategoryIds.Count == 0)
+                {
+                    response.Data = Array.Empty<SummerUnitFreezeDto>();
                     return response;
                 }
 
@@ -999,13 +1014,26 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerUnitFreezeDto>> CreateUnitFreezeAsync(SummerUnitFreezeCreateRequest request, string userId)
+        public async Task<CommonResponse<SummerUnitFreezeDto>> CreateUnitFreezeAsync(
+            SummerUnitFreezeCreateRequest request,
+            string userId,
+            bool hasSummerPricingPermission = false)
         {
             var response = new CommonResponse<SummerUnitFreezeDto>();
             var traceId = Guid.NewGuid().ToString("N");
             request ??= new SummerUnitFreezeCreateRequest();
             try
             {
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بإنشاء تجميد وحدات. يتطلب دور المدير العام (RoleId 2021)."
+                    });
+                    return response;
+                }
+
                 _logger.LogInformation(
                     "Unit-freeze create request started. TraceId={TraceId}, UserId={UserId}, CategoryId={CategoryId}, WaveCode={WaveCode}, FamilyCount={FamilyCount}, RequestedUnitsCount={RequestedUnitsCount}",
                     traceId,
@@ -1021,21 +1049,6 @@ namespace Persistence.Services
                     _logger.LogWarning(
                         "Unit-freeze create request validation failed. TraceId={TraceId}",
                         traceId);
-                    return response;
-                }
-
-                if (!await CanUserManageSummerCategoryAsync(userId, request.CategoryId))
-                {
-                    response.Errors.Add(new Error
-                    {
-                        Code = "403",
-                        Message = "غير مصرح لك بإنشاء تجميد وحدات لهذا المصيف."
-                    });
-                    _logger.LogWarning(
-                        "Unit-freeze create request denied by permissions. TraceId={TraceId}, UserId={UserId}, CategoryId={CategoryId}",
-                        traceId,
-                        userId,
-                        request.CategoryId);
                     return response;
                 }
 
@@ -1140,12 +1153,25 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerUnitFreezeDto>> ReleaseUnitFreezeAsync(SummerUnitFreezeReleaseRequest request, string userId)
+        public async Task<CommonResponse<SummerUnitFreezeDto>> ReleaseUnitFreezeAsync(
+            SummerUnitFreezeReleaseRequest request,
+            string userId,
+            bool hasSummerPricingPermission = false)
         {
             var response = new CommonResponse<SummerUnitFreezeDto>();
             request ??= new SummerUnitFreezeReleaseRequest();
             try
             {
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بفك التجميد. يتطلب دور المدير العام (RoleId 2021)."
+                    });
+                    return response;
+                }
+
                 if (request.FreezeId <= 0)
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "رقم التجميد مطلوب." });
@@ -1158,16 +1184,6 @@ namespace Persistence.Services
                 if (batchSnapshot == null)
                 {
                     response.Errors.Add(new Error { Code = "404", Message = "عملية التجميد غير موجودة." });
-                    return response;
-                }
-
-                if (!await CanUserManageSummerCategoryAsync(userId, batchSnapshot.CategoryId))
-                {
-                    response.Errors.Add(new Error
-                    {
-                        Code = "403",
-                        Message = "غير مصرح لك بفك التجميد لهذا المصيف."
-                    });
                     return response;
                 }
 
@@ -1196,11 +1212,24 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerUnitFreezeDetailsDto>> GetUnitFreezeDetailsAsync(int freezeId, string userId)
+        public async Task<CommonResponse<SummerUnitFreezeDetailsDto>> GetUnitFreezeDetailsAsync(
+            int freezeId,
+            string userId,
+            bool hasSummerPricingPermission = false)
         {
             var response = new CommonResponse<SummerUnitFreezeDetailsDto>();
             try
             {
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض تفاصيل التجميد. يتطلب دور المدير العام (RoleId 2021)."
+                    });
+                    return response;
+                }
+
                 if (freezeId <= 0)
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "رقم التجميد مطلوب." });
@@ -1214,16 +1243,6 @@ namespace Persistence.Services
                 if (batch == null)
                 {
                     response.Errors.Add(new Error { Code = "404", Message = "عملية التجميد غير موجودة." });
-                    return response;
-                }
-
-                if (!await CanUserManageSummerCategoryAsync(userId, batch.CategoryId))
-                {
-                    response.Errors.Add(new Error
-                    {
-                        Code = "403",
-                        Message = "غير مصرح لك بعرض تفاصيل التجميد لهذا المصيف."
-                    });
                     return response;
                 }
 
@@ -1719,12 +1738,6 @@ namespace Persistence.Services
             var input = Encoding.UTF8.GetBytes(normalized);
             var hash = SHA256.HashData(input);
             return Convert.ToHexString(hash).ToLowerInvariant();
-        }
-
-        private async Task<bool> CanUserManageSummerPricingAsync(string userId)
-        {
-            var manageableCategoryIds = await GetManageableSummerCategoryIdsAsync(userId);
-            return manageableCategoryIds.Count > 0;
         }
 
         private async Task<bool> CanUserManageSummerCategoryAsync(string userId, int categoryId)
@@ -2254,48 +2267,29 @@ namespace Persistence.Services
         public async Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuoteAsync(
             SummerPricingQuoteRequest request,
             string? userId = null,
-            bool hasSummerAdminPermission = false)
+            bool hasSummerPricingPermission = false)
         {
             request ??= new SummerPricingQuoteRequest();
-            var allowMembershipOverride = hasSummerAdminPermission;
-            if (!allowMembershipOverride && request.CategoryId > 0)
-            {
-                var normalizedUserId = (userId ?? string.Empty).Trim();
-                if (!string.IsNullOrWhiteSpace(normalizedUserId))
-                {
-                    allowMembershipOverride = await CanUserManageSummerCategoryAsync(normalizedUserId, request.CategoryId);
-                }
-            }
-
             return await _summerPricingService.GetQuoteAsync(
                 request,
-                allowMembershipOverride: allowMembershipOverride);
+                allowMembershipOverride: hasSummerPricingPermission);
         }
 
         public async Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalogAsync(
             int seasonYear,
             string userId,
-            bool hasSummerPricingPermission = true)
+            bool hasSummerPricingPermission = false)
         {
             var response = new CommonResponse<SummerPricingCatalogDto>();
             try
             {
+                _ = userId;
                 if (!hasSummerPricingPermission)
                 {
                     response.Errors.Add(new Error
                     {
                         Code = "403",
-                        Message = "غير مصرح لك بعرض إعدادات تسعير المصايف. يتطلب SummerPricingFunc."
-                    });
-                    return response;
-                }
-
-                if (!await CanUserManageSummerPricingAsync(userId))
-                {
-                    response.Errors.Add(new Error
-                    {
-                        Code = "403",
-                        Message = "غير مصرح لك بعرض إعدادات تسعير المصايف."
+                        Message = "غير مصرح لك بعرض إعدادات تسعير المصايف. يتطلب دور المدير العام (RoleId 2021)."
                     });
                     return response;
                 }
@@ -2323,27 +2317,18 @@ namespace Persistence.Services
         public async Task<CommonResponse<SummerPricingCatalogDto>> SavePricingCatalogAsync(
             SummerPricingCatalogUpsertRequest request,
             string userId,
-            bool hasSummerPricingPermission = true)
+            bool hasSummerPricingPermission = false)
         {
             var response = new CommonResponse<SummerPricingCatalogDto>();
             try
             {
+                _ = userId;
                 if (!hasSummerPricingPermission)
                 {
                     response.Errors.Add(new Error
                     {
                         Code = "403",
-                        Message = "غير مصرح لك بتعديل إعدادات تسعير المصايف. يتطلب SummerPricingFunc."
-                    });
-                    return response;
-                }
-
-                if (!await CanUserManageSummerPricingAsync(userId))
-                {
-                    response.Errors.Add(new Error
-                    {
-                        Code = "403",
-                        Message = "غير مصرح لك بتعديل إعدادات تسعير المصايف."
+                        Message = "غير مصرح لك بتعديل إعدادات تسعير المصايف. يتطلب دور المدير العام (RoleId 2021)."
                     });
                     return response;
                 }
