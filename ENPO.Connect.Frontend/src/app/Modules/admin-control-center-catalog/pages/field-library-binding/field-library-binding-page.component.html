@@ -676,6 +676,9 @@
         </button>
         <button pButton type="button" label="العودة إلى لوحة التحكم الجديدة" icon="pi pi-arrow-left" iconPos="left" (click)="onBackToCatalogDashboard()"></button>
       </div>
+      <p class="save-path-hint">
+        {{ saveToBackendActionHint }}
+      </p>
     </aside>
   </div>
 
@@ -991,6 +994,9 @@
     </div>
 
     <ng-template pTemplate="footer">
+      <p class="builder-save-hint">
+        زر "تطبيق على الحقل" لا يحفظ في قاعدة البيانات، وإنما يطبّق التعديل داخل الشاشة فقط حتى تضغط "حفظ في قاعدة البيانات".
+      </p>
       <div class="builder-footer">
         <button pButton type="button" class="p-button-text" label="إلغاء" (click)="onCancelDynamicRuntimeBuilder()"></button>
         <button

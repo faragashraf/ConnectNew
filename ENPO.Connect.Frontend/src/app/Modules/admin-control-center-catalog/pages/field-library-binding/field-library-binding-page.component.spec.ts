@@ -823,6 +823,8 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     }));
 
     await (component as any).loadBackendWorkspace(categoryId, appId);
+    const persistBindingsSpy = spyOn<any>(component, 'persistBindingsToBackend').and.callThrough();
+    const onSaveToBackendSpy = spyOn(component, 'onSaveToBackend').and.callThrough();
 
     const targetBinding = component.bindings.find(item => item.fieldKey === fieldKey);
     expect(targetBinding).toBeTruthy();
@@ -859,6 +861,8 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     expect(component.bindings[0].dynamicRuntimeJson).toContain('"statementId": 65');
     expect(String(component.bindings[0].displaySettingsJson ?? '')).toContain('"dynamicRuntime"');
     expect(String(component.bindings[0].displaySettingsJson ?? '')).toContain('"statementId":65');
+    expect(component.stepMessage).toContain('محليًا فقط');
+    expect(dynamicSubjectsController.upsertAdminCategoryFieldLinks).not.toHaveBeenCalled();
 
     // Simulate invalid advanced JSON draft without applying it.
     component.toggleDynamicRuntimeAdvancedMode(component.bindings[0]);
@@ -879,6 +883,9 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     rowBeforeSave.dynamicRuntimeJson = String(component.bindings[0].dynamicRuntimeJson ?? '');
 
     await component.onSaveToBackend();
+    expect(onSaveToBackendSpy).toHaveBeenCalledTimes(1);
+    expect(persistBindingsSpy).toHaveBeenCalledTimes(1);
+    expect(component.stepMessage).toContain('تم حفظ الحقول وسياسة الرقم المرجعي في قاعدة البيانات بنجاح');
 
     expect(dynamicSubjectsController.upsertAdminCategoryFieldLinks).toHaveBeenCalledTimes(1);
     const upsertRequest = dynamicSubjectsController.upsertAdminCategoryFieldLinks.calls.mostRecent().args[1];

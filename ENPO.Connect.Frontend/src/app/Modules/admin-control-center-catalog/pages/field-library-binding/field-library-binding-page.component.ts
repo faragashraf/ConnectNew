@@ -243,6 +243,16 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     visible: [true],
     defaultValue: ['']
   });
+  private readonly referencePolicyControlLabels: Readonly<Record<string, string>> = {
+    referenceMode: 'وضع الترقيم',
+    referenceSeparator: 'فاصل الرقم المرجعي',
+    serialName: 'اسم المسلسل',
+    referenceStartingValue: 'قيمة البداية',
+    referenceSequencePaddingLength: 'طول المسلسل'
+  };
+  private readonly presentationControlLabels: Readonly<Record<string, string>> = {
+    defaultDisplayMode: 'وضع العرض الافتراضي'
+  };
 
   vm: FieldBindingContextVm | null = null;
   step: FieldBindingStepVm | null = null;
@@ -361,6 +371,22 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
 
     return `${this.step.requiredCompleted} / ${this.step.requiredTotal}`;
+  }
+
+  get saveToBackendActionHint(): string {
+    if (this.loadingLibrary) {
+      return 'جاري تحميل بيانات الربط من قاعدة البيانات؛ زر الحفظ سيعمل تلقائيًا بعد اكتمال التحميل.';
+    }
+
+    if (!this.backendWorkspaceLoaded) {
+      return 'زر "حفظ في قاعدة البيانات" معطّل لأن بيانات الربط الفعلية لم تُحمّل من قاعدة البيانات بعد.';
+    }
+
+    if (this.hasPendingBackendChanges) {
+      return 'مهم: زر "تطبيق على الحقل" يحدّث الحالة محليًا فقط. استخدم زر "حفظ في قاعدة البيانات" لتثبيت التعديلات فعليًا.';
+    }
+
+    return 'لا توجد تعديلات جديدة للحفظ في قاعدة البيانات.';
   }
 
   get filteredReusableFields(): ReusableFieldLibraryItem[] {
@@ -729,6 +755,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.syncDynamicRuntimeAdvancedDraftForBinding(targetBindingId, runtimeJson);
     this.onCancelDynamicRuntimeBuilder();
     this.onBindingChanged();
+    this.stepMessageSeverity = 'warn';
+    this.stepMessage = 'تم تطبيق إعدادات السلوك الديناميكي على الحقل محليًا فقط. اضغط "حفظ في قاعدة البيانات" لتثبيت التعديل فعليًا.';
   }
 
   onAddDynamicRuntimeBinding(
@@ -963,27 +991,24 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.presentationForm.markAllAsTouched();
     this.evaluateBindings(true, false);
 
-    if (this.referencePolicyForm.invalid || this.presentationForm.invalid || !this.validation.isValid) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'لا يمكن الحفظ قبل استكمال المدخلات الإلزامية ومعالجة المشكلات المانعة.';
+    const preSaveBlockingReasons = this.collectPreSaveBlockingReasons();
+    if (preSaveBlockingReasons.length > 0) {
+      this.setSaveGuardBlockedMessage(preSaveBlockingReasons);
       return;
     }
 
     if (!this.currentCategoryId) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'يجب تحديد تصنيف صالح أولًا قبل الحفظ.';
+      this.setSaveGuardBlockedMessage(['التصنيف الحالي غير صالح أو غير محدد.']);
       return;
     }
 
     if (!this.currentApplicationId) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'يجب تحديد تطبيق صالح أولًا قبل الحفظ.';
+      this.setSaveGuardBlockedMessage(['التطبيق الحالي غير صالح أو غير محدد.']);
       return;
     }
 
     if (!this.backendWorkspaceLoaded) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'لا يمكن الحفظ قبل تحميل بيانات الربط الفعلية من قاعدة البيانات.';
+      this.setSaveGuardBlockedMessage(['لم يتم تحميل بيانات الربط الفعلية من قاعدة البيانات بعد.']);
       return;
     }
 
@@ -1002,6 +1027,73 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     } finally {
       this.savingToBackend = false;
     }
+  }
+
+  private setSaveGuardBlockedMessage(reasons: ReadonlyArray<string>): void {
+    const compactReasons = reasons
+      .map(reason => String(reason ?? '').trim())
+      .filter(reason => reason.length > 0);
+
+    this.stepMessageSeverity = 'warn';
+    if (compactReasons.length === 0) {
+      this.stepMessage = 'تعذر تنفيذ "حفظ في قاعدة البيانات" بسبب مانع غير محدد.';
+      return;
+    }
+
+    this.stepMessage = `تعذر تنفيذ "حفظ في قاعدة البيانات". الأسباب: ${compactReasons.join(' | ')}`;
+  }
+
+  private collectPreSaveBlockingReasons(): string[] {
+    const reasons: string[] = [];
+
+    if (this.referencePolicyForm.invalid) {
+      const invalidReferenceFields = this.collectInvalidControlLabels(
+        this.referencePolicyForm,
+        this.referencePolicyControlLabels
+      );
+      reasons.push(
+        invalidReferenceFields.length > 0
+          ? `نموذج سياسة الرقم المرجعي غير صالح: ${invalidReferenceFields.join('، ')}.`
+          : 'نموذج سياسة الرقم المرجعي يحتوي مدخلات غير صالحة.'
+      );
+    }
+
+    if (this.presentationForm.invalid) {
+      const invalidPresentationFields = this.collectInvalidControlLabels(
+        this.presentationForm,
+        this.presentationControlLabels
+      );
+      reasons.push(
+        invalidPresentationFields.length > 0
+          ? `نموذج العرض غير صالح: ${invalidPresentationFields.join('، ')}.`
+          : 'نموذج العرض يحتوي مدخلات غير صالحة.'
+      );
+    }
+
+    if (!this.validation.isValid) {
+      const firstBlockingIssue = this.validation.blockingIssues[0];
+      reasons.push(
+        firstBlockingIssue
+          ? `يوجد مانع ربط: ${firstBlockingIssue}`
+          : 'يوجد مانع في ربط الحقول يمنع الحفظ.'
+      );
+    }
+
+    return reasons;
+  }
+
+  private collectInvalidControlLabels(form: FormGroup, labelByControlName: Readonly<Record<string, string>>): string[] {
+    const labels: string[] = [];
+
+    for (const [controlName, control] of Object.entries(form.controls)) {
+      if (!control || control.valid) {
+        continue;
+      }
+
+      labels.push(labelByControlName[controlName] ?? controlName);
+    }
+
+    return labels;
   }
 
   onSaveDraft(): void {

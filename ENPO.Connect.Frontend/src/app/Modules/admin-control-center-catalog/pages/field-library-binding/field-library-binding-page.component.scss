@@ -379,6 +379,17 @@
   gap: 0.5rem;
 }
 
+.save-path-hint {
+  margin: 0;
+  border: 1px dashed #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+  border-radius: 10px;
+  padding: 0.55rem 0.6rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .integration-builder {
   display: grid;
   gap: 1rem;
@@ -480,6 +491,17 @@
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+.builder-save-hint {
+  margin: 0 0 0.55rem;
+  border: 1px dashed #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 @media (max-width: 1400px) {
