@@ -1,6 +1,5 @@
 ﻿import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
 import { Subscription, firstValueFrom } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { MessageDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
@@ -159,6 +158,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   readonly seasonYear = SUMMER_SEASON_YEAR;
   readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
+  readonly dynamicSummerConfigRouteKey = 'admins/summer-requests/dynamic-booking';
   destinations: SummerDestinationConfig[] = [];
   loadingDestinations = false;
   destinationsError = '';
@@ -200,7 +200,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   loadingRequests = false;
   loadingDetails = false;
   submittingAction = false;
-  creatingEditLink = false;
+  adminInlineEditDialogVisible = false;
+  adminInlineEditRequestId: number | null = null;
 
   activeDashboardStatus = '';
   activeDashboardPaymentState = '';
@@ -294,8 +295,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
     private readonly summerRealtimeService: SummerRequestsRealtimeService,
-    private readonly adminRealtimePatchService: SummerAdminRealtimePatchService,
-    private readonly router: Router
+    private readonly adminRealtimePatchService: SummerAdminRealtimePatchService
   ) {
     this.filtersForm = this.fb.group({
       categoryId: [null],
@@ -1747,31 +1747,31 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   openSelectedRequestEdit(): void {
     const request = this.selectedRequest;
-    if (!request || this.creatingEditLink) {
+    const messageId = Number(request?.messageId ?? 0);
+    if (!Number.isFinite(messageId) || messageId <= 0) {
       return;
     }
 
-    this.creatingEditLink = true;
-    this.summerWorkflowController.createEditToken({
-      messageId: request.messageId,
-      oneTimeUse: false
-    }).subscribe({
-      next: response => {
-        const token = String(response?.data ?? '').trim();
-        if (response?.isSuccess && token.length > 0) {
-          this.router.navigate(['/EmployeeRequests/SummerRequests/edit', token]);
-          return;
-        }
+    this.adminInlineEditRequestId = Math.floor(messageId);
+    this.adminInlineEditDialogVisible = true;
+  }
 
-        this.msg.msgError('تعذر إنشاء رابط التعديل', `<h5>${this.collectErrors(response)}</h5>`, true);
-      },
-      error: () => {
-        this.msg.msgError('تعذر إنشاء رابط التعديل', '<h5>حدث خطأ أثناء إنشاء رابط تعديل آمن للطلب.</h5>', true);
-      },
-      complete: () => {
-        this.creatingEditLink = false;
-      }
-    });
+  closeInlineEditDialog(): void {
+    this.adminInlineEditDialogVisible = false;
+    this.adminInlineEditRequestId = null;
+  }
+
+  onInlineEditSaved(savedMessageId: number): void {
+    const messageId = Number(savedMessageId ?? this.adminInlineEditRequestId ?? 0);
+    if (Number.isFinite(messageId) && messageId > 0) {
+      const normalizedMessageId = Math.floor(messageId);
+      this.selectedRequestId = normalizedMessageId;
+      this.loadSelectedRequestDetails(normalizedMessageId);
+      this.applyRealtimeRequestUpdate(this.createLocalRequestUpdateEvent(normalizedMessageId, 'UPDATE'));
+    }
+
+    this.loadRequests();
+    this.scheduleDashboardRefresh();
   }
 
   submitAdminAction(): void {

@@ -1114,6 +1114,33 @@
     </div>
   </p-dialog>
 
+  <p-dialog
+    header="تعديل طلب المصيف"
+    [(visible)]="adminInlineEditDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [maximizable]="true"
+    [style]="{ width: '95vw', maxWidth: '1800px' }"
+    [contentStyle]="{ maxHeight: '85vh', overflow: 'auto', padding: '12px' }"
+    styleClass="admin-inline-edit-dialog"
+    (onHide)="closeInlineEditDialog()">
+    <div class="admin-inline-edit-shell">
+      <small class="mode-note" *ngIf="adminInlineEditRequestId as editRequestId">
+        يتم تعديل الطلب رقم #{{ editRequestId }} داخل لوحة الإدارة.
+      </small>
+      <app-summer-dynamic-booking-builder
+        *ngIf="adminInlineEditRequestId as editRequestId"
+        [destinations]="destinations"
+        [seasonYear]="seasonYear"
+        [applicationId]="dynamicSummerApplicationId"
+        [configRouteKey]="dynamicSummerConfigRouteKey"
+        [editRequestId]="editRequestId"
+        (bookingCreated)="onInlineEditSaved($event)">
+      </app-summer-dynamic-booking-builder>
+    </div>
+  </p-dialog>
+
   <section class="workspace">
     <div class="requests-panel">
       <header>
@@ -1148,8 +1175,8 @@
           <h4>تفاصيل الطلب المختار</h4>
           <div class="request-details-actions">
             <small class="loading-note" *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
-            <button type="button" class="primary no-print" (click)="openSelectedRequestEdit()" [disabled]="loadingDetails || !selectedRequest || creatingEditLink">
-              {{ creatingEditLink ? 'جاري تجهيز رابط التعديل...' : 'تعديل الطلب' }}
+            <button type="button" class="primary no-print" (click)="openSelectedRequestEdit()" [disabled]="loadingDetails || !selectedRequest">
+              تعديل الطلب
             </button>
             <button type="button" class="ghost no-print" (click)="openSelectedRequestPrintPreview()" [disabled]="loadingDetails || !selectedRequest">
               طباعة نموذج الطلب

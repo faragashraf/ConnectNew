@@ -849,6 +849,22 @@ button.ghost:hover:not(:disabled) {
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
 }
 
+.admin-inline-edit-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-inline-edit-shell .mode-note {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #eef7ff;
+  color: #1b5475;
+  font-weight: 700;
+}
+
 .requests-panel,
 .details-panel {
   border: 1px solid #d2e3f0;

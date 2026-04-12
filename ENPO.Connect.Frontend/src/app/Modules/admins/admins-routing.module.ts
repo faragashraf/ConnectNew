@@ -40,6 +40,11 @@ const routes: Routes =
       pathMatch: 'full'
     },
     {
+      path: 'SummerRequestsManagement/edit/:token',
+      redirectTo: '/EmployeeRequests/SummerRequestsManagement/edit/:token',
+      pathMatch: 'full'
+    },
+    {
       path: 'resorts/unit-freeze',
       redirectTo: '/EmployeeRequests/resorts/unit-freeze',
       pathMatch: 'full'

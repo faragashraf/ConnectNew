@@ -25,7 +25,17 @@ const routes: Routes = [
     component: SummerRequestsWorkspaceComponent,
     canActivate: [AuthNewGuardService], data: {
       func: 'AllEnpoUsersFunc',
-      configRouteKey: 'EmployeeRequests/SummerRequests'
+      configRouteKey: 'EmployeeRequests/SummerRequests',
+      summerEditHost: 'employee'
+    }
+  },
+  {
+    path: SUMMER_FEATURE_ROUTES.adminConsoleEdit,
+    component: SummerRequestsWorkspaceComponent,
+    canActivate: [AuthNewGuardService], data: {
+      func: 'SummerAdminFunc',
+      configRouteKey: 'Admin/SummerRequestsManagement',
+      summerEditHost: 'admin'
     }
   },
   {

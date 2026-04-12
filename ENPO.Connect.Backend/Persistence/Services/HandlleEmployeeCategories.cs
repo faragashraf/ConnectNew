@@ -101,6 +101,31 @@ namespace Persistence.Services
             SummerWorkflowDomainConstants.PricingFieldKinds.SmsText,
             SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText
         };
+        private static readonly Dictionary<string, string> SummerAuditAliasMap = BuildSummerAuditAliasMap();
+        private static readonly Dictionary<string, string> SummerAuditFallbackFieldLabelByAlias = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["OWNER_NAME"] = "اسم صاحب الطلب",
+            ["OWNER_FILE_NUMBER"] = "رقم ملف صاحب الطلب",
+            ["OWNER_PHONE"] = "رقم هاتف صاحب الطلب",
+            ["OWNER_EXTRA_PHONE"] = "هاتف إضافي",
+            ["FAMILY_COUNT"] = "عدد الأفراد",
+            ["EXTRA_COUNT"] = "أفراد إضافيون",
+            ["COMPANION_NAME"] = "اسم المرافق",
+            ["COMPANION_AGE"] = "سن (للأطفال)",
+            ["COMPANION_RELATION"] = "صلة القرابة"
+        };
+        private static readonly Dictionary<string, string> SummerAuditFallbackGroupByAlias = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["OWNER_NAME"] = "بيانات صاحب الطلب",
+            ["OWNER_FILE_NUMBER"] = "بيانات صاحب الطلب",
+            ["OWNER_PHONE"] = "بيانات صاحب الطلب",
+            ["OWNER_EXTRA_PHONE"] = "بيانات صاحب الطلب",
+            ["FAMILY_COUNT"] = "بيانات الحجز",
+            ["EXTRA_COUNT"] = "بيانات الحجز",
+            ["COMPANION_NAME"] = "بيانات المرافقين",
+            ["COMPANION_AGE"] = "بيانات المرافقين",
+            ["COMPANION_RELATION"] = "بيانات المرافقين"
+        };
 
         public HandleEmployeeCategories(
             ConnectContext connectContext,
@@ -271,13 +296,14 @@ namespace Persistence.Services
                 destinationName = (categoryInfo.Category?.CatName ?? string.Empty).Trim();
             }
 
+            var hasAdminEditOverride = isEditOperation && (runtime.HasSummerAdminPermission || canManageSummerCategory);
             if (!ValidateSummerExtraMembersRules(
                     categoryInfo.Category?.CatId ?? 0,
                     destinationName,
                     familyCount,
                     extraCount,
                     runtime.HasSummerAdminPermission,
-                    isEditOperation,
+                    hasAdminEditOverride,
                     response))
             {
                 return;
@@ -499,9 +525,13 @@ namespace Persistence.Services
                         }
                         existingMessage.LastModifiedDate = DateTime.Now;
 
-                        await ReplaceMessageFieldsAsync(messageId, messageRequest.Fields);
+                        var fieldAuditEntries = await ReplaceMessageFieldsAsync(
+                            messageId,
+                            messageRequest.Fields,
+                            categoryInfo.Category.CatId,
+                            normalizedActorUserId);
 
-                        replyText = "تم تعديل طلب المصيف.";
+                        replyText = BuildSummerEditFriendlyReplyText(fieldAuditEntries);
                         capacityAction = "EDIT";
                     }
                     else
@@ -1234,7 +1264,7 @@ SELECT @result;
             int familyCount,
             int extraCount,
             bool hasSummerAdminPermission,
-            bool isEditOperation,
+            bool hasAdminEditOverride,
             CommonResponse<MessageDto> response)
         {
             if (!TryResolveSummerMaxExtraMembers(categoryId, out var maxExtraMembers))
@@ -1242,7 +1272,6 @@ SELECT @result;
                 return true;
             }
 
-            var hasAdminEditOverride = hasSummerAdminPermission && isEditOperation;
             if (hasAdminEditOverride)
             {
                 return true;
@@ -1614,7 +1643,11 @@ SELECT @result;
             }
         }
 
-        private async Task ReplaceMessageFieldsAsync(int messageId, List<TkmendField>? incomingFields)
+        private async Task<List<SummerFieldAuditEntry>> ReplaceMessageFieldsAsync(
+            int messageId,
+            List<TkmendField>? incomingFields,
+            int? categoryId = null,
+            string? changedBy = null)
         {
             var existingFields = await _connectContext.TkmendFields
                 .Where(x => x.FildRelted == messageId)
@@ -1677,6 +1710,13 @@ SELECT @result;
                 .Select(group => group.First())
                 .ToList();
 
+            var auditEntries = await LogSummerFieldDeltaAsync(
+                messageId,
+                categoryId,
+                changedBy,
+                existingFields,
+                mergedFields);
+
             if (existingFields.Count > 0)
             {
                 _connectContext.TkmendFields.RemoveRange(existingFields);
@@ -1686,6 +1726,536 @@ SELECT @result;
             {
                 await _connectContext.TkmendFields.AddRangeAsync(mergedFields);
             }
+
+            return auditEntries;
+        }
+
+        private async Task<List<SummerFieldAuditEntry>> LogSummerFieldDeltaAsync(
+            int messageId,
+            int? categoryId,
+            string? changedBy,
+            IReadOnlyCollection<TkmendField> existingFields,
+            IReadOnlyCollection<TkmendField> mergedFields)
+        {
+            var auditEntries = new List<SummerFieldAuditEntry>();
+            if (messageId <= 0)
+            {
+                return auditEntries;
+            }
+
+            var existingByKey = existingFields
+                .Where(field => field != null && IsAuditableSummerField(field.FildKind))
+                .GroupBy(BuildFieldInstanceKey, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            var mergedByKey = mergedFields
+                .Where(field => field != null && IsAuditableSummerField(field.FildKind))
+                .GroupBy(BuildFieldInstanceKey, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+            var allKeys = new HashSet<string>(existingByKey.Keys, StringComparer.OrdinalIgnoreCase);
+            allKeys.UnionWith(mergedByKey.Keys);
+            if (allKeys.Count == 0)
+            {
+                return auditEntries;
+            }
+
+            Dictionary<string, SummerFieldAuditMetadata> metadataByFieldKind;
+            if (categoryId.HasValue && categoryId.Value > 0)
+            {
+                metadataByFieldKind = await BuildSummerFieldMetadataByKindAsync(categoryId.Value);
+            }
+            else
+            {
+                metadataByFieldKind = new Dictionary<string, SummerFieldAuditMetadata>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            var normalizedActor = TruncateAuditValue(NormalizeAuditText(changedBy) ?? "SYSTEM", 20);
+
+            foreach (var key in allKeys.OrderBy(item => item, StringComparer.OrdinalIgnoreCase))
+            {
+                existingByKey.TryGetValue(key, out var oldField);
+                mergedByKey.TryGetValue(key, out var newField);
+
+                var oldValue = NormalizeAuditText(oldField?.FildTxt);
+                var newValue = NormalizeAuditText(newField?.FildTxt);
+
+                if (oldField != null
+                    && newField != null
+                    && string.Equals(oldValue, newValue, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var fieldKind = NormalizeAuditText(newField?.FildKind)
+                    ?? NormalizeAuditText(oldField?.FildKind);
+                if (string.IsNullOrWhiteSpace(fieldKind))
+                {
+                    continue;
+                }
+
+                metadataByFieldKind.TryGetValue(fieldKind, out var metadata);
+                var groupName = metadata?.GroupName ?? "بدون مجموعة";
+                var fieldName = metadata?.FieldLabel ?? fieldKind;
+                var operation = GetAuditOperationArabic(oldField, newField);
+                var instanceGroupId = newField?.InstanceGroupId ?? oldField?.InstanceGroupId ?? 1;
+                var beforeValue = FormatAuditValue(oldValue);
+                var afterValue = FormatAuditValue(newValue);
+
+                auditEntries.Add(new SummerFieldAuditEntry
+                {
+                    Operation = operation,
+                    GroupName = groupName,
+                    FieldName = fieldName,
+                    FieldKey = fieldKind,
+                    InstanceGroupId = instanceGroupId,
+                    BeforeValue = beforeValue,
+                    AfterValue = afterValue
+                });
+
+                _logger.AppendLine(
+                    $"SummerRequests FieldAudit | MessageId={messageId} | Operation={operation} | Group={groupName} | Field={fieldName} | FieldKey={fieldKind} | InstanceGroupId={instanceGroupId} | Before={beforeValue} | After={afterValue} | ChangedBy={normalizedActor}");
+            }
+
+            return auditEntries;
+        }
+
+        private async Task<Dictionary<string, SummerFieldAuditMetadata>> BuildSummerFieldMetadataByKindAsync(int categoryId)
+        {
+            var rows = await (
+                from categoryMand in _connectContext.CdCategoryMands.AsNoTracking()
+                join mend in _connectContext.Cdmends.AsNoTracking()
+                    on categoryMand.MendField equals mend.CdmendTxt into mendJoin
+                from mend in mendJoin.DefaultIfEmpty()
+                join mandGroup in _connectContext.MandGroups.AsNoTracking()
+                    on categoryMand.MendGroup equals mandGroup.GroupId into mandGroupJoin
+                from mandGroup in mandGroupJoin.DefaultIfEmpty()
+                where categoryMand.MendCategory == categoryId
+                select new
+                {
+                    categoryMand.MendField,
+                    GroupName = mandGroup != null ? mandGroup.GroupName : null,
+                    FieldLabel = mend != null ? mend.CDMendLbl : null
+                }).ToListAsync();
+
+            var result = new Dictionary<string, SummerFieldAuditMetadata>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows)
+            {
+                var fieldKind = NormalizeAuditText(row.MendField);
+                if (string.IsNullOrWhiteSpace(fieldKind) || result.ContainsKey(fieldKind))
+                {
+                    continue;
+                }
+
+                result[fieldKind] = new SummerFieldAuditMetadata
+                {
+                    GroupName = NormalizeAuditText(row.GroupName),
+                    FieldLabel = NormalizeAuditText(row.FieldLabel)
+                };
+            }
+
+            return result;
+        }
+
+        private static bool IsAuditableSummerField(string? fieldKind)
+        {
+            if (string.IsNullOrWhiteSpace(fieldKind))
+            {
+                return false;
+            }
+
+            return !IsSystemManagedSummerField(fieldKind);
+        }
+
+        private static string GetAuditOperationArabic(TkmendField? oldField, TkmendField? newField)
+        {
+            if (oldField == null && newField != null)
+            {
+                return "إضافة";
+            }
+
+            if (oldField != null && newField == null)
+            {
+                return "حذف";
+            }
+
+            return "تعديل";
+        }
+
+        private static string? NormalizeAuditText(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return value
+                .Replace("\r", " ", StringComparison.Ordinal)
+                .Replace("\n", " ", StringComparison.Ordinal)
+                .Trim();
+        }
+
+        private static string FormatAuditValue(string? value)
+        {
+            var normalized = NormalizeAuditText(value);
+            return string.IsNullOrWhiteSpace(normalized) ? "(فارغ)" : normalized;
+        }
+
+        private static string TruncateAuditValue(string? value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            return value.Length <= maxLength ? value : value[..maxLength];
+        }
+
+        private static string BuildSummerEditFriendlyReplyText(IReadOnlyCollection<SummerFieldAuditEntry>? auditEntries)
+        {
+            var entries = (auditEntries ?? Array.Empty<SummerFieldAuditEntry>())
+                .Where(item => item != null)
+                .ToList();
+
+            var distinctEntries = NormalizeAndDeduplicateAuditEntries(entries);
+
+            if (distinctEntries.Count == 0)
+            {
+                return "تم تعديل طلب المصيف.";
+            }
+
+            const int maxVisibleEntries = 20;
+            var lines = new List<string> { "تم تعديل طلب المصيف." };
+
+            foreach (var entry in distinctEntries.Take(maxVisibleEntries))
+            {
+                lines.Add($"- {BuildSummerFriendlyAuditLine(entry)}");
+            }
+
+            if (distinctEntries.Count > maxVisibleEntries)
+            {
+                var hiddenCount = distinctEntries.Count - maxVisibleEntries;
+                lines.Add($"- تم إجراء {ConvertToArabicIndicDigits(hiddenCount.ToString(CultureInfo.InvariantCulture))} تعديلات إضافية.");
+            }
+
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        private static string BuildSummerFriendlyAuditLine(SummerFieldAuditEntry entry)
+        {
+            var groupContext = BuildSummerGroupContext(entry.GroupName, entry.InstanceGroupId);
+            var fieldLabel = NormalizeAuditText(entry.FieldName) ?? "الحقل";
+            var beforeValue = FormatAuditValueForReply(entry.BeforeValue);
+            var afterValue = FormatAuditValueForReply(entry.AfterValue);
+
+            return entry.Operation switch
+            {
+                "إضافة" => $"تمت إضافة {groupContext} في حقل {fieldLabel} بالقيمة {afterValue}.",
+                "حذف" => $"تم حذف قيمة {beforeValue} من حقل {fieldLabel} في {groupContext}.",
+                _ => $"تم تعديل {groupContext} في حقل {fieldLabel} من {beforeValue} إلى {afterValue}."
+            };
+        }
+
+        private static List<SummerFieldAuditEntry> NormalizeAndDeduplicateAuditEntries(IReadOnlyCollection<SummerFieldAuditEntry> entries)
+        {
+            var orderedKeys = new List<string>();
+            var mergedEntries = new Dictionary<string, SummerFieldAuditEntry>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in entries.Where(item => item != null))
+            {
+                var canonicalAlias = ResolveSummerAuditAlias(entry.FieldKey);
+                var normalizedEntry = new SummerFieldAuditEntry
+                {
+                    Operation = NormalizeAuditText(entry.Operation) ?? "تعديل",
+                    GroupName = ResolvePreferredAuditGroupName(entry.GroupName, canonicalAlias),
+                    FieldName = ResolvePreferredAuditFieldLabel(entry.FieldName, entry.FieldKey, canonicalAlias),
+                    FieldKey = NormalizeAuditText(entry.FieldKey) ?? string.Empty,
+                    InstanceGroupId = entry.InstanceGroupId,
+                    BeforeValue = FormatAuditValue(entry.BeforeValue),
+                    AfterValue = FormatAuditValue(entry.AfterValue)
+                };
+
+                var semanticKey = BuildSummerAuditSemanticKey(normalizedEntry, canonicalAlias);
+                if (!mergedEntries.TryGetValue(semanticKey, out var currentEntry))
+                {
+                    mergedEntries[semanticKey] = normalizedEntry;
+                    orderedKeys.Add(semanticKey);
+                    continue;
+                }
+
+                if (GetAuditEntryQualityScore(normalizedEntry) > GetAuditEntryQualityScore(currentEntry))
+                {
+                    mergedEntries[semanticKey] = normalizedEntry;
+                }
+            }
+
+            return orderedKeys
+                .Where(key => mergedEntries.ContainsKey(key))
+                .Select(key => mergedEntries[key])
+                .ToList();
+        }
+
+        private static string BuildSummerAuditSemanticKey(SummerFieldAuditEntry entry, string canonicalAlias)
+        {
+            var operation = NormalizeAuditText(entry.Operation) ?? "تعديل";
+            var instanceGroup = entry.InstanceGroupId > 0 ? entry.InstanceGroupId : 1;
+            var beforeValue = NormalizeAuditText(entry.BeforeValue) ?? "(فارغ)";
+            var afterValue = NormalizeAuditText(entry.AfterValue) ?? "(فارغ)";
+            return $"{operation}|{canonicalAlias}|{instanceGroup}|{beforeValue}|{afterValue}";
+        }
+
+        private static int GetAuditEntryQualityScore(SummerFieldAuditEntry entry)
+        {
+            var score = 0;
+
+            var normalizedGroup = NormalizeAuditText(entry.GroupName);
+            if (!string.IsNullOrWhiteSpace(normalizedGroup)
+                && !string.Equals(normalizedGroup, "بدون مجموعة", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(normalizedGroup, "البيانات", StringComparison.OrdinalIgnoreCase))
+            {
+                score += 2;
+            }
+
+            if (!IsTechnicalAuditFieldLabel(entry.FieldName, entry.FieldKey))
+            {
+                score += 3;
+            }
+
+            if (!string.Equals(
+                NormalizeAuditText(entry.FieldName),
+                NormalizeAuditText(entry.FieldKey),
+                StringComparison.OrdinalIgnoreCase))
+            {
+                score += 1;
+            }
+
+            return score;
+        }
+
+        private static string ResolvePreferredAuditFieldLabel(string? fieldName, string? fieldKey, string canonicalAlias)
+        {
+            var normalizedFieldName = NormalizeAuditText(fieldName);
+            var normalizedFieldKey = NormalizeAuditText(fieldKey);
+
+            if (!IsTechnicalAuditFieldLabel(normalizedFieldName, normalizedFieldKey))
+            {
+                return normalizedFieldName!;
+            }
+
+            if (SummerAuditFallbackFieldLabelByAlias.TryGetValue(canonicalAlias, out var fallbackLabel)
+                && !string.IsNullOrWhiteSpace(fallbackLabel))
+            {
+                return fallbackLabel;
+            }
+
+            return normalizedFieldName
+                ?? normalizedFieldKey
+                ?? "الحقل";
+        }
+
+        private static string ResolvePreferredAuditGroupName(string? groupName, string canonicalAlias)
+        {
+            var normalizedGroup = NormalizeAuditText(groupName);
+            if (!string.IsNullOrWhiteSpace(normalizedGroup)
+                && !string.Equals(normalizedGroup, "بدون مجموعة", StringComparison.OrdinalIgnoreCase))
+            {
+                return normalizedGroup;
+            }
+
+            if (SummerAuditFallbackGroupByAlias.TryGetValue(canonicalAlias, out var fallbackGroup)
+                && !string.IsNullOrWhiteSpace(fallbackGroup))
+            {
+                return fallbackGroup;
+            }
+
+            return normalizedGroup ?? "بدون مجموعة";
+        }
+
+        private static bool IsTechnicalAuditFieldLabel(string? label, string? fieldKey)
+        {
+            var normalizedLabel = NormalizeAuditText(label);
+            if (string.IsNullOrWhiteSpace(normalizedLabel))
+            {
+                return true;
+            }
+
+            var normalizedFieldKey = NormalizeAuditText(fieldKey);
+            if (!string.IsNullOrWhiteSpace(normalizedFieldKey)
+                && string.Equals(normalizedLabel, normalizedFieldKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (normalizedLabel.StartsWith("SUM2026_", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var hasArabicCharacters = normalizedLabel.Any(ch => ch >= '\u0600' && ch <= '\u06FF');
+            if (hasArabicCharacters)
+            {
+                return false;
+            }
+
+            var hasWhiteSpace = normalizedLabel.Any(char.IsWhiteSpace);
+            if (hasWhiteSpace)
+            {
+                return false;
+            }
+
+            return normalizedLabel.All(ch => char.IsLetterOrDigit(ch) || ch == '_' || ch == '-');
+        }
+
+        private static string ResolveSummerAuditAlias(string? fieldKey)
+        {
+            var normalizedFieldKey = NormalizeAuditText(fieldKey);
+            if (string.IsNullOrWhiteSpace(normalizedFieldKey))
+            {
+                return string.Empty;
+            }
+
+            return SummerAuditAliasMap.TryGetValue(normalizedFieldKey, out var alias)
+                ? alias
+                : normalizedFieldKey;
+        }
+
+        private static Dictionary<string, string> BuildSummerAuditAliasMap()
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            AddSummerAuditAliasRange(map, "OWNER_NAME", SummerWorkflowDomainConstants.EmployeeNameFieldKinds);
+            AddSummerAuditAliasRange(map, "OWNER_FILE_NUMBER", SummerWorkflowDomainConstants.EmployeeIdFieldKinds);
+            AddSummerAuditAliasRange(map, "OWNER_PHONE", SummerWorkflowDomainConstants.EmployeePhoneFieldKinds);
+            AddSummerAuditAliasRange(map, "OWNER_EXTRA_PHONE", SummerWorkflowDomainConstants.EmployeeExtraPhoneFieldKinds);
+            AddSummerAuditAliasRange(map, "FAMILY_COUNT", SummerWorkflowDomainConstants.FamilyCountFieldKinds);
+            AddSummerAuditAliasRange(map, "EXTRA_COUNT", SummerWorkflowDomainConstants.ExtraCountFieldKinds);
+
+            AddSummerAuditAliasRange(map, "COMPANION_NAME", new[] { "SUM2026_CompanionName", "CompanionName", "Companion_Name", "CompanionNameAr" });
+            AddSummerAuditAliasRange(map, "COMPANION_AGE", new[] { "SUM2026_CompanionAge", "CompanionAge", "Companion_Age" });
+            AddSummerAuditAliasRange(map, "COMPANION_RELATION", new[] { "SUM2026_CompanionRelation", "CompanionRelation", "Companion_Relation" });
+
+            return map;
+        }
+
+        private static void AddSummerAuditAliasRange(
+            Dictionary<string, string> map,
+            string alias,
+            IEnumerable<string> keys)
+        {
+            if (map == null || string.IsNullOrWhiteSpace(alias) || keys == null)
+            {
+                return;
+            }
+
+            foreach (var key in keys)
+            {
+                var normalizedKey = NormalizeAuditText(key);
+                if (string.IsNullOrWhiteSpace(normalizedKey))
+                {
+                    continue;
+                }
+
+                if (!map.ContainsKey(normalizedKey))
+                {
+                    map[normalizedKey] = alias;
+                }
+            }
+        }
+
+        private static string BuildSummerGroupContext(string? groupName, int instanceGroupId)
+        {
+            var normalizedGroup = NormalizeAuditText(groupName);
+            var groupLabel = string.IsNullOrWhiteSpace(normalizedGroup)
+                || string.Equals(normalizedGroup, "بدون مجموعة", StringComparison.OrdinalIgnoreCase)
+                    ? "البيانات"
+                    : normalizedGroup;
+            var instanceContext = BuildSummerInstanceContext(normalizedGroup, instanceGroupId);
+            return string.IsNullOrWhiteSpace(instanceContext)
+                ? groupLabel
+                : $"{groupLabel} {instanceContext}";
+        }
+
+        private static string BuildSummerInstanceContext(string? groupName, int instanceGroupId)
+        {
+            if (instanceGroupId <= 0)
+            {
+                return string.Empty;
+            }
+
+            var isCompanionGroup = !string.IsNullOrWhiteSpace(groupName)
+                && groupName.Contains("مرافق", StringComparison.OrdinalIgnoreCase);
+            var shouldShowInstance = instanceGroupId > 1 || isCompanionGroup;
+            if (!shouldShowInstance)
+            {
+                return string.Empty;
+            }
+
+            var ordinal = ResolveArabicOrdinalText(instanceGroupId);
+            if (isCompanionGroup)
+            {
+                return $"للمرافق {ordinal}";
+            }
+
+            return $"للعنصر {ordinal}";
+        }
+
+        private static string ResolveArabicOrdinalText(int number)
+        {
+            return number switch
+            {
+                1 => "الأول",
+                2 => "الثاني",
+                3 => "الثالث",
+                4 => "الرابع",
+                5 => "الخامس",
+                6 => "السادس",
+                7 => "السابع",
+                8 => "الثامن",
+                9 => "التاسع",
+                10 => "العاشر",
+                _ => $"رقم {ConvertToArabicIndicDigits(number.ToString(CultureInfo.InvariantCulture))}"
+            };
+        }
+
+        private static string FormatAuditValueForReply(string? value)
+        {
+            return ConvertToArabicIndicDigits(FormatAuditValue(value));
+        }
+
+        private static string ConvertToArabicIndicDigits(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            var buffer = value.ToCharArray();
+            for (var index = 0; index < buffer.Length; index++)
+            {
+                var current = buffer[index];
+                if (current >= '0' && current <= '9')
+                {
+                    buffer[index] = (char)('٠' + (current - '0'));
+                }
+            }
+
+            return new string(buffer);
+        }
+
+        private sealed class SummerFieldAuditMetadata
+        {
+            public string? GroupName { get; set; }
+            public string? FieldLabel { get; set; }
+        }
+
+        private sealed class SummerFieldAuditEntry
+        {
+            public string Operation { get; set; } = "تعديل";
+            public string GroupName { get; set; } = "بدون مجموعة";
+            public string FieldName { get; set; } = string.Empty;
+            public string FieldKey { get; set; } = string.Empty;
+            public int InstanceGroupId { get; set; }
+            public string BeforeValue { get; set; } = "(فارغ)";
+            public string AfterValue { get; set; } = "(فارغ)";
         }
 
         private async Task SaveRequestAttachmentsAsync(List<IFormFile>? files, int replyId)

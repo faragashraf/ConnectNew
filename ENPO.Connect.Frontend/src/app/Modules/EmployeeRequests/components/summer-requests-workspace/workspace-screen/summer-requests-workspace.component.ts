@@ -115,6 +115,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   editRequestId: number | null = null;
   creatingEditLink = false;
   resolvingEditToken = false;
+  isAdminEditHost = false;
 
   private readonly paymentInFutureErrorKey = 'paymentInFuture';
   private readonly subscriptions = new Subscription();
@@ -219,6 +220,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   get isEditMode(): boolean {
     return String(this.editRouteToken ?? '').trim().length > 0;
+  }
+
+  get editModeExitLabel(): string {
+    return this.isAdminEditHost ? 'العودة للوحة الإدارة' : 'العودة لإنشاء طلب جديد';
   }
 
   get transferDestination(): SummerDestinationConfig | undefined {
@@ -529,7 +534,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       next: response => {
         const token = String(response?.data ?? '').trim();
         if (response?.isSuccess && token.length > 0) {
-          this.router.navigate(['/EmployeeRequests/SummerRequests/edit', token]);
+          this.router.navigate([this.getEditRoutePrefix(), token]);
           return;
         }
 
@@ -555,7 +560,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     if (openMyRequestsTab) {
       this.activeTabIndex = 1;
     }
-    this.router.navigate(['/EmployeeRequests/SummerRequests']);
+    this.router.navigate([this.getEditExitRoute()]);
   }
 
   addFiles(event: Event, bucket: FileBucket): void {
@@ -849,6 +854,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           if (this.isEditMode && this.editRequestId) {
             const editRequest = this.myRequests.find(item => item.messageId === this.editRequestId);
             if (!editRequest) {
+              if (this.isAdminEditHost) {
+                return;
+              }
+
               this.msg.msgError('خطأ', '<h5>تعذر العثور على الطلب المطلوب للتعديل ضمن طلباتك الحالية.</h5>', true);
               this.exitEditMode(true);
               return;
@@ -1121,7 +1130,36 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     });
   }
 
+  private getEditRoutePrefix(): string {
+    return this.isAdminEditHost
+      ? '/EmployeeRequests/SummerRequestsManagement/edit'
+      : '/EmployeeRequests/SummerRequests/edit';
+  }
+
+  private getEditExitRoute(): string {
+    return this.isAdminEditHost
+      ? '/EmployeeRequests/SummerRequestsManagement'
+      : '/EmployeeRequests/SummerRequests';
+  }
+
   private bindRouteMode(): void {
+    const routeDataSub = this.route.data.subscribe(data => {
+      const host = String(data?.['summerEditHost'] ?? '').trim().toLowerCase();
+      if (host === 'admin') {
+        this.isAdminEditHost = true;
+        return;
+      }
+
+      if (host === 'employee') {
+        this.isAdminEditHost = false;
+        return;
+      }
+
+      const currentUrl = String(this.router.url ?? '').trim().toLowerCase();
+      this.isAdminEditHost = currentUrl.includes('/employeeRequests/summerrequestsmanagement/edit'.toLowerCase());
+    });
+    this.subscriptions.add(routeDataSub);
+
     const routeSub = this.route.paramMap.subscribe(params => {
       const routeToken = String(params.get('token') ?? params.get('id') ?? '').trim();
       if (routeToken.length === 0) {
@@ -1180,7 +1218,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     this.editRouteToken = null;
     this.editRequestId = null;
     this.resolvingEditToken = false;
-    this.router.navigate(['/EmployeeRequests/SummerRequests']);
+    this.router.navigate([this.getEditExitRoute()]);
   }
 
   private loadSelectedRequestDetails(messageId: number): void {
