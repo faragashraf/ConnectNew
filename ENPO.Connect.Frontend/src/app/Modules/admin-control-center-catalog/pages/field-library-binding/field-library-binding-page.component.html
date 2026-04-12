@@ -707,6 +707,12 @@
           (click)="onApplyDynamicRuntimeExternalAsyncValidationPreset()">
         </button>
       </div>
+      <div class="builder-validation" *ngIf="dynamicRuntimeBuilderInlineValidationIssues.length > 0">
+        <p>لا يمكن تطبيق الإعداد قبل معالجة النقاط التالية:</p>
+        <ul>
+          <li *ngFor="let issue of dynamicRuntimeBuilderInlineValidationIssues">{{ issue }}</li>
+        </ul>
+      </div>
       <div class="integration-grid">
         <div class="field">
           <label>نوع السلوك</label>
@@ -783,6 +789,9 @@
               type="number"
               [(ngModel)]="dynamicRuntimeBuilderModel.statementId"
               [ngModelOptions]="{ standalone: true }" />
+            <small class="error" *ngIf="isDynamicRuntimeBuilderStatementIdMissing">
+              معرّف العبارة مطلوب ويجب أن يكون رقمًا موجبًا.
+            </small>
           </div>
         </div>
         <div class="builder-list">
@@ -812,6 +821,9 @@
               [(ngModel)]="dynamicRuntimeBuilderModel.fullUrl"
               [ngModelOptions]="{ standalone: true }"
               placeholder="https://example.com/api/..." />
+            <small class="error" *ngIf="isDynamicRuntimeBuilderExternalUrlMissing">
+              الرابط الكامل مطلوب لمسار المصدر الخارجي.
+            </small>
           </div>
           <div class="field">
             <label>طريقة الطلب</label>
@@ -981,7 +993,14 @@
     <ng-template pTemplate="footer">
       <div class="builder-footer">
         <button pButton type="button" class="p-button-text" label="إلغاء" (click)="onCancelDynamicRuntimeBuilder()"></button>
-        <button pButton type="button" label="تطبيق على الحقل" icon="pi pi-check" (click)="onSaveDynamicRuntimeBuilder()"></button>
+        <button
+          pButton
+          type="button"
+          label="تطبيق على الحقل"
+          icon="pi pi-check"
+          [disabled]="!isDynamicRuntimeBuilderReadyToApply"
+          (click)="onSaveDynamicRuntimeBuilder()">
+        </button>
       </div>
     </ng-template>
   </p-dialog>

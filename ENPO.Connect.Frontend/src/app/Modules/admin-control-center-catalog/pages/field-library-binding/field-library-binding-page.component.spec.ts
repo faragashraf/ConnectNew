@@ -615,6 +615,8 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
       readonly: false,
       isReadonly: false
     });
+    let docSourcePayloadDisplaySettingsJson = '';
+    let backendStoredDisplaySettingsJson = '';
 
     const categoryId = 100;
     const appId = 'APP-UNIT';
@@ -752,7 +754,10 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     })));
 
     dynamicSubjectsController.upsertAdminCategoryFieldLinks.and.callFake((_catId: number, request: any) => {
-      latestDisplaySettingsJson = request.links?.[0]?.displaySettingsJson ?? latestDisplaySettingsJson;
+      const docSourcePayload = (request?.links ?? []).find((link: any) => link?.fieldKey === fieldKey);
+      docSourcePayloadDisplaySettingsJson = String(docSourcePayload?.displaySettingsJson ?? '');
+      latestDisplaySettingsJson = docSourcePayload?.displaySettingsJson ?? latestDisplaySettingsJson;
+      backendStoredDisplaySettingsJson = latestDisplaySettingsJson;
       return of(createResponse([
         {
           mendSql: 7001,
@@ -827,6 +832,13 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
 
     component.onOpenDynamicRuntimeBuilder(targetBinding);
     component.onApplyDynamicRuntimePowerBiOptionLoaderPreset();
+    expect(component.isDynamicRuntimeBuilderReadyToApply).toBeFalse();
+    expect(component.dynamicRuntimeBuilderInlineValidationIssues.some(issue =>
+      issue.includes('معرّف العبارة'))).toBeTrue();
+    component.onSaveDynamicRuntimeBuilder();
+    expect(component.bindings[0].dynamicRuntimeJson).toBe('');
+    expect(component.dynamicRuntimeBuilderVisible).toBeTrue();
+
     component.dynamicRuntimeBuilderModel.statementId = 65;
     component.dynamicRuntimeBuilderModel.parameters = [
       {
@@ -842,11 +854,29 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     component.dynamicRuntimeBuilderModel.responseValuePath = 'id';
     component.dynamicRuntimeBuilderModel.responseLabelPath = 'name';
     component.onSaveDynamicRuntimeBuilder();
+    expect(component.dynamicRuntimeBuilderVisible).toBeFalse();
+    expect(component.bindings[0].dynamicRuntimeJson).toContain('"optionLoader"');
+    expect(component.bindings[0].dynamicRuntimeJson).toContain('"statementId": 65');
+    expect(String(component.bindings[0].displaySettingsJson ?? '')).toContain('"dynamicRuntime"');
+    expect(String(component.bindings[0].displaySettingsJson ?? '')).toContain('"statementId":65');
+
     // Simulate invalid advanced JSON draft without applying it.
     component.toggleDynamicRuntimeAdvancedMode(component.bindings[0]);
     component.onDynamicRuntimeAdvancedDraftChange(component.bindings[0], '{ invalid json from raw textarea');
     component.onBindingChanged();
     expect(component.validation.isValid).toBeTrue();
+
+    // Trace point #1: row model right before Save All.
+    const rowBeforeSave = {
+      dynamicRuntimeJson: '',
+      displaySettingsJson: String(component.bindings[0].displaySettingsJson ?? '')
+    };
+    // Simulate a transient drift where raw runtime mirror is empty while displaySettings still holds dynamicRuntime.
+    component.bindings[0] = {
+      ...component.bindings[0],
+      dynamicRuntimeJson: ''
+    };
+    rowBeforeSave.dynamicRuntimeJson = String(component.bindings[0].dynamicRuntimeJson ?? '');
 
     await component.onSaveToBackend();
 
@@ -857,6 +887,14 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     expect(sentDisplaySettings).toContain('"optionLoader"');
     expect(sentDisplaySettings).toContain('"statementId":65');
     expect(sentDisplaySettings).toContain('"sourceType":"powerbi"');
+    // Trace point #2: backend payload + stored backend value.
+    expect(docSourcePayloadDisplaySettingsJson).toContain('"dynamicRuntime"');
+    expect(docSourcePayloadDisplaySettingsJson).toContain('"statementId":65');
+    expect(backendStoredDisplaySettingsJson).toContain('"dynamicRuntime"');
+    expect(backendStoredDisplaySettingsJson).toContain('"statementId":65');
+    // Ensure we did not lose runtime even when row.dynamicRuntimeJson was transiently empty.
+    expect(rowBeforeSave.dynamicRuntimeJson).toBe('');
+    expect(rowBeforeSave.displaySettingsJson).toContain('"dynamicRuntime"');
 
     const reloadedBinding = component.bindings.find(item => item.fieldKey === fieldKey);
     expect(reloadedBinding).toBeTruthy();
@@ -871,6 +909,10 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     expect(component.dynamicRuntimeBuilderModel.parameters[0].name).toBe('direction');
     expect(component.dynamicRuntimeBuilderModel.parameters[0].source).toBe('static');
     expect(component.dynamicRuntimeBuilderModel.parameters[0].staticValue).toBe('incoming');
+    // Trace point #3: hydrated row after backend reload.
+    expect(String(reloadedBinding.displaySettingsJson ?? '')).toContain('"dynamicRuntime"');
+    expect(String(reloadedBinding.dynamicRuntimeJson ?? '')).toContain('"optionLoader"');
+    expect(String(reloadedBinding.dynamicRuntimeJson ?? '')).toContain('"statementId": 65');
     expect(localStorage.getItem(draftStorageKey)).toBeNull();
   });
 });

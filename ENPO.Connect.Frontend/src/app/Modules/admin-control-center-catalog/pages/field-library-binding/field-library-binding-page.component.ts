@@ -695,8 +695,17 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
 
     const targetBindingId = this.dynamicRuntimeBuilderTargetBindingId;
+    const builderIssues = this.dynamicRuntimeBuilderInlineValidationIssues;
+    if (builderIssues.length > 0) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = builderIssues[0];
+      return;
+    }
+
     const runtimeConfig = this.buildRuntimeConfigFromBuilder(this.dynamicRuntimeBuilderModel);
     if (!runtimeConfig) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'تعذر تطبيق إعدادات السلوك الديناميكي بسبب نقص أو تعارض في بيانات المنشئ.';
       return;
     }
 
@@ -822,6 +831,22 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
   get isDynamicRuntimeAutofillBehavior(): boolean {
     return this.dynamicRuntimeBuilderModel.behaviorType === 'autofill';
+  }
+
+  get dynamicRuntimeBuilderInlineValidationIssues(): string[] {
+    return this.collectDynamicRuntimeBuilderInlineValidationIssues(this.dynamicRuntimeBuilderModel);
+  }
+
+  get isDynamicRuntimeBuilderReadyToApply(): boolean {
+    return this.dynamicRuntimeBuilderInlineValidationIssues.length === 0;
+  }
+
+  get isDynamicRuntimeBuilderStatementIdMissing(): boolean {
+    return this.isDynamicRuntimePowerBiSource && !this.toPositiveInt(this.dynamicRuntimeBuilderModel.statementId);
+  }
+
+  get isDynamicRuntimeBuilderExternalUrlMissing(): boolean {
+    return this.isDynamicRuntimeExternalSource && !this.normalizeNullable(this.dynamicRuntimeBuilderModel.fullUrl);
   }
 
   onAddReferenceComponent(): void {
@@ -1277,7 +1302,12 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       const linkPayload: SubjectCategoryFieldLinkUpsertItemDto[] = normalizedBindings.map(binding => {
         const normalizedFieldKey = this.normalizeFieldKey(binding.fieldKey);
         const existingLink = latestLinksByKey.get(normalizedFieldKey) ?? null;
-        const displaySettingsJson = this.buildDisplaySettingsJson(existingLink?.displaySettingsJson, binding);
+        const runtimeJsonForPersistence = this.resolveBindingRuntimeJson(binding);
+        const bindingForPersistence: BoundFieldItem = {
+          ...binding,
+          dynamicRuntimeJson: runtimeJsonForPersistence
+        };
+        const displaySettingsJson = this.buildDisplaySettingsJson(existingLink?.displaySettingsJson, bindingForPersistence);
 
         return {
           mendSql: this.toPositiveInt(existingLink?.mendSql) ?? this.toPositiveInt(binding.mendSql) ?? undefined,
@@ -1901,8 +1931,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private buildRuntimeConfigFromBuilder(model: DynamicRuntimeBuilderVm): RequestRuntimeDynamicFieldBehaviorConfig | null {
     const integration = this.buildIntegrationConfigFromBuilder(model);
     if (!integration) {
-      this.stepMessageSeverity = 'warn';
-      this.stepMessage = 'تهيئة التكامل غير مكتملة. راجع نوع المصدر ومعلمات الاستدعاء.';
       return null;
     }
 
@@ -1978,6 +2006,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     if (model.sourceType === 'powerbi') {
       const statementId = this.toPositiveInt(model.statementId);
       if (!statementId) {
+        this.stepMessageSeverity = 'warn';
+        this.stepMessage = 'مصدر Power BI يتطلب إدخال معرّف عبارة صالح.';
         return null;
       }
 
@@ -1992,6 +2022,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     const fullUrl = this.normalizeNullable(model.fullUrl);
     if (!fullUrl) {
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = 'المصدر الخارجي يتطلب إدخال الرابط الكامل.';
       return null;
     }
 
@@ -2005,6 +2037,109 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       body: this.mapBuilderBindingsToContract(model.body),
       headers: this.mapBuilderBindingsToContract(model.headers)
     };
+  }
+
+  private collectDynamicRuntimeBuilderInlineValidationIssues(model: DynamicRuntimeBuilderVm): string[] {
+    const issues: string[] = [];
+
+    if (model.sourceType === 'powerbi') {
+      if (!this.toPositiveInt(model.statementId)) {
+        issues.push('مصدر Power BI يتطلب إدخال "معرّف العبارة" كرقم موجب.');
+      }
+
+      this.collectDynamicRuntimeBuilderBindingIssues('المعاملات', model.parameters, issues);
+    } else {
+      if (!this.normalizeNullable(model.fullUrl)) {
+        issues.push('المصدر الخارجي يتطلب إدخال الرابط الكامل.');
+      }
+
+      this.collectDynamicRuntimeBuilderBindingIssues('معاملات الاستعلام', model.query, issues);
+      this.collectDynamicRuntimeBuilderBindingIssues('معاملات جسم الطلب', model.body, issues);
+      this.collectDynamicRuntimeBuilderBindingIssues('رؤوس الطلب', model.headers, issues);
+    }
+
+    if (model.authMode === 'custom') {
+      this.collectDynamicRuntimeBuilderBindingIssues('رؤوس المصادقة المخصصة', model.customHeaders, issues);
+    }
+
+    if (model.behaviorType === 'autofill') {
+      const hasAnyValidPatch = (model.patches ?? [])
+        .some(patch => this.normalizeNullable(patch.targetFieldKey) != null);
+      if (!hasAnyValidPatch) {
+        issues.push('وضع التعبئة التلقائية يتطلب Patch واحدة على الأقل مع مفتاح حقل مستهدف.');
+      }
+
+      (model.patches ?? []).forEach((patch, index) => {
+        if (!this.hasDynamicRuntimeBuilderPatchInput(patch)) {
+          return;
+        }
+
+        if (!this.normalizeNullable(patch.targetFieldKey)) {
+          issues.push(`Patch رقم ${index + 1}: مفتاح الحقل المستهدف مطلوب.`);
+        }
+      });
+    }
+
+    return issues;
+  }
+
+  private collectDynamicRuntimeBuilderBindingIssues(
+    sectionLabel: string,
+    bindings: DynamicRuntimeBuilderBindingVm[] | undefined,
+    issues: string[]
+  ): void {
+    for (const [index, binding] of (bindings ?? []).entries()) {
+      if (!this.hasDynamicRuntimeBuilderBindingInput(binding)) {
+        continue;
+      }
+
+      const name = this.normalizeNullable(binding.name);
+      if (!name) {
+        issues.push(`${sectionLabel} - السطر ${index + 1}: اسم العنصر مطلوب.`);
+        continue;
+      }
+
+      if (binding.source === 'field') {
+        if (!this.normalizeNullable(binding.fieldKey)) {
+          issues.push(`${sectionLabel} - السطر ${index + 1}: مفتاح الحقل مطلوب عند اختيار "من حقل".`);
+        }
+        continue;
+      }
+
+      if (binding.source === 'claim') {
+        if (!this.normalizeNullable(binding.claimKey)) {
+          issues.push(`${sectionLabel} - السطر ${index + 1}: مفتاح المطالبة مطلوب عند اختيار "من مطالبة المستخدم".`);
+        }
+        continue;
+      }
+
+      if (!this.normalizeNullable(binding.staticValue)) {
+        issues.push(`${sectionLabel} - السطر ${index + 1}: القيمة الثابتة مطلوبة عند اختيار "قيمة ثابتة".`);
+      }
+    }
+  }
+
+  private hasDynamicRuntimeBuilderBindingInput(binding: DynamicRuntimeBuilderBindingVm | undefined): boolean {
+    if (!binding) {
+      return false;
+    }
+
+    return this.normalizeNullable(binding.name) != null
+      || this.normalizeNullable(binding.staticValue) != null
+      || this.normalizeNullable(binding.fieldKey) != null
+      || this.normalizeNullable(binding.claimKey) != null
+      || this.normalizeNullable(binding.fallbackValue) != null;
+  }
+
+  private hasDynamicRuntimeBuilderPatchInput(patch: DynamicRuntimeBuilderPatchVm | undefined): boolean {
+    if (!patch) {
+      return false;
+    }
+
+    return this.normalizeNullable(patch.targetFieldKey) != null
+      || this.normalizeNullable(patch.valuePath) != null
+      || this.normalizeNullable(patch.valueTemplate) != null
+      || patch.clearWhenMissing === true;
   }
 
   private mapBuilderBindingsToContract(
