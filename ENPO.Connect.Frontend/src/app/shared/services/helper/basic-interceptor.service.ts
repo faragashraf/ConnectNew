@@ -75,10 +75,12 @@ export class BasicInterceptorService implements HttpInterceptor {
       }
 
       return next.handle(tokenReq).pipe(
-        catchError((error: HttpErrorResponse) => {
-          console.log('error.status', error.status, error, tokenReq.url);
+        catchError((error: unknown) => {
+          if (error instanceof HttpErrorResponse) {
+            console.log('error.status', error.status, error, tokenReq.url);
+          }
 
-          if (error.status === 401) {
+          if (error instanceof HttpErrorResponse && error.status === 401) {
             return this.handleUnauthorizedError(tokenReq, next, token);
           }
 

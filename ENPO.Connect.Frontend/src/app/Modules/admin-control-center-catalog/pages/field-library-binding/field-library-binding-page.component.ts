@@ -17,6 +17,7 @@ import {
 import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import { AdminCatalogGroupTreeNodeDto } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
 import { DynamicSubjectsAdminCatalogController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
+import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import {
   BoundFieldItem,
   FieldLibraryBindingValidationResult,
@@ -110,6 +111,26 @@ interface DynamicRuntimeBuilderVm {
   patches: DynamicRuntimeBuilderPatchVm[];
 }
 
+interface ParsedBindingOptionsResult {
+  isValid: boolean;
+  values: Set<string>;
+}
+
+interface BindingOptionSourceDecision {
+  source: 'Static' | 'Dynamic' | 'None';
+  reason: string;
+  hasStaticOptionsPayload: boolean;
+  staticOptionsValid: boolean;
+  staticOptionsCount: number;
+  hasDynamicRuntimeConfig: boolean;
+  hasBehavioralRuntimeConfig: boolean;
+  hasDynamicOptionSource: boolean;
+  dynamicOptionSourceReason?: string;
+  optionsPayloadIgnored: boolean;
+  optionsPayloadIgnoredReason?: string;
+  staticOptionValues: Set<string>;
+}
+
 @Component({
   selector: 'app-field-library-binding-page',
   templateUrl: './field-library-binding-page.component.html',
@@ -118,6 +139,7 @@ interface DynamicRuntimeBuilderVm {
 })
 export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDestroy {
   private static readonly CATALOG_CONTEXT_STORAGE_KEY = 'connect:control-center-catalog:context:v1';
+  private static readonly SAVE_DIAGNOSTIC_MODE_STORAGE_KEY = 'connect:field-library-binding:diagnostic-mode';
 
   @Input() requestTypeId: number | null = null;
   @Input() applicationId: string | null = null;
@@ -285,6 +307,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
   private readonly subscriptions = new Subscription();
   private syncingFromStore = false;
+  private saveDiagnosticsMode = false;
   private activeLoadToken = 0;
   private currentCategoryId: number | null = null;
   private currentApplicationId: string | null = null;
@@ -292,7 +315,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private routeApplicationId: string | null = null;
   private subjectTypeAdmin: SubjectTypeAdminDto | null = null;
   private fieldCatalogByKey = new Map<string, SubjectAdminFieldDto>();
-  private loadedBindingsSnapshot = '';
 
   constructor(
     private readonly fb: FormBuilder,
@@ -300,16 +322,19 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     private readonly router: Router,
     private readonly bindingEngine: FieldLibraryBindingEngine,
     private readonly dynamicSubjectsController: DynamicSubjectsController,
-    private readonly adminCatalogController: DynamicSubjectsAdminCatalogController
+    private readonly adminCatalogController: DynamicSubjectsAdminCatalogController,
+    private readonly msgsService?: MsgsService
   ) {}
 
   ngOnInit(): void {
+    this.saveDiagnosticsMode = this.resolveSaveDiagnosticsMode();
     this.setReferenceComponents([this.createReferenceComponent('sequence')], false);
     this.vm = { context: { categoryId: null, applicationId: null } };
     this.step = { requiredCompleted: 0, requiredTotal: 1, isCompleted: false };
 
     this.subscriptions.add(
       combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(([pathParams, queryParams]) => {
+        this.saveDiagnosticsMode = this.resolveSaveDiagnosticsMode();
         this.routeCategoryId = this.readRouteCategoryId(queryParams) ?? this.readRouteCategoryId(pathParams);
         this.routeApplicationId = this.readRouteApplicationId(queryParams) ?? this.readRouteApplicationId(pathParams);
         this.syncContextFromInputsOrRoute();
@@ -727,6 +752,11 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.dynamicRuntimeBuilderTargetBindingId = null;
   }
 
+  onDynamicRuntimeBuilderDialogHide(): void {
+    this.dynamicRuntimeBuilderVisible = false;
+    this.dynamicRuntimeBuilderTargetBindingId = null;
+  }
+
   onSaveDynamicRuntimeBuilder(): void {
     if (!this.dynamicRuntimeBuilderTargetBindingId) {
       this.onCancelDynamicRuntimeBuilder();
@@ -1037,9 +1067,11 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.clearDraftFromLocalStorage();
       this.stepMessageSeverity = 'success';
       this.stepMessage = 'تم حفظ الحقول وسياسة الرقم المرجعي في قاعدة البيانات بنجاح.';
+      this.msgsService?.msgSuccess('تم حفظ الحقول وسياسة الرقم المرجعي في قاعدة البيانات بنجاح.', 3000, true);
     } catch (error) {
       this.stepMessageSeverity = 'warn';
       this.stepMessage = this.toErrorMessage(error, 'تعذر حفظ التعديلات في قاعدة البيانات.');
+      this.msgsService?.msgError('فشل الحفظ', this.stepMessage, true);
     } finally {
       this.savingToBackend = false;
     }
@@ -1102,7 +1134,74 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       );
     }
 
+    reasons.push(...this.collectLocalRuntimeDraftBlockingReasons());
+
     return reasons;
+  }
+
+  private collectLocalRuntimeDraftBlockingReasons(): string[] {
+    const reasons: string[] = [];
+
+    if (this.dynamicRuntimeBuilderVisible || this.dynamicRuntimeBuilderTargetBindingId) {
+      reasons.push('يوجد تعديل محلي داخل "منشئ التكامل" لم يُطبّق على الحقل بعد.');
+    }
+
+    const unappliedAdvancedDrafts = this.collectUnappliedAdvancedRuntimeDrafts();
+    if (unappliedAdvancedDrafts.length > 0) {
+      reasons.push(`يوجد JSON متقدم غير مطبّق: ${unappliedAdvancedDrafts.join(' | ')}`);
+    }
+
+    return reasons;
+  }
+
+  private collectUnappliedAdvancedRuntimeDrafts(): string[] {
+    const details: string[] = [];
+
+    for (const bindingId of Array.from(this.dynamicRuntimeAdvancedOpenBindingIds)) {
+      const draft = this.dynamicRuntimeAdvancedDraftByBindingId.get(bindingId);
+      if (draft == null) {
+        continue;
+      }
+
+      const binding = this.bindings.find(item => item.bindingId === bindingId);
+      if (!binding) {
+        continue;
+      }
+
+      const hasPendingDraft = this.hasUnappliedAdvancedRuntimeDraft(binding, draft);
+      if (!hasPendingDraft) {
+        continue;
+      }
+
+      details.push(binding.label || binding.fieldKey);
+    }
+
+    return details;
+  }
+
+  private hasUnappliedAdvancedRuntimeDraft(binding: BoundFieldItem, draftRaw: string): boolean {
+    const draft = this.normalizeNullable(draftRaw);
+    const currentRuntime = this.normalizeNullable(this.resolveBindingRuntimeJson(binding));
+
+    if (!draft) {
+      return currentRuntime != null;
+    }
+
+    const draftRuntime = this.parseSupportedDynamicRuntimeJson(draft);
+    if (!draftRuntime) {
+      return true;
+    }
+
+    if (!currentRuntime) {
+      return true;
+    }
+
+    const currentParsed = this.parseSupportedDynamicRuntimeJson(currentRuntime);
+    if (!currentParsed) {
+      return true;
+    }
+
+    return JSON.stringify(draftRuntime) !== JSON.stringify(currentParsed);
   }
 
   private collectInvalidControlDetails(form: FormGroup, labelByControlName: Readonly<Record<string, string>>): string[] {
@@ -1129,8 +1228,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private buildSaveGuardSnapshot(): string {
     const category = this.currentCategoryId ?? 'null';
     const application = this.currentApplicationId ?? 'null';
+    const advancedDraftCount = Array.from(this.dynamicRuntimeAdvancedOpenBindingIds).length;
 
-    return `الحالة الحالية => referencePolicyForm.invalid=${this.referencePolicyForm.invalid}, presentationForm.invalid=${this.presentationForm.invalid}, validation.isValid=${this.validation.isValid}, backendWorkspaceLoaded=${this.backendWorkspaceLoaded}, currentCategoryId=${category}, currentApplicationId=${application}`;
+    return `الحالة الحالية => referencePolicyForm.invalid=${this.referencePolicyForm.invalid}, presentationForm.invalid=${this.presentationForm.invalid}, validation.isValid=${this.validation.isValid}, backendWorkspaceLoaded=${this.backendWorkspaceLoaded}, dynamicRuntimeBuilderVisible=${this.dynamicRuntimeBuilderVisible}, dynamicRuntimeBuilderTargetBindingId=${this.dynamicRuntimeBuilderTargetBindingId ?? 'null'}, openedAdvancedRuntimeDrafts=${advancedDraftCount}, currentCategoryId=${category}, currentApplicationId=${application}`;
   }
 
   onSaveDraft(): void {
@@ -1164,12 +1264,17 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     const baseValidation = this.bindingEngine.validateBindings(this.bindings);
     const groupIssues = this.collectGroupValidationIssues(this.bindings);
     const dynamicRuntimeIssues = this.collectDynamicRuntimeValidationIssues(this.bindings);
+    const optionSourceIssues = this.collectOptionSourceValidationIssues(this.bindings);
     const referenceIssues = this.validateReferencePolicy();
     this.referencePolicyBlockingIssues = referenceIssues;
 
     this.validation = {
-      isValid: baseValidation.isValid && groupIssues.length === 0 && dynamicRuntimeIssues.length === 0 && referenceIssues.length === 0,
-      blockingIssues: [...baseValidation.blockingIssues, ...groupIssues, ...dynamicRuntimeIssues, ...referenceIssues],
+      isValid: baseValidation.isValid
+        && groupIssues.length === 0
+        && dynamicRuntimeIssues.length === 0
+        && optionSourceIssues.length === 0
+        && referenceIssues.length === 0,
+      blockingIssues: [...baseValidation.blockingIssues, ...groupIssues, ...dynamicRuntimeIssues, ...optionSourceIssues, ...referenceIssues],
       warnings: baseValidation.warnings
     };
 
@@ -1267,7 +1372,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         activeLinks.map(link => this.mapLinkToBinding(link))
       );
       this.pruneDynamicRuntimeAdvancedState();
-      this.loadedBindingsSnapshot = this.bindingEngine.serializeBindingsPayload(this.bindings);
 
       this.serialOptions = this.buildSerialOptions(subjectTypes);
       this.subjectTypeAdmin = resolvedSubjectType;
@@ -1294,7 +1398,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.reusableFields = [];
       this.serialOptions = [];
       this.fieldCatalogByKey.clear();
-      this.loadedBindingsSnapshot = '';
       this.pruneDynamicRuntimeAdvancedState();
       this.evaluateBindings(true, false);
 
@@ -1413,28 +1516,23 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       throw new Error(this.validation.blockingIssues[0]);
     }
 
-    await this.ensureAtLeastOneGroupExists();
+    const saveTraceContext: { stage: string; fieldKey: string | null } = {
+      stage: 'تهيئة الحفظ',
+      fieldKey: null
+    };
 
-    const normalizedBindings = this.bindingEngine.normalizeDisplayOrder(
-      this.bindings.map((binding, index) => ({
-        ...binding,
-        fieldKey: this.normalizeNullable(binding.fieldKey) ?? '',
-        label: this.normalizeNullable(binding.label) ?? '',
-        displayOrder: index + 1,
-        groupId: this.toPositiveInt(binding.groupId) ?? this.resolveDefaultGroupId() ?? 0,
-        groupName: this.resolveGroupName(this.toPositiveInt(binding.groupId) ?? this.resolveDefaultGroupId() ?? 0),
-        type: this.normalizeBindingType(binding.type),
-        defaultValue: String(binding.defaultValue ?? '').trim()
-      }))
-    );
-    const shouldSyncBindings = this.hasBindingChangesSinceBackend(normalizedBindings);
+    try {
+      await this.ensureAtLeastOneGroupExists();
 
-    const latestSubjectTypesResponse = await firstValueFrom(
-      this.dynamicSubjectsController.getSubjectTypesAdminConfig(applicationId ?? undefined)
-    );
-    const latestSubjectTypes = this.readArrayResponse(latestSubjectTypesResponse, 'تعذر تحميل إعدادات النوع قبل الحفظ.');
+      const normalizedBindings = this.buildNormalizedBindingsForPersistence();
+      this.bindings = normalizedBindings;
+      this.pruneDynamicRuntimeAdvancedState();
 
-    if (shouldSyncBindings) {
+      const latestSubjectTypesResponse = await firstValueFrom(
+        this.dynamicSubjectsController.getSubjectTypesAdminConfig(applicationId ?? undefined)
+      );
+      const latestSubjectTypes = this.readArrayResponse(latestSubjectTypesResponse, 'تعذر تحميل إعدادات النوع قبل الحفظ.');
+
       const [latestFieldsResponse, latestLinksResponse] = await Promise.all([
         firstValueFrom(this.dynamicSubjectsController.getAdminFields(applicationId ?? undefined)),
         firstValueFrom(this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId))
@@ -1450,6 +1548,11 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         latestLinks.map(item => [this.normalizeFieldKey(item.fieldKey), item] as const)
       );
 
+      this.traceSaveDiagnostics('save.payload.before-field-upsert', normalizedBindings.map(binding => {
+        const existing = latestFieldsByKey.get(this.normalizeFieldKey(binding.fieldKey)) ?? null;
+        return this.buildBindingSaveTraceRecord(binding, existing, null);
+      }));
+
       for (const binding of normalizedBindings) {
         const normalizedFieldKey = this.normalizeFieldKey(binding.fieldKey);
         if (!normalizedFieldKey) {
@@ -1463,6 +1566,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
         const existing = latestFieldsByKey.get(normalizedFieldKey) ?? null;
         const request = this.buildFieldUpsertRequest(binding, existing, applicationId);
+        saveTraceContext.stage = existing ? 'تحديث تعريف الحقل' : 'إنشاء تعريف الحقل';
+        saveTraceContext.fieldKey = binding.fieldKey;
+        this.traceSaveDiagnostics('save.payload.field-upsert', this.buildBindingSaveTraceRecord(binding, existing, null));
 
         const savedField = existing
           ? this.readSingleResponse(
@@ -1480,12 +1586,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       const linkPayload: SubjectCategoryFieldLinkUpsertItemDto[] = normalizedBindings.map(binding => {
         const normalizedFieldKey = this.normalizeFieldKey(binding.fieldKey);
         const existingLink = latestLinksByKey.get(normalizedFieldKey) ?? null;
-        const runtimeJsonForPersistence = this.resolveBindingRuntimeJson(binding);
-        const bindingForPersistence: BoundFieldItem = {
-          ...binding,
-          dynamicRuntimeJson: runtimeJsonForPersistence
-        };
-        const displaySettingsJson = this.buildDisplaySettingsJson(existingLink?.displaySettingsJson, bindingForPersistence);
 
         return {
           mendSql: this.toPositiveInt(existingLink?.mendSql) ?? this.toPositiveInt(binding.mendSql) ?? undefined,
@@ -1494,38 +1594,180 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
           isActive: true,
           displayOrder: binding.displayOrder,
           isVisible: binding.visible !== false,
-          displaySettingsJson
+          displaySettingsJson: binding.displaySettingsJson
         };
       });
 
+      saveTraceContext.stage = 'حفظ روابط الحقول';
+      saveTraceContext.fieldKey = null;
+      this.traceSaveDiagnostics('save.payload.field-links-upsert', linkPayload.map(item => {
+        const binding = normalizedBindings.find(candidate => this.normalizeFieldKey(candidate.fieldKey) === this.normalizeFieldKey(item.fieldKey));
+        const existingField = latestFieldsByKey.get(this.normalizeFieldKey(item.fieldKey)) ?? null;
+        return this.buildBindingSaveTraceRecord(binding ?? null, existingField, item);
+      }));
       this.readArrayResponse(
         await firstValueFrom(this.dynamicSubjectsController.upsertAdminCategoryFieldLinks(categoryId, { links: linkPayload })),
         'تعذر حفظ روابط الحقول في قاعدة البيانات.'
       );
+
+      const targetType = latestSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId)
+        ?? this.subjectTypeAdmin
+        ?? null;
+
+      const typeRequest = this.buildSubjectTypeUpsertRequest(targetType, normalizedBindings);
+      saveTraceContext.stage = 'حفظ إعدادات النوع';
+      this.traceSaveDiagnostics('save.payload.subject-type-upsert', {
+        categoryId,
+        applicationId,
+        request: typeRequest
+      });
+      const persistedType = this.readSingleResponse(
+        await firstValueFrom(this.dynamicSubjectsController.upsertSubjectTypeAdminConfig(categoryId, typeRequest)),
+        'تعذر حفظ سياسة الرقم المرجعي في قاعدة البيانات.'
+      );
+
+      this.subjectTypeAdmin = persistedType;
+
+      saveTraceContext.stage = 'إعادة تحميل مساحة العمل';
+      await this.loadBackendWorkspace(categoryId, applicationId);
+    } catch (error) {
+      const baseMessage = this.toErrorMessage(error, 'تعذر حفظ التعديلات في قاعدة البيانات.');
+      const contextLabels: string[] = [];
+      const stageHint = this.normalizeNullable(saveTraceContext.stage);
+      const fieldHint = this.normalizeNullable(saveTraceContext.fieldKey);
+      if (stageHint) {
+        contextLabels.push(`المرحلة: ${stageHint}`);
+      }
+      if (fieldHint) {
+        contextLabels.push(`الحقل: ${fieldHint}`);
+      }
+
+      const contextualMessage = contextLabels.length > 0
+        ? `${baseMessage} (${contextLabels.join(' | ')})`
+        : baseMessage;
+
+      this.traceSaveDiagnostics('save.failure', {
+        message: baseMessage,
+        contextualMessage,
+        stage: saveTraceContext.stage,
+        fieldKey: saveTraceContext.fieldKey
+      });
+
+      throw new Error(contextualMessage);
     }
-
-    const targetType = latestSubjectTypes.find(item => Number(item.categoryId ?? 0) === categoryId)
-      ?? this.subjectTypeAdmin
-      ?? null;
-
-    const typeRequest = this.buildSubjectTypeUpsertRequest(targetType, normalizedBindings);
-    const persistedType = this.readSingleResponse(
-      await firstValueFrom(this.dynamicSubjectsController.upsertSubjectTypeAdminConfig(categoryId, typeRequest)),
-      'تعذر حفظ سياسة الرقم المرجعي في قاعدة البيانات.'
-    );
-
-    this.subjectTypeAdmin = persistedType;
-
-    await this.loadBackendWorkspace(categoryId, applicationId);
   }
 
-  private hasBindingChangesSinceBackend(normalizedBindings: ReadonlyArray<BoundFieldItem>): boolean {
-    if (!this.loadedBindingsSnapshot) {
+  private buildNormalizedBindingsForPersistence(): BoundFieldItem[] {
+    const fallbackGroupId = this.resolveDefaultGroupId() ?? 0;
+
+    return this.bindingEngine.normalizeDisplayOrder(
+      this.bindings.map((binding, index) => {
+        const groupId = this.toPositiveInt(binding.groupId) ?? fallbackGroupId;
+        const runtimeJsonForPersistence = this.resolveBindingRuntimeJson(binding);
+
+        const normalizedBinding: BoundFieldItem = {
+          ...binding,
+          fieldKey: this.normalizeNullable(binding.fieldKey) ?? '',
+          label: this.normalizeNullable(binding.label) ?? '',
+          displayOrder: index + 1,
+          groupId,
+          groupName: this.resolveGroupName(groupId),
+          type: this.normalizeBindingType(binding.type),
+          defaultValue: String(binding.defaultValue ?? '').trim(),
+          dynamicRuntimeJson: runtimeJsonForPersistence
+        };
+
+        return {
+          ...normalizedBinding,
+          displaySettingsJson: this.buildDisplaySettingsJson(normalizedBinding.displaySettingsJson, normalizedBinding)
+        };
+      })
+    );
+  }
+
+  private buildBindingSaveTraceRecord(
+    binding: BoundFieldItem | null,
+    existingField: SubjectAdminFieldDto | null,
+    linkPayload: SubjectCategoryFieldLinkUpsertItemDto | null
+  ): Record<string, unknown> {
+    const fieldKey = this.normalizeNullable(linkPayload?.fieldKey)
+      ?? this.normalizeNullable(binding?.fieldKey)
+      ?? this.normalizeNullable(existingField?.fieldKey)
+      ?? '';
+    const runtimePayload = binding
+      ? this.normalizeNullable(this.resolveBindingRuntimeJson(binding))
+      : null;
+    const optionSourceDecision = this.resolveBindingOptionSourceDecision(binding, existingField);
+
+    return {
+      bindingId: binding?.bindingId ?? null,
+      mendSql: this.toPositiveInt(linkPayload?.mendSql) ?? this.toPositiveInt(binding?.mendSql) ?? null,
+      cdmendSql: this.toPositiveInt(existingField?.cdmendSql) ?? this.toPositiveInt(binding?.cdmendSql) ?? null,
+      fieldKey,
+      fieldLabel: this.normalizeNullable(binding?.label)
+        ?? this.normalizeNullable(existingField?.fieldLabel)
+        ?? fieldKey,
+      fieldType: this.normalizeNullable(this.mapBindingTypeToBackendFieldType(binding?.type ?? 'InputText'))
+        ?? this.normalizeNullable(existingField?.fieldType),
+      dataType: this.normalizeNullable(this.mapBindingTypeToBackendDataType(binding?.type ?? 'InputText'))
+        ?? this.normalizeNullable(existingField?.dataType),
+      defaultValue: this.normalizeNullable(binding?.defaultValue)
+        ?? this.normalizeNullable(existingField?.defaultValue),
+      optionsPayload: this.normalizeNullable(existingField?.optionsPayload),
+      optionSource: optionSourceDecision.source,
+      optionSourceReason: optionSourceDecision.reason,
+      hasDynamicRuntimeConfig: optionSourceDecision.hasDynamicRuntimeConfig,
+      hasBehavioralRuntimeConfig: optionSourceDecision.hasBehavioralRuntimeConfig,
+      hasDynamicOptionSource: optionSourceDecision.hasDynamicOptionSource,
+      staticOptionsPayloadValid: optionSourceDecision.staticOptionsValid,
+      staticOptionsCount: optionSourceDecision.staticOptionsCount,
+      optionsPayloadIgnored: optionSourceDecision.optionsPayloadIgnored,
+      optionsPayloadIgnoredReason: optionSourceDecision.optionsPayloadIgnoredReason ?? null,
+      displaySettingsJson: this.normalizeNullable(linkPayload?.displaySettingsJson)
+        ?? this.normalizeNullable(binding?.displaySettingsJson),
+      dynamicRuntimeJson: runtimePayload,
+      groupId: this.toPositiveInt(linkPayload?.groupId) ?? this.toPositiveInt(binding?.groupId) ?? null,
+      displayOrder: linkPayload?.displayOrder ?? binding?.displayOrder ?? null,
+      isVisible: linkPayload?.isVisible ?? binding?.visible ?? true,
+      required: binding?.required ?? existingField?.required ?? false,
+      readonly: binding?.readonly ?? existingField?.isDisabledInit ?? false
+    };
+  }
+
+  private traceSaveDiagnostics(scope: string, payload: unknown): void {
+    if (!this.saveDiagnosticsMode) {
+      return;
+    }
+
+    try {
+      const timestamp = new Date().toISOString();
+      console.groupCollapsed(`[FieldBinding][${scope}] ${timestamp}`);
+      console.log(payload);
+      if (Array.isArray(payload) && payload.length > 0) {
+        console.table(payload);
+      }
+      console.groupEnd();
+    } catch {
+      // Ignore diagnostics failures to avoid blocking save flow.
+    }
+  }
+
+  private resolveSaveDiagnosticsMode(): boolean {
+    const queryFlag = String(this.route.snapshot.queryParamMap.get('diagnosticMode') ?? '')
+      .trim()
+      .toLowerCase();
+    if (queryFlag === '1' || queryFlag === 'true' || queryFlag === 'on') {
       return true;
     }
 
-    const currentSnapshot = this.bindingEngine.serializeBindingsPayload(normalizedBindings);
-    return currentSnapshot !== this.loadedBindingsSnapshot;
+    const traceFlag = String(this.route.snapshot.queryParamMap.get('traceSave') ?? '')
+      .trim()
+      .toLowerCase();
+    if (traceFlag === '1' || traceFlag === 'true' || traceFlag === 'on') {
+      return true;
+    }
+
+    return localStorage.getItem(FieldLibraryBindingPageComponent.SAVE_DIAGNOSTIC_MODE_STORAGE_KEY) === 'true';
   }
 
   private buildFieldUpsertRequest(
@@ -1673,8 +1915,12 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       return '';
     }
 
-    const normalizedRuntime = this.tryNormalizeRuntimeConfig(parsed['dynamicRuntime'])
-      ?? this.tryNormalizeRuntimeConfig(parsed);
+    let normalizedRuntime: Record<string, unknown> | null = null;
+    if (Object.prototype.hasOwnProperty.call(parsed, 'dynamicRuntime')) {
+      normalizedRuntime = this.parseDynamicRuntimeJson(parsed['dynamicRuntime']);
+    }
+
+    normalizedRuntime = normalizedRuntime ?? this.tryNormalizeRuntimeConfig(parsed);
     if (!normalizedRuntime) {
       return '';
     }
@@ -1687,6 +1933,12 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   private parseDynamicRuntimeJson(raw: unknown): Record<string, unknown> | null {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const candidate = raw as Record<string, unknown>;
+      return this.tryNormalizeRuntimeConfig(candidate)
+        ?? { ...candidate };
+    }
+
     const payload = this.normalizeNullable(raw);
     if (!payload) {
       return null;
@@ -1793,7 +2045,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   private resolveBindingRuntimeJson(binding: Pick<BoundFieldItem, 'dynamicRuntimeJson' | 'displaySettingsJson'>): string {
     const direct = this.normalizeNullable(binding.dynamicRuntimeJson);
     if (direct != null) {
-      const normalizedDirect = this.parseSupportedDynamicRuntimeJson(direct);
+      const normalizedDirect = this.parseDynamicRuntimeJson(direct);
       if (normalizedDirect) {
         try {
           return JSON.stringify(normalizedDirect, null, 2);
@@ -1805,7 +2057,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     const fallback = this.extractDynamicRuntimeJson(binding.displaySettingsJson);
     if (fallback) {
-      const normalizedFallback = this.parseSupportedDynamicRuntimeJson(fallback);
+      const normalizedFallback = this.parseDynamicRuntimeJson(fallback);
       if (normalizedFallback) {
         try {
           return JSON.stringify(normalizedFallback, null, 2);
@@ -2663,6 +2915,264 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     return issues;
   }
 
+  private collectOptionSourceValidationIssues(bindings: ReadonlyArray<BoundFieldItem>): string[] {
+    const issues: string[] = [];
+
+    for (const item of bindings ?? []) {
+      const existingField = this.fieldCatalogByKey.get(this.normalizeFieldKey(item.fieldKey)) ?? null;
+      const optionSourceDecision = this.resolveBindingOptionSourceDecision(item, existingField);
+      const fieldLabel = item.label || item.fieldKey;
+      const isDropdown = this.normalizeBindingType(item.type) === 'Dropdown';
+
+      if (!isDropdown && optionSourceDecision.hasDynamicOptionSource) {
+        issues.push(`الحقل "${fieldLabel}" يحتوي مصدر خيارات ديناميكي رغم أن نوعه ليس قائمة اختيار.`);
+        continue;
+      }
+
+      if (!isDropdown) {
+        continue;
+      }
+
+      if (optionSourceDecision.source === 'None') {
+        issues.push(`فشل تجهيز الحقل "${fieldLabel}" لأنه لا يحتوي خيارات ثابتة صالحة ولا مصدر خيارات ديناميكي صريح.`);
+        continue;
+      }
+
+      const defaultValue = this.normalizeNullable(item.defaultValue);
+      if (!defaultValue || optionSourceDecision.source !== 'Static') {
+        continue;
+      }
+
+      if (!optionSourceDecision.staticOptionValues.has(defaultValue)) {
+        issues.push(`فشل تجهيز الحقل "${fieldLabel}" لأن القيمة الافتراضية "${defaultValue}" غير موجودة ضمن الخيارات الثابتة.`);
+      }
+    }
+
+    return Array.from(new Set(issues));
+  }
+
+  private resolveBindingOptionSourceDecision(
+    binding: Pick<BoundFieldItem, 'fieldKey' | 'dynamicRuntimeJson' | 'displaySettingsJson'> | null,
+    existingField: SubjectAdminFieldDto | null
+  ): BindingOptionSourceDecision {
+    const optionsPayload = this.normalizeNullable(existingField?.optionsPayload);
+    const parsedOptions = this.parseBindingOptionsPayload(optionsPayload ?? undefined);
+    const hasStaticOptionsPayload = optionsPayload != null;
+    const hasValidStaticOptions = hasStaticOptionsPayload && parsedOptions.isValid && parsedOptions.values.size > 0;
+    const runtimePayload = this.resolveRuntimePayloadForOptionSource(binding);
+    const runtimeBehavior = runtimePayload
+      ? parseRequestRuntimeDynamicFieldBehavior(JSON.stringify({ dynamicRuntime: runtimePayload }))
+      : null;
+    const hasDynamicOptionSource = runtimeBehavior?.optionLoader != null;
+    const hasBehavioralRuntimeConfig = runtimePayload != null && Object.keys(runtimePayload).length > 0;
+    const dynamicOptionSourceReason = hasDynamicOptionSource
+      ? 'تم اعتماد المصدر الديناميكي لأن optionLoader مفعّل صراحة.'
+      : undefined;
+
+    if (hasDynamicOptionSource) {
+      const optionsPayloadIgnored = hasValidStaticOptions;
+      return {
+        source: 'Dynamic',
+        reason: dynamicOptionSourceReason ?? 'تم اعتماد المصدر الديناميكي.',
+        hasStaticOptionsPayload,
+        staticOptionsValid: parsedOptions.isValid,
+        staticOptionsCount: parsedOptions.values.size,
+        hasDynamicRuntimeConfig: runtimePayload != null,
+        hasBehavioralRuntimeConfig,
+        hasDynamicOptionSource: true,
+        dynamicOptionSourceReason,
+        optionsPayloadIgnored,
+        optionsPayloadIgnoredReason: optionsPayloadIgnored
+          ? 'تم تجاهل optionsPayload بسبب تفعيل optionLoader كمصدر خيارات ديناميكي.'
+          : undefined,
+        staticOptionValues: parsedOptions.values
+      };
+    }
+
+    if (hasValidStaticOptions) {
+      return {
+        source: 'Static',
+        reason: 'تم اعتماد optionsPayload لأنه صالح ولا يوجد optionLoader مفعّل صراحة.',
+        hasStaticOptionsPayload,
+        staticOptionsValid: parsedOptions.isValid,
+        staticOptionsCount: parsedOptions.values.size,
+        hasDynamicRuntimeConfig: runtimePayload != null,
+        hasBehavioralRuntimeConfig,
+        hasDynamicOptionSource: false,
+        optionsPayloadIgnored: false,
+        staticOptionValues: parsedOptions.values
+      };
+    }
+
+    return {
+      source: 'None',
+      reason: this.buildEmptyOptionSourceReason(hasStaticOptionsPayload, parsedOptions.isValid, parsedOptions.values.size, runtimePayload != null),
+      hasStaticOptionsPayload,
+      staticOptionsValid: parsedOptions.isValid,
+      staticOptionsCount: parsedOptions.values.size,
+      hasDynamicRuntimeConfig: runtimePayload != null,
+      hasBehavioralRuntimeConfig,
+      hasDynamicOptionSource: false,
+      optionsPayloadIgnored: false,
+      staticOptionValues: parsedOptions.values
+    };
+  }
+
+  private resolveRuntimePayloadForOptionSource(
+    binding: Pick<BoundFieldItem, 'dynamicRuntimeJson' | 'displaySettingsJson'> | null
+  ): Record<string, unknown> | null {
+    if (!binding) {
+      return null;
+    }
+
+    const directRuntimePayload = this.parseDynamicRuntimeJson(binding.dynamicRuntimeJson);
+    if (directRuntimePayload) {
+      return directRuntimePayload;
+    }
+
+    const displaySettings = this.parseDisplaySettings(binding.displaySettingsJson);
+    if (!displaySettings) {
+      return null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(displaySettings, 'dynamicRuntime')) {
+      const embeddedRuntime = this.parseDynamicRuntimeJson(displaySettings['dynamicRuntime']);
+      if (embeddedRuntime) {
+        return embeddedRuntime;
+      }
+    }
+
+    if (this.isRuntimeBehaviorPayload(displaySettings)) {
+      return displaySettings;
+    }
+
+    return null;
+  }
+
+  private buildEmptyOptionSourceReason(
+    hasStaticOptionsPayload: boolean,
+    staticOptionsValid: boolean,
+    staticOptionsCount: number,
+    hasDynamicRuntimeConfig: boolean
+  ): string {
+    if (hasStaticOptionsPayload && !staticOptionsValid) {
+      return 'optionsPayload موجود لكنه غير صالح.';
+    }
+
+    if (hasStaticOptionsPayload && staticOptionsCount <= 0) {
+      return 'optionsPayload موجود لكنه لا يحتوي خيارات صالحة.';
+    }
+
+    if (hasDynamicRuntimeConfig) {
+      return 'dynamicRuntime موجود لكنه لا يفعّل مصدر خيارات ديناميكي.';
+    }
+
+    return 'لا توجد خيارات ثابتة صالحة ولا مصدر خيارات ديناميكي صريح.';
+  }
+
+  private parseBindingOptionsPayload(payloadRaw: string | undefined): ParsedBindingOptionsResult {
+    const values = new Set<string>();
+    const payload = this.normalizeNullable(payloadRaw);
+    if (!payload) {
+      return { isValid: true, values };
+    }
+
+    const looksLikeJson = payload.startsWith('{') || payload.startsWith('[');
+    if (looksLikeJson) {
+      try {
+        const parsed = JSON.parse(payload) as unknown;
+        this.extractBindingOptionTokens(parsed, values);
+        return {
+          isValid: values.size > 0,
+          values
+        };
+      } catch {
+        return { isValid: false, values };
+      }
+    }
+
+    let rawTokens = payload
+      .split(/[\r\n|;]/g)
+      .map(token => token.trim())
+      .filter(token => token.length > 0);
+    if (rawTokens.length === 1 && rawTokens[0].includes(',')) {
+      rawTokens = rawTokens[0]
+        .split(',')
+        .map(token => token.trim())
+        .filter(token => token.length > 0);
+    }
+
+    for (const token of rawTokens) {
+      values.add(token);
+      const separatorIndex = token.search(/[:=]/);
+      if (separatorIndex <= 0) {
+        continue;
+      }
+
+      const left = token.substring(0, separatorIndex).trim();
+      const right = token.substring(separatorIndex + 1).trim();
+      if (left.length > 0) {
+        values.add(left);
+      }
+
+      if (right.length > 0) {
+        values.add(right);
+      }
+    }
+
+    return {
+      isValid: values.size > 0,
+      values
+    };
+  }
+
+  private extractBindingOptionTokens(source: unknown, collector: Set<string>): void {
+    if (source == null) {
+      return;
+    }
+
+    if (Array.isArray(source)) {
+      for (const item of source) {
+        this.extractBindingOptionTokens(item, collector);
+      }
+
+      return;
+    }
+
+    if (typeof source === 'object') {
+      const record = source as Record<string, unknown>;
+      for (const [key, value] of Object.entries(record)) {
+        const normalizedKey = key.trim().toLowerCase();
+        if ([
+          'value',
+          'id',
+          'key',
+          'code',
+          'name',
+          'label',
+          'options',
+          'items',
+          'data',
+          'values'
+        ].includes(normalizedKey)) {
+          this.extractBindingOptionTokens(value, collector);
+          continue;
+        }
+
+        this.extractBindingOptionTokens(value, collector);
+      }
+
+      return;
+    }
+
+    if (typeof source === 'string' || typeof source === 'number' || typeof source === 'boolean') {
+      const normalized = this.normalizeNullable(String(source));
+      if (normalized) {
+        collector.add(normalized);
+      }
+    }
+  }
+
   private mapBackendFieldTypeToBindingType(fieldType: string | undefined, dataType: string | undefined): BoundFieldItem['type'] {
     const normalizedType = (fieldType ?? '').trim().toLowerCase();
     const normalizedDataType = (dataType ?? '').trim().toLowerCase();
@@ -2789,6 +3299,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       throw new Error(fallbackMessage);
     }
 
+    if (response.isSuccess === false) {
+      throw new Error(this.resolveCommonResponseErrorMessage(response, fallbackMessage));
+    }
+
     if (Array.isArray(response.errors) && response.errors.length > 0) {
       throw new Error(response.errors[0]?.message ?? fallbackMessage);
     }
@@ -2801,6 +3315,10 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       throw new Error(fallbackMessage);
     }
 
+    if (response.isSuccess === false) {
+      throw new Error(this.resolveCommonResponseErrorMessage(response, fallbackMessage));
+    }
+
     if (Array.isArray(response.errors) && response.errors.length > 0) {
       throw new Error(response.errors[0]?.message ?? fallbackMessage);
     }
@@ -2810,6 +3328,22 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
 
     return response.data;
+  }
+
+  private resolveCommonResponseErrorMessage(response: CommonResponse<unknown>, fallbackMessage: string): string {
+    const firstError = (response.errors ?? [])
+      .map(item => String(item?.message ?? '').trim())
+      .find(message => message.length > 0);
+    if (firstError) {
+      return firstError;
+    }
+
+    const directMessage = this.normalizeNullable((response as unknown as { message?: string }).message);
+    if (directMessage) {
+      return directMessage;
+    }
+
+    return fallbackMessage;
   }
 
   private toSafeSequenceLength(value: unknown): number {
@@ -3302,7 +3836,6 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.groupOptions = [];
     this.serialOptions = [];
     this.fieldCatalogByKey.clear();
-    this.loadedBindingsSnapshot = '';
     this.subjectTypeAdmin = null;
     this.reusableFields = [];
     this.dynamicRuntimeAdvancedOpenBindingIds.clear();

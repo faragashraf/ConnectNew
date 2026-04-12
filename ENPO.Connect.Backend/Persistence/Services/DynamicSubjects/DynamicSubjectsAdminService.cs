@@ -30,6 +30,7 @@ public sealed partial class DynamicSubjectsService
     private const int ReferenceSeparatorMaxLength = 10;
     private const int SourceFieldKeysMaxLength = 500;
     private const int SequenceNameMaxLength = 80;
+    private const int DiagnosticsPayloadPreviewMaxLength = 700;
 
     public async Task<CommonResponse<IEnumerable<SubjectTypeAdminDto>>> GetAdminCategoryTreeAsync(
         string userId,
@@ -863,6 +864,7 @@ public sealed partial class DynamicSubjectsService
         CancellationToken cancellationToken = default)
     {
         var response = new CommonResponse<SubjectAdminFieldDto>();
+        var fieldContextKey = string.Empty;
         try
         {
             var normalizedUserId = NormalizeUser(userId);
@@ -874,6 +876,7 @@ public sealed partial class DynamicSubjectsService
 
             var safeRequest = request ?? new SubjectAdminFieldUpsertRequestDto();
             var fieldKey = (safeRequest.FieldKey ?? string.Empty).Trim();
+            fieldContextKey = fieldKey;
             var fieldType = (safeRequest.FieldType ?? string.Empty).Trim();
             if (fieldKey.Length == 0 || fieldType.Length == 0)
             {
@@ -901,6 +904,8 @@ public sealed partial class DynamicSubjectsService
             }
 
             var dataType = NormalizeNullable(safeRequest.DataType);
+            var normalizedDefaultValue = NormalizeNullable(safeRequest.DefaultValue);
+            var normalizedOptionsPayload = NormalizeNullable(safeRequest.OptionsPayload);
             if (ExceedsMaxLength(dataType, FieldDataTypeMaxLength))
             {
                 response.Errors.Add(new Error { Code = "400", Message = $"نوع البيانات يجب ألا يزيد عن {FieldDataTypeMaxLength} حرفًا." });
@@ -924,6 +929,37 @@ public sealed partial class DynamicSubjectsService
             if (safeRequest.Width < 0 || safeRequest.Height < 0)
             {
                 response.Errors.Add(new Error { Code = "400", Message = "أبعاد الحقل يجب أن تكون صفرًا أو قيمًا موجبة." });
+                return response;
+            }
+
+            var (fieldBusinessValidationError, optionSourceDiagnostics) = ValidateAdminFieldBusinessRules(
+                fieldKey,
+                fieldLabel,
+                fieldType,
+                dataType,
+                normalizedDefaultValue,
+                normalizedOptionsPayload,
+                DisplaySettingsRuntimeInspection.Empty);
+            _logger?.LogInformation(
+                "CreateAdminField request snapshot: {Payload}",
+                JsonSerializer.Serialize(
+                    BuildFieldUpsertDiagnosticsSnapshot(
+                        fieldKey,
+                        fieldLabel,
+                        fieldType,
+                        dataType,
+                        normalizedDefaultValue,
+                        normalizedOptionsPayload,
+                        null,
+                        null,
+                        null,
+                        null,
+                        optionSourceDiagnostics: optionSourceDiagnostics,
+                        runtimeInspection: DisplaySettingsRuntimeInspection.Empty),
+                    SerializerOptions));
+            if (fieldBusinessValidationError != null)
+            {
+                response.Errors.Add(fieldBusinessValidationError);
                 return response;
             }
 
@@ -960,8 +996,8 @@ public sealed partial class DynamicSubjectsService
                 CdmendType = fieldType,
                 CDMendLbl = fieldLabel,
                 Placeholder = NormalizeNullable(safeRequest.Placeholder),
-                DefaultValue = NormalizeNullable(safeRequest.DefaultValue),
-                CdmendTbl = NormalizeNullable(safeRequest.OptionsPayload),
+                DefaultValue = normalizedDefaultValue,
+                CdmendTbl = normalizedOptionsPayload,
                 CdmendDatatype = dataType,
                 Required = safeRequest.Required,
                 RequiredTrue = safeRequest.RequiredTrue,
@@ -983,9 +1019,14 @@ public sealed partial class DynamicSubjectsService
 
             response.Data = MapAdminField(field, new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            _logger?.LogError(ex, "Failed to create admin field {FieldKey}.", fieldContextKey);
+            response.Errors.Add(new Error
+            {
+                Code = "500",
+                Message = BuildFieldUnhandledBusinessErrorMessage(fieldContextKey, "إنشاء")
+            });
         }
 
         return response;
@@ -998,6 +1039,7 @@ public sealed partial class DynamicSubjectsService
         CancellationToken cancellationToken = default)
     {
         var response = new CommonResponse<SubjectAdminFieldDto>();
+        var fieldContextKey = (fieldKey ?? string.Empty).Trim();
         try
         {
             var normalizedUserId = NormalizeUser(userId);
@@ -1024,6 +1066,7 @@ public sealed partial class DynamicSubjectsService
 
             var safeRequest = request ?? new SubjectAdminFieldUpsertRequestDto();
             var newFieldKey = (safeRequest.FieldKey ?? string.Empty).Trim();
+            fieldContextKey = newFieldKey.Length > 0 ? newFieldKey : oldFieldKey;
             var fieldType = (safeRequest.FieldType ?? string.Empty).Trim();
             if (newFieldKey.Length == 0 || fieldType.Length == 0)
             {
@@ -1051,6 +1094,8 @@ public sealed partial class DynamicSubjectsService
             }
 
             var dataType = NormalizeNullable(safeRequest.DataType);
+            var normalizedDefaultValue = NormalizeNullable(safeRequest.DefaultValue);
+            var normalizedOptionsPayload = NormalizeNullable(safeRequest.OptionsPayload);
             if (ExceedsMaxLength(dataType, FieldDataTypeMaxLength))
             {
                 response.Errors.Add(new Error { Code = "400", Message = $"نوع البيانات يجب ألا يزيد عن {FieldDataTypeMaxLength} حرفًا." });
@@ -1074,6 +1119,37 @@ public sealed partial class DynamicSubjectsService
             if (safeRequest.Width < 0 || safeRequest.Height < 0)
             {
                 response.Errors.Add(new Error { Code = "400", Message = "أبعاد الحقل يجب أن تكون صفرًا أو قيمًا موجبة." });
+                return response;
+            }
+
+            var (fieldBusinessValidationError, optionSourceDiagnostics) = ValidateAdminFieldBusinessRules(
+                newFieldKey,
+                fieldLabel,
+                fieldType,
+                dataType,
+                normalizedDefaultValue,
+                normalizedOptionsPayload,
+                DisplaySettingsRuntimeInspection.Empty);
+            _logger?.LogInformation(
+                "UpdateAdminField request snapshot: {Payload}",
+                JsonSerializer.Serialize(
+                    BuildFieldUpsertDiagnosticsSnapshot(
+                        newFieldKey,
+                        fieldLabel,
+                        fieldType,
+                        dataType,
+                        normalizedDefaultValue,
+                        normalizedOptionsPayload,
+                        null,
+                        null,
+                        null,
+                        null,
+                        optionSourceDiagnostics: optionSourceDiagnostics,
+                        runtimeInspection: DisplaySettingsRuntimeInspection.Empty),
+                    SerializerOptions));
+            if (fieldBusinessValidationError != null)
+            {
+                response.Errors.Add(fieldBusinessValidationError);
                 return response;
             }
 
@@ -1101,8 +1177,8 @@ public sealed partial class DynamicSubjectsService
             field.CdmendType = fieldType;
             field.CDMendLbl = fieldLabel;
             field.Placeholder = NormalizeNullable(safeRequest.Placeholder);
-            field.DefaultValue = NormalizeNullable(safeRequest.DefaultValue);
-            field.CdmendTbl = NormalizeNullable(safeRequest.OptionsPayload);
+            field.DefaultValue = normalizedDefaultValue;
+            field.CdmendTbl = normalizedOptionsPayload;
             field.CdmendDatatype = dataType;
             field.Required = safeRequest.Required;
             field.RequiredTrue = safeRequest.RequiredTrue;
@@ -1134,9 +1210,14 @@ public sealed partial class DynamicSubjectsService
                     [newFieldKey] = linkedCount
                 });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            _logger?.LogError(ex, "Failed to update admin field {FieldKey}.", fieldContextKey);
+            response.Errors.Add(new Error
+            {
+                Code = "500",
+                Message = BuildFieldUnhandledBusinessErrorMessage(fieldContextKey, "تحديث")
+            });
         }
 
         return response;
@@ -1519,6 +1600,8 @@ public sealed partial class DynamicSubjectsService
         CancellationToken cancellationToken = default)
     {
         var response = new CommonResponse<IEnumerable<SubjectCategoryFieldLinkAdminDto>>();
+        var saveStage = "تهيئة الحفظ";
+        var saveFieldKey = string.Empty;
         try
         {
             var normalizedUserId = NormalizeUser(userId);
@@ -1542,17 +1625,66 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
-            var safeItems = (request?.Links ?? new List<SubjectCategoryFieldLinkUpsertItemDto>())
-                .Where(item => !string.IsNullOrWhiteSpace(item.FieldKey) && item.GroupId > 0)
-                .Select(item => new SubjectCategoryFieldLinkUpsertItemDto
+            var normalizedIncomingItems = (request?.Links ?? new List<SubjectCategoryFieldLinkUpsertItemDto>())
+                .Select((item, index) => new NormalizedFieldLinkRequestItem
                 {
+                    RowNumber = index + 1,
                     MendSql = item.MendSql,
-                    FieldKey = (item.FieldKey ?? string.Empty).Trim(),
+                    FieldKey = NormalizeNullable(item.FieldKey),
                     GroupId = item.GroupId,
                     IsActive = item.IsActive,
                     DisplayOrder = item.DisplayOrder <= 0 ? 1 : item.DisplayOrder,
                     IsVisible = item.IsVisible,
                     DisplaySettingsJson = NormalizeNullable(item.DisplaySettingsJson)
+                })
+                .ToList();
+
+            var invalidFieldKeyRow = normalizedIncomingItems
+                .FirstOrDefault(item => string.IsNullOrWhiteSpace(item.FieldKey));
+            if (invalidFieldKeyRow != null)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"فشل حفظ الربط في السطر {invalidFieldKeyRow.RowNumber} بسبب fieldKey غير صالح."
+                });
+                return response;
+            }
+
+            var invalidGroupRow = normalizedIncomingItems
+                .FirstOrDefault(item => item.GroupId <= 0);
+            if (invalidGroupRow != null)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"فشل حفظ الحقل '{invalidGroupRow.FieldKey}' بسبب GroupId غير صالح."
+                });
+                return response;
+            }
+
+            var invalidMendSqlRow = normalizedIncomingItems
+                .FirstOrDefault(item => item.MendSql.HasValue && item.MendSql.Value <= 0);
+            if (invalidMendSqlRow != null)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"فشل حفظ الحقل '{invalidMendSqlRow.FieldKey}' بسبب MendSql غير صالح."
+                });
+                return response;
+            }
+
+            var safeItems = normalizedIncomingItems
+                .Select(item => new SubjectCategoryFieldLinkUpsertItemDto
+                {
+                    MendSql = item.MendSql,
+                    FieldKey = item.FieldKey ?? string.Empty,
+                    GroupId = item.GroupId,
+                    IsActive = item.IsActive,
+                    DisplayOrder = item.DisplayOrder,
+                    IsVisible = item.IsVisible,
+                    DisplaySettingsJson = item.DisplaySettingsJson
                 })
                 .ToList();
 
@@ -1573,7 +1705,16 @@ public sealed partial class DynamicSubjectsService
             var existingFields = await _connectContext.Cdmends
                 .AsNoTracking()
                 .Where(item => requestedFieldKeys.Contains(item.CdmendTxt) && !item.CdmendStat)
-                .Select(item => new { item.CdmendTxt, item.ApplicationId })
+                .Select(item => new
+                {
+                    item.CdmendTxt,
+                    item.ApplicationId,
+                    item.CDMendLbl,
+                    item.CdmendType,
+                    item.CdmendDatatype,
+                    item.DefaultValue,
+                    OptionsPayload = item.CdmendTbl
+                })
                 .ToListAsync(cancellationToken);
             var existingFieldsSet = existingFields
                 .Select(item => item.CdmendTxt)
@@ -1629,6 +1770,125 @@ public sealed partial class DynamicSubjectsService
                 return response;
             }
 
+            var duplicatedMendSqlGroup = safeItems
+                .Where(item => item.MendSql.HasValue && item.MendSql.Value > 0)
+                .GroupBy(item => item.MendSql!.Value)
+                .FirstOrDefault(group => group.Count() > 1);
+            if (duplicatedMendSqlGroup != null)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"فشل الحفظ بسبب تكرار MendSql='{duplicatedMendSqlGroup.Key}' في أكثر من حقل."
+                });
+                return response;
+            }
+
+            var duplicatedDisplayOrder = safeItems
+                .GroupBy(item => item.DisplayOrder)
+                .FirstOrDefault(group => group.Count() > 1);
+            if (duplicatedDisplayOrder != null)
+            {
+                var duplicatedKeys = duplicatedDisplayOrder
+                    .Select(item => item.FieldKey)
+                    .Where(item => !string.IsNullOrWhiteSpace(item))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = duplicatedKeys.Count > 0
+                        ? $"فشل الحفظ لأن ترتيب العرض '{duplicatedDisplayOrder.Key}' مكرر في الحقول: {string.Join(", ", duplicatedKeys)}."
+                        : $"فشل الحفظ لأن ترتيب العرض '{duplicatedDisplayOrder.Key}' مكرر."
+                });
+                return response;
+            }
+
+            var fieldValidationErrors = new List<Error>();
+            foreach (var item in safeItems)
+            {
+                saveStage = "التحقق قبل الحفظ";
+                saveFieldKey = item.FieldKey;
+
+                if (!existingFieldsSet.Contains(item.FieldKey))
+                {
+                    fieldValidationErrors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = $"فشل حفظ الحقل '{item.FieldKey}' لأنه غير موجود أو غير مفعل."
+                    });
+                    continue;
+                }
+
+                var matchedField = existingFields.FirstOrDefault(field =>
+                    string.Equals(field.CdmendTxt, item.FieldKey, StringComparison.OrdinalIgnoreCase));
+                if (matchedField == null)
+                {
+                    continue;
+                }
+
+                if (!TryInspectDisplaySettingsPayload(
+                    item.DisplaySettingsJson,
+                    out var runtimeInspection,
+                    out var displaySettingsValidationError))
+                {
+                    fieldValidationErrors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = $"فشل حفظ الحقل '{item.FieldKey}' بسبب {displaySettingsValidationError ?? "JSON غير صالح في إعدادات العرض"}."
+                    });
+                    continue;
+                }
+
+                var (fieldRuleError, optionSourceDiagnostics) = ValidateAdminFieldBusinessRules(
+                    fieldKey: item.FieldKey,
+                    fieldLabel: NormalizeNullable(matchedField.CDMendLbl) ?? item.FieldKey,
+                    fieldType: NormalizeNullable(matchedField.CdmendType) ?? string.Empty,
+                    dataType: NormalizeNullable(matchedField.CdmendDatatype),
+                    defaultValue: NormalizeNullable(matchedField.DefaultValue),
+                    optionsPayload: NormalizeNullable(matchedField.OptionsPayload),
+                    runtimeInspection: runtimeInspection);
+
+                _logger?.LogInformation(
+                    "Admin category field-links binding snapshot: {Payload}",
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            binding = BuildFieldUpsertDiagnosticsSnapshot(
+                                item.FieldKey,
+                                NormalizeNullable(matchedField.CDMendLbl) ?? item.FieldKey,
+                                NormalizeNullable(matchedField.CdmendType),
+                                NormalizeNullable(matchedField.CdmendDatatype),
+                                NormalizeNullable(matchedField.DefaultValue),
+                                NormalizeNullable(matchedField.OptionsPayload),
+                                item.DisplaySettingsJson,
+                                runtimeInspection.DynamicRuntimePayloadPreview,
+                                item.GroupId,
+                                item.DisplayOrder,
+                                item.MendSql,
+                                optionSourceDiagnostics: optionSourceDiagnostics,
+                                runtimeInspection: runtimeInspection),
+                            validationMessage = fieldRuleError?.Message
+                        },
+                        SerializerOptions));
+
+                if (fieldRuleError != null)
+                {
+                    fieldValidationErrors.Add(fieldRuleError);
+                    continue;
+                }
+            }
+
+            if (fieldValidationErrors.Count > 0)
+            {
+                foreach (var validationError in fieldValidationErrors.Take(20))
+                {
+                    response.Errors.Add(validationError);
+                }
+
+                return response;
+            }
+
             var existingLinks = await _connectContext.AdminCatalogCategoryFieldBindings
                 .Where(item => item.CategoryId == categoryId)
                 .ToListAsync(cancellationToken);
@@ -1651,6 +1911,8 @@ public sealed partial class DynamicSubjectsService
 
             foreach (var item in safeItems)
             {
+                saveStage = "ترحيل روابط الحقول";
+                saveFieldKey = item.FieldKey;
                 var canonicalGroupId = item.GroupId;
                 AdminCatalogCategoryFieldBinding? link = null;
                 if (item.MendSql.HasValue && item.MendSql.Value > 0)
@@ -1689,6 +1951,8 @@ public sealed partial class DynamicSubjectsService
 
             foreach (var item in safeItems)
             {
+                saveStage = "حفظ إعدادات العرض";
+                saveFieldKey = item.FieldKey;
                 var canonicalGroupId = item.GroupId;
                 AdminCatalogCategoryFieldBinding? link = null;
                 if (item.MendSql.HasValue && item.MendSql.Value > 0)
@@ -1737,6 +2001,8 @@ public sealed partial class DynamicSubjectsService
                 (item.MendSql.HasValue && item.MendSql.Value == link.MendSql)
                 || (!item.MendSql.HasValue && string.Equals(item.FieldKey, link.MendField, StringComparison.OrdinalIgnoreCase)))))
             {
+                saveStage = "تعطيل الروابط غير المرسلة";
+                saveFieldKey = existing.MendField;
                 existing.MendStat = true;
 
                 var hiddenSetting = await _connectContext.SubjectCategoryFieldSettings
@@ -1751,14 +2017,25 @@ public sealed partial class DynamicSubjectsService
 
             await _connectContext.SaveChangesAsync(cancellationToken);
 
+            saveStage = "مزامنة الروابط القديمة";
+            saveFieldKey = string.Empty;
             await SyncLegacyCategoryFieldBindingsAsync(categoryId, existingLinks, validGroupById, cancellationToken);
 
             response.Data = await LoadAdminCategoryFieldLinksAsync(categoryId, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to upsert admin category field links for category {CategoryId}.", categoryId);
-            AddUnhandledError(response);
+            _logger?.LogError(
+                ex,
+                "Failed to upsert admin category field links for category {CategoryId}. Stage={Stage}, FieldKey={FieldKey}.",
+                categoryId,
+                saveStage,
+                saveFieldKey);
+            response.Errors.Add(new Error
+            {
+                Code = "500",
+                Message = BuildFieldLinksUnhandledBusinessErrorMessage(saveFieldKey, saveStage)
+            });
         }
 
         return response;
@@ -2301,6 +2578,814 @@ public sealed partial class DynamicSubjectsService
         }
     }
 
+    private static (Error? Error, FieldOptionSourceDiagnostics OptionSourceDiagnostics) ValidateAdminFieldBusinessRules(
+        string fieldKey,
+        string fieldLabel,
+        string? fieldType,
+        string? dataType,
+        string? defaultValue,
+        string? optionsPayload,
+        DisplaySettingsRuntimeInspection runtimeInspection)
+    {
+        var safeRuntimeInspection = runtimeInspection ?? DisplaySettingsRuntimeInspection.Empty;
+        var normalizedFieldKey = NormalizeNullable(fieldKey) ?? "غير معروف";
+        var normalizedFieldLabel = NormalizeNullable(fieldLabel) ?? normalizedFieldKey;
+        var normalizedFieldType = NormalizeNullable(fieldType) ?? string.Empty;
+        var normalizedDataType = NormalizeNullable(dataType) ?? string.Empty;
+        var normalizedDefaultValue = NormalizeNullable(defaultValue);
+        var hasStaticOptionsPayload = NormalizeNullable(optionsPayload) != null;
+        var parsedOptions = ParseOptionValues(optionsPayload);
+        var requiresOptionsBinding = RequiresOptionsBinding(normalizedFieldType);
+        var optionSourceDiagnostics = ResolveFieldOptionSourceDiagnostics(
+            requiresOptionsBinding,
+            hasStaticOptionsPayload,
+            parsedOptions.IsValid,
+            parsedOptions.Values.Count,
+            safeRuntimeInspection);
+
+        if (optionSourceDiagnostics.HasExplicitDynamicOptionSource && !requiresOptionsBinding)
+        {
+            return (new Error
+            {
+                Code = "400",
+                Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن optionLoader غير متوافق مع نوع الحقل '{normalizedFieldType}'."
+            }, optionSourceDiagnostics);
+        }
+
+        if (requiresOptionsBinding && string.Equals(optionSourceDiagnostics.EffectiveSource, "None", StringComparison.Ordinal))
+        {
+            if (hasStaticOptionsPayload && !parsedOptions.IsValid)
+            {
+                return (new Error
+                {
+                    Code = "400",
+                    Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن optionsPayload غير صالح، ولم يتم تفعيل مصدر خيارات ديناميكي صريح."
+                }, optionSourceDiagnostics);
+            }
+
+            if (safeRuntimeInspection.HasOptionLoaderConfig && !safeRuntimeInspection.HasExplicitDynamicOptionSource)
+            {
+                return (new Error
+                {
+                    Code = "400",
+                    Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن dynamicRuntime.optionLoader غير مكتمل ولم يفعّل مصدر خيارات ديناميكي صريح."
+                }, optionSourceDiagnostics);
+            }
+
+            return (new Error
+            {
+                Code = "400",
+                Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأنه لا يحتوي على خيارات ثابتة صالحة ولا مصدر خيارات ديناميكي صريح."
+            }, optionSourceDiagnostics);
+        }
+
+        if (normalizedDefaultValue != null
+            && requiresOptionsBinding
+            && string.Equals(optionSourceDiagnostics.EffectiveSource, "Static", StringComparison.Ordinal)
+            && !parsedOptions.Values.Contains(normalizedDefaultValue))
+        {
+            return (new Error
+            {
+                Code = "400",
+                Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن القيمة الافتراضية غير موجودة ضمن الخيارات."
+            }, optionSourceDiagnostics);
+        }
+
+        if (normalizedDefaultValue != null && IsNumericFieldType(normalizedFieldType, normalizedDataType))
+        {
+            var parsedAsInvariant = decimal.TryParse(
+                normalizedDefaultValue,
+                NumberStyles.Any,
+                CultureInfo.InvariantCulture,
+                out _);
+            var parsedAsCurrent = decimal.TryParse(
+                normalizedDefaultValue,
+                NumberStyles.Any,
+                CultureInfo.CurrentCulture,
+                out _);
+            if (!parsedAsInvariant && !parsedAsCurrent)
+            {
+                return (new Error
+                {
+                    Code = "400",
+                    Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن القيمة الافتراضية يجب أن تكون رقمًا صالحًا."
+                }, optionSourceDiagnostics);
+            }
+        }
+
+        if (normalizedDefaultValue != null && IsBooleanFieldType(normalizedFieldType, normalizedDataType))
+        {
+            if (!TryParseBooleanToken(normalizedDefaultValue, out _))
+            {
+                return (new Error
+                {
+                    Code = "400",
+                    Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن قيمة الحقل المنطقي يجب أن تكون true أو false."
+                }, optionSourceDiagnostics);
+            }
+        }
+
+        if (normalizedDefaultValue != null && IsDateFieldType(normalizedFieldType, normalizedDataType))
+        {
+            if (!DateTime.TryParse(normalizedDefaultValue, out _))
+            {
+                return (new Error
+                {
+                    Code = "400",
+                    Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن القيمة الافتراضية للتاريخ غير صالحة."
+                }, optionSourceDiagnostics);
+            }
+        }
+
+        if (normalizedFieldLabel.Length == 0)
+        {
+            return (new Error
+            {
+                Code = "400",
+                Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن اسم الحقل غير صالح."
+            }, optionSourceDiagnostics);
+        }
+
+        return (null, optionSourceDiagnostics);
+    }
+
+    private static FieldOptionSourceDiagnostics ResolveFieldOptionSourceDiagnostics(
+        bool requiresOptionsBinding,
+        bool hasStaticOptionsPayload,
+        bool isStaticOptionsPayloadValid,
+        int staticOptionsCount,
+        DisplaySettingsRuntimeInspection runtimeInspection)
+    {
+        var hasValidStaticOptions = hasStaticOptionsPayload && isStaticOptionsPayloadValid && staticOptionsCount > 0;
+
+        if (runtimeInspection.HasExplicitDynamicOptionSource)
+        {
+            var hasStaticIgnored = hasValidStaticOptions;
+            return new FieldOptionSourceDiagnostics
+            {
+                EffectiveSource = "Dynamic",
+                EffectiveSourceReason = runtimeInspection.DynamicOptionSourceReason
+                    ?? "تم اعتماد المصدر الديناميكي لأن optionLoader مفعّل صراحة.",
+                HasRuntimePayload = runtimeInspection.HasRuntimePayload,
+                HasBehavioralRuntimeConfig = runtimeInspection.HasBehavioralRuntimeConfig,
+                HasOptionLoaderConfig = runtimeInspection.HasOptionLoaderConfig,
+                HasExplicitDynamicOptionSource = runtimeInspection.HasExplicitDynamicOptionSource,
+                DynamicOptionSourceReason = runtimeInspection.DynamicOptionSourceReason,
+                OptionLoaderRejectedReason = runtimeInspection.OptionLoaderRejectedReason,
+                HasStaticOptionsPayload = hasStaticOptionsPayload,
+                IsStaticOptionsPayloadValid = isStaticOptionsPayloadValid,
+                StaticOptionsCount = staticOptionsCount,
+                IsStaticOptionsIgnored = hasStaticIgnored,
+                StaticOptionsIgnoredReason = hasStaticIgnored
+                    ? "تم تجاهل optionsPayload لأن optionLoader فعّل مصدر خيارات ديناميكي صراحة."
+                    : null
+            };
+        }
+
+        if (hasValidStaticOptions)
+        {
+            return new FieldOptionSourceDiagnostics
+            {
+                EffectiveSource = "Static",
+                EffectiveSourceReason = requiresOptionsBinding
+                    ? "تم اعتماد optionsPayload لأنه صالح ولا يوجد optionLoader مفعّل صراحة."
+                    : "تم اعتماد optionsPayload لأنه صالح.",
+                HasRuntimePayload = runtimeInspection.HasRuntimePayload,
+                HasBehavioralRuntimeConfig = runtimeInspection.HasBehavioralRuntimeConfig,
+                HasOptionLoaderConfig = runtimeInspection.HasOptionLoaderConfig,
+                HasExplicitDynamicOptionSource = runtimeInspection.HasExplicitDynamicOptionSource,
+                DynamicOptionSourceReason = runtimeInspection.DynamicOptionSourceReason,
+                OptionLoaderRejectedReason = runtimeInspection.OptionLoaderRejectedReason,
+                HasStaticOptionsPayload = hasStaticOptionsPayload,
+                IsStaticOptionsPayloadValid = isStaticOptionsPayloadValid,
+                StaticOptionsCount = staticOptionsCount,
+                IsStaticOptionsIgnored = false
+            };
+        }
+
+        return new FieldOptionSourceDiagnostics
+        {
+            EffectiveSource = "None",
+            EffectiveSourceReason = BuildNoOptionsSourceReason(
+                requiresOptionsBinding,
+                hasStaticOptionsPayload,
+                isStaticOptionsPayloadValid,
+                staticOptionsCount,
+                runtimeInspection),
+            HasRuntimePayload = runtimeInspection.HasRuntimePayload,
+            HasBehavioralRuntimeConfig = runtimeInspection.HasBehavioralRuntimeConfig,
+            HasOptionLoaderConfig = runtimeInspection.HasOptionLoaderConfig,
+            HasExplicitDynamicOptionSource = runtimeInspection.HasExplicitDynamicOptionSource,
+            DynamicOptionSourceReason = runtimeInspection.DynamicOptionSourceReason,
+            OptionLoaderRejectedReason = runtimeInspection.OptionLoaderRejectedReason,
+            HasStaticOptionsPayload = hasStaticOptionsPayload,
+            IsStaticOptionsPayloadValid = isStaticOptionsPayloadValid,
+            StaticOptionsCount = staticOptionsCount,
+            IsStaticOptionsIgnored = false
+        };
+    }
+
+    private static string BuildNoOptionsSourceReason(
+        bool requiresOptionsBinding,
+        bool hasStaticOptionsPayload,
+        bool isStaticOptionsPayloadValid,
+        int staticOptionsCount,
+        DisplaySettingsRuntimeInspection runtimeInspection)
+    {
+        if (!requiresOptionsBinding)
+        {
+            return "الحقل لا يعتمد على مصدر خيارات.";
+        }
+
+        if (hasStaticOptionsPayload && !isStaticOptionsPayloadValid)
+        {
+            return "optionsPayload موجود لكنه غير صالح.";
+        }
+
+        if (hasStaticOptionsPayload && staticOptionsCount <= 0)
+        {
+            return "optionsPayload موجود لكنه لا يحتوي أي خيار صالح.";
+        }
+
+        if (runtimeInspection.HasOptionLoaderConfig && !runtimeInspection.HasExplicitDynamicOptionSource)
+        {
+            return runtimeInspection.OptionLoaderRejectedReason
+                ?? "تم تجاهل optionLoader لأنه لا يحتوي مصدر خيارات ديناميكي مفعّل صراحة.";
+        }
+
+        return "لا توجد خيارات ثابتة صالحة ولا مصدر خيارات ديناميكي مفعّل صراحة.";
+    }
+
+    private static bool TryInspectDisplaySettingsPayload(
+        string? displaySettingsJson,
+        out DisplaySettingsRuntimeInspection runtimeInspection,
+        out string? validationError)
+    {
+        runtimeInspection = DisplaySettingsRuntimeInspection.Empty;
+        validationError = null;
+
+        var normalizedPayload = NormalizeNullable(displaySettingsJson);
+        if (normalizedPayload == null)
+        {
+            return true;
+        }
+
+        try
+        {
+            using var displaySettingsDoc = JsonDocument.Parse(normalizedPayload);
+            if (displaySettingsDoc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                validationError = "displaySettingsJson يجب أن يكون كائن JSON صالح.";
+                return false;
+            }
+
+            if (!TryResolveDynamicRuntimePayload(
+                displaySettingsDoc.RootElement,
+                out var dynamicRuntimeElement,
+                out validationError))
+            {
+                return false;
+            }
+
+            if (!dynamicRuntimeElement.HasValue)
+            {
+                return true;
+            }
+
+            var runtimePayload = dynamicRuntimeElement.Value;
+            if (runtimePayload.ValueKind != JsonValueKind.Object)
+            {
+                validationError = "dynamicRuntime يجب أن يكون كائن JSON صالح.";
+                return false;
+            }
+
+            var hasBehavioralRuntimeConfig = false;
+            var hasOptionLoaderConfig = false;
+            var hasExplicitDynamicOptionSource = false;
+            string? dynamicOptionSourceReason = null;
+            string? optionLoaderRejectedReason = null;
+
+            if (runtimePayload.TryGetProperty("optionLoader", out var optionLoaderElement))
+            {
+                if (optionLoaderElement.ValueKind != JsonValueKind.Object)
+                {
+                    validationError = "dynamicRuntime.optionLoader يجب أن يكون كائن JSON صالح.";
+                    return false;
+                }
+
+                hasBehavioralRuntimeConfig = true;
+                hasOptionLoaderConfig = true;
+
+                if (!TryReadDynamicOptionSourceDetails(
+                    optionLoaderElement,
+                    out hasExplicitDynamicOptionSource,
+                    out dynamicOptionSourceReason,
+                    out optionLoaderRejectedReason,
+                    out validationError))
+                {
+                    return false;
+                }
+            }
+
+            if (runtimePayload.TryGetProperty("asyncValidation", out var asyncValidationElement))
+            {
+                if (asyncValidationElement.ValueKind != JsonValueKind.Object)
+                {
+                    validationError = "dynamicRuntime.asyncValidation يجب أن يكون كائن JSON صالح.";
+                    return false;
+                }
+
+                hasBehavioralRuntimeConfig = true;
+            }
+
+            if (runtimePayload.TryGetProperty("actions", out var actionsElement))
+            {
+                if (actionsElement.ValueKind != JsonValueKind.Array)
+                {
+                    validationError = "dynamicRuntime.actions يجب أن تكون مصفوفة JSON صالحة.";
+                    return false;
+                }
+
+                hasBehavioralRuntimeConfig = true;
+            }
+
+            runtimeInspection = new DisplaySettingsRuntimeInspection
+            {
+                HasRuntimePayload = true,
+                HasBehavioralRuntimeConfig = hasBehavioralRuntimeConfig,
+                HasOptionLoaderConfig = hasOptionLoaderConfig,
+                HasExplicitDynamicOptionSource = hasExplicitDynamicOptionSource,
+                DynamicOptionSourceReason = dynamicOptionSourceReason,
+                OptionLoaderRejectedReason = optionLoaderRejectedReason,
+                DynamicRuntimePayloadPreview = TruncatePayloadForDiagnostics(runtimePayload.GetRawText())
+            };
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            validationError = "JSON غير صالح في displaySettingsJson.";
+            return false;
+        }
+    }
+
+    private static bool TryReadDynamicOptionSourceDetails(
+        JsonElement optionLoaderElement,
+        out bool hasExplicitDynamicOptionSource,
+        out string? dynamicOptionSourceReason,
+        out string? optionLoaderRejectedReason,
+        out string? validationError)
+    {
+        hasExplicitDynamicOptionSource = false;
+        dynamicOptionSourceReason = null;
+        optionLoaderRejectedReason = null;
+        validationError = null;
+
+        if (optionLoaderElement.TryGetProperty("integration", out var integrationElement))
+        {
+            if (integrationElement.ValueKind != JsonValueKind.Object)
+            {
+                validationError = "dynamicRuntime.optionLoader.integration يجب أن يكون كائن JSON صالح.";
+                return false;
+            }
+
+            var sourceType = (ReadJsonStringProperty(integrationElement, "sourceType") ?? string.Empty)
+                .Trim()
+                .ToLowerInvariant();
+            var statementId = ReadPositiveIntProperty(integrationElement, "statementId");
+            var fullUrl = ReadJsonStringProperty(integrationElement, "fullUrl");
+
+            if ((sourceType == "powerbi" && statementId.HasValue)
+                || (sourceType.Length == 0 && statementId.HasValue))
+            {
+                hasExplicitDynamicOptionSource = true;
+                dynamicOptionSourceReason = "تم تفعيل المصدر الديناميكي عبر integration.statementId.";
+                return true;
+            }
+
+            if ((sourceType == "external" && fullUrl != null)
+                || (sourceType.Length == 0 && fullUrl != null))
+            {
+                hasExplicitDynamicOptionSource = true;
+                dynamicOptionSourceReason = "تم تفعيل المصدر الديناميكي عبر integration.fullUrl.";
+                return true;
+            }
+        }
+
+        if (optionLoaderElement.TryGetProperty("request", out var requestElement))
+        {
+            if (requestElement.ValueKind != JsonValueKind.Object)
+            {
+                validationError = "dynamicRuntime.optionLoader.request يجب أن يكون كائن JSON صالح.";
+                return false;
+            }
+
+            var requestUrl = ReadJsonStringProperty(requestElement, "url");
+            if (requestUrl != null)
+            {
+                hasExplicitDynamicOptionSource = true;
+                dynamicOptionSourceReason = "تم تفعيل المصدر الديناميكي عبر optionLoader.request.url.";
+                return true;
+            }
+        }
+
+        optionLoaderRejectedReason = "تم تجاهل optionLoader لأنه لا يحتوي integration/request صالح لتفعيل مصدر الخيارات الديناميكي.";
+        return true;
+    }
+
+    private static string? ReadJsonStringProperty(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var valueElement))
+        {
+            return null;
+        }
+
+        return valueElement.ValueKind switch
+        {
+            JsonValueKind.String => NormalizeNullable(valueElement.GetString()),
+            JsonValueKind.Number => NormalizeNullable(valueElement.ToString()),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => null
+        };
+    }
+
+    private static int? ReadPositiveIntProperty(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var valueElement))
+        {
+            return null;
+        }
+
+        if (valueElement.ValueKind == JsonValueKind.Number && valueElement.TryGetInt32(out var numericValue))
+        {
+            return numericValue > 0 ? numericValue : null;
+        }
+
+        if (valueElement.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var rawValue = NormalizeNullable(valueElement.GetString());
+        if (rawValue == null)
+        {
+            return null;
+        }
+
+        if (int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedAsInvariant)
+            && parsedAsInvariant > 0)
+        {
+            return parsedAsInvariant;
+        }
+
+        if (int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.CurrentCulture, out var parsedAsCurrent)
+            && parsedAsCurrent > 0)
+        {
+            return parsedAsCurrent;
+        }
+
+        return null;
+    }
+
+    private static bool TryResolveDynamicRuntimePayload(
+        JsonElement displaySettingsRoot,
+        out JsonElement? runtimePayload,
+        out string? validationError)
+    {
+        runtimePayload = null;
+        validationError = null;
+
+        if (displaySettingsRoot.ValueKind != JsonValueKind.Object)
+        {
+            validationError = "displaySettingsJson يجب أن يكون كائن JSON صالح.";
+            return false;
+        }
+
+        if (displaySettingsRoot.TryGetProperty("dynamicRuntime", out var dynamicRuntimeElement))
+        {
+            if (dynamicRuntimeElement.ValueKind == JsonValueKind.String)
+            {
+                var embeddedPayload = NormalizeNullable(dynamicRuntimeElement.GetString());
+                if (embeddedPayload == null)
+                {
+                    return true;
+                }
+
+                try
+                {
+                    using var embeddedRuntimeDoc = JsonDocument.Parse(embeddedPayload);
+                    runtimePayload = embeddedRuntimeDoc.RootElement.Clone();
+                    return true;
+                }
+                catch (JsonException)
+                {
+                    validationError = "JSON غير صالح في dynamicRuntime.";
+                    return false;
+                }
+            }
+
+            runtimePayload = dynamicRuntimeElement.Clone();
+            return true;
+        }
+
+        var hasDirectRuntimeMarkers = (displaySettingsRoot.TryGetProperty("optionLoader", out var directOptionLoader)
+                && directOptionLoader.ValueKind == JsonValueKind.Object)
+            || (displaySettingsRoot.TryGetProperty("asyncValidation", out var directAsyncValidation)
+                && directAsyncValidation.ValueKind == JsonValueKind.Object)
+            || (displaySettingsRoot.TryGetProperty("actions", out var directActions)
+                && directActions.ValueKind == JsonValueKind.Array);
+        if (hasDirectRuntimeMarkers)
+        {
+            runtimePayload = displaySettingsRoot.Clone();
+        }
+
+        return true;
+    }
+
+    private static (bool IsValid, HashSet<string> Values) ParseOptionValues(string? optionsPayload)
+    {
+        var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var payload = NormalizeNullable(optionsPayload);
+        if (payload == null)
+        {
+            return (true, values);
+        }
+
+        var looksLikeJson = payload.StartsWith("{", StringComparison.Ordinal)
+            || payload.StartsWith("[", StringComparison.Ordinal);
+        if (looksLikeJson)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(payload);
+                ExtractOptionValueTokens(document.RootElement, values);
+                return values.Count > 0 ? (true, values) : (false, values);
+            }
+            catch (JsonException)
+            {
+                return (false, values);
+            }
+        }
+
+        var rawTokens = payload
+            .Split(new[] { '\r', '\n', '|', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(token => token.Trim())
+            .Where(token => token.Length > 0)
+            .ToList();
+        if (rawTokens.Count == 1 && rawTokens[0].Contains(',', StringComparison.Ordinal))
+        {
+            rawTokens = rawTokens[0]
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(token => token.Trim())
+                .Where(token => token.Length > 0)
+                .ToList();
+        }
+
+        foreach (var token in rawTokens)
+        {
+            values.Add(token);
+            var pairSeparators = new[] { ':', '=' };
+            var separatorIndex = token.IndexOfAny(pairSeparators);
+            if (separatorIndex <= 0)
+            {
+                continue;
+            }
+
+            var left = token.Substring(0, separatorIndex).Trim();
+            var right = token.Substring(separatorIndex + 1).Trim();
+            if (left.Length > 0)
+            {
+                values.Add(left);
+            }
+
+            if (right.Length > 0)
+            {
+                values.Add(right);
+            }
+        }
+
+        return values.Count > 0 ? (true, values) : (false, values);
+    }
+
+    private static void ExtractOptionValueTokens(JsonElement element, ISet<string> collector)
+    {
+        if (collector == null)
+        {
+            return;
+        }
+
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    ExtractOptionValueTokens(item, collector);
+                }
+
+                break;
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    var key = property.Name;
+                    var normalizedKey = key.Trim().ToLowerInvariant();
+                    if (normalizedKey is "value" or "id" or "key" or "code" or "name" or "label")
+                    {
+                        ExtractOptionValueTokens(property.Value, collector);
+                        continue;
+                    }
+
+                    if (normalizedKey is "options" or "items" or "data" or "values")
+                    {
+                        ExtractOptionValueTokens(property.Value, collector);
+                        continue;
+                    }
+
+                    ExtractOptionValueTokens(property.Value, collector);
+                }
+
+                break;
+            case JsonValueKind.String:
+            {
+                var raw = NormalizeNullable(element.GetString());
+                if (raw != null)
+                {
+                    collector.Add(raw);
+                }
+
+                break;
+            }
+            case JsonValueKind.Number:
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+            {
+                var primitive = NormalizeNullable(element.ToString());
+                if (primitive != null)
+                {
+                    collector.Add(primitive);
+                }
+
+                break;
+            }
+        }
+    }
+
+    private static bool IsNumericFieldType(string fieldType, string dataType)
+    {
+        var normalizedFieldType = (fieldType ?? string.Empty).Trim().ToLowerInvariant();
+        var normalizedDataType = (dataType ?? string.Empty).Trim().ToLowerInvariant();
+
+        return normalizedFieldType.Contains("number", StringComparison.Ordinal)
+            || normalizedFieldType.Contains("decimal", StringComparison.Ordinal)
+            || normalizedFieldType.Contains("int", StringComparison.Ordinal)
+            || normalizedDataType.Contains("number", StringComparison.Ordinal)
+            || normalizedDataType.Contains("decimal", StringComparison.Ordinal)
+            || normalizedDataType.Contains("int", StringComparison.Ordinal);
+    }
+
+    private static bool IsBooleanFieldType(string fieldType, string dataType)
+    {
+        var normalizedFieldType = (fieldType ?? string.Empty).Trim().ToLowerInvariant();
+        var normalizedDataType = (dataType ?? string.Empty).Trim().ToLowerInvariant();
+
+        return normalizedFieldType.Contains("check", StringComparison.Ordinal)
+            || normalizedFieldType.Contains("bool", StringComparison.Ordinal)
+            || normalizedFieldType.Contains("switch", StringComparison.Ordinal)
+            || normalizedDataType.Contains("bool", StringComparison.Ordinal);
+    }
+
+    private static bool IsDateFieldType(string fieldType, string dataType)
+    {
+        var normalizedFieldType = (fieldType ?? string.Empty).Trim().ToLowerInvariant();
+        var normalizedDataType = (dataType ?? string.Empty).Trim().ToLowerInvariant();
+
+        return normalizedFieldType.Contains("date", StringComparison.Ordinal)
+            || normalizedDataType.Contains("date", StringComparison.Ordinal)
+            || normalizedDataType.Contains("time", StringComparison.Ordinal);
+    }
+
+    private static bool TryParseBooleanToken(string value, out bool parsed)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+        switch (normalized)
+        {
+            case "true":
+            case "1":
+            case "yes":
+            case "y":
+            case "on":
+            case "نعم":
+            case "صح":
+                parsed = true;
+                return true;
+            case "false":
+            case "0":
+            case "no":
+            case "n":
+            case "off":
+            case "لا":
+            case "خطأ":
+                parsed = false;
+                return true;
+            default:
+                return bool.TryParse(normalized, out parsed);
+        }
+    }
+
+    private static object BuildFieldUpsertDiagnosticsSnapshot(
+        string? fieldKey,
+        string? fieldLabel,
+        string? fieldType,
+        string? dataType,
+        string? defaultValue,
+        string? optionsPayload,
+        string? displaySettingsJson,
+        string? dynamicRuntimeJson,
+        int? groupId,
+        int? displayOrder,
+        int? mendSql = null,
+        int? cdmendSql = null,
+        FieldOptionSourceDiagnostics? optionSourceDiagnostics = null,
+        DisplaySettingsRuntimeInspection? runtimeInspection = null)
+    {
+        return new
+        {
+            fieldKey = NormalizeNullable(fieldKey),
+            fieldLabel = NormalizeNullable(fieldLabel),
+            fieldType = NormalizeNullable(fieldType),
+            dataType = NormalizeNullable(dataType),
+            defaultValue = NormalizeNullable(defaultValue),
+            optionsPayload = TruncatePayloadForDiagnostics(optionsPayload),
+            configJson = TruncatePayloadForDiagnostics(displaySettingsJson),
+            dynamicJson = TruncatePayloadForDiagnostics(dynamicRuntimeJson),
+            optionSource = optionSourceDiagnostics?.EffectiveSource,
+            optionSourceReason = optionSourceDiagnostics?.EffectiveSourceReason,
+            hasRuntimeConfig = runtimeInspection?.HasRuntimePayload ?? optionSourceDiagnostics?.HasRuntimePayload,
+            hasBehavioralRuntimeConfig = runtimeInspection?.HasBehavioralRuntimeConfig ?? optionSourceDiagnostics?.HasBehavioralRuntimeConfig,
+            hasOptionLoaderConfig = runtimeInspection?.HasOptionLoaderConfig ?? optionSourceDiagnostics?.HasOptionLoaderConfig,
+            hasExplicitDynamicOptionSource = runtimeInspection?.HasExplicitDynamicOptionSource ?? optionSourceDiagnostics?.HasExplicitDynamicOptionSource,
+            dynamicOptionSourceReason = runtimeInspection?.DynamicOptionSourceReason ?? optionSourceDiagnostics?.DynamicOptionSourceReason,
+            optionLoaderRejectedReason = runtimeInspection?.OptionLoaderRejectedReason ?? optionSourceDiagnostics?.OptionLoaderRejectedReason,
+            staticOptionsPayloadValid = optionSourceDiagnostics?.IsStaticOptionsPayloadValid,
+            staticOptionsCount = optionSourceDiagnostics?.StaticOptionsCount,
+            optionsPayloadIgnored = optionSourceDiagnostics?.IsStaticOptionsIgnored,
+            optionsPayloadIgnoredReason = optionSourceDiagnostics?.StaticOptionsIgnoredReason,
+            groupId,
+            displayOrder,
+            mendSql,
+            cdmendSql
+        };
+    }
+
+    private static string? TruncatePayloadForDiagnostics(string? payload)
+    {
+        var normalized = NormalizeNullable(payload);
+        if (normalized == null)
+        {
+            return null;
+        }
+
+        if (normalized.Length <= DiagnosticsPayloadPreviewMaxLength)
+        {
+            return normalized;
+        }
+
+        return normalized.Substring(0, DiagnosticsPayloadPreviewMaxLength) + "...";
+    }
+
+    private static string BuildFieldUnhandledBusinessErrorMessage(string fieldKey, string operation)
+    {
+        var normalizedKey = NormalizeNullable(fieldKey);
+        if (normalizedKey == null)
+        {
+            return $"تعذر {operation} الحقل بسبب خطأ داخلي غير متوقع. راجع سجل النظام.";
+        }
+
+        return $"فشل {operation} الحقل '{normalizedKey}' بسبب خطأ داخلي غير متوقع. راجع سجل النظام.";
+    }
+
+    private static string BuildFieldLinksUnhandledBusinessErrorMessage(string fieldKey, string stage)
+    {
+        var normalizedKey = NormalizeNullable(fieldKey);
+        var normalizedStage = NormalizeNullable(stage);
+        if (normalizedKey != null && normalizedStage != null)
+        {
+            return $"فشل حفظ الحقل '{normalizedKey}' أثناء مرحلة '{normalizedStage}' بسبب خطأ داخلي غير متوقع. راجع سجل النظام.";
+        }
+
+        if (normalizedKey != null)
+        {
+            return $"فشل حفظ الحقل '{normalizedKey}' بسبب خطأ داخلي غير متوقع. راجع سجل النظام.";
+        }
+
+        if (normalizedStage != null)
+        {
+            return $"فشل حفظ روابط الحقول أثناء مرحلة '{normalizedStage}' بسبب خطأ داخلي غير متوقع. راجع سجل النظام.";
+        }
+
+        return "فشل حفظ روابط الحقول بسبب خطأ داخلي غير متوقع. راجع سجل النظام.";
+    }
+
     private SubjectAdminFieldDto MapAdminField(Cdmend field, IReadOnlyDictionary<string, int> linkedCounts)
     {
         var key = field.CdmendTxt ?? string.Empty;
@@ -2725,6 +3810,73 @@ public sealed partial class DynamicSubjectsService
             .ToList();
 
         return mapped;
+    }
+
+    private sealed class NormalizedFieldLinkRequestItem
+    {
+        public int RowNumber { get; init; }
+
+        public int? MendSql { get; init; }
+
+        public string? FieldKey { get; init; }
+
+        public int GroupId { get; init; }
+
+        public bool IsActive { get; init; }
+
+        public int DisplayOrder { get; init; }
+
+        public bool IsVisible { get; init; }
+
+        public string? DisplaySettingsJson { get; init; }
+    }
+
+    private sealed class DisplaySettingsRuntimeInspection
+    {
+        public static DisplaySettingsRuntimeInspection Empty { get; } = new();
+
+        public bool HasRuntimePayload { get; init; }
+
+        public bool HasBehavioralRuntimeConfig { get; init; }
+
+        public bool HasOptionLoaderConfig { get; init; }
+
+        public bool HasExplicitDynamicOptionSource { get; init; }
+
+        public string? DynamicOptionSourceReason { get; init; }
+
+        public string? OptionLoaderRejectedReason { get; init; }
+
+        public string? DynamicRuntimePayloadPreview { get; init; }
+    }
+
+    private sealed class FieldOptionSourceDiagnostics
+    {
+        public string EffectiveSource { get; init; } = "None";
+
+        public string EffectiveSourceReason { get; init; } = string.Empty;
+
+        public bool HasRuntimePayload { get; init; }
+
+        public bool HasBehavioralRuntimeConfig { get; init; }
+
+        public bool HasOptionLoaderConfig { get; init; }
+
+        public bool HasExplicitDynamicOptionSource { get; init; }
+
+        public string? DynamicOptionSourceReason { get; init; }
+
+        public string? OptionLoaderRejectedReason { get; init; }
+
+        public bool HasStaticOptionsPayload { get; init; }
+
+        public bool IsStaticOptionsPayloadValid { get; init; }
+
+        public int StaticOptionsCount { get; init; }
+
+        public bool IsStaticOptionsIgnored { get; init; }
+
+        public string? StaticOptionsIgnoredReason { get; init; }
     }
 
     private static bool ExceedsMaxLength(string? value, int maxLength)

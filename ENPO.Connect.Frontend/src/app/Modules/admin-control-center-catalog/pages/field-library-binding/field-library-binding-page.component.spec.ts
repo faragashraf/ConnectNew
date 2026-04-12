@@ -595,6 +595,72 @@ describe('FieldLibraryBindingPageComponent - Dynamic Integration Builder', () =>
   });
 });
 
+describe('FieldLibraryBindingPageComponent - Save Pipeline Guards', () => {
+  let component: FieldLibraryBindingPageComponent;
+
+  const createBinding = (): BoundFieldItem => ({
+    bindingId: 'bind-save-guard-doc-source',
+    sourceFieldId: 'field-doc-source',
+    fieldKey: 'DOC_SOURCE',
+    label: 'مصدر المستند',
+    type: 'Dropdown',
+    displayOrder: 1,
+    visible: true,
+    required: false,
+    readonly: false,
+    defaultValue: '',
+    groupId: 1,
+    groupName: 'البيانات الأساسية',
+    dynamicRuntimeJson: ''
+  });
+
+  beforeEach(() => {
+    component = new FieldLibraryBindingPageComponent(
+      new FormBuilder(),
+      {} as any,
+      {} as any,
+      new FieldLibraryBindingEngine(),
+      {} as any,
+      {} as any
+    );
+
+    component.bindings = [createBinding()];
+    (component as any).currentCategoryId = 100;
+    (component as any).currentApplicationId = 'APP-UNIT';
+    component.backendWorkspaceLoaded = true;
+    component.onBindingChanged();
+  });
+
+  it('blocks save when advanced runtime draft has unapplied local changes', async () => {
+    const persistSpy = spyOn<any>(component, 'persistBindingsToBackend').and.resolveTo();
+    const binding = component.bindings[0];
+
+    component.toggleDynamicRuntimeAdvancedMode(binding);
+    component.onDynamicRuntimeAdvancedDraftChange(binding, '{ invalid json from advanced draft');
+
+    await component.onSaveToBackend();
+
+    expect(persistSpy).not.toHaveBeenCalled();
+    expect(component.stepMessage).toContain('JSON متقدم غير مطبّق');
+  });
+
+  it('blocks save when integration builder has unapplied local edits', async () => {
+    const persistSpy = spyOn<any>(component, 'persistBindingsToBackend').and.resolveTo();
+
+    component.onOpenDynamicRuntimeBuilder(component.bindings[0]);
+    component.onApplyDynamicRuntimePowerBiOptionLoaderPreset();
+    component.dynamicRuntimeBuilderModel.statementId = 65;
+    component.dynamicRuntimeBuilderModel.responseListPath = 'data';
+    component.dynamicRuntimeBuilderModel.responseValuePath = 'id';
+    component.dynamicRuntimeBuilderModel.responseLabelPath = 'name';
+
+    await component.onSaveToBackend();
+
+    expect(persistSpy).not.toHaveBeenCalled();
+    expect(component.stepMessage).toContain('منشئ التكامل');
+  });
+});
+
 describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', () => {
   const createResponse = <T>(data: T) => ({
     isSuccess: true,
@@ -869,6 +935,8 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     component.onDynamicRuntimeAdvancedDraftChange(component.bindings[0], '{ invalid json from raw textarea');
     component.onBindingChanged();
     expect(component.validation.isValid).toBeTrue();
+    // Explicitly close advanced mode to discard unapplied local draft before Save All.
+    component.toggleDynamicRuntimeAdvancedMode(component.bindings[0]);
 
     // Trace point #1: row model right before Save All.
     const rowBeforeSave = {
@@ -1107,6 +1175,198 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     await component.onSaveToBackend();
 
     expect(persistBindingsSpy).toHaveBeenCalledTimes(1);
+    expect(dynamicSubjectsController.upsertAdminCategoryFieldLinks).toHaveBeenCalled();
     expect(dynamicSubjectsController.upsertSubjectTypeAdminConfig).toHaveBeenCalled();
+  });
+
+  it('shows clear save error when backend returns isSuccess=false even with empty errors array', async () => {
+    const categoryId = 100;
+    const appId = 'APP-UNIT';
+    const fieldKey = 'DOC_SOURCE';
+
+    const dynamicSubjectsController = jasmine.createSpyObj('DynamicSubjectsController', [
+      'getAdminFields',
+      'getAdminCategoryFieldLinks',
+      'getSubjectTypesAdminConfig',
+      'updateAdminField',
+      'createAdminField',
+      'upsertAdminCategoryFieldLinks',
+      'upsertSubjectTypeAdminConfig'
+    ]);
+    const adminCatalogController = jasmine.createSpyObj('DynamicSubjectsAdminCatalogController', [
+      'getGroupsByCategory'
+    ]);
+
+    dynamicSubjectsController.getAdminFields.and.returnValue(of(createResponse([
+      {
+        cdmendSql: 501,
+        fieldKey,
+        fieldType: 'Dropdown',
+        fieldLabel: 'مصدر المستند',
+        defaultValue: '',
+        required: false,
+        requiredTrue: false,
+        email: false,
+        pattern: false,
+        isActive: true,
+        width: 0,
+        height: 0,
+        isDisabledInit: false,
+        isSearchable: true,
+        linkedCategoriesCount: 1,
+        applicationId: appId
+      }
+    ])));
+
+    adminCatalogController.getGroupsByCategory.and.returnValue(of(createResponse([
+      {
+        groupId: 1,
+        categoryId,
+        applicationId: appId,
+        groupName: 'البيانات الأساسية',
+        groupDescription: '',
+        parentGroupId: null,
+        displayOrder: 1,
+        isActive: true,
+        children: []
+      }
+    ])));
+
+    dynamicSubjectsController.getAdminCategoryFieldLinks.and.returnValue(of(createResponse([
+      {
+        mendSql: 7001,
+        categoryId,
+        fieldKey,
+        fieldLabel: 'مصدر المستند',
+        fieldType: 'Dropdown',
+        groupId: 1,
+        groupName: 'البيانات الأساسية',
+        isActive: true,
+        displayOrder: 1,
+        isVisible: true,
+        displaySettingsJson: JSON.stringify({ readonly: false }),
+        applicationId: appId
+      }
+    ])));
+
+    dynamicSubjectsController.getSubjectTypesAdminConfig.and.returnValue(of(createResponse([
+      {
+        categoryId,
+        parentCategoryId: 0,
+        categoryName: 'طلب تجريبي',
+        applicationId: appId,
+        catMend: '',
+        catWorkFlow: 0,
+        catSms: false,
+        catMailNotification: false,
+        isActive: true,
+        hasDynamicFields: true,
+        canCreate: true,
+        displayOrder: 1,
+        referencePolicyEnabled: true,
+        referenceMode: 'default',
+        referenceSeparator: '-',
+        referenceStartingValue: 1,
+        includeYear: false,
+        useSequence: true,
+        sequencePaddingLength: 6,
+        sequenceResetScope: 'none',
+        defaultDisplayMode: 'Standard',
+        allowUserToChangeDisplayMode: false
+      }
+    ])));
+
+    dynamicSubjectsController.updateAdminField.and.returnValue(of(createResponse({
+      cdmendSql: 501,
+      fieldKey,
+      fieldType: 'Dropdown',
+      fieldLabel: 'مصدر المستند',
+      defaultValue: '',
+      required: false,
+      requiredTrue: false,
+      email: false,
+      pattern: false,
+      isActive: true,
+      width: 0,
+      height: 0,
+      isDisabledInit: false,
+      isSearchable: true,
+      linkedCategoriesCount: 1,
+      applicationId: appId
+    })));
+
+    dynamicSubjectsController.createAdminField.and.returnValue(of(createResponse({
+      cdmendSql: 501,
+      fieldKey,
+      fieldType: 'Dropdown',
+      fieldLabel: 'مصدر المستند',
+      defaultValue: '',
+      required: false,
+      requiredTrue: false,
+      email: false,
+      pattern: false,
+      isActive: true,
+      width: 0,
+      height: 0,
+      isDisabledInit: false,
+      isSearchable: true,
+      linkedCategoriesCount: 1,
+      applicationId: appId
+    })));
+
+    dynamicSubjectsController.upsertAdminCategoryFieldLinks.and.returnValue(of({
+      isSuccess: false,
+      errors: [],
+      data: [],
+      totalCount: 0,
+      pageNumber: 0,
+      pageSize: 0,
+      totalPages: 0
+    } as any));
+
+    dynamicSubjectsController.upsertSubjectTypeAdminConfig.and.returnValue(of(createResponse({
+      categoryId,
+      parentCategoryId: 0,
+      categoryName: 'طلب تجريبي',
+      applicationId: appId,
+      catMend: '',
+      catWorkFlow: 0,
+      catSms: false,
+      catMailNotification: false,
+      isActive: true,
+      hasDynamicFields: true,
+      canCreate: true,
+      displayOrder: 1,
+      referencePolicyEnabled: true,
+      referenceMode: 'default',
+      referenceSeparator: '-',
+      referenceStartingValue: 1,
+      includeYear: false,
+      useSequence: true,
+      sequencePaddingLength: 6,
+      sequenceResetScope: 'none',
+      defaultDisplayMode: 'Standard',
+      allowUserToChangeDisplayMode: false
+    })));
+
+    const component = new FieldLibraryBindingPageComponent(
+      new FormBuilder(),
+      { paramMap: of({} as any), queryParamMap: of({} as any), snapshot: { queryParamMap: {} } } as any,
+      { navigate: () => Promise.resolve(true) } as any,
+      new FieldLibraryBindingEngine(),
+      dynamicSubjectsController,
+      adminCatalogController
+    );
+
+    (component as any).setReferenceComponents([{ id: 'sequence-1', type: 'sequence' }], false);
+    (component as any).currentCategoryId = categoryId;
+    (component as any).currentApplicationId = appId;
+
+    await (component as any).loadBackendWorkspace(categoryId, appId);
+    await component.onSaveToBackend();
+
+    expect(component.stepMessageSeverity).toBe('warn');
+    expect(component.stepMessage).toContain('تعذر حفظ روابط الحقول في قاعدة البيانات.');
+    expect(dynamicSubjectsController.upsertSubjectTypeAdminConfig).not.toHaveBeenCalled();
   });
 });
