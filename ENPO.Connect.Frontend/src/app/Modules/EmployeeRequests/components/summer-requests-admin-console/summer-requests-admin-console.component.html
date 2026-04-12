@@ -1148,6 +1148,9 @@
           <h4>تفاصيل الطلب المختار</h4>
           <div class="request-details-actions">
             <small class="loading-note" *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
+            <button type="button" class="primary no-print" (click)="openSelectedRequestEdit()" [disabled]="loadingDetails || !selectedRequest || creatingEditLink">
+              {{ creatingEditLink ? 'جاري تجهيز رابط التعديل...' : 'تعديل الطلب' }}
+            </button>
             <button type="button" class="ghost no-print" (click)="openSelectedRequestPrintPreview()" [disabled]="loadingDetails || !selectedRequest">
               طباعة نموذج الطلب
             </button>

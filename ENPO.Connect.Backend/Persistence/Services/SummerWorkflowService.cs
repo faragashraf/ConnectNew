@@ -253,7 +253,11 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<string>> CreateEditTokenAsync(SummerCreateEditTokenRequest request, string userId, string ip)
+        public async Task<CommonResponse<string>> CreateEditTokenAsync(
+            SummerCreateEditTokenRequest request,
+            string userId,
+            string ip,
+            bool hasSummerAdminPermission = false)
         {
             var response = new CommonResponse<string>();
             request ??= new SummerCreateEditTokenRequest();
@@ -304,7 +308,7 @@ namespace Persistence.Services
                     .Where(field => field.FildRelted == message.MessageId)
                     .ToListAsync();
                 var paidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind));
-                if (message.Status == MessageStatus.Rejected || paidAtUtc.HasValue)
+                if (!hasSummerAdminPermission && (message.Status == MessageStatus.Rejected || paidAtUtc.HasValue))
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "لا يمكن إنشاء رابط تعديل لهذا الطلب في حالته الحالية." });
                     return response;
@@ -364,7 +368,11 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerEditTokenResolutionDto>> ResolveEditTokenAsync(string token, string userId, string ip)
+        public async Task<CommonResponse<SummerEditTokenResolutionDto>> ResolveEditTokenAsync(
+            string token,
+            string userId,
+            string ip,
+            bool hasSummerAdminPermission = false)
         {
             var response = new CommonResponse<SummerEditTokenResolutionDto>();
             try
@@ -499,7 +507,7 @@ namespace Persistence.Services
                     .Where(field => field.FildRelted == message.MessageId)
                     .ToListAsync();
                 var paidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind));
-                if (message.Status == MessageStatus.Rejected || paidAtUtc.HasValue)
+                if (!hasSummerAdminPermission && (message.Status == MessageStatus.Rejected || paidAtUtc.HasValue))
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تعديل الطلب في حالته الحالية." });
                     return response;

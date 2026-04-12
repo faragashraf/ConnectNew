@@ -187,7 +187,13 @@ export class SummerDynamicFormEngineService {
     };
   }
 
-  ensureExtraCountRule(form: FormGroup, genericFormService: GenericFormsService, destination: SummerDestinationConfig): void {
+  ensureExtraCountRule(
+    form: FormGroup,
+    genericFormService: GenericFormsService,
+    destination: SummerDestinationConfig,
+    allowAdminExtraOverride = false,
+    forceAdminEditOverride = false
+  ): void {
     const familyCtrl = this.resolveControl(form, genericFormService, this.aliases.familyCount);
     const extraCtrl = this.resolveControl(form, genericFormService, this.aliases.extraCount);
     if (!familyCtrl || !extraCtrl) {
@@ -195,13 +201,21 @@ export class SummerDynamicFormEngineService {
     }
 
     const family = Number(familyCtrl.value ?? 0) || 0;
+    const currentExtra = Math.max(0, Number(extraCtrl.value ?? 0) || 0);
     const maxFamily = destination.familyOptions.length > 0 ? Math.max(...destination.familyOptions) : 0;
     const maxExtra = Number(destination.maxExtraMembers ?? 0) || 0;
-    const enabled = maxFamily > 0 && family === maxFamily && maxExtra > 0;
+    const enabledByFamilyRule = maxFamily > 0 && family === maxFamily && maxExtra > 0;
+    const enabledByAdminExceeding = allowAdminExtraOverride && currentExtra > maxExtra;
+    const enabledByForcedAdminEdit = allowAdminExtraOverride && forceAdminEditOverride;
+    const enabled = enabledByFamilyRule || enabledByAdminExceeding || enabledByForcedAdminEdit;
 
     if (enabled) {
       extraCtrl.enable({ emitEvent: false });
-      extraCtrl.setValidators([Validators.min(0), Validators.max(maxExtra)]);
+      if (allowAdminExtraOverride) {
+        extraCtrl.setValidators([Validators.min(0)]);
+      } else {
+        extraCtrl.setValidators([Validators.min(0), Validators.max(maxExtra)]);
+      }
     } else {
       extraCtrl.setValue(0, { emitEvent: false });
       extraCtrl.clearValidators();
@@ -430,4 +444,3 @@ export class SummerDynamicFormEngineService {
     });
   }
 }
-

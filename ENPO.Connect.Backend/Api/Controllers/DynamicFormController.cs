@@ -3,6 +3,8 @@ using Core;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using Models.DTO.Common;
 using Models.DTO.Correspondance;
 using Persistence.Services.Summer;
@@ -16,11 +18,21 @@ namespace Api.Controllers
 
     public class DynamicFormController : ControllerBase
     {
+        private const string FunctionsHeaderName = "ConnectFunctions";
+        private const string LegacyFunctionsHeaderName = "X-Connect-Functions";
         private readonly IUnitOfWork _unitOfWork;
+        private readonly TokenValidationParameters? _summerFunctionsTokenValidationParameters;
 
-        public DynamicFormController(IUnitOfWork unitOfWork)
+        public DynamicFormController(
+            IUnitOfWork unitOfWork,
+            IOptions<ApplicationConfig> applicationConfigOptions)
         {
             _unitOfWork = unitOfWork;
+            var tokenOptions = applicationConfigOptions?.Value?.tokenOptions;
+            _summerFunctionsTokenValidationParameters = SummerFunctionClaimGuard.BuildTokenValidationParameters(
+                tokenOptions?.Key,
+                tokenOptions?.Issuer,
+                tokenOptions?.Audience);
         }
 
         [HttpGet]
@@ -82,7 +94,39 @@ namespace Api.Controllers
 
         private bool HasRequiredFunction(string requiredFunction)
         {
-            return SummerFunctionClaimGuard.HasRequiredFunction(HttpContext?.User, requiredFunction);
+            return SummerFunctionClaimGuard.HasRequiredFunction(
+                HttpContext?.User,
+                requiredFunction,
+                ResolveFunctionsTokenFromHeaders(),
+                _summerFunctionsTokenValidationParameters);
+        }
+
+        private string? ResolveFunctionsTokenFromHeaders()
+        {
+            if (Request?.Headers == null)
+            {
+                return null;
+            }
+
+            if (Request.Headers.TryGetValue(FunctionsHeaderName, out var directHeaderValues))
+            {
+                var directValue = directHeaderValues.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(directValue))
+                {
+                    return directValue;
+                }
+            }
+
+            if (Request.Headers.TryGetValue(LegacyFunctionsHeaderName, out var legacyHeaderValues))
+            {
+                var legacyValue = legacyHeaderValues.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(legacyValue))
+                {
+                    return legacyValue;
+                }
+            }
+
+            return null;
         }
 
     }

@@ -54,6 +54,12 @@ namespace Persistence.Services
             { 148, new Dictionary<int, int> { { 2, 2 }, { 4, 6 }, { 6, 2 } } },
             { 149, new Dictionary<int, int> { { 4, 24 }, { 6, 23 }, { 7, 24 } } }
         };
+        private static readonly Dictionary<int, int> SummerMaxExtraMembersRules = new()
+        {
+            { 147, 2 },
+            { 148, 1 },
+            { 149, 2 }
+        };
         private static readonly HashSet<string> SystemManagedSummerFieldKinds = new(StringComparer.OrdinalIgnoreCase)
         {
             SummerWorkflowDomainConstants.ActionTypeFieldKind,
@@ -263,6 +269,18 @@ namespace Persistence.Services
             if (string.IsNullOrWhiteSpace(destinationName))
             {
                 destinationName = (categoryInfo.Category?.CatName ?? string.Empty).Trim();
+            }
+
+            if (!ValidateSummerExtraMembersRules(
+                    categoryInfo.Category?.CatId ?? 0,
+                    destinationName,
+                    familyCount,
+                    extraCount,
+                    runtime.HasSummerAdminPermission,
+                    isEditOperation,
+                    response))
+            {
+                return;
             }
 
             var pricingQuoteResponse = await _summerPricingService.GetQuoteAsync(new SummerPricingQuoteRequest
@@ -1208,6 +1226,82 @@ SELECT @result;
         private static int ParseInt(string? value, int fallback = 0)
         {
             return int.TryParse((value ?? string.Empty).Trim(), out var parsed) ? parsed : fallback;
+        }
+
+        private static bool ValidateSummerExtraMembersRules(
+            int categoryId,
+            string? destinationName,
+            int familyCount,
+            int extraCount,
+            bool hasSummerAdminPermission,
+            bool isEditOperation,
+            CommonResponse<MessageDto> response)
+        {
+            if (!TryResolveSummerMaxExtraMembers(categoryId, out var maxExtraMembers))
+            {
+                return true;
+            }
+
+            var hasAdminEditOverride = hasSummerAdminPermission && isEditOperation;
+            if (hasAdminEditOverride)
+            {
+                return true;
+            }
+
+            var normalizedDestinationName = string.IsNullOrWhiteSpace(destinationName)
+                ? $"المصيف رقم {categoryId}"
+                : destinationName.Trim();
+            var maxFamilyCount = ResolveSummerMaxFamilyCount(categoryId);
+            var isAdminExceedingDestinationLimit = hasSummerAdminPermission && extraCount > maxExtraMembers;
+
+            if (maxFamilyCount > 0
+                && familyCount != maxFamilyCount
+                && extraCount > 0
+                && !isAdminExceedingDestinationLimit)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"الأفراد الإضافيون متاحون فقط عند اختيار السعة القصوى ({maxFamilyCount})."
+                });
+                return false;
+            }
+
+            if (!hasSummerAdminPermission && extraCount > maxExtraMembers)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"الحد الأقصى للأفراد الإضافيين في {normalizedDestinationName} هو {maxExtraMembers}."
+                });
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool TryResolveSummerMaxExtraMembers(int categoryId, out int maxExtraMembers)
+        {
+            if (SummerMaxExtraMembersRules.TryGetValue(categoryId, out var configuredMaxExtra))
+            {
+                maxExtraMembers = Math.Max(0, configuredMaxExtra);
+                return true;
+            }
+
+            maxExtraMembers = 0;
+            return false;
+        }
+
+        private static int ResolveSummerMaxFamilyCount(int categoryId)
+        {
+            if (!SummerCapacityRules.TryGetValue(categoryId, out var capacityByFamily)
+                || capacityByFamily == null
+                || capacityByFamily.Count == 0)
+            {
+                return 0;
+            }
+
+            return capacityByFamily.Keys.Max();
         }
 
         private static bool CanCreateSummerRequestForDestination(

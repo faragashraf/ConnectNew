@@ -114,7 +114,14 @@ export class BasicInterceptorService implements HttpInterceptor {
   }
 
   private attachBearer(req: HttpRequest<any>, token: string): HttpRequest<any> {
-    return req.clone({ setHeaders: { Authorization: `Bearer ${token}` } });
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`
+    };
+    const functionsToken = localStorage.getItem('ConnectFunctions');
+    if (functionsToken) {
+      headers['ConnectFunctions'] = `Bearer ${functionsToken}`;
+    }
+    return req.clone({ setHeaders: headers });
   }
 
   private handleUnauthorizedError(

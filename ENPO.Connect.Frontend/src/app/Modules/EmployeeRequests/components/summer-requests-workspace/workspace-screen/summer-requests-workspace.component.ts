@@ -470,6 +470,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return false;
     }
 
+    if (this.hasSummerAdminPermission) {
+      return true;
+    }
+
     if (this.isRejectedStatus(request.status)) {
       return false;
     }
@@ -484,6 +488,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   getEditBlockedReason(request: SummerRequestSummaryDto | undefined | null): string {
     if (!request) {
       return 'لا يمكن تعديل الطلب.';
+    }
+
+    if (this.hasSummerAdminPermission) {
+      return '';
     }
 
     if (this.isRejectedStatus(request.status)) {

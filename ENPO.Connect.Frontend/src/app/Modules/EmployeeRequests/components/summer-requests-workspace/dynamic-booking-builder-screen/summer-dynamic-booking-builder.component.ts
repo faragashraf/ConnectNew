@@ -198,6 +198,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return false;
   }
 
+  private get isAdminEditOverrideActive(): boolean {
+    return this.isEditMode && this.canUseProxyRegistration;
+  }
+
   onMembershipTypeChanged(value: string | null | undefined): void {
     if (!this.canSelectMembershipType) {
       this.membershipTypeValue = 'WORKER_MEMBER';
@@ -779,13 +783,39 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return;
     }
 
-    this.engine.ensureExtraCountRule(this.ticketForm, this.genericFormService, destination);
+    this.engine.ensureExtraCountRule(
+      this.ticketForm,
+      this.genericFormService,
+      destination,
+      this.canUseProxyRegistration,
+      this.isAdminEditOverrideActive
+    );
+    this.applyAdminEditCapacityOverride();
     this.syncExtraCountValidationMessage(destination);
     this.syncCompanionInstances();
     this.applyCompanionAgeRules();
     this.syncWaveLabel();
     this.loadBookingCapacity();
     this.loadPricingQuote();
+  }
+
+  private applyAdminEditCapacityOverride(): void {
+    if (!this.isAdminEditOverrideActive || !this.ticketForm) {
+      return;
+    }
+
+    const familyControl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.familyCount);
+    if (familyControl) {
+      familyControl.enable({ emitEvent: false });
+      familyControl.updateValueAndValidity({ emitEvent: false });
+    }
+
+    const extraControl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.extraCount);
+    if (extraControl) {
+      extraControl.enable({ emitEvent: false });
+      extraControl.setValidators([Validators.min(0)]);
+      extraControl.updateValueAndValidity({ emitEvent: false });
+    }
   }
 
   private syncExtraCountValidationMessage(destination: SummerDestinationConfig): void {
@@ -811,7 +841,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
       const validators = Array.isArray(item.validators) ? item.validators : [];
       const withoutMax = validators.filter(v => String(v?.key ?? '') !== 'max');
-      withoutMax.push({ key: 'max', value: maxMessage });
+      if (!this.canUseProxyRegistration) {
+        withoutMax.push({ key: 'max', value: maxMessage });
+      }
       item.validators = withoutMax as any;
     });
 
@@ -1113,11 +1145,15 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     const maxFamily = destination.familyOptions.length > 0 ? Math.max(...destination.familyOptions) : 0;
-    if (maxFamily > 0 && familyCount !== maxFamily && extraCount > 0) {
+    const bypassCapacityRulesForAdminEdit = this.isAdminEditOverrideActive;
+    const isAdminExceedingDestinationLimit =
+      this.canUseProxyRegistration && extraCount > Number(destination.maxExtraMembers ?? 0);
+
+    if (maxFamily > 0 && familyCount !== maxFamily && extraCount > 0 && !isAdminExceedingDestinationLimit && !bypassCapacityRulesForAdminEdit) {
       alerts.push(`الأفراد الإضافيون متاحون فقط عند اختيار السعة القصوى (${maxFamily}).`);
     }
 
-    if (extraCount > destination.maxExtraMembers) {
+    if (!this.canUseProxyRegistration && extraCount > destination.maxExtraMembers) {
       alerts.push(`الحد الأقصى للأفراد الإضافيين في ${destination.name} هو ${destination.maxExtraMembers}.`);
     }
 
@@ -1803,6 +1839,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return false;
     }
 
+    if (this.isAdminEditOverrideActive) {
+      return true;
+    }
+
     if (String(request.paidAtUtc ?? '').trim().length > 0) {
       return false;
     }
@@ -1818,6 +1858,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private getEditBlockedReason(request: SummerRequestSummaryDto | undefined): string {
     if (!request) {
       return 'لا يمكن تعديل الطلب.';
+    }
+
+    if (this.isAdminEditOverrideActive) {
+      return '';
     }
 
     if (String(request.paidAtUtc ?? '').trim().length > 0) {

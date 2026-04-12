@@ -1,6 +1,8 @@
 using Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using Models.DTO.Common;
 using Models.DTO.Correspondance.Summer;
 using Persistence.Services;
@@ -12,15 +14,24 @@ namespace Api.Controllers
     [ApiController]
     public class SummerWorkflowController : ControllerBase
     {
+        private const string FunctionsHeaderName = "ConnectFunctions";
+        private const string LegacyFunctionsHeaderName = "X-Connect-Functions";
         private readonly SummerWorkflowService _summerWorkflowService;
         private readonly ILogger<SummerWorkflowController> _logger;
+        private readonly TokenValidationParameters? _summerFunctionsTokenValidationParameters;
 
         public SummerWorkflowController(
             SummerWorkflowService summerWorkflowService,
-            ILogger<SummerWorkflowController> logger)
+            ILogger<SummerWorkflowController> logger,
+            IOptions<ApplicationConfig> applicationConfigOptions)
         {
             _summerWorkflowService = summerWorkflowService;
             _logger = logger;
+            var tokenOptions = applicationConfigOptions?.Value?.tokenOptions;
+            _summerFunctionsTokenValidationParameters = SummerFunctionClaimGuard.BuildTokenValidationParameters(
+                tokenOptions?.Key,
+                tokenOptions?.Issuer,
+                tokenOptions?.Audience);
         }
 
         [HttpGet(nameof(GetMyRequests))]
@@ -35,7 +46,8 @@ namespace Api.Controllers
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
             var ip = HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "0.0.0.0";
-            return _summerWorkflowService.CreateEditTokenAsync(request, userId, ip);
+            var hasSummerAdminPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerAdmin);
+            return _summerWorkflowService.CreateEditTokenAsync(request, userId, ip, hasSummerAdminPermission);
         }
 
         [HttpGet(nameof(ResolveEditToken))]
@@ -43,7 +55,8 @@ namespace Api.Controllers
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
             var ip = HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "0.0.0.0";
-            return _summerWorkflowService.ResolveEditTokenAsync(token, userId, ip);
+            var hasSummerAdminPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerAdmin);
+            return _summerWorkflowService.ResolveEditTokenAsync(token, userId, ip, hasSummerAdminPermission);
         }
 
         [HttpGet(nameof(GetWaveCapacity))]
@@ -264,7 +277,39 @@ namespace Api.Controllers
 
         private bool HasRequiredFunction(string requiredFunction)
         {
-            return SummerFunctionClaimGuard.HasRequiredFunction(HttpContext?.User, requiredFunction);
+            return SummerFunctionClaimGuard.HasRequiredFunction(
+                HttpContext?.User,
+                requiredFunction,
+                ResolveFunctionsTokenFromHeaders(),
+                _summerFunctionsTokenValidationParameters);
+        }
+
+        private string? ResolveFunctionsTokenFromHeaders()
+        {
+            if (Request?.Headers == null)
+            {
+                return null;
+            }
+
+            if (Request.Headers.TryGetValue(FunctionsHeaderName, out var directHeaderValues))
+            {
+                var directValue = directHeaderValues.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(directValue))
+                {
+                    return directValue;
+                }
+            }
+
+            if (Request.Headers.TryGetValue(LegacyFunctionsHeaderName, out var legacyHeaderValues))
+            {
+                var legacyValue = legacyHeaderValues.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(legacyValue))
+                {
+                    return legacyValue;
+                }
+            }
+
+            return null;
         }
     }
 }
