@@ -560,6 +560,39 @@ describe('FieldLibraryBindingPageComponent - Dynamic Integration Builder', () =>
     expect(component.validation.blockingIssues.some(issue =>
       issue.includes('تهيئة السلوك الديناميكي'))).toBeFalse();
   });
+
+  it('keeps builder state valid when advanced raw draft is invalid and not applicable', () => {
+    const binding = createBinding();
+    component.bindings = [binding];
+
+    component.onOpenDynamicRuntimeBuilder(binding);
+    component.onApplyDynamicRuntimePowerBiOptionLoaderPreset();
+    component.dynamicRuntimeBuilderModel.statementId = 65;
+    component.dynamicRuntimeBuilderModel.responseListPath = 'data';
+    component.dynamicRuntimeBuilderModel.responseValuePath = 'id';
+    component.dynamicRuntimeBuilderModel.responseLabelPath = 'name';
+    component.onSaveDynamicRuntimeBuilder();
+
+    const firstBinding = component.bindings[0];
+    expect(firstBinding.dynamicRuntimeJson).toContain('"optionLoader"');
+    expect(component.validation.blockingIssues.some(issue =>
+      issue.includes('تهيئة السلوك الديناميكي'))).toBeFalse();
+
+    component.toggleDynamicRuntimeAdvancedMode(firstBinding);
+    component.onDynamicRuntimeAdvancedDraftChange(firstBinding, '{ invalid json from advanced mode');
+    component.onBindingChanged();
+
+    const normalizedAfterDraft = component.bindings[0];
+    expect(normalizedAfterDraft.dynamicRuntimeJson).toContain('"optionLoader"');
+    expect(component.validation.blockingIssues.some(issue =>
+      issue.includes('تهيئة السلوك الديناميكي'))).toBeFalse();
+
+    component.onApplyDynamicRuntimeAdvancedDraft(normalizedAfterDraft);
+    expect(component.bindings[0].dynamicRuntimeJson).toContain('"optionLoader"');
+    expect(component.validation.blockingIssues.some(issue =>
+      issue.includes('تهيئة السلوك الديناميكي'))).toBeFalse();
+    expect(component.stepMessageSeverity).toBe('warn');
+  });
 });
 
 describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', () => {
@@ -809,8 +842,9 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     component.dynamicRuntimeBuilderModel.responseValuePath = 'id';
     component.dynamicRuntimeBuilderModel.responseLabelPath = 'name';
     component.onSaveDynamicRuntimeBuilder();
-    // Simulate stale/invalid raw JSON edit after builder save.
-    component.bindings[0].dynamicRuntimeJson = '{ invalid json from raw textarea';
+    // Simulate invalid advanced JSON draft without applying it.
+    component.toggleDynamicRuntimeAdvancedMode(component.bindings[0]);
+    component.onDynamicRuntimeAdvancedDraftChange(component.bindings[0], '{ invalid json from raw textarea');
     component.onBindingChanged();
     expect(component.validation.isValid).toBeTrue();
 

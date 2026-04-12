@@ -554,16 +554,52 @@
                       icon="pi pi-sliders-h"
                       (click)="onOpenDynamicRuntimeBuilder(row)">
                     </button>
+                    <button
+                      pButton
+                      type="button"
+                      class="p-button-text p-button-sm"
+                      [label]="isDynamicRuntimeAdvancedModeOpen(row) ? 'إخفاء JSON المتقدم' : 'وضع JSON المتقدم'"
+                      icon="pi pi-code"
+                      (click)="toggleDynamicRuntimeAdvancedMode(row)">
+                    </button>
                   </div>
-                  <textarea
-                    pInputTextarea
-                    rows="4"
-                    [autoResize]="true"
-                    [(ngModel)]="row.dynamicRuntimeJson"
-                    [ngModelOptions]="{ standalone: true }"
-                    (ngModelChange)="onBindingChanged()"
-                    placeholder='مثال: {"optionLoader":{"request":{"url":"/api/..."}}}'>
-                  </textarea>
+                  <pre class="dynamic-runtime-mirror"><code [innerText]="getDynamicRuntimeReadonlyMirror(row) || '{}'"></code></pre>
+                  <div class="dynamic-runtime-advanced" *ngIf="isDynamicRuntimeAdvancedModeOpen(row)">
+                    <label>JSON متقدم (اختياري)</label>
+                    <textarea
+                      pInputTextarea
+                      rows="6"
+                      [autoResize]="true"
+                      [ngModel]="getDynamicRuntimeAdvancedDraft(row)"
+                      [ngModelOptions]="{ standalone: true }"
+                      (ngModelChange)="onDynamicRuntimeAdvancedDraftChange(row, $event)"
+                      placeholder='مثال: {"optionLoader":{"integration":{"sourceType":"powerbi","statementId":65}}}'>
+                    </textarea>
+                    <small class="field-note">
+                      وضع متقدم للمراجعة أو التعديل اليدوي فقط. لا يتم تطبيق التعديل إلا عند الضغط على "تطبيق JSON المتقدم".
+                    </small>
+                    <small class="error" *ngIf="getDynamicRuntimeAdvancedError(row) as advancedRuntimeError">
+                      {{ advancedRuntimeError }}
+                    </small>
+                    <div class="dynamic-runtime-advanced-actions">
+                      <button
+                        pButton
+                        type="button"
+                        class="p-button-sm"
+                        label="تطبيق JSON المتقدم"
+                        icon="pi pi-check"
+                        (click)="onApplyDynamicRuntimeAdvancedDraft(row)">
+                      </button>
+                      <button
+                        pButton
+                        type="button"
+                        class="p-button-sm p-button-outlined"
+                        label="استعادة من إعدادات الحقل"
+                        icon="pi pi-refresh"
+                        (click)="onResetDynamicRuntimeAdvancedDraft(row)">
+                      </button>
+                    </div>
+                  </div>
                 </td>
                 <td class="actions-col">
                   <div class="row-actions">

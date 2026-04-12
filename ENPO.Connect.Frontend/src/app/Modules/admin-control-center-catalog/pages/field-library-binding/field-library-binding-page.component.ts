@@ -269,6 +269,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   dynamicRuntimeBuilderVisible = false;
   dynamicRuntimeBuilderTargetBindingId: string | null = null;
   dynamicRuntimeBuilderModel: DynamicRuntimeBuilderVm = this.createDefaultDynamicRuntimeBuilder();
+  readonly dynamicRuntimeAdvancedOpenBindingIds = new Set<string>();
+  private readonly dynamicRuntimeAdvancedDraftByBindingId = new Map<string, string>();
+  private readonly dynamicRuntimeAdvancedErrorByBindingId = new Map<string, string>();
 
   private readonly subscriptions = new Subscription();
   private syncingFromStore = false;
@@ -557,9 +560,11 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   }
 
   onDeleteBinding(binding: BoundFieldItem): void {
+    this.clearDynamicRuntimeAdvancedStateForBinding(binding.bindingId);
     this.bindings = this.bindingEngine.normalizeDisplayOrder(
       this.bindings.filter(item => item.bindingId !== binding.bindingId)
     );
+    this.pruneDynamicRuntimeAdvancedState();
     this.evaluateBindings(true, true);
   }
 
@@ -594,7 +599,82 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
         };
       })
     );
+    this.pruneDynamicRuntimeAdvancedState();
     this.evaluateBindings(true, true);
+  }
+
+  isDynamicRuntimeAdvancedModeOpen(binding: Pick<BoundFieldItem, 'bindingId'>): boolean {
+    return this.dynamicRuntimeAdvancedOpenBindingIds.has(binding.bindingId);
+  }
+
+  toggleDynamicRuntimeAdvancedMode(binding: BoundFieldItem): void {
+    const bindingId = binding.bindingId;
+    if (this.dynamicRuntimeAdvancedOpenBindingIds.has(bindingId)) {
+      this.clearDynamicRuntimeAdvancedStateForBinding(bindingId);
+      return;
+    }
+
+    this.dynamicRuntimeAdvancedOpenBindingIds.add(bindingId);
+    this.dynamicRuntimeAdvancedDraftByBindingId.set(bindingId, this.resolveBindingRuntimeJson(binding));
+    this.dynamicRuntimeAdvancedErrorByBindingId.delete(bindingId);
+  }
+
+  getDynamicRuntimeReadonlyMirror(binding: BoundFieldItem): string {
+    return this.resolveBindingRuntimeJson(binding);
+  }
+
+  getDynamicRuntimeAdvancedDraft(binding: BoundFieldItem): string {
+    const bindingId = binding.bindingId;
+    const existing = this.dynamicRuntimeAdvancedDraftByBindingId.get(bindingId);
+    if (existing != null) {
+      return existing;
+    }
+
+    const resolved = this.resolveBindingRuntimeJson(binding);
+    this.dynamicRuntimeAdvancedDraftByBindingId.set(bindingId, resolved);
+    return resolved;
+  }
+
+  onDynamicRuntimeAdvancedDraftChange(binding: BoundFieldItem, value: string): void {
+    this.dynamicRuntimeAdvancedDraftByBindingId.set(binding.bindingId, String(value ?? ''));
+    this.dynamicRuntimeAdvancedErrorByBindingId.delete(binding.bindingId);
+  }
+
+  onApplyDynamicRuntimeAdvancedDraft(binding: BoundFieldItem): void {
+    const bindingId = binding.bindingId;
+    const draft = this.normalizeNullable(this.dynamicRuntimeAdvancedDraftByBindingId.get(bindingId));
+    if (!draft) {
+      this.updateBindingDynamicRuntimeState(bindingId, '');
+      this.dynamicRuntimeAdvancedDraftByBindingId.set(bindingId, '');
+      this.dynamicRuntimeAdvancedErrorByBindingId.delete(bindingId);
+      this.onBindingChanged();
+      return;
+    }
+
+    const normalizedRuntime = this.parseSupportedDynamicRuntimeJson(draft);
+    if (!normalizedRuntime) {
+      const errorMessage = 'الـ JSON المتقدم غير صالح أو لا يطابق عقد dynamicRuntime المدعوم.';
+      this.dynamicRuntimeAdvancedErrorByBindingId.set(bindingId, errorMessage);
+      this.stepMessageSeverity = 'warn';
+      this.stepMessage = errorMessage;
+      return;
+    }
+
+    const runtimeJson = JSON.stringify(normalizedRuntime, null, 2);
+    this.updateBindingDynamicRuntimeState(bindingId, runtimeJson);
+    this.dynamicRuntimeAdvancedDraftByBindingId.set(bindingId, runtimeJson);
+    this.dynamicRuntimeAdvancedErrorByBindingId.delete(bindingId);
+    this.onBindingChanged();
+  }
+
+  onResetDynamicRuntimeAdvancedDraft(binding: BoundFieldItem): void {
+    const resolved = this.resolveBindingRuntimeJson(binding);
+    this.dynamicRuntimeAdvancedDraftByBindingId.set(binding.bindingId, resolved);
+    this.dynamicRuntimeAdvancedErrorByBindingId.delete(binding.bindingId);
+  }
+
+  getDynamicRuntimeAdvancedError(binding: Pick<BoundFieldItem, 'bindingId'>): string | null {
+    return this.dynamicRuntimeAdvancedErrorByBindingId.get(binding.bindingId) ?? null;
   }
 
   onOpenDynamicRuntimeBuilder(binding: BoundFieldItem): void {
@@ -614,6 +694,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       return;
     }
 
+    const targetBindingId = this.dynamicRuntimeBuilderTargetBindingId;
     const runtimeConfig = this.buildRuntimeConfigFromBuilder(this.dynamicRuntimeBuilderModel);
     if (!runtimeConfig) {
       return;
@@ -621,7 +702,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     const runtimeJson = JSON.stringify(runtimeConfig, null, 2);
     this.bindings = this.bindings.map(binding => {
-      if (binding.bindingId !== this.dynamicRuntimeBuilderTargetBindingId) {
+      if (binding.bindingId !== targetBindingId) {
         return binding;
       }
 
@@ -636,6 +717,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       };
     });
 
+    this.syncDynamicRuntimeAdvancedDraftForBinding(targetBindingId, runtimeJson);
     this.onCancelDynamicRuntimeBuilder();
     this.onBindingChanged();
   }
@@ -1040,6 +1122,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.bindings = this.bindingEngine.normalizeDisplayOrder(
         activeLinks.map(link => this.mapLinkToBinding(link))
       );
+      this.pruneDynamicRuntimeAdvancedState();
       this.loadedBindingsSnapshot = this.bindingEngine.serializeBindingsPayload(this.bindings);
 
       this.serialOptions = this.buildSerialOptions(subjectTypes);
@@ -1066,6 +1149,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       this.serialOptions = [];
       this.fieldCatalogByKey.clear();
       this.loadedBindingsSnapshot = '';
+      this.pruneDynamicRuntimeAdvancedState();
       this.evaluateBindings(true, false);
 
       this.stepMessageSeverity = 'warn';
@@ -1536,6 +1620,61 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       JSON.stringify({ dynamicRuntime: parsedRuntime })
     );
     return parsedBehavior ? parsedRuntime : null;
+  }
+
+  private updateBindingDynamicRuntimeState(bindingId: string, runtimeJson: string): void {
+    this.bindings = this.bindings.map(binding => {
+      if (binding.bindingId !== bindingId) {
+        return binding;
+      }
+
+      const nextBinding: BoundFieldItem = {
+        ...binding,
+        dynamicRuntimeJson: runtimeJson
+      };
+
+      return {
+        ...nextBinding,
+        displaySettingsJson: this.buildDisplaySettingsJson(binding.displaySettingsJson, nextBinding)
+      };
+    });
+  }
+
+  private syncDynamicRuntimeAdvancedDraftForBinding(bindingId: string, runtimeJson: string): void {
+    if (!this.dynamicRuntimeAdvancedOpenBindingIds.has(bindingId)) {
+      return;
+    }
+
+    this.dynamicRuntimeAdvancedDraftByBindingId.set(bindingId, runtimeJson);
+    this.dynamicRuntimeAdvancedErrorByBindingId.delete(bindingId);
+  }
+
+  private clearDynamicRuntimeAdvancedStateForBinding(bindingId: string): void {
+    this.dynamicRuntimeAdvancedOpenBindingIds.delete(bindingId);
+    this.dynamicRuntimeAdvancedDraftByBindingId.delete(bindingId);
+    this.dynamicRuntimeAdvancedErrorByBindingId.delete(bindingId);
+  }
+
+  private pruneDynamicRuntimeAdvancedState(): void {
+    const validBindingIds = new Set(this.bindings.map(binding => binding.bindingId));
+
+    for (const bindingId of Array.from(this.dynamicRuntimeAdvancedOpenBindingIds)) {
+      if (!validBindingIds.has(bindingId)) {
+        this.dynamicRuntimeAdvancedOpenBindingIds.delete(bindingId);
+      }
+    }
+
+    for (const bindingId of Array.from(this.dynamicRuntimeAdvancedDraftByBindingId.keys())) {
+      if (!validBindingIds.has(bindingId)) {
+        this.dynamicRuntimeAdvancedDraftByBindingId.delete(bindingId);
+      }
+    }
+
+    for (const bindingId of Array.from(this.dynamicRuntimeAdvancedErrorByBindingId.keys())) {
+      if (!validBindingIds.has(bindingId)) {
+        this.dynamicRuntimeAdvancedErrorByBindingId.delete(bindingId);
+      }
+    }
   }
 
   private createDefaultBuilderBinding(): DynamicRuntimeBuilderBindingVm {
@@ -2853,6 +2992,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.loadedBindingsSnapshot = '';
     this.subjectTypeAdmin = null;
     this.reusableFields = [];
+    this.dynamicRuntimeAdvancedOpenBindingIds.clear();
+    this.dynamicRuntimeAdvancedDraftByBindingId.clear();
+    this.dynamicRuntimeAdvancedErrorByBindingId.clear();
 
     this.syncingFromStore = true;
     this.referencePolicyForm.patchValue({

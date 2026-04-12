@@ -225,16 +225,46 @@
 .dynamic-runtime-cell-actions {
   display: flex;
   justify-content: flex-start;
+  gap: 0.35rem;
+  flex-wrap: wrap;
   margin-bottom: 0.35rem;
 }
 
-.dynamic-col textarea {
+.dynamic-runtime-mirror {
+  margin: 0;
+  border: 1px solid #d9e7f1;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 0.5rem;
+  min-height: 4.5rem;
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.dynamic-runtime-mirror code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dynamic-runtime-advanced {
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.dynamic-runtime-advanced textarea {
   width: 100%;
-  min-height: 6.4rem;
+  min-height: 7rem;
   direction: ltr;
   text-align: left;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 0.75rem;
+}
+
+.dynamic-runtime-advanced-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
 }
 
 .table-wrapper {
