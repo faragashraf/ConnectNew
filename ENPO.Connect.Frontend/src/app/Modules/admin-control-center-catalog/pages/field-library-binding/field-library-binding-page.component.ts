@@ -112,22 +112,30 @@ interface DynamicRuntimeBuilderVm {
 }
 
 interface ParsedBindingOptionsResult {
-  isValid: boolean;
+  state: 'missing' | 'valid' | 'empty' | 'invalid';
+  options: Array<{ value: string; label: string }>;
   values: Set<string>;
+  invalidSourceCount: number;
+  emptySourceCount: number;
+  rawSourceCount: number;
+  rawSources: Array<{ source: string; payload: string }>;
+  invalidReason?: string;
 }
 
 interface BindingOptionSourceDecision {
-  source: 'Static' | 'Dynamic' | 'None';
+  source: 'Static' | 'Internal' | 'External' | 'None';
   reason: string;
-  hasStaticOptionsPayload: boolean;
+  hasStaticSourcePayload: boolean;
   staticOptionsValid: boolean;
   staticOptionsCount: number;
+  rawStaticSourceCount: number;
+  rawStaticSources: Array<{ source: string; payload: string }>;
   hasDynamicRuntimeConfig: boolean;
   hasBehavioralRuntimeConfig: boolean;
   hasDynamicOptionSource: boolean;
+  dynamicOptionSourceKind?: 'Internal' | 'External';
   dynamicOptionSourceReason?: string;
-  optionsPayloadIgnored: boolean;
-  optionsPayloadIgnoredReason?: string;
+  staticExcludedReason?: string;
   staticOptionValues: Set<string>;
 }
 
@@ -1714,15 +1722,20 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       defaultValue: this.normalizeNullable(binding?.defaultValue)
         ?? this.normalizeNullable(existingField?.defaultValue),
       optionsPayload: this.normalizeNullable(existingField?.optionsPayload),
-      optionSource: optionSourceDecision.source,
-      optionSourceReason: optionSourceDecision.reason,
+      finalOptionSource: optionSourceDecision.source,
+      finalOptionSourceReason: optionSourceDecision.reason,
       hasDynamicRuntimeConfig: optionSourceDecision.hasDynamicRuntimeConfig,
       hasBehavioralRuntimeConfig: optionSourceDecision.hasBehavioralRuntimeConfig,
       hasDynamicOptionSource: optionSourceDecision.hasDynamicOptionSource,
+      dynamicOptionSourceKind: optionSourceDecision.dynamicOptionSourceKind ?? null,
       staticOptionsPayloadValid: optionSourceDecision.staticOptionsValid,
       staticOptionsCount: optionSourceDecision.staticOptionsCount,
-      optionsPayloadIgnored: optionSourceDecision.optionsPayloadIgnored,
-      optionsPayloadIgnoredReason: optionSourceDecision.optionsPayloadIgnoredReason ?? null,
+      rawOptionsSource: optionSourceDecision.rawStaticSources.map(item => ({
+        source: item.source,
+        payload: item.payload
+      })),
+      normalizedOptionsCount: optionSourceDecision.staticOptionsCount,
+      staticExcludedReason: optionSourceDecision.staticExcludedReason ?? null,
       displaySettingsJson: this.normalizeNullable(linkPayload?.displaySettingsJson)
         ?? this.normalizeNullable(binding?.displaySettingsJson),
       dynamicRuntimeJson: runtimePayload,
@@ -2934,7 +2947,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       }
 
       if (optionSourceDecision.source === 'None') {
-        issues.push(`فشل تجهيز الحقل "${fieldLabel}" لأنه لا يحتوي خيارات ثابتة صالحة ولا مصدر خيارات ديناميكي صريح.`);
+        issues.push(`فشل تجهيز الحقل "${fieldLabel}" لأنه لا يحتوي خيارات ثابتة صالحة ولا مصدر خيارات داخلي/خارجي صالح.`);
         continue;
       }
 
@@ -2955,66 +2968,73 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     binding: Pick<BoundFieldItem, 'fieldKey' | 'dynamicRuntimeJson' | 'displaySettingsJson'> | null,
     existingField: SubjectAdminFieldDto | null
   ): BindingOptionSourceDecision {
-    const optionsPayload = this.normalizeNullable(existingField?.optionsPayload);
-    const parsedOptions = this.parseBindingOptionsPayload(optionsPayload ?? undefined);
-    const hasStaticOptionsPayload = optionsPayload != null;
-    const hasValidStaticOptions = hasStaticOptionsPayload && parsedOptions.isValid && parsedOptions.values.size > 0;
-    const runtimePayload = this.resolveRuntimePayloadForOptionSource(binding);
-    const runtimeBehavior = runtimePayload
-      ? parseRequestRuntimeDynamicFieldBehavior(JSON.stringify({ dynamicRuntime: runtimePayload }))
-      : null;
-    const hasDynamicOptionSource = runtimeBehavior?.optionLoader != null;
-    const hasBehavioralRuntimeConfig = runtimePayload != null && Object.keys(runtimePayload).length > 0;
-    const dynamicOptionSourceReason = hasDynamicOptionSource
-      ? 'تم اعتماد المصدر الديناميكي لأن optionLoader مفعّل صراحة.'
-      : undefined;
+    const rawStaticSources = this.collectRawStaticOptionSources(binding, existingField);
+    const parsedStaticOptions = this.parseBindingOptionsPayload(rawStaticSources);
+    const dynamicOptionSource = this.resolveDynamicOptionSource(binding);
+    const hasValidStaticOptions = parsedStaticOptions.state === 'valid' && parsedStaticOptions.values.size > 0;
+    const staticExcludedReason = this.buildStaticExcludedReason(parsedStaticOptions);
 
-    if (hasDynamicOptionSource) {
-      const optionsPayloadIgnored = hasValidStaticOptions;
+    if (hasValidStaticOptions) {
+      const dynamicFallbackNote = dynamicOptionSource.kind != null
+        ? `تم تفضيل الخيارات الثابتة، بينما مصدر ${dynamicOptionSource.kind === 'Internal' ? 'داخلي' : 'خارجي'} متاح كمسار بديل.`
+        : '';
       return {
-        source: 'Dynamic',
-        reason: dynamicOptionSourceReason ?? 'تم اعتماد المصدر الديناميكي.',
-        hasStaticOptionsPayload,
-        staticOptionsValid: parsedOptions.isValid,
-        staticOptionsCount: parsedOptions.values.size,
-        hasDynamicRuntimeConfig: runtimePayload != null,
-        hasBehavioralRuntimeConfig,
-        hasDynamicOptionSource: true,
-        dynamicOptionSourceReason,
-        optionsPayloadIgnored,
-        optionsPayloadIgnoredReason: optionsPayloadIgnored
-          ? 'تم تجاهل optionsPayload بسبب تفعيل optionLoader كمصدر خيارات ديناميكي.'
-          : undefined,
-        staticOptionValues: parsedOptions.values
+        source: 'Static',
+        reason: dynamicFallbackNote.length > 0
+          ? `تم اعتماد الخيارات الثابتة بعد التطبيع. ${dynamicFallbackNote}`
+          : 'تم اعتماد الخيارات الثابتة بعد التطبيع.',
+        hasStaticSourcePayload: parsedStaticOptions.rawSourceCount > 0,
+        staticOptionsValid: true,
+        staticOptionsCount: parsedStaticOptions.values.size,
+        rawStaticSourceCount: parsedStaticOptions.rawSourceCount,
+        rawStaticSources: parsedStaticOptions.rawSources,
+        hasDynamicRuntimeConfig: dynamicOptionSource.hasRuntimePayload,
+        hasBehavioralRuntimeConfig: dynamicOptionSource.hasBehavioralRuntimeConfig,
+        hasDynamicOptionSource: dynamicOptionSource.hasDynamicOptionSource,
+        dynamicOptionSourceKind: dynamicOptionSource.kind ?? undefined,
+        dynamicOptionSourceReason: dynamicOptionSource.reason ?? undefined,
+        staticExcludedReason: undefined,
+        staticOptionValues: parsedStaticOptions.values
       };
     }
 
-    if (hasValidStaticOptions) {
+    if (dynamicOptionSource.kind != null) {
       return {
-        source: 'Static',
-        reason: 'تم اعتماد optionsPayload لأنه صالح ولا يوجد optionLoader مفعّل صراحة.',
-        hasStaticOptionsPayload,
-        staticOptionsValid: parsedOptions.isValid,
-        staticOptionsCount: parsedOptions.values.size,
-        hasDynamicRuntimeConfig: runtimePayload != null,
-        hasBehavioralRuntimeConfig,
-        hasDynamicOptionSource: false,
-        optionsPayloadIgnored: false,
-        staticOptionValues: parsedOptions.values
+        source: dynamicOptionSource.kind,
+        reason: dynamicOptionSource.reason
+          ?? (dynamicOptionSource.kind === 'Internal'
+            ? 'تم اعتماد مصدر خيارات ديناميكي داخلي.'
+            : 'تم اعتماد مصدر خيارات ديناميكي خارجي.'),
+        hasStaticSourcePayload: parsedStaticOptions.rawSourceCount > 0,
+        staticOptionsValid: false,
+        staticOptionsCount: parsedStaticOptions.values.size,
+        rawStaticSourceCount: parsedStaticOptions.rawSourceCount,
+        rawStaticSources: parsedStaticOptions.rawSources,
+        hasDynamicRuntimeConfig: dynamicOptionSource.hasRuntimePayload,
+        hasBehavioralRuntimeConfig: dynamicOptionSource.hasBehavioralRuntimeConfig,
+        hasDynamicOptionSource: true,
+        dynamicOptionSourceKind: dynamicOptionSource.kind,
+        dynamicOptionSourceReason: dynamicOptionSource.reason ?? undefined,
+        staticExcludedReason,
+        staticOptionValues: parsedStaticOptions.values
       };
     }
 
     return {
       source: 'None',
-      reason: this.buildEmptyOptionSourceReason(hasStaticOptionsPayload, parsedOptions.isValid, parsedOptions.values.size, runtimePayload != null),
-      hasStaticOptionsPayload,
-      staticOptionsValid: parsedOptions.isValid,
-      staticOptionsCount: parsedOptions.values.size,
-      hasDynamicRuntimeConfig: runtimePayload != null,
-      hasBehavioralRuntimeConfig,
-      hasDynamicOptionSource: false,
-      optionsPayloadIgnored: false,
-      staticOptionValues: parsedOptions.values
+      reason: this.buildNoOptionSourceReason(parsedStaticOptions, dynamicOptionSource.reason),
+      hasStaticSourcePayload: parsedStaticOptions.rawSourceCount > 0,
+      staticOptionsValid: false,
+      staticOptionsCount: parsedStaticOptions.values.size,
+      rawStaticSourceCount: parsedStaticOptions.rawSourceCount,
+      rawStaticSources: parsedStaticOptions.rawSources,
+      hasDynamicRuntimeConfig: dynamicOptionSource.hasRuntimePayload,
+      hasBehavioralRuntimeConfig: dynamicOptionSource.hasBehavioralRuntimeConfig,
+      hasDynamicOptionSource: dynamicOptionSource.hasDynamicOptionSource,
+      dynamicOptionSourceKind: undefined,
+      dynamicOptionSourceReason: dynamicOptionSource.reason ?? undefined,
+      staticExcludedReason,
+      staticOptionValues: parsedStaticOptions.values
     };
   }
 
@@ -3049,48 +3069,412 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     return null;
   }
 
-  private buildEmptyOptionSourceReason(
-    hasStaticOptionsPayload: boolean,
-    staticOptionsValid: boolean,
-    staticOptionsCount: number,
-    hasDynamicRuntimeConfig: boolean
-  ): string {
-    if (hasStaticOptionsPayload && !staticOptionsValid) {
-      return 'optionsPayload موجود لكنه غير صالح.';
+  private resolveDynamicOptionSource(
+    binding: Pick<BoundFieldItem, 'dynamicRuntimeJson' | 'displaySettingsJson'> | null
+  ): {
+    kind: 'Internal' | 'External' | null;
+    reason: string | null;
+    hasRuntimePayload: boolean;
+    hasBehavioralRuntimeConfig: boolean;
+    hasDynamicOptionSource: boolean;
+  } {
+    const runtimePayload = this.resolveRuntimePayloadForOptionSource(binding);
+    if (!runtimePayload) {
+      return {
+        kind: null,
+        reason: null,
+        hasRuntimePayload: false,
+        hasBehavioralRuntimeConfig: false,
+        hasDynamicOptionSource: false
+      };
     }
 
-    if (hasStaticOptionsPayload && staticOptionsCount <= 0) {
-      return 'optionsPayload موجود لكنه لا يحتوي خيارات صالحة.';
+    const readObject = (value: unknown): Record<string, unknown> | null => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+      }
+
+      return value as Record<string, unknown>;
+    };
+    const runtimeBehavior = parseRequestRuntimeDynamicFieldBehavior(JSON.stringify({ dynamicRuntime: runtimePayload }));
+    const rawOptionLoader = readObject(runtimePayload['optionLoader']);
+    const rawAsyncValidation = readObject(runtimePayload['asyncValidation']);
+    const rawActions = Array.isArray(runtimePayload['actions']) ? runtimePayload['actions'] : null;
+    const hasBehavioralRuntimeConfig = runtimeBehavior != null
+      || rawOptionLoader != null
+      || rawAsyncValidation != null
+      || rawActions != null
+      || Object.keys(runtimePayload).length > 0;
+
+    if (!rawOptionLoader) {
+      return {
+        kind: null,
+        reason: 'dynamicRuntime يحتوي سلوكًا فقط بدون مصدر خيارات.',
+        hasRuntimePayload: true,
+        hasBehavioralRuntimeConfig,
+        hasDynamicOptionSource: false
+      };
     }
 
-    if (hasDynamicRuntimeConfig) {
-      return 'dynamicRuntime موجود لكنه لا يفعّل مصدر خيارات ديناميكي.';
+    const integration = readObject(rawOptionLoader['integration']);
+    const sourceType = this.normalizeNullable(integration?.['sourceType'])?.toLowerCase();
+    const statementId = this.toPositiveInt(integration?.['statementId']);
+    const fullUrl = this.normalizeNullable(integration?.['fullUrl']);
+    if ((sourceType === 'powerbi' && statementId != null)
+      || (sourceType == null && statementId != null)) {
+      return {
+        kind: 'Internal',
+        reason: 'تم تحديد مصدر خيارات ديناميكي داخلي عبر integration.statementId.',
+        hasRuntimePayload: true,
+        hasBehavioralRuntimeConfig: true,
+        hasDynamicOptionSource: true
+      };
     }
 
-    return 'لا توجد خيارات ثابتة صالحة ولا مصدر خيارات ديناميكي صريح.';
+    if ((sourceType === 'external' && !!fullUrl)
+      || (sourceType == null && !!fullUrl)) {
+      return {
+        kind: 'External',
+        reason: 'تم تحديد مصدر خيارات ديناميكي خارجي عبر integration.fullUrl.',
+        hasRuntimePayload: true,
+        hasBehavioralRuntimeConfig: true,
+        hasDynamicOptionSource: true
+      };
+    }
+
+    const requestPayload = readObject(rawOptionLoader['request']);
+    if (this.normalizeNullable(requestPayload?.['url'])) {
+      return {
+        kind: 'External',
+        reason: 'تم تحديد مصدر خيارات ديناميكي خارجي عبر request.url.',
+        hasRuntimePayload: true,
+        hasBehavioralRuntimeConfig: true,
+        hasDynamicOptionSource: true
+      };
+    }
+
+    return {
+      kind: null,
+      reason: 'تم العثور على optionLoader لكن بدون مصدر داخلي/خارجي صالح.',
+      hasRuntimePayload: true,
+      hasBehavioralRuntimeConfig,
+      hasDynamicOptionSource: true
+    };
   }
 
-  private parseBindingOptionsPayload(payloadRaw: string | undefined): ParsedBindingOptionsResult {
-    const values = new Set<string>();
-    const payload = this.normalizeNullable(payloadRaw);
-    if (!payload) {
-      return { isValid: true, values };
+  private buildStaticExcludedReason(parsed: ParsedBindingOptionsResult): string | undefined {
+    switch (parsed.state) {
+      case 'missing':
+        return 'لا يوجد مصدر خيارات ثابت (optionsPayload/legacy).';
+      case 'empty':
+        return 'مصدر الخيارات الثابت موجود لكنه أصبح فارغًا بعد التطبيع.';
+      case 'invalid':
+        return parsed.invalidReason ?? 'فشل parse/normalize لمصدر الخيارات الثابت.';
+      default:
+        return undefined;
+    }
+  }
+
+  private buildNoOptionSourceReason(
+    parsedStaticOptions: ParsedBindingOptionsResult,
+    dynamicResolutionReason: string | null
+  ): string {
+    if (parsedStaticOptions.state === 'invalid') {
+      return parsedStaticOptions.invalidReason
+        ?? 'مصدر الخيارات الثابت غير صالح، ولم يتم العثور على مصدر ديناميكي صالح.';
     }
 
-    const looksLikeJson = payload.startsWith('{') || payload.startsWith('[');
-    if (looksLikeJson) {
-      try {
-        const parsed = JSON.parse(payload) as unknown;
-        this.extractBindingOptionTokens(parsed, values);
-        return {
-          isValid: values.size > 0,
-          values
-        };
-      } catch {
-        return { isValid: false, values };
+    if (parsedStaticOptions.state === 'empty') {
+      return 'مصدر الخيارات الثابت موجود لكنه فارغ بعد التطبيع، ولا يوجد مصدر ديناميكي صالح.';
+    }
+
+    if (dynamicResolutionReason) {
+      return `لا يوجد مصدر خيارات صالح. ${dynamicResolutionReason}`;
+    }
+
+    return 'لا توجد خيارات ثابتة صالحة ولا مصدر خيارات داخلي/خارجي صالح.';
+  }
+
+  private collectRawStaticOptionSources(
+    binding: Pick<BoundFieldItem, 'displaySettingsJson'> | null,
+    existingField: SubjectAdminFieldDto | null
+  ): Array<{ source: string; payload: string }> {
+    const sources: Array<{ source: string; payload: string }> = [];
+
+    this.pushRawStaticOptionSource(sources, 'optionsPayload', existingField?.optionsPayload);
+
+    const displaySettings = this.parseDisplaySettings(binding?.displaySettingsJson);
+    if (displaySettings) {
+      const legacyKeys = [
+        'optionsPayload',
+        'options',
+        'items',
+        'values',
+        'lookupOptions',
+        'dropdownOptions',
+        'sourceOptions',
+        'cdmendTbl'
+      ];
+
+      for (const key of legacyKeys) {
+        if (!Object.prototype.hasOwnProperty.call(displaySettings, key)) {
+          continue;
+        }
+
+        const serializedPayload = this.serializeRawStaticOptionSource(displaySettings[key]);
+        this.pushRawStaticOptionSource(sources, `displaySettings.${key}`, serializedPayload);
       }
     }
 
+    const deduped = new Map<string, { source: string; payload: string }>();
+    for (const item of sources) {
+      const dedupeKey = `${item.source}::${item.payload}`;
+      if (!deduped.has(dedupeKey)) {
+        deduped.set(dedupeKey, item);
+      }
+    }
+
+    return Array.from(deduped.values());
+  }
+
+  private pushRawStaticOptionSource(
+    target: Array<{ source: string; payload: string }>,
+    source: string,
+    payload: unknown
+  ): void {
+    const normalizedPayload = this.normalizeNullable(payload);
+    if (!normalizedPayload) {
+      return;
+    }
+
+    target.push({ source, payload: normalizedPayload });
+  }
+
+  private serializeRawStaticOptionSource(value: unknown): string | null {
+    const direct = this.normalizeNullable(value);
+    if (direct) {
+      return direct;
+    }
+
+    if (value == null) {
+      return null;
+    }
+
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return null;
+      }
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+
+    return null;
+  }
+
+  private parseBindingOptionsPayload(
+    rawSources: Array<{ source: string; payload: string }>
+  ): ParsedBindingOptionsResult {
+    const values = new Set<string>();
+    const options: Array<{ value: string; label: string }> = [];
+    const optionKeys = new Set<string>();
+    const normalizedRawSources = rawSources
+      .map(item => ({
+        source: this.normalizeNullable(item.source) ?? 'unknown',
+        payload: this.normalizeNullable(item.payload) ?? ''
+      }))
+      .filter(item => item.payload.length > 0);
+
+    if (normalizedRawSources.length === 0) {
+      return {
+        state: 'missing',
+        options,
+        values,
+        invalidSourceCount: 0,
+        emptySourceCount: 0,
+        rawSourceCount: 0,
+        rawSources: []
+      };
+    }
+
+    let invalidSourceCount = 0;
+    let emptySourceCount = 0;
+    let firstInvalidReason: string | undefined;
+
+    for (const rawSource of normalizedRawSources) {
+      const normalized = this.normalizeSingleOptionPayload(rawSource.payload);
+      if (normalized.state === 'invalid') {
+        invalidSourceCount++;
+        if (!firstInvalidReason) {
+          firstInvalidReason = `${rawSource.source}: ${normalized.invalidReason ?? 'تنسيق غير صالح.'}`;
+        }
+        continue;
+      }
+
+      if (normalized.state === 'empty') {
+        emptySourceCount++;
+        continue;
+      }
+
+      for (const option of normalized.options) {
+        const dedupeKey = `${option.value.toLowerCase()}::${option.label.toLowerCase()}`;
+        if (optionKeys.has(dedupeKey)) {
+          continue;
+        }
+
+        optionKeys.add(dedupeKey);
+        options.push(option);
+        values.add(option.value);
+      }
+    }
+
+    if (values.size > 0) {
+      return {
+        state: 'valid',
+        options,
+        values,
+        invalidSourceCount,
+        emptySourceCount,
+        rawSourceCount: normalizedRawSources.length,
+        rawSources: normalizedRawSources
+      };
+    }
+
+    if (invalidSourceCount > 0) {
+      return {
+        state: 'invalid',
+        options,
+        values,
+        invalidSourceCount,
+        emptySourceCount,
+        rawSourceCount: normalizedRawSources.length,
+        rawSources: normalizedRawSources,
+        invalidReason: firstInvalidReason ?? 'فشل parse/normalize لمصدر الخيارات الثابت.'
+      };
+    }
+
+    return {
+      state: 'empty',
+      options,
+      values,
+      invalidSourceCount,
+      emptySourceCount,
+      rawSourceCount: normalizedRawSources.length,
+      rawSources: normalizedRawSources
+    };
+  }
+
+  private normalizeSingleOptionPayload(payloadRaw: string): ParsedBindingOptionsResult {
+    const payload = this.normalizeNullable(payloadRaw);
+    const values = new Set<string>();
+    const options: Array<{ value: string; label: string }> = [];
+    if (!payload) {
+      return {
+        state: 'empty',
+        options,
+        values,
+        invalidSourceCount: 0,
+        emptySourceCount: 1,
+        rawSourceCount: 1,
+        rawSources: []
+      };
+    }
+
+    const looksLikeJson = payload.startsWith('{') || payload.startsWith('[') || payload.startsWith('"');
+    const jsonCandidate = this.tryParseLegacyJson(payload);
+    if (jsonCandidate.parsed) {
+      this.extractNormalizedOptions(jsonCandidate.value, options);
+      for (const option of options) {
+        values.add(option.value);
+      }
+
+      return {
+        state: values.size > 0 ? 'valid' : 'empty',
+        options,
+        values,
+        invalidSourceCount: 0,
+        emptySourceCount: values.size > 0 ? 0 : 1,
+        rawSourceCount: 1,
+        rawSources: []
+      };
+    }
+
+    const delimitedOptions = this.parseDelimitedOptions(payload);
+    for (const option of delimitedOptions) {
+      options.push(option);
+      values.add(option.value);
+    }
+
+    if (values.size > 0) {
+      return {
+        state: 'valid',
+        options,
+        values,
+        invalidSourceCount: 0,
+        emptySourceCount: 0,
+        rawSourceCount: 1,
+        rawSources: []
+      };
+    }
+
+    return {
+      state: looksLikeJson ? 'invalid' : 'empty',
+      options,
+      values,
+      invalidSourceCount: looksLikeJson ? 1 : 0,
+      emptySourceCount: looksLikeJson ? 0 : 1,
+      rawSourceCount: 1,
+      rawSources: [],
+      invalidReason: looksLikeJson ? 'JSON غير صالح أو غير قابل للتطبيع.' : undefined
+    };
+  }
+
+  private tryParseLegacyJson(payload: string): { parsed: boolean; value: unknown | null } {
+    const normalized = this.normalizeNullable(payload);
+    if (!normalized) {
+      return { parsed: false, value: null };
+    }
+
+    const tryParse = (candidate: string): unknown | null => {
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        return null;
+      }
+    };
+
+    const parsedDirect = tryParse(normalized);
+    if (parsedDirect != null) {
+      return this.resolveNestedSerializedJson(parsedDirect);
+    }
+
+    const singleQuoteNormalized = normalized.replace(/'/g, '"');
+    const parsedSingleQuote = tryParse(singleQuoteNormalized);
+    if (parsedSingleQuote != null) {
+      return this.resolveNestedSerializedJson(parsedSingleQuote);
+    }
+
+    return { parsed: false, value: null };
+  }
+
+  private resolveNestedSerializedJson(parsed: unknown): { parsed: boolean; value: unknown | null } {
+    if (typeof parsed !== 'string') {
+      return { parsed: true, value: parsed };
+    }
+
+    const nestedPayload = this.normalizeNullable(parsed);
+    if (!nestedPayload || !(nestedPayload.startsWith('{') || nestedPayload.startsWith('['))) {
+      return { parsed: true, value: parsed };
+    }
+
+    return this.tryParseLegacyJson(nestedPayload);
+  }
+
+  private parseDelimitedOptions(payload: string): Array<{ value: string; label: string }> {
+    const options: Array<{ value: string; label: string }> = [];
     let rawTokens = payload
       .split(/[\r\n|;]/g)
       .map(token => token.trim())
@@ -3103,63 +3487,83 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     }
 
     for (const token of rawTokens) {
-      values.add(token);
       const separatorIndex = token.search(/[:=]/);
-      if (separatorIndex <= 0) {
+      if (separatorIndex > 0) {
+        const left = this.normalizeNullable(token.substring(0, separatorIndex));
+        const right = this.normalizeNullable(token.substring(separatorIndex + 1));
+        if (left) {
+          options.push({
+            value: left,
+            label: right ?? left
+          });
+        }
         continue;
       }
 
-      const left = token.substring(0, separatorIndex).trim();
-      const right = token.substring(separatorIndex + 1).trim();
-      if (left.length > 0) {
-        values.add(left);
+      const normalizedToken = this.normalizeNullable(token);
+      if (!normalizedToken) {
+        continue;
       }
 
-      if (right.length > 0) {
-        values.add(right);
-      }
+      options.push({
+        value: normalizedToken,
+        label: normalizedToken
+      });
     }
 
-    return {
-      isValid: values.size > 0,
-      values
-    };
+    return options;
   }
 
-  private extractBindingOptionTokens(source: unknown, collector: Set<string>): void {
+  private extractNormalizedOptions(source: unknown, collector: Array<{ value: string; label: string }>): void {
     if (source == null) {
       return;
     }
 
     if (Array.isArray(source)) {
       for (const item of source) {
-        this.extractBindingOptionTokens(item, collector);
+        this.extractNormalizedOptions(item, collector);
       }
-
       return;
     }
 
     if (typeof source === 'object') {
       const record = source as Record<string, unknown>;
-      for (const [key, value] of Object.entries(record)) {
-        const normalizedKey = key.trim().toLowerCase();
-        if ([
-          'value',
-          'id',
-          'key',
-          'code',
-          'name',
-          'label',
-          'options',
-          'items',
-          'data',
-          'values'
-        ].includes(normalizedKey)) {
-          this.extractBindingOptionTokens(value, collector);
+      const mappedOption = this.mapLegacyOptionRecord(record);
+      if (mappedOption) {
+        collector.push(mappedOption);
+        return;
+      }
+
+      const containerKeys = ['options', 'items', 'data', 'values', 'lookupOptions', 'dropdownOptions', 'list'];
+      let hasContainer = false;
+      for (const key of containerKeys) {
+        if (!Object.prototype.hasOwnProperty.call(record, key)) {
           continue;
         }
 
-        this.extractBindingOptionTokens(value, collector);
+        hasContainer = true;
+        this.extractNormalizedOptions(record[key], collector);
+      }
+
+      if (hasContainer) {
+        return;
+      }
+
+      for (const [key, value] of Object.entries(record)) {
+        if (value == null || typeof value === 'object') {
+          continue;
+        }
+
+        const normalizedKey = this.normalizeNullable(key);
+        const normalizedLabel = this.normalizeNullable(String(value));
+        if (!normalizedKey || !normalizedLabel) {
+          continue;
+        }
+
+        collector.push({
+          value: normalizedKey,
+          label: normalizedLabel
+        });
       }
 
       return;
@@ -3167,10 +3571,48 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
 
     if (typeof source === 'string' || typeof source === 'number' || typeof source === 'boolean') {
       const normalized = this.normalizeNullable(String(source));
+      if (!normalized) {
+        return;
+      }
+
+      collector.push({
+        value: normalized,
+        label: normalized
+      });
+    }
+  }
+
+  private mapLegacyOptionRecord(record: Record<string, unknown>): { value: string; label: string } | null {
+    const value = this.readFirstPrimitiveValue(record, ['value', 'key', 'id', 'code']);
+    const label = this.readFirstPrimitiveValue(record, ['label', 'name', 'text', 'title']);
+    if (!value) {
+      return null;
+    }
+
+    return {
+      value,
+      label: label ?? value
+    };
+  }
+
+  private readFirstPrimitiveValue(record: Record<string, unknown>, keys: string[]): string | null {
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(record, key)) {
+        continue;
+      }
+
+      const candidate = record[key];
+      if (candidate == null || typeof candidate === 'object') {
+        continue;
+      }
+
+      const normalized = this.normalizeNullable(String(candidate));
       if (normalized) {
-        collector.add(normalized);
+        return normalized;
       }
     }
+
+    return null;
   }
 
   private mapBackendFieldTypeToBindingType(fieldType: string | undefined, dataType: string | undefined): BoundFieldItem['type'] {

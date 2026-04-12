@@ -939,6 +939,7 @@ public sealed partial class DynamicSubjectsService
                 dataType,
                 normalizedDefaultValue,
                 normalizedOptionsPayload,
+                displaySettingsJson: null,
                 DisplaySettingsRuntimeInspection.Empty);
             _logger?.LogInformation(
                 "CreateAdminField request snapshot: {Payload}",
@@ -1129,6 +1130,7 @@ public sealed partial class DynamicSubjectsService
                 dataType,
                 normalizedDefaultValue,
                 normalizedOptionsPayload,
+                displaySettingsJson: null,
                 DisplaySettingsRuntimeInspection.Empty);
             _logger?.LogInformation(
                 "UpdateAdminField request snapshot: {Payload}",
@@ -1847,6 +1849,7 @@ public sealed partial class DynamicSubjectsService
                     dataType: NormalizeNullable(matchedField.CdmendDatatype),
                     defaultValue: NormalizeNullable(matchedField.DefaultValue),
                     optionsPayload: NormalizeNullable(matchedField.OptionsPayload),
+                    displaySettingsJson: item.DisplaySettingsJson,
                     runtimeInspection: runtimeInspection);
 
                 _logger?.LogInformation(
@@ -2585,6 +2588,7 @@ public sealed partial class DynamicSubjectsService
         string? dataType,
         string? defaultValue,
         string? optionsPayload,
+        string? displaySettingsJson,
         DisplaySettingsRuntimeInspection runtimeInspection)
     {
         var safeRuntimeInspection = runtimeInspection ?? DisplaySettingsRuntimeInspection.Empty;
@@ -2593,14 +2597,11 @@ public sealed partial class DynamicSubjectsService
         var normalizedFieldType = NormalizeNullable(fieldType) ?? string.Empty;
         var normalizedDataType = NormalizeNullable(dataType) ?? string.Empty;
         var normalizedDefaultValue = NormalizeNullable(defaultValue);
-        var hasStaticOptionsPayload = NormalizeNullable(optionsPayload) != null;
-        var parsedOptions = ParseOptionValues(optionsPayload);
+        var staticOptionsDiagnostics = ResolveStaticOptionsDiagnostics(optionsPayload, displaySettingsJson);
         var requiresOptionsBinding = RequiresOptionsBinding(normalizedFieldType);
         var optionSourceDiagnostics = ResolveFieldOptionSourceDiagnostics(
             requiresOptionsBinding,
-            hasStaticOptionsPayload,
-            parsedOptions.IsValid,
-            parsedOptions.Values.Count,
+            staticOptionsDiagnostics,
             safeRuntimeInspection);
 
         if (optionSourceDiagnostics.HasExplicitDynamicOptionSource && !requiresOptionsBinding)
@@ -2614,12 +2615,12 @@ public sealed partial class DynamicSubjectsService
 
         if (requiresOptionsBinding && string.Equals(optionSourceDiagnostics.EffectiveSource, "None", StringComparison.Ordinal))
         {
-            if (hasStaticOptionsPayload && !parsedOptions.IsValid)
+            if (string.Equals(staticOptionsDiagnostics.State, "invalid", StringComparison.Ordinal))
             {
                 return (new Error
                 {
                     Code = "400",
-                    Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن optionsPayload غير صالح، ولم يتم تفعيل مصدر خيارات ديناميكي صريح."
+                    Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأن مصدر الخيارات الثابت غير صالح بعد التطبيع، ولم يتم العثور على مصدر خيارات داخلي/خارجي صالح."
                 }, optionSourceDiagnostics);
             }
 
@@ -2635,14 +2636,14 @@ public sealed partial class DynamicSubjectsService
             return (new Error
             {
                 Code = "400",
-                Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأنه لا يحتوي على خيارات ثابتة صالحة ولا مصدر خيارات ديناميكي صريح."
+                Message = $"فشل حفظ الحقل '{normalizedFieldKey}' لأنه لا يحتوي على خيارات ثابتة صالحة ولا مصدر خيارات داخلي/خارجي صالح."
             }, optionSourceDiagnostics);
         }
 
         if (normalizedDefaultValue != null
             && requiresOptionsBinding
             && string.Equals(optionSourceDiagnostics.EffectiveSource, "Static", StringComparison.Ordinal)
-            && !parsedOptions.Values.Contains(normalizedDefaultValue))
+            && !staticOptionsDiagnostics.NormalizedValues.Contains(normalizedDefaultValue))
         {
             return (new Error
             {
@@ -2711,36 +2712,13 @@ public sealed partial class DynamicSubjectsService
 
     private static FieldOptionSourceDiagnostics ResolveFieldOptionSourceDiagnostics(
         bool requiresOptionsBinding,
-        bool hasStaticOptionsPayload,
-        bool isStaticOptionsPayloadValid,
-        int staticOptionsCount,
+        StaticOptionsResolutionDiagnostics staticOptionsDiagnostics,
         DisplaySettingsRuntimeInspection runtimeInspection)
     {
-        var hasValidStaticOptions = hasStaticOptionsPayload && isStaticOptionsPayloadValid && staticOptionsCount > 0;
-
-        if (runtimeInspection.HasExplicitDynamicOptionSource)
-        {
-            var hasStaticIgnored = hasValidStaticOptions;
-            return new FieldOptionSourceDiagnostics
-            {
-                EffectiveSource = "Dynamic",
-                EffectiveSourceReason = runtimeInspection.DynamicOptionSourceReason
-                    ?? "تم اعتماد المصدر الديناميكي لأن optionLoader مفعّل صراحة.",
-                HasRuntimePayload = runtimeInspection.HasRuntimePayload,
-                HasBehavioralRuntimeConfig = runtimeInspection.HasBehavioralRuntimeConfig,
-                HasOptionLoaderConfig = runtimeInspection.HasOptionLoaderConfig,
-                HasExplicitDynamicOptionSource = runtimeInspection.HasExplicitDynamicOptionSource,
-                DynamicOptionSourceReason = runtimeInspection.DynamicOptionSourceReason,
-                OptionLoaderRejectedReason = runtimeInspection.OptionLoaderRejectedReason,
-                HasStaticOptionsPayload = hasStaticOptionsPayload,
-                IsStaticOptionsPayloadValid = isStaticOptionsPayloadValid,
-                StaticOptionsCount = staticOptionsCount,
-                IsStaticOptionsIgnored = hasStaticIgnored,
-                StaticOptionsIgnoredReason = hasStaticIgnored
-                    ? "تم تجاهل optionsPayload لأن optionLoader فعّل مصدر خيارات ديناميكي صراحة."
-                    : null
-            };
-        }
+        var safeStaticDiagnostics = staticOptionsDiagnostics ?? StaticOptionsResolutionDiagnostics.Empty;
+        var staticOptionsCount = safeStaticDiagnostics.NormalizedValues.Count;
+        var hasValidStaticOptions = string.Equals(safeStaticDiagnostics.State, "valid", StringComparison.Ordinal)
+            && staticOptionsCount > 0;
 
         if (hasValidStaticOptions)
         {
@@ -2748,18 +2726,50 @@ public sealed partial class DynamicSubjectsService
             {
                 EffectiveSource = "Static",
                 EffectiveSourceReason = requiresOptionsBinding
-                    ? "تم اعتماد optionsPayload لأنه صالح ولا يوجد optionLoader مفعّل صراحة."
-                    : "تم اعتماد optionsPayload لأنه صالح.",
+                    ? "تم اعتماد الخيارات الثابتة بعد التطبيع (أولوية Static أعلى من Internal/External)."
+                    : "تم اعتماد الخيارات الثابتة بعد التطبيع.",
                 HasRuntimePayload = runtimeInspection.HasRuntimePayload,
                 HasBehavioralRuntimeConfig = runtimeInspection.HasBehavioralRuntimeConfig,
                 HasOptionLoaderConfig = runtimeInspection.HasOptionLoaderConfig,
                 HasExplicitDynamicOptionSource = runtimeInspection.HasExplicitDynamicOptionSource,
+                DynamicOptionSourceKind = runtimeInspection.DynamicOptionSourceKind,
                 DynamicOptionSourceReason = runtimeInspection.DynamicOptionSourceReason,
                 OptionLoaderRejectedReason = runtimeInspection.OptionLoaderRejectedReason,
-                HasStaticOptionsPayload = hasStaticOptionsPayload,
-                IsStaticOptionsPayloadValid = isStaticOptionsPayloadValid,
+                HasStaticOptionsPayload = safeStaticDiagnostics.RawOptionSourceCount > 0,
+                IsStaticOptionsPayloadValid = true,
                 StaticOptionsCount = staticOptionsCount,
-                IsStaticOptionsIgnored = false
+                IsStaticOptionsIgnored = false,
+                StaticOptionsIgnoredReason = null,
+                StaticOptionsExcludedReason = null,
+                RawOptionSourcesPreview = safeStaticDiagnostics.RawOptionSourcePreviews
+            };
+        }
+
+        if (runtimeInspection.HasExplicitDynamicOptionSource)
+        {
+            var normalizedDynamicKind = NormalizeDynamicOptionSourceKind(runtimeInspection.DynamicOptionSourceKind);
+            var effectiveSource = normalizedDynamicKind ?? "External";
+            return new FieldOptionSourceDiagnostics
+            {
+                EffectiveSource = effectiveSource,
+                EffectiveSourceReason = runtimeInspection.DynamicOptionSourceReason
+                    ?? (effectiveSource == "Internal"
+                        ? "تم اعتماد مصدر خيارات ديناميكي داخلي."
+                        : "تم اعتماد مصدر خيارات ديناميكي خارجي."),
+                HasRuntimePayload = runtimeInspection.HasRuntimePayload,
+                HasBehavioralRuntimeConfig = runtimeInspection.HasBehavioralRuntimeConfig,
+                HasOptionLoaderConfig = runtimeInspection.HasOptionLoaderConfig,
+                HasExplicitDynamicOptionSource = runtimeInspection.HasExplicitDynamicOptionSource,
+                DynamicOptionSourceKind = effectiveSource,
+                DynamicOptionSourceReason = runtimeInspection.DynamicOptionSourceReason,
+                OptionLoaderRejectedReason = runtimeInspection.OptionLoaderRejectedReason,
+                HasStaticOptionsPayload = safeStaticDiagnostics.RawOptionSourceCount > 0,
+                IsStaticOptionsPayloadValid = false,
+                StaticOptionsCount = staticOptionsCount,
+                IsStaticOptionsIgnored = false,
+                StaticOptionsIgnoredReason = null,
+                StaticOptionsExcludedReason = BuildStaticOptionsExcludedReason(safeStaticDiagnostics),
+                RawOptionSourcesPreview = safeStaticDiagnostics.RawOptionSourcePreviews
             };
         }
 
@@ -2768,28 +2778,28 @@ public sealed partial class DynamicSubjectsService
             EffectiveSource = "None",
             EffectiveSourceReason = BuildNoOptionsSourceReason(
                 requiresOptionsBinding,
-                hasStaticOptionsPayload,
-                isStaticOptionsPayloadValid,
-                staticOptionsCount,
+                safeStaticDiagnostics,
                 runtimeInspection),
             HasRuntimePayload = runtimeInspection.HasRuntimePayload,
             HasBehavioralRuntimeConfig = runtimeInspection.HasBehavioralRuntimeConfig,
             HasOptionLoaderConfig = runtimeInspection.HasOptionLoaderConfig,
             HasExplicitDynamicOptionSource = runtimeInspection.HasExplicitDynamicOptionSource,
+            DynamicOptionSourceKind = NormalizeDynamicOptionSourceKind(runtimeInspection.DynamicOptionSourceKind),
             DynamicOptionSourceReason = runtimeInspection.DynamicOptionSourceReason,
             OptionLoaderRejectedReason = runtimeInspection.OptionLoaderRejectedReason,
-            HasStaticOptionsPayload = hasStaticOptionsPayload,
-            IsStaticOptionsPayloadValid = isStaticOptionsPayloadValid,
+            HasStaticOptionsPayload = safeStaticDiagnostics.RawOptionSourceCount > 0,
+            IsStaticOptionsPayloadValid = false,
             StaticOptionsCount = staticOptionsCount,
-            IsStaticOptionsIgnored = false
+            IsStaticOptionsIgnored = false,
+            StaticOptionsIgnoredReason = null,
+            StaticOptionsExcludedReason = BuildStaticOptionsExcludedReason(safeStaticDiagnostics),
+            RawOptionSourcesPreview = safeStaticDiagnostics.RawOptionSourcePreviews
         };
     }
 
     private static string BuildNoOptionsSourceReason(
         bool requiresOptionsBinding,
-        bool hasStaticOptionsPayload,
-        bool isStaticOptionsPayloadValid,
-        int staticOptionsCount,
+        StaticOptionsResolutionDiagnostics staticOptionsDiagnostics,
         DisplaySettingsRuntimeInspection runtimeInspection)
     {
         if (!requiresOptionsBinding)
@@ -2797,23 +2807,225 @@ public sealed partial class DynamicSubjectsService
             return "الحقل لا يعتمد على مصدر خيارات.";
         }
 
-        if (hasStaticOptionsPayload && !isStaticOptionsPayloadValid)
+        if (string.Equals(staticOptionsDiagnostics.State, "invalid", StringComparison.Ordinal))
         {
-            return "optionsPayload موجود لكنه غير صالح.";
+            return "مصدر الخيارات الثابت غير صالح بعد التطبيع.";
         }
 
-        if (hasStaticOptionsPayload && staticOptionsCount <= 0)
+        if (string.Equals(staticOptionsDiagnostics.State, "empty", StringComparison.Ordinal))
         {
-            return "optionsPayload موجود لكنه لا يحتوي أي خيار صالح.";
+            return "مصدر الخيارات الثابت موجود لكنه فارغ بعد التطبيع.";
         }
 
         if (runtimeInspection.HasOptionLoaderConfig && !runtimeInspection.HasExplicitDynamicOptionSource)
         {
             return runtimeInspection.OptionLoaderRejectedReason
-                ?? "تم تجاهل optionLoader لأنه لا يحتوي مصدر خيارات ديناميكي مفعّل صراحة.";
+                ?? "تم تجاهل optionLoader لأنه لا يحتوي مصدر خيارات داخلي/خارجي صالح.";
         }
 
-        return "لا توجد خيارات ثابتة صالحة ولا مصدر خيارات ديناميكي مفعّل صراحة.";
+        if (runtimeInspection.HasBehavioralRuntimeConfig && !runtimeInspection.HasOptionLoaderConfig)
+        {
+            return "dynamicRuntime يحتوي سلوكًا فقط بدون مصدر خيارات.";
+        }
+
+        return "لا توجد خيارات ثابتة صالحة ولا مصدر خيارات داخلي/خارجي صالح.";
+    }
+
+    private static string? BuildStaticOptionsExcludedReason(StaticOptionsResolutionDiagnostics staticOptionsDiagnostics)
+    {
+        if (string.Equals(staticOptionsDiagnostics.State, "invalid", StringComparison.Ordinal))
+        {
+            return staticOptionsDiagnostics.InvalidReason ?? "فشل parse/normalize لمصدر الخيارات الثابت.";
+        }
+
+        if (string.Equals(staticOptionsDiagnostics.State, "empty", StringComparison.Ordinal))
+        {
+            return "مصدر الخيارات الثابت موجود لكنه فارغ بعد التطبيع.";
+        }
+
+        if (string.Equals(staticOptionsDiagnostics.State, "missing", StringComparison.Ordinal))
+        {
+            return "لا يوجد مصدر خيارات ثابت (optionsPayload/legacy).";
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeDynamicOptionSourceKind(string? sourceKind)
+    {
+        var normalized = NormalizeNullable(sourceKind);
+        if (normalized == null)
+        {
+            return null;
+        }
+
+        if (string.Equals(normalized, "internal", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Internal";
+        }
+
+        if (string.Equals(normalized, "external", StringComparison.OrdinalIgnoreCase))
+        {
+            return "External";
+        }
+
+        return null;
+    }
+
+    private static StaticOptionsResolutionDiagnostics ResolveStaticOptionsDiagnostics(
+        string? optionsPayload,
+        string? displaySettingsJson)
+    {
+        var rawSources = CollectRawStaticOptionSources(optionsPayload, displaySettingsJson);
+        if (rawSources.Count == 0)
+        {
+            return new StaticOptionsResolutionDiagnostics
+            {
+                State = "missing",
+                RawOptionSourceCount = 0,
+                RawOptionSourcePreviews = Array.Empty<string>(),
+                NormalizedValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                InvalidReason = null
+            };
+        }
+
+        var normalizedValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var invalidSourceCount = 0;
+        var emptySourceCount = 0;
+        string? firstInvalidReason = null;
+
+        foreach (var source in rawSources)
+        {
+            var parsed = ParseOptionValues(source.Payload);
+            if (parsed.Values.Count > 0)
+            {
+                foreach (var value in parsed.Values)
+                {
+                    normalizedValues.Add(value);
+                }
+
+                continue;
+            }
+
+            if (parsed.IsValid)
+            {
+                emptySourceCount++;
+                continue;
+            }
+
+            invalidSourceCount++;
+            firstInvalidReason ??= $"{source.Source}: صيغة JSON غير صالحة أو غير قابلة للتطبيع.";
+        }
+
+        var state = normalizedValues.Count > 0
+            ? "valid"
+            : (invalidSourceCount > 0 ? "invalid" : "empty");
+
+        return new StaticOptionsResolutionDiagnostics
+        {
+            State = state,
+            RawOptionSourceCount = rawSources.Count,
+            RawOptionSourcePreviews = rawSources
+                .Select(item => $"{item.Source}={TruncatePayloadForDiagnostics(item.Payload)}")
+                .ToList(),
+            NormalizedValues = normalizedValues,
+            InvalidReason = state == "invalid"
+                ? (firstInvalidReason ?? "فشل parse/normalize لمصدر الخيارات الثابت.")
+                : null,
+            InvalidSourceCount = invalidSourceCount,
+            EmptySourceCount = emptySourceCount
+        };
+    }
+
+    private static List<StaticRawOptionSource> CollectRawStaticOptionSources(
+        string? optionsPayload,
+        string? displaySettingsJson)
+    {
+        var collected = new List<StaticRawOptionSource>();
+        AddRawStaticOptionSource(collected, "optionsPayload", optionsPayload);
+
+        var normalizedDisplaySettings = NormalizeNullable(displaySettingsJson);
+        if (normalizedDisplaySettings == null)
+        {
+            return collected;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(normalizedDisplaySettings);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return collected;
+            }
+
+            var legacyKeys = new[]
+            {
+                "optionsPayload",
+                "options",
+                "items",
+                "values",
+                "lookupOptions",
+                "dropdownOptions",
+                "sourceOptions",
+                "cdmendTbl"
+            };
+
+            foreach (var key in legacyKeys)
+            {
+                if (!document.RootElement.TryGetProperty(key, out var valueElement))
+                {
+                    continue;
+                }
+
+                AddRawStaticOptionSource(
+                    collected,
+                    $"displaySettings.{key}",
+                    SerializeOptionSourcePayload(valueElement));
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore display-settings legacy options when payload is invalid.
+        }
+
+        return collected;
+    }
+
+    private static void AddRawStaticOptionSource(
+        ICollection<StaticRawOptionSource> target,
+        string sourceName,
+        string? payload)
+    {
+        var normalizedPayload = NormalizeNullable(payload);
+        if (normalizedPayload == null)
+        {
+            return;
+        }
+
+        var normalizedSourceName = NormalizeNullable(sourceName) ?? "unknown";
+        var duplicate = target.Any(item =>
+            string.Equals(item.Source, normalizedSourceName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(item.Payload, normalizedPayload, StringComparison.Ordinal));
+        if (duplicate)
+        {
+            return;
+        }
+
+        target.Add(new StaticRawOptionSource
+        {
+            Source = normalizedSourceName,
+            Payload = normalizedPayload
+        });
+    }
+
+    private static string? SerializeOptionSourcePayload(JsonElement valueElement)
+    {
+        return valueElement.ValueKind switch
+        {
+            JsonValueKind.String => NormalizeNullable(valueElement.GetString()),
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => NormalizeNullable(valueElement.GetRawText())
+        };
     }
 
     private static bool TryInspectDisplaySettingsPayload(
@@ -2862,6 +3074,7 @@ public sealed partial class DynamicSubjectsService
             var hasBehavioralRuntimeConfig = false;
             var hasOptionLoaderConfig = false;
             var hasExplicitDynamicOptionSource = false;
+            string? dynamicOptionSourceKind = null;
             string? dynamicOptionSourceReason = null;
             string? optionLoaderRejectedReason = null;
 
@@ -2879,6 +3092,7 @@ public sealed partial class DynamicSubjectsService
                 if (!TryReadDynamicOptionSourceDetails(
                     optionLoaderElement,
                     out hasExplicitDynamicOptionSource,
+                    out dynamicOptionSourceKind,
                     out dynamicOptionSourceReason,
                     out optionLoaderRejectedReason,
                     out validationError))
@@ -2915,6 +3129,7 @@ public sealed partial class DynamicSubjectsService
                 HasBehavioralRuntimeConfig = hasBehavioralRuntimeConfig,
                 HasOptionLoaderConfig = hasOptionLoaderConfig,
                 HasExplicitDynamicOptionSource = hasExplicitDynamicOptionSource,
+                DynamicOptionSourceKind = dynamicOptionSourceKind,
                 DynamicOptionSourceReason = dynamicOptionSourceReason,
                 OptionLoaderRejectedReason = optionLoaderRejectedReason,
                 DynamicRuntimePayloadPreview = TruncatePayloadForDiagnostics(runtimePayload.GetRawText())
@@ -2932,11 +3147,13 @@ public sealed partial class DynamicSubjectsService
     private static bool TryReadDynamicOptionSourceDetails(
         JsonElement optionLoaderElement,
         out bool hasExplicitDynamicOptionSource,
+        out string? dynamicOptionSourceKind,
         out string? dynamicOptionSourceReason,
         out string? optionLoaderRejectedReason,
         out string? validationError)
     {
         hasExplicitDynamicOptionSource = false;
+        dynamicOptionSourceKind = null;
         dynamicOptionSourceReason = null;
         optionLoaderRejectedReason = null;
         validationError = null;
@@ -2959,6 +3176,7 @@ public sealed partial class DynamicSubjectsService
                 || (sourceType.Length == 0 && statementId.HasValue))
             {
                 hasExplicitDynamicOptionSource = true;
+                dynamicOptionSourceKind = "Internal";
                 dynamicOptionSourceReason = "تم تفعيل المصدر الديناميكي عبر integration.statementId.";
                 return true;
             }
@@ -2967,6 +3185,7 @@ public sealed partial class DynamicSubjectsService
                 || (sourceType.Length == 0 && fullUrl != null))
             {
                 hasExplicitDynamicOptionSource = true;
+                dynamicOptionSourceKind = "External";
                 dynamicOptionSourceReason = "تم تفعيل المصدر الديناميكي عبر integration.fullUrl.";
                 return true;
             }
@@ -2984,6 +3203,7 @@ public sealed partial class DynamicSubjectsService
             if (requestUrl != null)
             {
                 hasExplicitDynamicOptionSource = true;
+                dynamicOptionSourceKind = "External";
                 dynamicOptionSourceReason = "تم تفعيل المصدر الديناميكي عبر optionLoader.request.url.";
                 return true;
             }
@@ -3113,19 +3333,17 @@ public sealed partial class DynamicSubjectsService
         }
 
         var looksLikeJson = payload.StartsWith("{", StringComparison.Ordinal)
-            || payload.StartsWith("[", StringComparison.Ordinal);
+            || payload.StartsWith("[", StringComparison.Ordinal)
+            || payload.StartsWith("\"", StringComparison.Ordinal);
         if (looksLikeJson)
         {
-            try
+            if (TryParseOptionJsonPayload(payload, out var jsonRoot))
             {
-                using var document = JsonDocument.Parse(payload);
-                ExtractOptionValueTokens(document.RootElement, values);
-                return values.Count > 0 ? (true, values) : (false, values);
+                ExtractOptionValueTokens(jsonRoot, values);
+                return (true, values);
             }
-            catch (JsonException)
-            {
-                return (false, values);
-            }
+
+            return (false, values);
         }
 
         var rawTokens = payload
@@ -3144,28 +3362,72 @@ public sealed partial class DynamicSubjectsService
 
         foreach (var token in rawTokens)
         {
-            values.Add(token);
             var pairSeparators = new[] { ':', '=' };
             var separatorIndex = token.IndexOfAny(pairSeparators);
             if (separatorIndex <= 0)
             {
+                values.Add(token);
                 continue;
             }
 
             var left = token.Substring(0, separatorIndex).Trim();
-            var right = token.Substring(separatorIndex + 1).Trim();
             if (left.Length > 0)
             {
                 values.Add(left);
             }
-
-            if (right.Length > 0)
-            {
-                values.Add(right);
-            }
         }
 
-        return values.Count > 0 ? (true, values) : (false, values);
+        return (true, values);
+    }
+
+    private static bool TryParseOptionJsonPayload(string payload, out JsonElement rootElement)
+    {
+        rootElement = default;
+        var normalizedPayload = NormalizeNullable(payload);
+        if (normalizedPayload == null)
+        {
+            return false;
+        }
+
+        if (TryParseOptionJsonPayloadCore(normalizedPayload, out rootElement))
+        {
+            return true;
+        }
+
+        var singleQuoteNormalized = normalizedPayload.Replace('\'', '"');
+        if (TryParseOptionJsonPayloadCore(singleQuoteNormalized, out rootElement))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryParseOptionJsonPayloadCore(string payload, out JsonElement rootElement)
+    {
+        rootElement = default;
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement.Clone();
+            if (root.ValueKind == JsonValueKind.String)
+            {
+                var embedded = NormalizeNullable(root.GetString());
+                if (embedded != null
+                    && (embedded.StartsWith("{", StringComparison.Ordinal)
+                        || embedded.StartsWith("[", StringComparison.Ordinal)))
+                {
+                    return TryParseOptionJsonPayload(embedded, out rootElement);
+                }
+            }
+
+            rootElement = root;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static void ExtractOptionValueTokens(JsonElement element, ISet<string> collector)
@@ -3185,23 +3447,57 @@ public sealed partial class DynamicSubjectsService
 
                 break;
             case JsonValueKind.Object:
+                if (TryReadLegacyOptionValueToken(element, out var legacyValueToken)
+                    && legacyValueToken != null)
+                {
+                    collector.Add(legacyValueToken);
+                    break;
+                }
+
+                var containerKeys = new[]
+                {
+                    "options",
+                    "items",
+                    "data",
+                    "values",
+                    "lookupoptions",
+                    "dropdownoptions",
+                    "list",
+                    "sourceoptions"
+                };
+                var hasContainer = false;
                 foreach (var property in element.EnumerateObject())
                 {
-                    var key = property.Name;
-                    var normalizedKey = key.Trim().ToLowerInvariant();
-                    if (normalizedKey is "value" or "id" or "key" or "code" or "name" or "label")
+                    var normalizedKey = property.Name.Trim().ToLowerInvariant();
+                    if (!containerKeys.Contains(normalizedKey, StringComparer.Ordinal))
                     {
-                        ExtractOptionValueTokens(property.Value, collector);
                         continue;
                     }
 
-                    if (normalizedKey is "options" or "items" or "data" or "values")
-                    {
-                        ExtractOptionValueTokens(property.Value, collector);
-                        continue;
-                    }
-
+                    hasContainer = true;
                     ExtractOptionValueTokens(property.Value, collector);
+                }
+
+                if (hasContainer)
+                {
+                    break;
+                }
+
+                foreach (var property in element.EnumerateObject())
+                {
+                    var normalizedKey = NormalizeNullable(property.Name);
+                    if (normalizedKey == null)
+                    {
+                        continue;
+                    }
+
+                    if (property.Value.ValueKind is JsonValueKind.String
+                        or JsonValueKind.Number
+                        or JsonValueKind.True
+                        or JsonValueKind.False)
+                    {
+                        collector.Add(normalizedKey);
+                    }
                 }
 
                 break;
@@ -3227,9 +3523,46 @@ public sealed partial class DynamicSubjectsService
 
                 break;
             }
+            default:
+                break;
         }
     }
 
+    private static bool TryReadLegacyOptionValueToken(JsonElement element, out string? token)
+    {
+        token = null;
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        var candidateKeys = new[] { "value", "key", "id", "code" };
+        foreach (var candidateKey in candidateKeys)
+        {
+            if (!element.TryGetProperty(candidateKey, out var valueElement))
+            {
+                continue;
+            }
+
+            var normalized = valueElement.ValueKind switch
+            {
+                JsonValueKind.String => NormalizeNullable(valueElement.GetString()),
+                JsonValueKind.Number => NormalizeNullable(valueElement.ToString()),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => null
+            };
+            if (normalized == null)
+            {
+                continue;
+            }
+
+            token = normalized;
+            return true;
+        }
+
+        return false;
+    }
     private static bool IsNumericFieldType(string fieldType, string dataType)
     {
         var normalizedFieldType = (fieldType ?? string.Empty).Trim().ToLowerInvariant();
@@ -3318,18 +3651,22 @@ public sealed partial class DynamicSubjectsService
             optionsPayload = TruncatePayloadForDiagnostics(optionsPayload),
             configJson = TruncatePayloadForDiagnostics(displaySettingsJson),
             dynamicJson = TruncatePayloadForDiagnostics(dynamicRuntimeJson),
-            optionSource = optionSourceDiagnostics?.EffectiveSource,
-            optionSourceReason = optionSourceDiagnostics?.EffectiveSourceReason,
+            finalOptionSource = optionSourceDiagnostics?.EffectiveSource,
+            finalOptionSourceReason = optionSourceDiagnostics?.EffectiveSourceReason,
             hasRuntimeConfig = runtimeInspection?.HasRuntimePayload ?? optionSourceDiagnostics?.HasRuntimePayload,
             hasBehavioralRuntimeConfig = runtimeInspection?.HasBehavioralRuntimeConfig ?? optionSourceDiagnostics?.HasBehavioralRuntimeConfig,
             hasOptionLoaderConfig = runtimeInspection?.HasOptionLoaderConfig ?? optionSourceDiagnostics?.HasOptionLoaderConfig,
             hasExplicitDynamicOptionSource = runtimeInspection?.HasExplicitDynamicOptionSource ?? optionSourceDiagnostics?.HasExplicitDynamicOptionSource,
+            dynamicOptionSourceKind = runtimeInspection?.DynamicOptionSourceKind ?? optionSourceDiagnostics?.DynamicOptionSourceKind,
             dynamicOptionSourceReason = runtimeInspection?.DynamicOptionSourceReason ?? optionSourceDiagnostics?.DynamicOptionSourceReason,
             optionLoaderRejectedReason = runtimeInspection?.OptionLoaderRejectedReason ?? optionSourceDiagnostics?.OptionLoaderRejectedReason,
             staticOptionsPayloadValid = optionSourceDiagnostics?.IsStaticOptionsPayloadValid,
             staticOptionsCount = optionSourceDiagnostics?.StaticOptionsCount,
+            normalizedOptionsCount = optionSourceDiagnostics?.StaticOptionsCount,
+            rawOptionsSource = optionSourceDiagnostics?.RawOptionSourcesPreview,
             optionsPayloadIgnored = optionSourceDiagnostics?.IsStaticOptionsIgnored,
             optionsPayloadIgnoredReason = optionSourceDiagnostics?.StaticOptionsIgnoredReason,
+            staticExcludedReason = optionSourceDiagnostics?.StaticOptionsExcludedReason,
             groupId,
             displayOrder,
             mendSql,
@@ -3843,6 +4180,8 @@ public sealed partial class DynamicSubjectsService
 
         public bool HasExplicitDynamicOptionSource { get; init; }
 
+        public string? DynamicOptionSourceKind { get; init; }
+
         public string? DynamicOptionSourceReason { get; init; }
 
         public string? OptionLoaderRejectedReason { get; init; }
@@ -3864,6 +4203,8 @@ public sealed partial class DynamicSubjectsService
 
         public bool HasExplicitDynamicOptionSource { get; init; }
 
+        public string? DynamicOptionSourceKind { get; init; }
+
         public string? DynamicOptionSourceReason { get; init; }
 
         public string? OptionLoaderRejectedReason { get; init; }
@@ -3877,6 +4218,42 @@ public sealed partial class DynamicSubjectsService
         public bool IsStaticOptionsIgnored { get; init; }
 
         public string? StaticOptionsIgnoredReason { get; init; }
+
+        public string? StaticOptionsExcludedReason { get; init; }
+
+        public IReadOnlyList<string> RawOptionSourcesPreview { get; init; } = Array.Empty<string>();
+    }
+
+    private sealed class StaticOptionsResolutionDiagnostics
+    {
+        public static StaticOptionsResolutionDiagnostics Empty { get; } = new()
+        {
+            State = "missing",
+            RawOptionSourceCount = 0,
+            RawOptionSourcePreviews = Array.Empty<string>(),
+            NormalizedValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        };
+
+        public string State { get; init; } = "missing";
+
+        public int RawOptionSourceCount { get; init; }
+
+        public IReadOnlyList<string> RawOptionSourcePreviews { get; init; } = Array.Empty<string>();
+
+        public HashSet<string> NormalizedValues { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public int InvalidSourceCount { get; init; }
+
+        public int EmptySourceCount { get; init; }
+
+        public string? InvalidReason { get; init; }
+    }
+
+    private sealed class StaticRawOptionSource
+    {
+        public string Source { get; init; } = string.Empty;
+
+        public string Payload { get; init; } = string.Empty;
     }
 
     private static bool ExceedsMaxLength(string? value, int maxLength)
