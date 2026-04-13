@@ -260,7 +260,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   }
 
   get canEditPaymentPlanSettings(): boolean {
-    return this.hasSummerGeneralManagerPermission;
+    return !this.isEditMode || this.hasSummerGeneralManagerPermission;
   }
 
   get canManageInstallmentPaymentState(): boolean {

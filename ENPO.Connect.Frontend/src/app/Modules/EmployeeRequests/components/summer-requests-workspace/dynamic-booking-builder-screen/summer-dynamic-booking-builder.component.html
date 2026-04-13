@@ -204,9 +204,6 @@
         <strong>{{ formatPriceValue(quote.grandTotal) }}</strong>
       </div>
       <p class="warn" *ngIf="isInstallmentMode && installmentPlanError.length > 0">{{ installmentPlanError }}</p>
-      <small class="mode-note" *ngIf="!canEditPaymentPlanSettings">
-        تعديل أسلوب السداد وعدد الأقساط وقيم الأقساط وحالة السداد متاح للمدير العام فقط.
-      </small>
     </section>
 
     <p class="pricing-note" *ngIf="!pricingQuoteLoading && pricingQuote as quote">
