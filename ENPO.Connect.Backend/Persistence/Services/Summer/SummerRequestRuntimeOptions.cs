@@ -12,4 +12,7 @@ public sealed class SummerRequestRuntimeOptions
 
     // Mirrors SummerAdminFunc permission from the authenticated caller.
     public bool HasSummerAdminPermission { get; init; }
+
+    // Mirrors role-id 2021 (Summer general manager) from the authenticated caller token.
+    public bool HasSummerGeneralManagerPermission { get; init; }
 }

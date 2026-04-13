@@ -154,7 +154,8 @@ namespace Persistence.Repositories
             string userId,
             string UserEmail,
             string ip,
-            bool hasSummerAdminPermission = false)
+            bool hasSummerAdminPermission = false,
+            bool hasSummerGeneralManagerPermission = false)
         {
             var response = new CommonResponse<MessageDto>();
 
@@ -197,7 +198,8 @@ namespace Persistence.Repositories
                     userId,
                     new SummerRequestRuntimeOptions
                     {
-                        HasSummerAdminPermission = hasSummerAdminPermission
+                        HasSummerAdminPermission = hasSummerAdminPermission,
+                        HasSummerGeneralManagerPermission = hasSummerGeneralManagerPermission
                     });
                 await TrySendCreateNotificationAsync(response?.Data);
                 _logger.AppendLine("CreateRequest: Handled by SummerRequests path.");

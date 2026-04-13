@@ -14,7 +14,8 @@ namespace Repositories
             string userId,
             string UserEmail,
             string ip,
-            bool hasSummerAdminPermission = false);
+            bool hasSummerAdminPermission = false,
+            bool hasSummerGeneralManagerPermission = false);
         public Task<CommonResponse<MessageDto>> GetRequestById(int messageId, string userId);
 
     }

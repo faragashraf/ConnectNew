@@ -85,6 +85,12 @@ type SummerResortBookingsWaveGroupVm = {
   totalBookingAmount: number;
   totalInsuranceAmount: number;
   totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
   sections: SummerWaveBookingsPrintSectionDto[];
 };
 
@@ -101,6 +107,12 @@ type SummerResortBookingsPrintReportVm = {
   totalBookingAmount: number;
   totalInsuranceAmount: number;
   totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
   waveGroups: SummerResortBookingsWaveGroupVm[];
 };
 
@@ -111,6 +123,12 @@ type SummerAllResortsSummaryWaveVm = {
   totalBookingAmount: number;
   totalInsuranceAmount: number;
   totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
 };
 
 type SummerAllResortsSummaryResortVm = {
@@ -123,6 +141,12 @@ type SummerAllResortsSummaryResortVm = {
   totalBookingAmount: number;
   totalInsuranceAmount: number;
   totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
   waves: SummerAllResortsSummaryWaveVm[];
 };
 
@@ -138,7 +162,22 @@ type SummerAllResortsSummaryPrintReportVm = {
   totalBookingAmount: number;
   totalInsuranceAmount: number;
   totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
   resorts: SummerAllResortsSummaryResortVm[];
+};
+
+type RequestPrintPaymentModeKind = 'cash' | 'installment' | 'unknown';
+
+type RequestPrintPaymentPlanRow = {
+  title: string;
+  amount: string;
+  paidState: string;
+  paidAt: string;
 };
 
 @Component({
@@ -271,8 +310,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   resortBookingsPrintTotalPages = 0;
   allResortsSummaryPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
   allResortsSummaryPrintTotalPages = 0;
-  private readonly waveBookingsPrintPageContentHeightPx = (277 * 96) / 25.4;
-  private readonly waveBookingsPrintFooterInsetPx = (4 * 96) / 25.4;
+  private readonly waveBookingsPrintPageContentHeightPx = (271 * 96) / 25.4;
+  private readonly waveBookingsPrintFooterInsetPx = (6 * 96) / 25.4;
+  private readonly waveBookingsPrintHeaderInsetPx = (2 * 96) / 25.4;
   private isWaveBookingsPrintModeEnabled = false;
   private waveBookingsPrintMediaQueryList: MediaQueryList | null = null;
   private readonly onWaveBookingsAfterPrint = () => {
@@ -537,6 +577,36 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return Number.isFinite(total) ? total : 0;
   }
 
+  get waveBookingsPrintTotalCollectedAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalCollectedAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintTotalUncollectedAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalUncollectedAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintCashBookingsCount(): number {
+    const total = Number(this.waveBookingsPrintData?.cashBookingsCount ?? 0);
+    return Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0;
+  }
+
+  get waveBookingsPrintInstallmentBookingsCount(): number {
+    const total = Number(this.waveBookingsPrintData?.installmentBookingsCount ?? 0);
+    return Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0;
+  }
+
+  get waveBookingsPrintCashFinalAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.cashFinalAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintInstallmentFinalAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.installmentFinalAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
   get canOpenResortBookingsPrintDialog(): boolean {
     return this.selectedFilterCategoryId > 0;
   }
@@ -699,6 +769,28 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     });
   }
 
+  get selectedRequestPrintFields(): SummerRequestFieldGridRow[] {
+    return this.selectedRequestFields.filter(row => {
+      if (row?.rowType === 'group-header') {
+        return false;
+      }
+
+      return !this.isInstallmentDetailFieldKey(row?.key);
+    });
+  }
+
+  get selectedRequestPaymentMethodLabel(): string {
+    return this.buildSelectedRequestPaymentPlan().modeLabel;
+  }
+
+  get selectedRequestPaymentPlanRows(): RequestPrintPaymentPlanRow[] {
+    return this.buildSelectedRequestPaymentPlan().rows;
+  }
+
+  get hasSelectedRequestPaymentPlan(): boolean {
+    return this.selectedRequestPaymentPlanRows.length > 0;
+  }
+
   get selectedRequestCompanions(): Array<{ index: number; name: string; relation: string; nationalId: string; age: string }> {
     return buildSummerRequestCompanions(this.selectedRequestDetails?.fields);
   }
@@ -811,6 +903,97 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     return value.length >= 90 || value.includes('\n');
+  }
+
+  private buildSelectedRequestPaymentPlan(): { modeLabel: string; rows: RequestPrintPaymentPlanRow[] } {
+    const fieldRows = (this.selectedRequestFields ?? []).filter(row => row?.rowType !== 'group-header');
+    if (fieldRows.length === 0) {
+      return { modeLabel: '-', rows: [] };
+    }
+
+    const paymentModeValue = this.getSelectedRequestFieldValueByKey(fieldRows, 'payment_mode');
+    const modeKind = this.resolveRequestPaymentModeKind(paymentModeValue, fieldRows);
+    const modeLabel = this.resolveRequestPaymentModeLabel(modeKind, paymentModeValue);
+
+    const installmentCount = this.parseRequestPositiveInt(this.getSelectedRequestFieldValueByKey(fieldRows, 'payment_installment_count'));
+    const installmentMap = new Map<number, { amount: string; paidState: string; paidAt: string }>();
+
+    fieldRows.forEach(row => {
+      const key = this.resolveSelectedRequestFieldKey(row);
+      if (!key) {
+        return;
+      }
+
+      const amountMatch = key.match(/^payment_installment_(\d+)_amount$/);
+      if (amountMatch) {
+        const installmentNo = Math.max(1, Number(amountMatch[1] ?? '1'));
+        const current = installmentMap.get(installmentNo) ?? { amount: '-', paidState: '-', paidAt: '-' };
+        current.amount = this.resolveSelectedRequestFieldValue(row);
+        installmentMap.set(installmentNo, current);
+        return;
+      }
+
+      const paidMatch = key.match(/^payment_installment_(\d+)_paid$/);
+      if (paidMatch) {
+        const installmentNo = Math.max(1, Number(paidMatch[1] ?? '1'));
+        const current = installmentMap.get(installmentNo) ?? { amount: '-', paidState: '-', paidAt: '-' };
+        current.paidState = this.resolveRequestPaidState(this.resolveSelectedRequestFieldValue(row));
+        installmentMap.set(installmentNo, current);
+        return;
+      }
+
+      const paidAtMatch = key.match(/^payment_installment_(\d+)_paid_at$/);
+      if (paidAtMatch) {
+        const installmentNo = Math.max(1, Number(paidAtMatch[1] ?? '1'));
+        const current = installmentMap.get(installmentNo) ?? { amount: '-', paidState: '-', paidAt: '-' };
+        current.paidAt = this.formatRequestPrintFieldValue(this.resolveSelectedRequestFieldValue(row));
+        installmentMap.set(installmentNo, current);
+      }
+    });
+
+    if (modeKind === 'cash') {
+      const paidAt = this.getSelectedRequestFieldValueByKey(fieldRows, 'paid_at');
+      const paymentStatus = this.getSelectedRequestFieldValueByKey(fieldRows, 'payment_status');
+      const amount = this.pickRequestDisplayValue([
+        this.getSelectedRequestFieldValueByKey(fieldRows, 'pricing_grand_total'),
+        this.getSelectedRequestFieldValueByKey(fieldRows, 'payment_installments_total')
+      ]);
+
+      return {
+        modeLabel,
+        rows: [{
+          title: 'دفعة كاش',
+          amount: this.ensureRequestCurrency(amount),
+          paidState: this.resolveRequestCashPaidState(paymentStatus, paidAt),
+          paidAt: this.toRequestDisplayOrDash(this.formatRequestPrintFieldValue(paidAt))
+        }]
+      };
+    }
+
+    const maxInstallmentNo = installmentCount && installmentCount > 0
+      ? installmentCount
+      : Math.max(0, ...Array.from(installmentMap.keys()));
+    if (maxInstallmentNo <= 0) {
+      return { modeLabel, rows: [] };
+    }
+
+    const rows: RequestPrintPaymentPlanRow[] = [];
+    for (let installmentNo = 1; installmentNo <= maxInstallmentNo; installmentNo += 1) {
+      const item = installmentMap.get(installmentNo) ?? { amount: '-', paidState: '-', paidAt: '-' };
+      const paidAt = this.toRequestDisplayOrDash(item.paidAt);
+      const paidState = item.paidState !== '-'
+        ? item.paidState
+        : (paidAt !== '-' ? 'مسدد' : 'غير مسدد');
+
+      rows.push({
+        title: `القسط ${installmentNo}`,
+        amount: this.ensureRequestCurrency(item.amount),
+        paidState,
+        paidAt
+      });
+    }
+
+    return { modeLabel, rows };
   }
 
   onSearch(): void {
@@ -1179,6 +1362,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           totalBookingAmount: includeFinancials ? Number(waveData.totalBookingAmount ?? 0) || 0 : 0,
           totalInsuranceAmount: includeFinancials ? Number(waveData.totalInsuranceAmount ?? 0) || 0 : 0,
           totalFinalAmount: includeFinancials ? Number(waveData.totalFinalAmount ?? 0) || 0 : 0,
+          totalCollectedAmount: includeFinancials ? Number(waveData.totalCollectedAmount ?? 0) || 0 : 0,
+          totalUncollectedAmount: includeFinancials ? Number(waveData.totalUncollectedAmount ?? 0) || 0 : 0,
+          cashBookingsCount: Number(waveData.cashBookingsCount ?? 0) || 0,
+          installmentBookingsCount: Number(waveData.installmentBookingsCount ?? 0) || 0,
+          cashFinalAmount: includeFinancials ? Number(waveData.cashFinalAmount ?? 0) || 0 : 0,
+          installmentFinalAmount: includeFinancials ? Number(waveData.installmentFinalAmount ?? 0) || 0 : 0,
           sections: [...(waveData.sections ?? [])]
         });
       }
@@ -1202,6 +1391,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         totalBookingAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalBookingAmount, 0) : 0,
         totalInsuranceAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalInsuranceAmount, 0) : 0,
         totalFinalAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalFinalAmount, 0) : 0,
+        totalCollectedAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalCollectedAmount, 0) : 0,
+        totalUncollectedAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalUncollectedAmount, 0) : 0,
+        cashBookingsCount: waveGroups.reduce((sum, group) => sum + group.cashBookingsCount, 0),
+        installmentBookingsCount: waveGroups.reduce((sum, group) => sum + group.installmentBookingsCount, 0),
+        cashFinalAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.cashFinalAmount, 0) : 0,
+        installmentFinalAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.installmentFinalAmount, 0) : 0,
         waveGroups
       };
 
@@ -1313,7 +1508,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
             totalPersons,
             totalBookingAmount: includeFinancials ? Number(waveData.totalBookingAmount ?? 0) || 0 : 0,
             totalInsuranceAmount: includeFinancials ? Number(waveData.totalInsuranceAmount ?? 0) || 0 : 0,
-            totalFinalAmount: includeFinancials ? Number(waveData.totalFinalAmount ?? 0) || 0 : 0
+            totalFinalAmount: includeFinancials ? Number(waveData.totalFinalAmount ?? 0) || 0 : 0,
+            totalCollectedAmount: includeFinancials ? Number(waveData.totalCollectedAmount ?? 0) || 0 : 0,
+            totalUncollectedAmount: includeFinancials ? Number(waveData.totalUncollectedAmount ?? 0) || 0 : 0,
+            cashBookingsCount: Number(waveData.cashBookingsCount ?? 0) || 0,
+            installmentBookingsCount: Number(waveData.installmentBookingsCount ?? 0) || 0,
+            cashFinalAmount: includeFinancials ? Number(waveData.cashFinalAmount ?? 0) || 0 : 0,
+            installmentFinalAmount: includeFinancials ? Number(waveData.installmentFinalAmount ?? 0) || 0 : 0
           });
         }
 
@@ -1327,6 +1528,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           totalBookingAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalBookingAmount, 0) : 0,
           totalInsuranceAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalInsuranceAmount, 0) : 0,
           totalFinalAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalFinalAmount, 0) : 0,
+          totalCollectedAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalCollectedAmount, 0) : 0,
+          totalUncollectedAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalUncollectedAmount, 0) : 0,
+          cashBookingsCount: waveSummaries.reduce((sum, item) => sum + item.cashBookingsCount, 0),
+          installmentBookingsCount: waveSummaries.reduce((sum, item) => sum + item.installmentBookingsCount, 0),
+          cashFinalAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.cashFinalAmount, 0) : 0,
+          installmentFinalAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.installmentFinalAmount, 0) : 0,
           waves: waveSummaries
         });
       }
@@ -1343,6 +1550,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         totalBookingAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalBookingAmount, 0) : 0,
         totalInsuranceAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalInsuranceAmount, 0) : 0,
         totalFinalAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalFinalAmount, 0) : 0,
+        totalCollectedAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalCollectedAmount, 0) : 0,
+        totalUncollectedAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalUncollectedAmount, 0) : 0,
+        cashBookingsCount: resorts.reduce((sum, resort) => sum + resort.cashBookingsCount, 0),
+        installmentBookingsCount: resorts.reduce((sum, resort) => sum + resort.installmentBookingsCount, 0),
+        cashFinalAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.cashFinalAmount, 0) : 0,
+        installmentFinalAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.installmentFinalAmount, 0) : 0,
         resorts
       };
 
@@ -1941,6 +2154,39 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   resolveWaveBookingsPrintText(value: string | null | undefined): string {
     const text = String(value ?? '').trim();
     return text.length > 0 ? text : '-';
+  }
+
+  resolvePaymentModeLabel(row: SummerWaveBookingsPrintRowDto | null | undefined): string {
+    const explicitLabel = String(row?.paymentModeLabel ?? '').trim();
+    if (explicitLabel.length > 0 && explicitLabel !== '-') {
+      return explicitLabel;
+    }
+
+    const paymentMode = String(row?.paymentMode ?? '').trim().toUpperCase();
+    if (paymentMode === 'INSTALLMENT') {
+      return 'تقسيط';
+    }
+
+    return 'كاش';
+  }
+
+  resolveCollectionStatusLabel(row: SummerWaveBookingsPrintRowDto | null | undefined): string {
+    const explicitLabel = String(row?.collectionStatusLabel ?? '').trim();
+    if (explicitLabel.length > 0 && explicitLabel !== '-') {
+      return explicitLabel;
+    }
+
+    if (row?.isFullyCollected) {
+      return 'مسدد';
+    }
+
+    const collectedAmount = Number(row?.collectedAmount ?? 0) || 0;
+    const uncollectedAmount = Number(row?.uncollectedAmount ?? 0) || 0;
+    if (collectedAmount > 0 && uncollectedAmount > 0) {
+      return 'مسدد جزئيًا';
+    }
+
+    return 'غير مسدد';
   }
 
   isPaymentOverdue(request: SummerRequestSummaryDto): boolean {
@@ -2840,8 +3086,14 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     const result = this.buildPrintFooterPagination(this.requestAdminPrintDocumentRef);
-    this.requestAdminPrintFooterMarkers = result.markers;
-    this.requestAdminPrintTotalPages = result.totalPages;
+    this.requestAdminPrintFooterMarkers = Array.from({ length: result.totalPages }, (_item, index) => ({
+      pageNumber: index + 1,
+      topPx: Math.max(
+        this.waveBookingsPrintHeaderInsetPx,
+        Math.round((index * this.waveBookingsPrintPageContentHeightPx) + this.waveBookingsPrintHeaderInsetPx)
+      )
+    }));
+    this.requestAdminPrintTotalPages = this.requestAdminPrintFooterMarkers.length;
   }
 
   private buildPrintFooterPagination(
@@ -2921,6 +3173,177 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         }
       }
     });
+  }
+
+  private isInstallmentDetailFieldKey(key: unknown): boolean {
+    const normalizedKey = String(key ?? '').trim().toLowerCase();
+    return /^payment_installment_\d+_(amount|paid|paid_at)$/.test(normalizedKey);
+  }
+
+  private getSelectedRequestFieldValueByKey(rows: SummerRequestFieldGridRow[], key: string): string {
+    const targetKey = String(key ?? '').trim().toLowerCase();
+    if (!targetKey) {
+      return '-';
+    }
+
+    const row = rows.find(item => this.resolveSelectedRequestFieldKey(item) === targetKey);
+    if (!row) {
+      return '-';
+    }
+
+    return this.resolveSelectedRequestFieldValue(row);
+  }
+
+  private resolveSelectedRequestFieldKey(row: SummerRequestFieldGridRow): string {
+    return String(row?.key ?? '').trim().toLowerCase();
+  }
+
+  private resolveSelectedRequestFieldValue(row: SummerRequestFieldGridRow): string {
+    const value = String(row?.value ?? '').trim();
+    return value.length > 0 ? value : '-';
+  }
+
+  private resolveRequestPaymentModeLabel(modeKind: RequestPrintPaymentModeKind, value: string): string {
+    if (modeKind === 'cash') {
+      return 'كاش';
+    }
+    if (modeKind === 'installment') {
+      return 'تقسيط';
+    }
+
+    const text = String(value ?? '').trim();
+    return text.length > 0 ? text : '-';
+  }
+
+  private resolveRequestPaymentModeKind(modeValue: string, fieldRows: SummerRequestFieldGridRow[]): RequestPrintPaymentModeKind {
+    const normalized = this.normalizeRequestPaymentText(modeValue);
+    if (normalized.includes('cash') || normalized.includes('كاش')) {
+      return 'cash';
+    }
+    if (normalized.includes('installment') || normalized.includes('تقسيط')) {
+      return 'installment';
+    }
+
+    const hasInstallments = fieldRows.some(row => /^payment_installment_\d+_amount$/.test(this.resolveSelectedRequestFieldKey(row)));
+    if (hasInstallments) {
+      return 'installment';
+    }
+
+    return 'unknown';
+  }
+
+  private resolveRequestPaidState(value: string): string {
+    const normalized = this.normalizeRequestPaymentText(value);
+    if (!normalized || normalized === '-') {
+      return '-';
+    }
+
+    if (normalized === 'false'
+      || normalized === '0'
+      || normalized.includes('غيرمسدد')
+      || normalized.includes('بانتظار')
+      || normalized.includes('unpaid')
+      || normalized.includes('pending')
+      || normalized.includes('متاخر')) {
+      return 'غير مسدد';
+    }
+
+    if (normalized === 'true'
+      || normalized === '1'
+      || normalized === 'paid'
+      || normalized.includes('تمالسداد')
+      || normalized.includes('مسدد')) {
+      return 'مسدد';
+    }
+
+    return value;
+  }
+
+  private resolveRequestCashPaidState(paymentStatus: string, paidAt: string): string {
+    if (this.toRequestDisplayOrDash(this.formatRequestPrintFieldValue(paidAt)) !== '-') {
+      return 'مسدد';
+    }
+
+    const normalized = this.normalizeRequestPaymentText(paymentStatus);
+    if (!normalized || normalized === '-') {
+      return 'غير مسدد';
+    }
+
+    if (normalized.includes('تمالسداد') || normalized === 'paid' || normalized.includes('مسدد')) {
+      return 'مسدد';
+    }
+
+    return 'غير مسدد';
+  }
+
+  private parseRequestPositiveInt(value: string): number | null {
+    const normalized = this.replaceArabicIndicDigits(String(value ?? '').trim());
+    const matched = normalized.match(/\d+/);
+    if (!matched) {
+      return null;
+    }
+
+    const parsed = Number(matched[0]);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null;
+    }
+
+    return Math.floor(parsed);
+  }
+
+  private pickRequestDisplayValue(values: string[]): string {
+    for (const value of values) {
+      const normalized = this.toRequestDisplayOrDash(value);
+      if (normalized !== '-') {
+        return normalized;
+      }
+    }
+
+    return '-';
+  }
+
+  private toRequestDisplayOrDash(value: string): string {
+    const normalized = String(value ?? '').trim();
+    return normalized.length > 0 ? normalized : '-';
+  }
+
+  private ensureRequestCurrency(value: string): string {
+    const display = this.toRequestDisplayOrDash(value);
+    if (display === '-') {
+      return display;
+    }
+
+    if (display.includes('جنيه')) {
+      return display;
+    }
+
+    const normalized = this.replaceArabicIndicDigits(display).replace(/,/g, '').trim();
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) {
+      return display;
+    }
+
+    const rounded = Math.round(parsed * 100) / 100;
+    const hasFraction = Math.abs(rounded - Math.trunc(rounded)) > 0.0001;
+    const formatted = rounded.toLocaleString('en-US', {
+      minimumFractionDigits: hasFraction ? 2 : 0,
+      maximumFractionDigits: 2
+    });
+
+    return `${formatted} جنيه`;
+  }
+
+  private normalizeRequestPaymentText(value: string): string {
+    return this.replaceArabicIndicDigits(String(value ?? ''))
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_\-]/g, '');
+  }
+
+  private replaceArabicIndicDigits(value: string): string {
+    return String(value ?? '')
+      .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+      .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
   }
 
   private hasAnyWaveBookingsPrintText(

@@ -99,7 +99,50 @@ namespace Persistence.Services
             SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal,
             SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText,
             SummerWorkflowDomainConstants.PricingFieldKinds.SmsText,
-            SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText
+            SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText,
+            "Summer_PaymentMode",
+            "SUM2026_PaymentMode",
+            "PaymentMode",
+            "Summer_PaymentInstallmentCount",
+            "SUM2026_PaymentInstallmentCount",
+            "Summer_PaymentInstallmentsTotal",
+            "SUM2026_PaymentInstallmentsTotal",
+            "Summer_PaymentInstallment1Amount",
+            "Summer_PaymentInstallment2Amount",
+            "Summer_PaymentInstallment3Amount",
+            "Summer_PaymentInstallment4Amount",
+            "Summer_PaymentInstallment5Amount",
+            "Summer_PaymentInstallment6Amount",
+            "SUM2026_PaymentInstallment1Amount",
+            "SUM2026_PaymentInstallment2Amount",
+            "SUM2026_PaymentInstallment3Amount",
+            "SUM2026_PaymentInstallment4Amount",
+            "SUM2026_PaymentInstallment5Amount",
+            "SUM2026_PaymentInstallment6Amount",
+            "Summer_PaymentInstallment1Paid",
+            "Summer_PaymentInstallment2Paid",
+            "Summer_PaymentInstallment3Paid",
+            "Summer_PaymentInstallment4Paid",
+            "Summer_PaymentInstallment5Paid",
+            "Summer_PaymentInstallment6Paid",
+            "SUM2026_PaymentInstallment1Paid",
+            "SUM2026_PaymentInstallment2Paid",
+            "SUM2026_PaymentInstallment3Paid",
+            "SUM2026_PaymentInstallment4Paid",
+            "SUM2026_PaymentInstallment5Paid",
+            "SUM2026_PaymentInstallment6Paid",
+            "Summer_PaymentInstallment1PaidAtUtc",
+            "Summer_PaymentInstallment2PaidAtUtc",
+            "Summer_PaymentInstallment3PaidAtUtc",
+            "Summer_PaymentInstallment4PaidAtUtc",
+            "Summer_PaymentInstallment5PaidAtUtc",
+            "Summer_PaymentInstallment6PaidAtUtc",
+            "SUM2026_PaymentInstallment1PaidAtUtc",
+            "SUM2026_PaymentInstallment2PaidAtUtc",
+            "SUM2026_PaymentInstallment3PaidAtUtc",
+            "SUM2026_PaymentInstallment4PaidAtUtc",
+            "SUM2026_PaymentInstallment5PaidAtUtc",
+            "SUM2026_PaymentInstallment6PaidAtUtc"
         };
         private static readonly Dictionary<string, string> SummerAuditAliasMap = BuildSummerAuditAliasMap();
         private static readonly Dictionary<string, string> SummerAuditFallbackFieldLabelByAlias = new(StringComparer.OrdinalIgnoreCase)
@@ -248,6 +291,7 @@ namespace Persistence.Services
             }
 
             var isEditOperation = messageRequest.MessageId.GetValueOrDefault() > 0;
+            var editMessageId = messageRequest.MessageId.GetValueOrDefault();
             if (!isEditOperation
                 && !CanCreateSummerRequestForDestination(
                     categoryInfo.Category?.CatId ?? 0,
@@ -362,9 +406,25 @@ namespace Persistence.Services
                 messageRequest.Fields,
                 SummerWorkflowDomainConstants.UseFrozenUnitFieldKinds,
                 allowAdminFrozenBooking ? "true" : "false");
+            Dictionary<string, string>? existingPaymentPlanSnapshot = null;
+            if (isEditOperation
+                && !runtime.HasSummerGeneralManagerPermission
+                && editMessageId > 0)
+            {
+                existingPaymentPlanSnapshot = await LoadExistingSummerPaymentPlanSnapshotAsync(editMessageId);
+            }
+            if (!ApplySummerPaymentPlanFields(
+                    messageRequest.Fields,
+                    pricingQuote.GrandTotal,
+                    runtime.HasSummerGeneralManagerPermission,
+                    isEditOperation,
+                    existingPaymentPlanSnapshot,
+                    response))
+            {
+                return;
+            }
 
             messageRequest.Type = (byte)parentCategory.CatId;
-            var editMessageId = messageRequest.MessageId.GetValueOrDefault();
 
 
             var allowed = await IsWithinCategoryIntervalLimitAsync(
@@ -1256,6 +1316,433 @@ SELECT @result;
         private static int ParseInt(string? value, int fallback = 0)
         {
             return int.TryParse((value ?? string.Empty).Trim(), out var parsed) ? parsed : fallback;
+        }
+
+        private static decimal ParseDecimal(string? value, decimal fallback = 0m)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return fallback;
+            }
+
+            if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var invariantParsed))
+            {
+                return invariantParsed;
+            }
+
+            if (decimal.TryParse(normalized, NumberStyles.Number, new CultureInfo("ar-EG"), out var arabicParsed))
+            {
+                return arabicParsed;
+            }
+
+            return fallback;
+        }
+
+        private async Task<Dictionary<string, string>> LoadExistingSummerPaymentPlanSnapshotAsync(int messageId)
+        {
+            if (messageId <= 0)
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            var fieldKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            fieldKinds.UnionWith(SummerWorkflowDomainConstants.PaymentModeFieldKinds);
+            fieldKinds.UnionWith(SummerWorkflowDomainConstants.InstallmentCountFieldKinds);
+            fieldKinds.UnionWith(SummerWorkflowDomainConstants.InstallmentsTotalFieldKinds);
+            for (var installmentNo = 1; installmentNo <= SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount; installmentNo++)
+            {
+                fieldKinds.UnionWith(SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo));
+                fieldKinds.UnionWith(SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo));
+                fieldKinds.UnionWith(SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo));
+            }
+
+            var rows = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(field =>
+                    field.FildRelted == messageId
+                    && fieldKinds.Contains(field.FildKind ?? string.Empty))
+                .Select(field => new
+                {
+                    Key = (field.FildKind ?? string.Empty).Trim(),
+                    Value = (field.FildTxt ?? string.Empty).Trim()
+                })
+                .ToListAsync();
+
+            var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows)
+            {
+                if (row.Key.Length == 0 || snapshot.ContainsKey(row.Key))
+                {
+                    continue;
+                }
+
+                snapshot[row.Key] = row.Value;
+            }
+
+            return snapshot;
+        }
+
+        private static bool ApplySummerPaymentPlanFields(
+            List<TkmendField>? fields,
+            decimal grandTotal,
+            bool hasSummerGeneralManagerPermission,
+            bool isEditOperation,
+            Dictionary<string, string>? existingSnapshot,
+            CommonResponse<MessageDto> response)
+        {
+            if (response == null)
+            {
+                return false;
+            }
+
+            if (fields == null)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "بيانات السداد غير متاحة."
+                });
+                return false;
+            }
+
+            var normalizedGrandTotal = NormalizeMoney(grandTotal);
+            var incomingPaymentModeRaw = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.PaymentModeFieldKinds);
+            var incomingPaymentMode = NormalizePaymentModeToken(incomingPaymentModeRaw);
+
+            var resolvedPaymentMode = incomingPaymentMode;
+            if (!hasSummerGeneralManagerPermission
+                && isEditOperation
+                && existingSnapshot != null
+                && existingSnapshot.Count > 0
+                && string.IsNullOrWhiteSpace(incomingPaymentModeRaw))
+            {
+                resolvedPaymentMode = NormalizePaymentModeToken(
+                    GetFirstSnapshotValue(existingSnapshot, SummerWorkflowDomainConstants.PaymentModeFieldKinds));
+            }
+
+            UpsertRequestFieldRange(
+                fields,
+                SummerWorkflowDomainConstants.PaymentModeFieldKinds,
+                resolvedPaymentMode);
+
+            if (!string.Equals(
+                    resolvedPaymentMode,
+                    SummerWorkflowDomainConstants.PaymentModes.Installment,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                UpsertRequestFieldRange(fields, SummerWorkflowDomainConstants.InstallmentCountFieldKinds, "0");
+                UpsertRequestFieldRange(fields, SummerWorkflowDomainConstants.InstallmentsTotalFieldKinds, "0");
+                for (var installmentNo = 1; installmentNo <= SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount; installmentNo++)
+                {
+                    UpsertRequestFieldRange(
+                        fields,
+                        SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo),
+                        "0");
+                    UpsertRequestFieldRange(
+                        fields,
+                        SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo),
+                        "false");
+                    UpsertRequestFieldRange(
+                        fields,
+                        SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo),
+                        string.Empty);
+                }
+
+                return true;
+            }
+
+            var maxInstallmentCount = SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount;
+            var defaultInstallmentCount = SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount;
+            var minInstallmentCount = SummerWorkflowDomainConstants.PaymentModes.MinInstallmentCount;
+            var hasExistingSnapshot = existingSnapshot != null && existingSnapshot.Count > 0;
+
+            var incomingInstallmentCountRaw = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.InstallmentCountFieldKinds);
+            if (!TryResolveInstallmentCount(
+                    incomingInstallmentCountRaw,
+                    defaultInstallmentCount,
+                    response,
+                    out var incomingInstallmentCount))
+            {
+                return false;
+            }
+
+            var existingInstallmentCount = defaultInstallmentCount;
+            if (hasExistingSnapshot
+                && !TryResolveInstallmentCount(
+                    GetFirstSnapshotValue(existingSnapshot, SummerWorkflowDomainConstants.InstallmentCountFieldKinds),
+                    defaultInstallmentCount,
+                    response,
+                    out existingInstallmentCount))
+            {
+                return false;
+            }
+
+            var resolvedInstallmentCount = incomingInstallmentCount;
+            if (!hasSummerGeneralManagerPermission
+                && isEditOperation
+                && hasExistingSnapshot)
+            {
+                resolvedInstallmentCount = string.IsNullOrWhiteSpace(incomingInstallmentCountRaw)
+                    ? existingInstallmentCount
+                    : incomingInstallmentCount;
+            }
+
+            if (resolvedInstallmentCount < minInstallmentCount || resolvedInstallmentCount > maxInstallmentCount)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"عدد الأقساط يجب أن يكون بين {minInstallmentCount} و {maxInstallmentCount}."
+                });
+                return false;
+            }
+
+            var defaultInstallments = BuildEqualInstallments(normalizedGrandTotal, resolvedInstallmentCount);
+            var resolvedInstallments = new decimal[resolvedInstallmentCount];
+            var resolvedPaid = new bool[resolvedInstallmentCount];
+            var resolvedPaidAt = new string[resolvedInstallmentCount];
+            var canPreserveExistingInstallments = !hasSummerGeneralManagerPermission
+                && isEditOperation
+                && hasExistingSnapshot
+                && resolvedInstallmentCount == existingInstallmentCount;
+
+            for (var index = 0; index < resolvedInstallmentCount; index++)
+            {
+                var installmentNo = index + 1;
+                var amountFieldKinds = SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo);
+                var paidFieldKinds = SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo);
+                var paidAtFieldKinds = SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo);
+
+                decimal amount;
+                bool isPaid;
+                string paidAtValue;
+
+                if (hasSummerGeneralManagerPermission)
+                {
+                    amount = NormalizeMoney(ParseDecimal(GetFirstFieldValue(fields, amountFieldKinds), defaultInstallments[index]));
+                    isPaid = ParseBoolean(GetFirstFieldValue(fields, paidFieldKinds));
+                    paidAtValue = NormalizeUtcValue(GetFirstFieldValue(fields, paidAtFieldKinds), response, installmentNo);
+                    if (response.Errors.Count > 0)
+                    {
+                        return false;
+                    }
+                }
+                else if (canPreserveExistingInstallments)
+                {
+                    amount = NormalizeMoney(ParseDecimal(GetFirstSnapshotValue(existingSnapshot, amountFieldKinds), defaultInstallments[index]));
+                    isPaid = ParseBoolean(GetFirstSnapshotValue(existingSnapshot, paidFieldKinds));
+                    paidAtValue = NormalizeSnapshotUtcValue(GetFirstSnapshotValue(existingSnapshot, paidAtFieldKinds));
+                }
+                else
+                {
+                    amount = defaultInstallments[index];
+                    isPaid = false;
+                    paidAtValue = string.Empty;
+                }
+
+                resolvedInstallments[index] = amount;
+                resolvedPaid[index] = isPaid && amount > 0m;
+                resolvedPaidAt[index] = resolvedPaid[index] ? paidAtValue : string.Empty;
+            }
+
+            var installmentsTotal = NormalizeMoney(resolvedInstallments.Sum());
+            if (installmentsTotal > normalizedGrandTotal)
+            {
+                if (!hasSummerGeneralManagerPermission)
+                {
+                    var normalizedDefaults = BuildEqualInstallments(normalizedGrandTotal, resolvedInstallmentCount);
+                    for (var index = 0; index < resolvedInstallmentCount; index++)
+                    {
+                        resolvedInstallments[index] = normalizedDefaults[index];
+                        resolvedPaid[index] = false;
+                        resolvedPaidAt[index] = string.Empty;
+                    }
+                    installmentsTotal = NormalizeMoney(resolvedInstallments.Sum());
+                }
+                else
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = $"إجمالي الأقساط ({FormatDecimalValue(installmentsTotal)}) لا يجب أن يتجاوز إجمالي الحجز ({FormatDecimalValue(normalizedGrandTotal)})."
+                    });
+                    return false;
+                }
+            }
+
+            UpsertRequestFieldRange(
+                fields,
+                SummerWorkflowDomainConstants.InstallmentCountFieldKinds,
+                resolvedInstallmentCount.ToString(CultureInfo.InvariantCulture));
+            UpsertRequestFieldRange(
+                fields,
+                SummerWorkflowDomainConstants.InstallmentsTotalFieldKinds,
+                FormatDecimalValue(installmentsTotal));
+
+            for (var installmentNo = 1; installmentNo <= maxInstallmentCount; installmentNo++)
+            {
+                var index = installmentNo - 1;
+                var isActiveInstallment = installmentNo <= resolvedInstallmentCount;
+                var amountValue = isActiveInstallment ? FormatDecimalValue(resolvedInstallments[index]) : "0";
+                var isPaidValue = isActiveInstallment && resolvedPaid[index] ? "true" : "false";
+                var paidAtValue = isActiveInstallment ? resolvedPaidAt[index] : string.Empty;
+
+                UpsertRequestFieldRange(
+                    fields,
+                    SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo),
+                    amountValue);
+                UpsertRequestFieldRange(
+                    fields,
+                    SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo),
+                    isPaidValue);
+                UpsertRequestFieldRange(
+                    fields,
+                    SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo),
+                    paidAtValue);
+            }
+
+            return true;
+        }
+
+        private static string NormalizePaymentModeToken(string? value)
+        {
+            var token = (value ?? string.Empty).Trim().ToUpperInvariant();
+            return token == SummerWorkflowDomainConstants.PaymentModes.Installment
+                ? SummerWorkflowDomainConstants.PaymentModes.Installment
+                : SummerWorkflowDomainConstants.PaymentModes.Cash;
+        }
+
+        private static bool TryResolveInstallmentCount(
+            string? value,
+            int fallback,
+            CommonResponse<MessageDto> response,
+            out int installmentCount)
+        {
+            installmentCount = fallback;
+            var minCount = SummerWorkflowDomainConstants.PaymentModes.MinInstallmentCount;
+            var maxCount = SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount;
+            var normalized = (value ?? string.Empty).Trim();
+
+            if (normalized.Length == 0)
+            {
+                installmentCount = Math.Clamp(fallback, minCount, maxCount);
+                return true;
+            }
+
+            if (!int.TryParse(normalized, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "عدد الأقساط غير صالح."
+                });
+                installmentCount = Math.Clamp(fallback, minCount, maxCount);
+                return false;
+            }
+
+            if (parsed < minCount || parsed > maxCount)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"عدد الأقساط يجب أن يكون بين {minCount} و {maxCount}."
+                });
+                installmentCount = Math.Clamp(fallback, minCount, maxCount);
+                return false;
+            }
+
+            installmentCount = parsed;
+            return true;
+        }
+
+        private static decimal NormalizeMoney(decimal value)
+        {
+            if (value <= 0m)
+            {
+                return 0m;
+            }
+
+            return Math.Round(value, 2, MidpointRounding.AwayFromZero);
+        }
+
+        private static decimal[] BuildEqualInstallments(decimal totalAmount, int installmentCount)
+        {
+            var count = installmentCount > 0 ? installmentCount : 1;
+            var normalizedTotal = NormalizeMoney(totalAmount);
+            var totalCents = decimal.ToInt64(normalizedTotal * 100m);
+            var baseCents = totalCents / count;
+            var remainder = totalCents % count;
+
+            var values = new decimal[count];
+            for (var index = 0; index < count; index++)
+            {
+                var cents = baseCents + (index < remainder ? 1 : 0);
+                values[index] = cents / 100m;
+            }
+
+            return values;
+        }
+
+        private static string GetFirstSnapshotValue(
+            IReadOnlyDictionary<string, string>? snapshot,
+            IEnumerable<string> fieldKinds)
+        {
+            if (snapshot == null || snapshot.Count == 0 || fieldKinds == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (var fieldKind in fieldKinds)
+            {
+                var key = (fieldKind ?? string.Empty).Trim();
+                if (key.Length == 0)
+                {
+                    continue;
+                }
+
+                if (snapshot.TryGetValue(key, out var value)
+                    && !string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string NormalizeSnapshotUtcValue(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            return DateTimeOffset.TryParse(normalized, out var parsed)
+                ? parsed.UtcDateTime.ToString("o")
+                : string.Empty;
+        }
+
+        private static string NormalizeUtcValue(string? value, CommonResponse<MessageDto> response, int installmentNo)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            if (!DateTimeOffset.TryParse(normalized, out var parsed))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"تاريخ سداد القسط رقم {installmentNo} غير صالح."
+                });
+                return string.Empty;
+            }
+
+            return parsed.UtcDateTime.ToString("o");
         }
 
         private static bool ValidateSummerExtraMembersRules(

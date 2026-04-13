@@ -84,9 +84,15 @@ export interface SummerWaveBookingsPrintRowDto {
   personsCount: number;
   statusLabel: string;
   notes: string;
+  paymentMode: string;
+  paymentModeLabel: string;
+  collectionStatusLabel: string;
   bookingAmount: number;
   insuranceAmount: number;
   finalAmount: number;
+  collectedAmount: number;
+  uncollectedAmount: number;
+  isFullyCollected: boolean;
 }
 
 export interface SummerWaveBookingsPrintSectionDto {
@@ -96,6 +102,12 @@ export interface SummerWaveBookingsPrintSectionDto {
   totalBookingAmount: number;
   totalInsuranceAmount: number;
   totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
   rows: SummerWaveBookingsPrintRowDto[];
 }
 
@@ -112,6 +124,12 @@ export interface SummerWaveBookingsPrintReportDto {
   totalBookingAmount: number;
   totalInsuranceAmount: number;
   totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
   sections: SummerWaveBookingsPrintSectionDto[];
 }
 

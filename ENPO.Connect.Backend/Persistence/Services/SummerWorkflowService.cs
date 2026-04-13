@@ -51,6 +51,8 @@ namespace Persistence.Services
         private static readonly string[] WaveLabelFieldKinds = SummerWorkflowDomainConstants.WaveLabelFieldKinds;
         private static readonly string[] FamilyCountFieldKinds = SummerWorkflowDomainConstants.FamilyCountFieldKinds;
         private static readonly string[] ExtraCountFieldKinds = SummerWorkflowDomainConstants.ExtraCountFieldKinds;
+        private static readonly string[] PaymentModeFieldKinds = SummerWorkflowDomainConstants.PaymentModeFieldKinds;
+        private static readonly string[] InstallmentCountFieldKinds = SummerWorkflowDomainConstants.InstallmentCountFieldKinds;
         private static readonly string[] DestinationIdFieldKinds = SummerWorkflowDomainConstants.DestinationIdFieldKinds;
         private static readonly string[] DestinationNameFieldKinds = SummerWorkflowDomainConstants.DestinationNameFieldKinds;
         private static readonly string[] EmployeeIdFieldKinds = SummerWorkflowDomainConstants.EmployeeIdFieldKinds;
@@ -2039,6 +2041,7 @@ namespace Persistence.Services
                     var (bookingAmount, insuranceAmount, finalAmount) = includeFinancials
                         ? ResolveRowFinancialAmounts(messageFields)
                         : (0m, 0m, 0m);
+                    var paymentCollection = ResolvePaymentCollectionSnapshot(messageFields, finalAmount);
 
                     var row = new SummerWaveBookingPrintRowDto
                     {
@@ -2053,9 +2056,15 @@ namespace Persistence.Services
                         PersonsCount = Math.Max(0, personsCount),
                         StatusLabel = ResolveDisplayText(statusLabel),
                         Notes = ResolveDisplayText(GetFirstFieldValue(messageFields, NotesFieldKinds)),
+                        PaymentMode = paymentCollection.PaymentModeCode,
+                        PaymentModeLabel = paymentCollection.PaymentModeLabel,
+                        CollectionStatusLabel = paymentCollection.CollectionStatusLabel,
                         BookingAmount = bookingAmount,
                         InsuranceAmount = insuranceAmount,
-                        FinalAmount = finalAmount
+                        FinalAmount = finalAmount,
+                        CollectedAmount = paymentCollection.CollectedAmount,
+                        UncollectedAmount = paymentCollection.UncollectedAmount,
+                        IsFullyCollected = paymentCollection.IsFullyCollected
                     };
 
                     rows.Add((familyCount, row));
@@ -2081,6 +2090,16 @@ namespace Persistence.Services
                             TotalBookingAmount = includeFinancials ? orderedRows.Sum(item => item.BookingAmount) : 0m,
                             TotalInsuranceAmount = includeFinancials ? orderedRows.Sum(item => item.InsuranceAmount) : 0m,
                             TotalFinalAmount = includeFinancials ? orderedRows.Sum(item => item.FinalAmount) : 0m,
+                            TotalCollectedAmount = includeFinancials ? orderedRows.Sum(item => item.CollectedAmount) : 0m,
+                            TotalUncollectedAmount = includeFinancials ? orderedRows.Sum(item => item.UncollectedAmount) : 0m,
+                            CashBookingsCount = orderedRows.Count(item => IsCashPaymentMode(item.PaymentMode)),
+                            InstallmentBookingsCount = orderedRows.Count(item => IsInstallmentPaymentMode(item.PaymentMode)),
+                            CashFinalAmount = includeFinancials
+                                ? orderedRows.Where(item => IsCashPaymentMode(item.PaymentMode)).Sum(item => item.FinalAmount)
+                                : 0m,
+                            InstallmentFinalAmount = includeFinancials
+                                ? orderedRows.Where(item => IsInstallmentPaymentMode(item.PaymentMode)).Sum(item => item.FinalAmount)
+                                : 0m,
                             Rows = orderedRows
                         };
                     })
@@ -2090,6 +2109,12 @@ namespace Persistence.Services
                 report.TotalBookingAmount = includeFinancials ? report.Sections.Sum(section => section.TotalBookingAmount) : 0m;
                 report.TotalInsuranceAmount = includeFinancials ? report.Sections.Sum(section => section.TotalInsuranceAmount) : 0m;
                 report.TotalFinalAmount = includeFinancials ? report.Sections.Sum(section => section.TotalFinalAmount) : 0m;
+                report.TotalCollectedAmount = includeFinancials ? report.Sections.Sum(section => section.TotalCollectedAmount) : 0m;
+                report.TotalUncollectedAmount = includeFinancials ? report.Sections.Sum(section => section.TotalUncollectedAmount) : 0m;
+                report.CashBookingsCount = report.Sections.Sum(section => section.CashBookingsCount);
+                report.InstallmentBookingsCount = report.Sections.Sum(section => section.InstallmentBookingsCount);
+                report.CashFinalAmount = includeFinancials ? report.Sections.Sum(section => section.CashFinalAmount) : 0m;
+                report.InstallmentFinalAmount = includeFinancials ? report.Sections.Sum(section => section.InstallmentFinalAmount) : 0m;
                 response.Data = report;
             }
             catch (Exception ex)
@@ -2186,6 +2211,166 @@ namespace Persistence.Services
                 NormalizeMoneyAmount(bookingAmount),
                 NormalizeMoneyAmount(insuranceAmount),
                 NormalizeMoneyAmount(finalAmount));
+        }
+
+        private readonly struct PaymentCollectionSnapshot
+        {
+            public PaymentCollectionSnapshot(
+                string paymentModeCode,
+                string paymentModeLabel,
+                decimal collectedAmount,
+                decimal uncollectedAmount,
+                bool isFullyCollected,
+                string collectionStatusLabel)
+            {
+                PaymentModeCode = paymentModeCode;
+                PaymentModeLabel = paymentModeLabel;
+                CollectedAmount = collectedAmount;
+                UncollectedAmount = uncollectedAmount;
+                IsFullyCollected = isFullyCollected;
+                CollectionStatusLabel = collectionStatusLabel;
+            }
+
+            public string PaymentModeCode { get; }
+            public string PaymentModeLabel { get; }
+            public decimal CollectedAmount { get; }
+            public decimal UncollectedAmount { get; }
+            public bool IsFullyCollected { get; }
+            public string CollectionStatusLabel { get; }
+        }
+
+        private static PaymentCollectionSnapshot ResolvePaymentCollectionSnapshot(
+            IEnumerable<TkmendField> fields,
+            decimal finalAmount)
+        {
+            var normalizedFinalAmount = NormalizeMoneyAmount(finalAmount);
+            var paymentModeCode = ResolvePaymentModeCode(fields);
+            var paymentModeLabel = ResolvePaymentModeLabel(paymentModeCode);
+            var paymentStatusToken = NormalizeSearchToken(GetFieldValue(fields, PaymentStatusFieldKind));
+            var paidAtUtc = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind));
+
+            var isFullyCollected = paymentStatusToken == "paid" || paidAtUtc.HasValue;
+            decimal collectedAmount;
+            if (isFullyCollected)
+            {
+                collectedAmount = normalizedFinalAmount;
+            }
+            else if (IsInstallmentPaymentMode(paymentModeCode))
+            {
+                collectedAmount = ResolveCollectedInstallmentsAmount(fields);
+            }
+            else
+            {
+                collectedAmount = 0m;
+            }
+
+            collectedAmount = NormalizeMoneyAmount(Math.Max(0m, collectedAmount));
+            if (normalizedFinalAmount > 0m)
+            {
+                collectedAmount = Math.Min(normalizedFinalAmount, collectedAmount);
+            }
+
+            var uncollectedAmount = NormalizeMoneyAmount(Math.Max(0m, normalizedFinalAmount - collectedAmount));
+            if (normalizedFinalAmount <= 0m)
+            {
+                collectedAmount = 0m;
+                uncollectedAmount = 0m;
+                isFullyCollected = true;
+            }
+            else if (uncollectedAmount <= 0m)
+            {
+                collectedAmount = normalizedFinalAmount;
+                uncollectedAmount = 0m;
+                isFullyCollected = true;
+            }
+
+            var collectionStatusLabel = isFullyCollected
+                ? "مسدد"
+                : collectedAmount > 0m
+                    ? "مسدد جزئيًا"
+                    : "غير مسدد";
+
+            return new PaymentCollectionSnapshot(
+                paymentModeCode,
+                paymentModeLabel,
+                collectedAmount,
+                uncollectedAmount,
+                isFullyCollected,
+                collectionStatusLabel);
+        }
+
+        private static decimal ResolveCollectedInstallmentsAmount(IEnumerable<TkmendField> fields)
+        {
+            var total = 0m;
+            for (var installmentNo = 1; installmentNo <= SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount; installmentNo++)
+            {
+                var isPaid = ParseBooleanLike(GetFirstFieldValue(
+                    fields,
+                    SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo))) == true;
+                if (!isPaid)
+                {
+                    continue;
+                }
+
+                var amount = ParseDecimal(
+                    GetFirstFieldValue(fields, SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo)),
+                    0m);
+                total += Math.Max(0m, amount);
+            }
+
+            return NormalizeMoneyAmount(total);
+        }
+
+        private static string ResolvePaymentModeCode(IEnumerable<TkmendField> fields)
+        {
+            var paymentModeRaw = GetFirstFieldValue(fields, PaymentModeFieldKinds);
+            var token = NormalizeSearchToken(paymentModeRaw);
+            if (token.Contains("installment", StringComparison.Ordinal))
+            {
+                return SummerWorkflowDomainConstants.PaymentModes.Installment;
+            }
+
+            if (token.Contains("cash", StringComparison.Ordinal))
+            {
+                return SummerWorkflowDomainConstants.PaymentModes.Cash;
+            }
+
+            var installmentCount = ParseInt(GetFirstFieldValue(fields, InstallmentCountFieldKinds), 0);
+            if (installmentCount > 1)
+            {
+                return SummerWorkflowDomainConstants.PaymentModes.Installment;
+            }
+
+            for (var installmentNo = 1; installmentNo <= SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount; installmentNo++)
+            {
+                var amount = ParseDecimal(
+                    GetFirstFieldValue(fields, SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo)),
+                    0m);
+                if (amount > 0m)
+                {
+                    return SummerWorkflowDomainConstants.PaymentModes.Installment;
+                }
+            }
+
+            return SummerWorkflowDomainConstants.PaymentModes.Cash;
+        }
+
+        private static string ResolvePaymentModeLabel(string paymentModeCode)
+        {
+            return IsInstallmentPaymentMode(paymentModeCode) ? "تقسيط" : "كاش";
+        }
+
+        private static bool IsInstallmentPaymentMode(string? paymentModeCode)
+        {
+            return string.Equals(
+                (paymentModeCode ?? string.Empty).Trim(),
+                SummerWorkflowDomainConstants.PaymentModes.Installment,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsCashPaymentMode(string? paymentModeCode)
+        {
+            return !IsInstallmentPaymentMode(paymentModeCode);
         }
 
         private static decimal NormalizeMoneyAmount(decimal value)

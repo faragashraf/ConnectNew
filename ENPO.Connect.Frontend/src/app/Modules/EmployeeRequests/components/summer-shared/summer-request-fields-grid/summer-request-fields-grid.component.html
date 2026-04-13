@@ -1,8 +1,8 @@
 <section class="fields-card">
   <h5>{{ title }}</h5>
 
-  <div class="details-grid" *ngIf="rows.length > 0; else emptyState">
-    <ng-container *ngFor="let row of rows">
+  <div class="details-grid" *ngIf="displayRows.length > 0; else emptyState">
+    <ng-container *ngFor="let row of displayRows">
       <div class="group-row" *ngIf="isGroupHeader(row)">
         {{ resolveGroupTitle(row) }}
       </div>
@@ -14,7 +14,35 @@
     </ng-container>
   </div>
 
+  <section class="payment-plan-card" *ngIf="hasPaymentPlanTable">
+    <div class="payment-plan-header">
+      <h6>بيان السداد</h6>
+      <span class="payment-mode-chip">طريقة السداد: {{ paymentMethodLabel }}</span>
+    </div>
+
+    <div class="payment-plan-table-wrap">
+      <table class="payment-plan-table">
+        <thead>
+          <tr>
+            <th>البيان</th>
+            <th>القيمة</th>
+            <th>حالة السداد</th>
+            <th>تاريخ السداد</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let paymentRow of paymentPlanRows">
+            <td>{{ paymentRow.title }}</td>
+            <td>{{ paymentRow.amount }}</td>
+            <td>{{ paymentRow.paidState }}</td>
+            <td>{{ paymentRow.paidAt }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <ng-template #emptyState>
-    <p class="empty-sub">{{ emptyMessage }}</p>
+    <p class="empty-sub" *ngIf="!hasPaymentPlanTable">{{ emptyMessage }}</p>
   </ng-template>
 </section>

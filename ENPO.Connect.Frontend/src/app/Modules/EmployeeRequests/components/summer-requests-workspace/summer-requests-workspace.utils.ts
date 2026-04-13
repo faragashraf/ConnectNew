@@ -40,6 +40,13 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   Summer_PaymentDueAtUtc: 'مهلة السداد',
   Summer_PaymentStatus: 'حالة السداد',
   Summer_PaidAtUtc: 'تاريخ السداد',
+  Summer_PaymentMode: 'طريقة السداد',
+  SUM2026_PaymentMode: 'طريقة السداد',
+  PaymentMode: 'طريقة السداد',
+  Summer_PaymentInstallmentCount: 'عدد الأقساط',
+  SUM2026_PaymentInstallmentCount: 'عدد الأقساط',
+  Summer_PaymentInstallmentsTotal: 'إجمالي الأقساط',
+  SUM2026_PaymentInstallmentsTotal: 'إجمالي الأقساط',
   Summer_RequestCreatedAtUtc: 'تاريخ إنشاء الطلب (UTC)',
   Summer_TransferCount: 'عدد مرات التحويل',
   Summer_TransferredAtUtc: 'تاريخ التحويل',
@@ -95,6 +102,11 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   CANCELLED_USER: 'ملغي بناءً على الاعتذار',
   CANCELLED: 'ملغي',
   OVERDUE: 'متأخر عن السداد'
+};
+
+const PAYMENT_MODE_LABELS: Record<string, string> = {
+  CASH: 'كاش',
+  INSTALLMENT: 'تقسيط'
 };
 
 const WORKFLOW_STATE_LABELS: Record<string, string> = {
@@ -257,6 +269,35 @@ function translateValue(value: string, dictionary: Record<string, string>): stri
   return dictionary[normalized] ?? value;
 }
 
+function parseNumberLike(value: string): number | null {
+  const normalized = String(value ?? '').trim().replace(/,/g, '');
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function formatMoneyWithCurrency(value: string): string {
+  const parsed = parseNumberLike(value);
+  if (parsed === null) {
+    return value;
+  }
+
+  const rounded = Math.round(parsed * 100) / 100;
+  const hasFraction = Math.abs(rounded - Math.trunc(rounded)) > 0.0001;
+  const formatted = rounded.toLocaleString('en-US', {
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: 2
+  });
+  return `${formatted} جنيه`;
+}
+
 export function formatRequestFieldValue(fieldKey: string, rawValue: string): string {
   let value = String(rawValue ?? '').trim();
   if (!value) {
@@ -281,6 +322,25 @@ export function formatRequestFieldValue(fieldKey: string, rawValue: string): str
 
   if (normalizedKey.includes('paymentstatus')) {
     return translateValue(value, PAYMENT_STATUS_LABELS);
+  }
+
+  if (normalizedKey.includes('paymentmode')) {
+    return translateValue(value, PAYMENT_MODE_LABELS);
+  }
+
+  if (normalizedKey.includes('paymentinstallmentstotal')
+    || (normalizedKey.includes('paymentinstallment') && normalizedKey.includes('amount'))) {
+    return formatMoneyWithCurrency(value);
+  }
+
+  if (normalizedKey.includes('paymentinstallment')
+    && normalizedKey.includes('paid')
+    && !normalizedKey.includes('paidat')) {
+    const paid = parseBooleanLike(value);
+    if (paid === null) {
+      return value;
+    }
+    return paid ? 'مسدد' : 'غير مسدد';
   }
 
   if (normalizedKey.includes('workflowstate') && !normalizedKey.includes('reason') && !normalizedKey.includes('label')) {
@@ -360,6 +420,7 @@ export function resolveFieldLabel(key: string, labelMap: Record<string, string> 
 }
 
 export type SummerRequestFieldGridRow = {
+  key?: string;
   label: string;
   value: string;
   instanceGroupId: number;
@@ -531,6 +592,39 @@ function resolveCanonicalFieldMeta(
 ): CanonicalFieldMeta {
   const normalized = normalizeFieldToken(fieldKey);
 
+  const installmentAmountMatch = normalized.match(/paymentinstallment(\d+)amount/);
+  if (installmentAmountMatch) {
+    const installmentNo = Math.max(1, Number(installmentAmountMatch[1] ?? '1'));
+    return {
+      id: `payment_installment_${installmentNo}_amount`,
+      label: `قيمة القسط ${installmentNo}`,
+      group: 'workflow',
+      order: 220 + (installmentNo * 3)
+    };
+  }
+
+  const installmentPaidAtMatch = normalized.match(/paymentinstallment(\d+)paidat/);
+  if (installmentPaidAtMatch) {
+    const installmentNo = Math.max(1, Number(installmentPaidAtMatch[1] ?? '1'));
+    return {
+      id: `payment_installment_${installmentNo}_paid_at`,
+      label: `تاريخ سداد القسط ${installmentNo}`,
+      group: 'workflow',
+      order: 221 + (installmentNo * 3)
+    };
+  }
+
+  const installmentPaidMatch = normalized.match(/paymentinstallment(\d+)paid/);
+  if (installmentPaidMatch) {
+    const installmentNo = Math.max(1, Number(installmentPaidMatch[1] ?? '1'));
+    return {
+      id: `payment_installment_${installmentNo}_paid`,
+      label: `حالة سداد القسط ${installmentNo}`,
+      group: 'workflow',
+      order: 222 + (installmentNo * 3)
+    };
+  }
+
   if (normalized.includes('requestref')) {
     return { id: 'request_ref', label: 'رقم الطلب', group: 'workflow', order: 10 };
   }
@@ -653,6 +747,15 @@ function resolveCanonicalFieldMeta(
   if (normalized.includes('adminactionatutc')) {
     return { id: 'admin_action_at', label: 'تاريخ الإجراء الإداري', group: 'workflow', order: 40 };
   }
+  if (normalized.includes('paymentmode')) {
+    return { id: 'payment_mode', label: 'طريقة السداد', group: 'workflow', order: 46 };
+  }
+  if (normalized.includes('paymentinstallmentcount')) {
+    return { id: 'payment_installment_count', label: 'عدد الأقساط', group: 'workflow', order: 47 };
+  }
+  if (normalized.includes('paymentinstallmentstotal')) {
+    return { id: 'payment_installments_total', label: 'إجمالي الأقساط', group: 'workflow', order: 48 };
+  }
   if (normalized.includes('paymentstatus')) {
     return { id: 'payment_status', label: 'حالة السداد', group: 'workflow', order: 50 };
   }
@@ -725,6 +828,7 @@ function appendGroupHeaders(rows: CanonicalFieldRow[]): SummerRequestFieldGridRo
     }
 
     result.push({
+      key: row.id,
       label: row.label,
       value: toDisplayOrDash(row.value),
       instanceGroupId: row.instanceGroupId,

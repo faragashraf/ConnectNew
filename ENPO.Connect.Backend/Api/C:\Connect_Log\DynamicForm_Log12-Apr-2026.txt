@@ -1,0 +1,59 @@
+2026-04-12 23:11:39 | Class: DynamicFormRepository | Method: CreateRequest | Line: 161 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-12 23:11:39 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-12 23:11:39 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-12 23:11:39 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-12 23:11:39 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-12 23:11:39 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-12 23:11:40 | Class: DynamicFormRepository | Method: CreateRequest | Line: 203 | Message: CreateRequest: Handled by SummerRequests path.. 
+2026-04-12 23:12:00 | Class: DynamicFormRepository | Method: CreateRequest | Line: 161 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-12 23:12:00 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-12 23:12:00 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-12 23:12:00 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-12 23:12:01 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-12 23:12:01 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-12 23:12:01 | Class: helperService | Method: ValidateFileSizes | Line: 53 | Message: Starting ValidateFileSizes method.. 
+2026-04-12 23:12:01 | Class: helperService | Method: ValidateFileSizes | Line: 70 | Message: ValidateFileSizes method completed.. 
+2026-04-12 23:12:02 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 563 | Message: SummerRequests: anchored request created time for message 3399 at 2026-04-12T21:12:02.0000000Z; payment due at 2026-04-13T21:12:02.0000000Z.. 
+2026-04-12 23:12:02 | Class: helperService | Method: CreateReply | Line: 76 | Message: Starting CreateReply method.. 
+2026-04-12 23:12:03 | Class: helperService | Method: CreateReply | Line: 78 | Message: Generated replyId: 5473. 
+2026-04-12 23:12:03 | Class: helperService | Method: CreateReply | Line: 89 | Message: CreateReply method completed.. 
+2026-04-12 23:12:03 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 60 | Message: Reply created and added to context.. 
+2026-04-12 23:12:03 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 64 | Message: Message created and added to context.. 
+2026-04-12 23:12:03 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 91 | Message: Fields added to context.. 
+2026-04-12 23:12:03 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 611 | Message: SummerRequests: created message 3399 with RequestRef Summer2026-R-313. 
+2026-04-12 23:12:03 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 732 | Message: PostCommitActionsAsync: summer request update prepared. MessageId=3399, Action=CREATE, CreatedBy=84621, AdminGroups=241, RequestRef=Summer2026-R-313, Category=طلبات العاملين.. 
+2026-04-12 23:12:03 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 756 | Message: PostCommitActionsAsync: dispatched summer admin update. MessageId=3399, Groups=241.. 
+2026-04-12 23:12:03 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 764 | Message: Transactions committed.. 
+2026-04-12 23:12:04 | Class: HandlleEmployeeCategories | Method: DispatchOwnerPricingConfirmationAsync | Line: 1105 | Message: Owner pricing SMS notification failed for MessageId=3399. Errors=-1:nodename nor servname provided, or not known (sms.egyptpost.gov.eg:80). 
+2026-04-12 23:12:04 | Class: HandlleEmployeeCategories | Method: DispatchOwnerPricingConfirmationAsync | Line: 1120 | Message: Owner pricing WhatsApp notification failed for MessageId=3399. Errors=501:WhatsApp channel is not implemented yet.. 
+2026-04-12 23:12:04 | Class: DynamicFormRepository | Method: CreateRequest | Line: 203 | Message: CreateRequest: Handled by SummerRequests path.. 
+2026-04-12 23:15:21 | Class: DynamicFormRepository | Method: CreateRequest | Line: 161 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-12 23:15:21 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-12 23:15:21 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-12 23:15:21 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-12 23:15:21 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-12 23:15:21 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-12 23:15:21 | Class: helperService | Method: ValidateFileSizes | Line: 53 | Message: Starting ValidateFileSizes method.. 
+2026-04-12 23:15:21 | Class: helperService | Method: ValidateFileSizes | Line: 70 | Message: ValidateFileSizes method completed.. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=SUM2026_PaymentInstallment1Amount | FieldKey=SUM2026_PaymentInstallment1Amount | InstanceGroupId=1 | Before=420 | After=500 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=SUM2026_PaymentInstallment1PaidAtUtc | FieldKey=SUM2026_PaymentInstallment1PaidAtUtc | InstanceGroupId=1 | Before=(فارغ) | After=2026-04-12T21:15:00.000Z | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=SUM2026_PaymentInstallment1Paid | FieldKey=SUM2026_PaymentInstallment1Paid | InstanceGroupId=1 | Before=false | After=true | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=SUM2026_PaymentInstallment2Amount | FieldKey=SUM2026_PaymentInstallment2Amount | InstanceGroupId=1 | Before=420 | After=400 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=SUM2026_PaymentInstallment3Amount | FieldKey=SUM2026_PaymentInstallment3Amount | InstanceGroupId=1 | Before=420 | After=400 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=SUM2026_PaymentInstallment4Amount | FieldKey=SUM2026_PaymentInstallment4Amount | InstanceGroupId=1 | Before=420 | After=400 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=SUM2026_PaymentInstallment5Amount | FieldKey=SUM2026_PaymentInstallment5Amount | InstanceGroupId=1 | Before=420 | After=400 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=Summer_PaymentInstallment1Amount | FieldKey=Summer_PaymentInstallment1Amount | InstanceGroupId=1 | Before=420 | After=500 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=Summer_PaymentInstallment1PaidAtUtc | FieldKey=Summer_PaymentInstallment1PaidAtUtc | InstanceGroupId=1 | Before=(فارغ) | After=2026-04-12T21:15:00.000Z | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=Summer_PaymentInstallment1Paid | FieldKey=Summer_PaymentInstallment1Paid | InstanceGroupId=1 | Before=false | After=true | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=Summer_PaymentInstallment2Amount | FieldKey=Summer_PaymentInstallment2Amount | InstanceGroupId=1 | Before=420 | After=400 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=Summer_PaymentInstallment3Amount | FieldKey=Summer_PaymentInstallment3Amount | InstanceGroupId=1 | Before=420 | After=400 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=Summer_PaymentInstallment4Amount | FieldKey=Summer_PaymentInstallment4Amount | InstanceGroupId=1 | Before=420 | After=400 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 1815 | Message: SummerRequests FieldAudit | MessageId=3399 | Operation=تعديل | Group=بدون مجموعة | Field=Summer_PaymentInstallment5Amount | FieldKey=Summer_PaymentInstallment5Amount | InstanceGroupId=1 | Before=420 | After=400 | ChangedBy=84621. 
+2026-04-12 23:15:22 | Class: helperService | Method: CreateReply | Line: 76 | Message: Starting CreateReply method.. 
+2026-04-12 23:15:22 | Class: helperService | Method: CreateReply | Line: 78 | Message: Generated replyId: 5474. 
+2026-04-12 23:15:22 | Class: helperService | Method: CreateReply | Line: 89 | Message: CreateReply method completed.. 
+2026-04-12 23:15:23 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 611 | Message: SummerRequests: updated message 3399 with RequestRef Summer2026-R-313. 
+2026-04-12 23:15:23 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 732 | Message: PostCommitActionsAsync: summer request update prepared. MessageId=3399, Action=EDIT, CreatedBy=84621, AdminGroups=241, RequestRef=Summer2026-R-313, Category=طلبات العاملين.. 
+2026-04-12 23:15:23 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 756 | Message: PostCommitActionsAsync: dispatched summer admin update. MessageId=3399, Groups=241.. 
+2026-04-12 23:15:23 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 764 | Message: Transactions committed.. 
+2026-04-12 23:15:24 | Class: DynamicFormRepository | Method: CreateRequest | Line: 203 | Message: CreateRequest: Handled by SummerRequests path.. 

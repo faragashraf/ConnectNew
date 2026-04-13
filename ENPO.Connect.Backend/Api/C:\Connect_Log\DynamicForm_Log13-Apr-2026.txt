@@ -1,0 +1,21 @@
+2026-04-13 11:07:17 | Class: DynamicFormRepository | Method: CreateRequest | Line: 162 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-13 11:07:17 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-13 11:07:17 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-13 11:07:17 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-13 11:07:18 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-13 11:07:18 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-13 11:07:18 | Class: DynamicFormRepository | Method: CreateRequest | Line: 205 | Message: CreateRequest: Handled by SummerRequests path.. 
+2026-04-13 11:07:30 | Class: DynamicFormRepository | Method: CreateRequest | Line: 162 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-13 11:07:30 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-13 11:07:30 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-13 11:07:30 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-13 11:07:30 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-13 11:07:30 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-13 11:07:30 | Class: DynamicFormRepository | Method: CreateRequest | Line: 205 | Message: CreateRequest: Handled by SummerRequests path.. 
+2026-04-13 11:09:06 | Class: DynamicFormRepository | Method: CreateRequest | Line: 162 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-13 11:09:06 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-13 11:09:07 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-13 11:09:07 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-13 11:09:07 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-13 11:09:07 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-13 11:09:07 | Class: DynamicFormRepository | Method: CreateRequest | Line: 205 | Message: CreateRequest: Handled by SummerRequests path.. 

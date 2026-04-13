@@ -1338,6 +1338,24 @@ button.ghost:hover:not(:disabled) {
   color: #0f4e79;
 }
 
+.wave-bookings-wave-group-totals span.is-collected {
+  background: #ebf8f0;
+  border-color: #b9e1cc;
+  color: #1a6a44;
+}
+
+.wave-bookings-wave-group-totals span.is-uncollected {
+  background: #fff2f2;
+  border-color: #efc7c7;
+  color: #9d2525;
+}
+
+.wave-bookings-wave-group-totals span.is-payment-mode {
+  background: #f2f7ff;
+  border-color: #c8daf3;
+  color: #204f81;
+}
+
 .wave-bookings-section-header {
   display: flex;
   align-items: flex-start;
@@ -1388,6 +1406,24 @@ button.ghost:hover:not(:disabled) {
   background: #eaf6ff;
   border-color: #b9d8ef;
   color: #0f4f7b;
+}
+
+.wave-bookings-section-financial span.is-collected {
+  background: #ebf8f0;
+  border-color: #b9e1cc;
+  color: #1a6a44;
+}
+
+.wave-bookings-section-financial span.is-uncollected {
+  background: #fff2f2;
+  border-color: #efc7c7;
+  color: #9d2525;
+}
+
+.wave-bookings-section-financial span.is-payment-mode {
+  background: #f2f7ff;
+  border-color: #c8daf3;
+  color: #204f81;
 }
 
 .wave-bookings-table-wrap {
@@ -1461,6 +1497,20 @@ button.ghost:hover:not(:disabled) {
   line-height: 1.45;
 }
 
+.wave-bookings-table .col-payment-mode {
+  min-width: 102px;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.wave-bookings-table .col-collection-status {
+  min-width: 114px;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
 .wave-bookings-table .col-request-ref {
   min-width: 96px;
   text-align: center;
@@ -1505,6 +1555,14 @@ button.ghost:hover:not(:disabled) {
   text-align: center;
   white-space: nowrap;
   font-weight: 700;
+}
+
+.wave-bookings-table .col-collected {
+  color: #1a6a44;
+}
+
+.wave-bookings-table .col-uncollected {
+  color: #9d2525;
 }
 
 .wave-bookings-table .col-money-final {
@@ -1556,6 +1614,24 @@ button.ghost:hover:not(:disabled) {
   background: #e6f4ff;
   border-color: #95c8e6;
   color: #0c4b74;
+}
+
+.wave-bookings-summary-financial .is-collected {
+  background: #ebf8f0;
+  border-color: #b9e1cc;
+  color: #1a6a44;
+}
+
+.wave-bookings-summary-financial .is-uncollected {
+  background: #fff2f2;
+  border-color: #efc7c7;
+  color: #9d2525;
+}
+
+.wave-bookings-summary-financial .is-payment-mode {
+  background: #f2f7ff;
+  border-color: #c8daf3;
+  color: #204f81;
 }
 
 .all-resorts-summary-section {
@@ -1620,6 +1696,24 @@ button.ghost:hover:not(:disabled) {
   color: #0f4e79;
 }
 
+.all-resorts-summary-totals span.is-collected {
+  background: #ebf8f0;
+  border-color: #b9e1cc;
+  color: #1a6a44;
+}
+
+.all-resorts-summary-totals span.is-uncollected {
+  background: #fff2f2;
+  border-color: #efc7c7;
+  color: #9d2525;
+}
+
+.all-resorts-summary-totals span.is-payment-mode {
+  background: #f2f7ff;
+  border-color: #c8daf3;
+  color: #204f81;
+}
+
 .all-resorts-summary-table .col-wave {
   min-width: 120px;
   text-align: center;
@@ -1628,6 +1722,12 @@ button.ghost:hover:not(:disabled) {
 
 .all-resorts-summary-table .col-count {
   min-width: 110px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.all-resorts-summary-table .col-payment-count {
+  min-width: 102px;
   text-align: center;
   white-space: nowrap;
 }
@@ -1685,6 +1785,56 @@ button.ghost:hover:not(:disabled) {
 
 .request-print-fields-grid article.is-wide {
   grid-column: span 3;
+}
+
+.request-print-payment-plan-section {
+  display: grid;
+  gap: 10px;
+}
+
+.request-print-payment-plan-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.request-print-payment-plan-header h3 {
+  margin: 0;
+}
+
+.request-print-payment-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #c8daf0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: #eef6ff;
+  color: #18496b;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.request-print-payment-plan-table .col-payment-title {
+  min-width: 130px;
+}
+
+.request-print-payment-plan-table .col-payment-state {
+  min-width: 120px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.request-print-payment-plan-table .col-payment-date {
+  min-width: 165px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.request-print-payment-plan-table td.col-payment-date {
+  direction: ltr;
 }
 
 .request-print-simple-list {
@@ -1751,6 +1901,11 @@ button.ghost:hover:not(:disabled) {
 }
 
 .wave-bookings-print-footer-item {
+  display: none;
+}
+
+.request-print-top-markers,
+.request-print-top-marker {
   display: none;
 }
 
@@ -2052,6 +2207,11 @@ button.ghost:hover:not(:disabled) {
     grid-column: span 1;
   }
 
+  .request-print-payment-plan-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .pager,
   .pager-controls,
   .page-buttons {
@@ -2080,7 +2240,7 @@ button.ghost:hover:not(:disabled) {
 @media print {
   @page {
     size: A4;
-    margin: 8mm 8mm 12mm;
+    margin: 8mm 8mm 18mm;
   }
 
   ::ng-deep body.wave-bookings-print-mode {
@@ -2154,6 +2314,10 @@ button.ghost:hover:not(:disabled) {
     border-radius: 0 !important;
     padding: 0 !important;
     position: relative !important;
+  }
+
+  ::ng-deep body.wave-bookings-print-mode .request-admin-print-doc {
+    padding-top: 9mm !important;
   }
 
   ::ng-deep body.wave-bookings-print-mode .wave-bookings-doc-header {
@@ -2240,6 +2404,11 @@ button.ghost:hover:not(:disabled) {
     width: 9% !important;
   }
 
+  ::ng-deep body.wave-bookings-print-mode .wave-bookings-table .col-payment-mode,
+  ::ng-deep body.wave-bookings-print-mode .wave-bookings-table .col-collection-status {
+    width: 7% !important;
+  }
+
   ::ng-deep body.wave-bookings-print-mode .wave-bookings-table .col-money {
     width: 8% !important;
   }
@@ -2258,12 +2427,32 @@ button.ghost:hover:not(:disabled) {
     width: 9% !important;
   }
 
+  ::ng-deep body.wave-bookings-print-mode .request-print-payment-plan-table .col-payment-title {
+    width: 30% !important;
+  }
+
+  ::ng-deep body.wave-bookings-print-mode .request-print-payment-plan-table .col-money {
+    width: 22% !important;
+  }
+
+  ::ng-deep body.wave-bookings-print-mode .request-print-payment-plan-table .col-payment-state {
+    width: 22% !important;
+  }
+
+  ::ng-deep body.wave-bookings-print-mode .request-print-payment-plan-table .col-payment-date {
+    width: 26% !important;
+  }
+
   ::ng-deep body.wave-bookings-print-mode .all-resorts-summary-table .col-wave {
     width: 24% !important;
   }
 
   ::ng-deep body.wave-bookings-print-mode .all-resorts-summary-table .col-count {
     width: 20% !important;
+  }
+
+  ::ng-deep body.wave-bookings-print-mode .all-resorts-summary-table .col-payment-count {
+    width: 12% !important;
   }
 
   ::ng-deep body.wave-bookings-print-mode .wave-bookings-table tr,
@@ -2296,6 +2485,20 @@ button.ghost:hover:not(:disabled) {
   ::ng-deep body.wave-bookings-print-mode .wave-bookings-section-financial span {
     border-color: #ccd8e3 !important;
     background: #fff !important;
+  }
+
+  ::ng-deep body.wave-bookings-print-mode .wave-bookings-summary-financial span.is-collected,
+  ::ng-deep body.wave-bookings-print-mode .wave-bookings-section-financial span.is-collected,
+  ::ng-deep body.wave-bookings-print-mode .wave-bookings-wave-group-totals span.is-collected,
+  ::ng-deep body.wave-bookings-print-mode .all-resorts-summary-totals span.is-collected {
+    color: #1a6a44 !important;
+  }
+
+  ::ng-deep body.wave-bookings-print-mode .wave-bookings-summary-financial span.is-uncollected,
+  ::ng-deep body.wave-bookings-print-mode .wave-bookings-section-financial span.is-uncollected,
+  ::ng-deep body.wave-bookings-print-mode .wave-bookings-wave-group-totals span.is-uncollected,
+  ::ng-deep body.wave-bookings-print-mode .all-resorts-summary-totals span.is-uncollected {
+    color: #9d2525 !important;
   }
 
   ::ng-deep body.wave-bookings-print-mode .wave-bookings-wave-group-totals span,
@@ -2349,4 +2552,26 @@ button.ghost:hover:not(:disabled) {
     transform: translateY(-100%);
     white-space: nowrap;
   }
+
+  ::ng-deep body.wave-bookings-print-mode .request-print-top-markers {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    z-index: 6;
+  }
+
+  ::ng-deep body.wave-bookings-print-mode .request-print-top-marker {
+    display: block !important;
+    position: absolute !important;
+    left: 8mm;
+    right: auto;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    color: #3f5668;
+    direction: ltr;
+    white-space: nowrap;
+  }
+
 }

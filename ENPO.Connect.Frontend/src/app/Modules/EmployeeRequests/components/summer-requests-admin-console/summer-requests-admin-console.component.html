@@ -31,7 +31,7 @@
     </div>
   </section>
 
-  <section class="scope-panel">
+  <section class="scope-panel" *ngIf="canManageSummerPricing">
     <div class="scope-row">
       <button type="button" class="ghost" routerLink="/Admin/resorts/unit-freeze">
         إدارة تجميد الوحدات
@@ -570,6 +570,10 @@
               <div class="wave-bookings-section-financial" *ngIf="showWaveBookingsFinancialColumns">
                 <span>إجمالي الحجز: {{ formatMoney(section.totalBookingAmount) }} ج.م</span>
                 <span>إجمالي التأمين: {{ formatMoney(section.totalInsuranceAmount) }} ج.م</span>
+                <span class="is-collected">المحصل: {{ formatMoney(section.totalCollectedAmount) }} ج.م</span>
+                <span class="is-uncollected">غير المحصل: {{ formatMoney(section.totalUncollectedAmount) }} ج.م</span>
+                <span class="is-payment-mode">طلبات كاش: {{ formatWholeNumber(section.cashBookingsCount) }} ({{ formatMoney(section.cashFinalAmount) }} ج.م)</span>
+                <span class="is-payment-mode">طلبات تقسيط: {{ formatWholeNumber(section.installmentBookingsCount) }} ({{ formatMoney(section.installmentFinalAmount) }} ج.م)</span>
                 <span class="is-final">الإجمالي النهائي: {{ formatMoney(section.totalFinalAmount) }} ج.م</span>
               </div>
             </header>
@@ -585,6 +589,10 @@
                     <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ الحجز</th>
                     <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ التأمين</th>
                     <th class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي</th>
+                    <th class="col-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طريقة السداد</th>
+                    <th class="col-collection-status" *ngIf="showWaveBookingsFinancialColumns">حالة السداد</th>
+                    <th class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل</th>
+                    <th class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل</th>
                     <th class="col-request-ref" *ngIf="showWaveBookingsPrintRequestRefColumn">رقم الطلب</th>
                     <th class="col-persons" *ngIf="showWaveBookingsPrintPersonsCountColumn">عدد الأفراد</th>
                     <th class="col-status" *ngIf="showWaveBookingsPrintStatusColumn">الحالة</th>
@@ -601,6 +609,10 @@
                     <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.bookingAmount) }} ج.م</td>
                     <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.insuranceAmount) }} ج.م</td>
                     <td class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.finalAmount) }} ج.م</td>
+                    <td class="col-payment-mode" *ngIf="showWaveBookingsFinancialColumns">{{ resolveWaveBookingsPrintText(resolvePaymentModeLabel(row)) }}</td>
+                    <td class="col-collection-status" *ngIf="showWaveBookingsFinancialColumns">{{ resolveWaveBookingsPrintText(resolveCollectionStatusLabel(row)) }}</td>
+                    <td class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.collectedAmount) }} ج.م</td>
+                    <td class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.uncollectedAmount) }} ج.م</td>
                     <td class="col-request-ref" *ngIf="showWaveBookingsPrintRequestRefColumn">{{ resolveWaveBookingsPrintText(row.requestRef) }}</td>
                     <td class="col-persons" *ngIf="showWaveBookingsPrintPersonsCountColumn">{{ row.personsCount > 0 ? formatWholeNumber(row.personsCount) : '-' }}</td>
                     <td class="col-status" *ngIf="showWaveBookingsPrintStatusColumn">{{ resolveWaveBookingsPrintText(row.statusLabel) }}</td>
@@ -619,6 +631,10 @@
             <div class="wave-bookings-summary-financial" *ngIf="showWaveBookingsFinancialSummary">
               <span>إجمالي مبلغ الحجز: {{ formatMoney(waveBookingsPrintTotalBookingAmount) }} ج.م</span>
               <span>إجمالي مبلغ التأمين: {{ formatMoney(waveBookingsPrintTotalInsuranceAmount) }} ج.م</span>
+              <span class="is-collected">إجمالي المحصل: {{ formatMoney(waveBookingsPrintTotalCollectedAmount) }} ج.م</span>
+              <span class="is-uncollected">إجمالي غير المحصل: {{ formatMoney(waveBookingsPrintTotalUncollectedAmount) }} ج.م</span>
+              <span class="is-payment-mode">طلبات كاش: {{ formatWholeNumber(waveBookingsPrintCashBookingsCount) }} ({{ formatMoney(waveBookingsPrintCashFinalAmount) }} ج.م)</span>
+              <span class="is-payment-mode">طلبات تقسيط: {{ formatWholeNumber(waveBookingsPrintInstallmentBookingsCount) }} ({{ formatMoney(waveBookingsPrintInstallmentFinalAmount) }} ج.م)</span>
               <span class="is-grand-total">الإجمالي النهائي للتقرير: {{ formatMoney(waveBookingsPrintTotalFinalAmount) }} ج.م</span>
             </div>
           </footer>
@@ -731,6 +747,10 @@
                 <span>إجمالي الطلبات: {{ formatWholeNumber(waveGroup.totalBookings) }}</span>
                 <span *ngIf="showWaveBookingsFinancialColumns">إجمالي الحجز: {{ formatMoney(waveGroup.totalBookingAmount) }} ج.م</span>
                 <span *ngIf="showWaveBookingsFinancialColumns">إجمالي التأمين: {{ formatMoney(waveGroup.totalInsuranceAmount) }} ج.م</span>
+                <span class="is-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل: {{ formatMoney(waveGroup.totalCollectedAmount) }} ج.م</span>
+                <span class="is-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل: {{ formatMoney(waveGroup.totalUncollectedAmount) }} ج.م</span>
+                <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش: {{ formatWholeNumber(waveGroup.cashBookingsCount) }} ({{ formatMoney(waveGroup.cashFinalAmount) }} ج.م)</span>
+                <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط: {{ formatWholeNumber(waveGroup.installmentBookingsCount) }} ({{ formatMoney(waveGroup.installmentFinalAmount) }} ج.م)</span>
                 <span class="is-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي: {{ formatMoney(waveGroup.totalFinalAmount) }} ج.م</span>
               </div>
             </header>
@@ -744,6 +764,10 @@
                 <div class="wave-bookings-section-financial" *ngIf="showWaveBookingsFinancialColumns">
                   <span>إجمالي الحجز: {{ formatMoney(section.totalBookingAmount) }} ج.م</span>
                   <span>إجمالي التأمين: {{ formatMoney(section.totalInsuranceAmount) }} ج.م</span>
+                  <span class="is-collected">المحصل: {{ formatMoney(section.totalCollectedAmount) }} ج.م</span>
+                  <span class="is-uncollected">غير المحصل: {{ formatMoney(section.totalUncollectedAmount) }} ج.م</span>
+                  <span class="is-payment-mode">طلبات كاش: {{ formatWholeNumber(section.cashBookingsCount) }} ({{ formatMoney(section.cashFinalAmount) }} ج.م)</span>
+                  <span class="is-payment-mode">طلبات تقسيط: {{ formatWholeNumber(section.installmentBookingsCount) }} ({{ formatMoney(section.installmentFinalAmount) }} ج.م)</span>
                   <span class="is-final">الإجمالي النهائي: {{ formatMoney(section.totalFinalAmount) }} ج.م</span>
                 </div>
               </header>
@@ -759,6 +783,10 @@
                       <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ الحجز</th>
                       <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ التأمين</th>
                       <th class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي</th>
+                      <th class="col-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طريقة السداد</th>
+                      <th class="col-collection-status" *ngIf="showWaveBookingsFinancialColumns">حالة السداد</th>
+                      <th class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل</th>
+                      <th class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل</th>
                       <th class="col-request-ref" *ngIf="showResortBookingsPrintRequestRefColumn">رقم الطلب</th>
                       <th class="col-persons" *ngIf="showResortBookingsPrintPersonsCountColumn">عدد الأفراد</th>
                       <th class="col-status" *ngIf="showResortBookingsPrintStatusColumn">الحالة</th>
@@ -775,6 +803,10 @@
                       <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.bookingAmount) }} ج.م</td>
                       <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.insuranceAmount) }} ج.م</td>
                       <td class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.finalAmount) }} ج.م</td>
+                      <td class="col-payment-mode" *ngIf="showWaveBookingsFinancialColumns">{{ resolveWaveBookingsPrintText(resolvePaymentModeLabel(row)) }}</td>
+                      <td class="col-collection-status" *ngIf="showWaveBookingsFinancialColumns">{{ resolveWaveBookingsPrintText(resolveCollectionStatusLabel(row)) }}</td>
+                      <td class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.collectedAmount) }} ج.م</td>
+                      <td class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.uncollectedAmount) }} ج.م</td>
                       <td class="col-request-ref" *ngIf="showResortBookingsPrintRequestRefColumn">{{ resolveWaveBookingsPrintText(row.requestRef) }}</td>
                       <td class="col-persons" *ngIf="showResortBookingsPrintPersonsCountColumn">{{ row.personsCount > 0 ? formatWholeNumber(row.personsCount) : '-' }}</td>
                       <td class="col-status" *ngIf="showResortBookingsPrintStatusColumn">{{ resolveWaveBookingsPrintText(row.statusLabel) }}</td>
@@ -795,6 +827,10 @@
               <span>إجمالي الأفراد: {{ formatWholeNumber(report.totalPersons) }}</span>
               <span *ngIf="showWaveBookingsFinancialColumns">إجمالي مبلغ الحجز: {{ formatMoney(report.totalBookingAmount) }} ج.م</span>
               <span *ngIf="showWaveBookingsFinancialColumns">إجمالي مبلغ التأمين: {{ formatMoney(report.totalInsuranceAmount) }} ج.م</span>
+              <span class="is-collected" *ngIf="showWaveBookingsFinancialColumns">إجمالي المحصل: {{ formatMoney(report.totalCollectedAmount) }} ج.م</span>
+              <span class="is-uncollected" *ngIf="showWaveBookingsFinancialColumns">إجمالي غير المحصل: {{ formatMoney(report.totalUncollectedAmount) }} ج.م</span>
+              <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش: {{ formatWholeNumber(report.cashBookingsCount) }} ({{ formatMoney(report.cashFinalAmount) }} ج.م)</span>
+              <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط: {{ formatWholeNumber(report.installmentBookingsCount) }} ({{ formatMoney(report.installmentFinalAmount) }} ج.م)</span>
               <span class="is-grand-total" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي للتقرير: {{ formatMoney(report.totalFinalAmount) }} ج.م</span>
             </div>
           </footer>
@@ -906,6 +942,10 @@
                 <span>الأفراد: {{ formatWholeNumber(resort.totalPersons) }}</span>
                 <span *ngIf="showWaveBookingsFinancialColumns">إجمالي الحجز: {{ formatMoney(resort.totalBookingAmount) }} ج.م</span>
                 <span *ngIf="showWaveBookingsFinancialColumns">إجمالي التأمين: {{ formatMoney(resort.totalInsuranceAmount) }} ج.م</span>
+                <span class="is-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل: {{ formatMoney(resort.totalCollectedAmount) }} ج.م</span>
+                <span class="is-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل: {{ formatMoney(resort.totalUncollectedAmount) }} ج.م</span>
+                <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش: {{ formatWholeNumber(resort.cashBookingsCount) }} ({{ formatMoney(resort.cashFinalAmount) }} ج.م)</span>
+                <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط: {{ formatWholeNumber(resort.installmentBookingsCount) }} ({{ formatMoney(resort.installmentFinalAmount) }} ج.م)</span>
                 <span class="is-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي: {{ formatMoney(resort.totalFinalAmount) }} ج.م</span>
               </div>
             </header>
@@ -921,6 +961,10 @@
                     <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ الحجز</th>
                     <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ التأمين</th>
                     <th class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي</th>
+                    <th class="col-payment-count" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش</th>
+                    <th class="col-payment-count" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط</th>
+                    <th class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل</th>
+                    <th class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -932,6 +976,10 @@
                     <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalBookingAmount) }} ج.م</td>
                     <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalInsuranceAmount) }} ج.م</td>
                     <td class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalFinalAmount) }} ج.م</td>
+                    <td class="col-payment-count" *ngIf="showWaveBookingsFinancialColumns">{{ formatWholeNumber(wave.cashBookingsCount) }}</td>
+                    <td class="col-payment-count" *ngIf="showWaveBookingsFinancialColumns">{{ formatWholeNumber(wave.installmentBookingsCount) }}</td>
+                    <td class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalCollectedAmount) }} ج.م</td>
+                    <td class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalUncollectedAmount) }} ج.م</td>
                   </tr>
                 </tbody>
               </table>
@@ -948,6 +996,10 @@
               <span>إجمالي الأفراد: {{ formatWholeNumber(report.totalPersons) }}</span>
               <span *ngIf="showWaveBookingsFinancialColumns">إجمالي مبلغ الحجز: {{ formatMoney(report.totalBookingAmount) }} ج.م</span>
               <span *ngIf="showWaveBookingsFinancialColumns">إجمالي مبلغ التأمين: {{ formatMoney(report.totalInsuranceAmount) }} ج.م</span>
+              <span class="is-collected" *ngIf="showWaveBookingsFinancialColumns">إجمالي المحصل: {{ formatMoney(report.totalCollectedAmount) }} ج.م</span>
+              <span class="is-uncollected" *ngIf="showWaveBookingsFinancialColumns">إجمالي غير المحصل: {{ formatMoney(report.totalUncollectedAmount) }} ج.م</span>
+              <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش: {{ formatWholeNumber(report.cashBookingsCount) }} ({{ formatMoney(report.cashFinalAmount) }} ج.م)</span>
+              <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط: {{ formatWholeNumber(report.installmentBookingsCount) }} ({{ formatMoney(report.installmentFinalAmount) }} ج.م)</span>
               <span class="is-grand-total" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي: {{ formatMoney(report.totalFinalAmount) }} ج.م</span>
             </div>
           </footer>
@@ -998,6 +1050,14 @@
           #requestAdminPrintDocument
           class="wave-bookings-print-doc request-admin-print-doc"
           *ngIf="selectedRequest as request">
+          <div class="request-print-top-markers" *ngIf="requestAdminPrintFooterMarkers.length > 0">
+            <span
+              class="request-print-top-marker"
+              *ngFor="let marker of requestAdminPrintFooterMarkers; let pageIndex = index"
+              [style.top.px]="marker.topPx">
+              Page {{ pageIndex + 1 }} of {{ requestAdminPrintFooterMarkers.length }}
+            </span>
+          </div>
           <header class="wave-bookings-doc-header">
             <h2>نموذج بيانات طلب الحجز</h2>
             <div class="wave-bookings-meta-grid">
@@ -1042,10 +1102,37 @@
           <section class="request-print-section">
             <h3>تفاصيل الحجز</h3>
             <div class="request-print-fields-grid">
-              <article *ngFor="let row of selectedRequestFields" [class.is-wide]="isRequestPrintFieldWide(row)">
+              <article *ngFor="let row of selectedRequestPrintFields" [class.is-wide]="isRequestPrintFieldWide(row)">
                 <span>{{ row.label }}</span>
                 <strong>{{ formatRequestPrintFieldValue(row.value) }}</strong>
               </article>
+            </div>
+          </section>
+
+          <section class="request-print-section request-print-payment-plan-section" *ngIf="hasSelectedRequestPaymentPlan">
+            <div class="request-print-payment-plan-header">
+              <h3>بيان السداد</h3>
+              <span class="request-print-payment-mode-chip">طريقة السداد: {{ selectedRequestPaymentMethodLabel }}</span>
+            </div>
+            <div class="wave-bookings-table-wrap">
+              <table class="wave-bookings-table request-print-payment-plan-table">
+                <thead>
+                  <tr>
+                    <th class="col-payment-title">البيان</th>
+                    <th class="col-money">القيمة</th>
+                    <th class="col-payment-state">حالة السداد</th>
+                    <th class="col-payment-date">تاريخ السداد</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let paymentRow of selectedRequestPaymentPlanRows">
+                    <td class="col-payment-title">{{ paymentRow.title }}</td>
+                    <td class="col-money">{{ paymentRow.amount }}</td>
+                    <td class="col-payment-state">{{ paymentRow.paidState }}</td>
+                    <td class="col-payment-date">{{ paymentRow.paidAt }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </section>
 
@@ -1101,14 +1188,6 @@
             </div>
           </section>
 
-          <div class="wave-bookings-print-footer-layer" *ngIf="requestAdminPrintFooterMarkers.length > 0">
-            <span
-              class="wave-bookings-print-footer-item"
-              *ngFor="let marker of requestAdminPrintFooterMarkers; trackBy: trackByWaveBookingsPrintFooter"
-              [style.top.px]="marker.topPx">
-              Page {{ marker.pageNumber }} of {{ requestAdminPrintTotalPages }}
-            </span>
-          </div>
         </section>
       </div>
     </div>

@@ -129,6 +129,86 @@
       </article>
     </div>
 
+    <section class="payment-plan-shell" *ngIf="!pricingQuoteLoading && pricingQuote as quote">
+      <div class="payment-mode-row">
+        <label>
+          <span class="required-label">أسلوب السداد</span>
+          <select
+            [ngModel]="selectedPaymentMode"
+            [ngModelOptions]="{ standalone: true }"
+            (ngModelChange)="onPaymentModeChanged($event)"
+            [disabled]="submitting || loadingMetadata || loadingEditRequest">
+            <option *ngFor="let option of paymentModeOptions" [ngValue]="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <label *ngIf="isInstallmentMode">
+          <span class="required-label">عدد الأقساط</span>
+          <select
+            [ngModel]="selectedInstallmentCount"
+            [ngModelOptions]="{ standalone: true }"
+            (ngModelChange)="onInstallmentCountChanged($event)"
+            [disabled]="submitting || loadingMetadata || loadingEditRequest">
+            <option *ngFor="let count of installmentCountOptions" [ngValue]="count">
+              {{ count }}
+            </option>
+          </select>
+        </label>
+        <small class="mode-note" *ngIf="isInstallmentMode">
+          يتم إنشاء {{ selectedInstallmentCount }} أقساط تلقائيًا من إجمالي الحجز حسب العدد المختار.
+        </small>
+      </div>
+
+      <div class="installment-grid" *ngIf="isInstallmentMode">
+        <article class="installment-card" *ngFor="let installment of installmentPlan">
+          <header>
+            <strong>القسط {{ installment.installmentNo }}</strong>
+          </header>
+          <label>
+            <span>قيمة القسط</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              [ngModel]="installment.amount"
+              [ngModelOptions]="{ standalone: true }"
+              [disabled]="!canEditInstallmentPlanManually || submitting"
+              (ngModelChange)="onInstallmentAmountChanged(installment.installmentNo, $event)" />
+          </label>
+          <label class="installment-paid-toggle">
+            <input
+              type="checkbox"
+              [checked]="installment.isPaid"
+              [disabled]="!canManageInstallmentPaymentState || submitting"
+              (change)="onInstallmentPaidChanged(installment.installmentNo, $any($event.target).checked)" />
+            <span>تم السداد</span>
+          </label>
+          <label>
+            <span>تاريخ السداد</span>
+            <input
+              type="datetime-local"
+              [ngModel]="installment.paidAtLocal"
+              [ngModelOptions]="{ standalone: true }"
+              [disabled]="!canManageInstallmentPaymentState || !installment.isPaid || submitting"
+              (ngModelChange)="onInstallmentPaidAtChanged(installment.installmentNo, $event)" />
+          </label>
+        </article>
+      </div>
+
+      <div class="installment-summary" *ngIf="isInstallmentMode">
+        <span>إجمالي الأقساط</span>
+        <strong>{{ formatPriceValue(installmentPlanTotalAmount) }}</strong>
+        <span>/</span>
+        <span>إجمالي الحجز</span>
+        <strong>{{ formatPriceValue(quote.grandTotal) }}</strong>
+      </div>
+      <p class="warn" *ngIf="isInstallmentMode && installmentPlanError.length > 0">{{ installmentPlanError }}</p>
+      <!-- <small class="mode-note" *ngIf="isInstallmentMode && !canEditInstallmentPlanManually">
+        تعديل قيم الأقساط وتسجيل السداد متاحان للمدير العام فقط.
+      </small> -->
+    </section>
+
     <p class="pricing-note" *ngIf="!pricingQuoteLoading && pricingQuote as quote">
       <ng-container *ngIf="quote.transportationMandatory || isTransportIncludedMode">
         الانتقالات إلزامية لهذا المصيف

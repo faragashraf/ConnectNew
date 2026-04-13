@@ -213,6 +213,127 @@
   font-weight: 600;
 }
 
+.payment-plan-shell {
+  margin-top: 0.2rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #c6e4d3;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.payment-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+}
+
+.payment-mode-row label {
+  display: grid;
+  gap: 0.35rem;
+  width: min(260px, 100%);
+}
+
+.payment-mode-row select {
+  border: 1px solid #c5d4e3;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  background: #fff;
+  min-height: 42px;
+}
+
+.payment-mode-row .mode-note {
+  width: 100%;
+}
+
+.installment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.7rem;
+}
+
+.installment-card {
+  border: 1px solid #cce3d4;
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: #fff;
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+}
+
+.installment-card header strong {
+  color: #145d3c;
+  font-size: 1.05rem;
+}
+
+.installment-card label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.installment-card label span {
+  color: #3f6f57;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.installment-card input[type='number'],
+.installment-card input[type='datetime-local'] {
+  border: 1px solid #c5d4e3;
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  background: #fff;
+  min-height: 42px;
+  font-size: 1rem;
+}
+
+.installment-card input[type='number'] {
+  text-align: center;
+  direction: ltr;
+}
+
+.installment-paid-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.installment-paid-toggle input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+}
+
+.installment-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  color: #145d3c;
+  font-weight: 700;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .payment-mode-row {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .payment-mode-row label {
+    width: 100%;
+  }
+
+  .installment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .installment-summary {
+    justify-content: flex-start;
+  }
+}
+
 .meta-error {
   color: #b33131;
 }

@@ -66,6 +66,12 @@ public class SummerWaveBookingsPrintReportDto
     public decimal TotalBookingAmount { get; set; }
     public decimal TotalInsuranceAmount { get; set; }
     public decimal TotalFinalAmount { get; set; }
+    public decimal TotalCollectedAmount { get; set; }
+    public decimal TotalUncollectedAmount { get; set; }
+    public int CashBookingsCount { get; set; }
+    public int InstallmentBookingsCount { get; set; }
+    public decimal CashFinalAmount { get; set; }
+    public decimal InstallmentFinalAmount { get; set; }
     public List<SummerWaveBookingsPrintSectionDto> Sections { get; set; } = new();
 }
 
@@ -77,6 +83,12 @@ public class SummerWaveBookingsPrintSectionDto
     public decimal TotalBookingAmount { get; set; }
     public decimal TotalInsuranceAmount { get; set; }
     public decimal TotalFinalAmount { get; set; }
+    public decimal TotalCollectedAmount { get; set; }
+    public decimal TotalUncollectedAmount { get; set; }
+    public int CashBookingsCount { get; set; }
+    public int InstallmentBookingsCount { get; set; }
+    public decimal CashFinalAmount { get; set; }
+    public decimal InstallmentFinalAmount { get; set; }
     public List<SummerWaveBookingPrintRowDto> Rows { get; set; } = new();
 }
 
@@ -91,9 +103,15 @@ public class SummerWaveBookingPrintRowDto
     public int PersonsCount { get; set; }
     public string StatusLabel { get; set; } = string.Empty;
     public string Notes { get; set; } = string.Empty;
+    public string PaymentMode { get; set; } = string.Empty;
+    public string PaymentModeLabel { get; set; } = string.Empty;
+    public string CollectionStatusLabel { get; set; } = string.Empty;
     public decimal BookingAmount { get; set; }
     public decimal InsuranceAmount { get; set; }
     public decimal FinalAmount { get; set; }
+    public decimal CollectedAmount { get; set; }
+    public decimal UncollectedAmount { get; set; }
+    public bool IsFullyCollected { get; set; }
 }
 
 public class SummerDestinationConfigDto

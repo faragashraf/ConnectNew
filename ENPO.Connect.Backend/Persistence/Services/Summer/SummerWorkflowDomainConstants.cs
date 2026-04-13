@@ -30,6 +30,9 @@ namespace Persistence.Services.Summer
         public static readonly string[] UseFrozenUnitFieldKinds = { "Summer_UseFrozenUnit", "SUM2026_UseFrozenUnit", "UseFrozenUnit" };
         public static readonly string[] DestinationIdFieldKinds = { "SummerDestinationId", "SUM2026_DestinationId" };
         public static readonly string[] DestinationNameFieldKinds = { "SummerDestinationName", "SUM2026_DestinationName" };
+        public static readonly string[] PaymentModeFieldKinds = { "Summer_PaymentMode", "SUM2026_PaymentMode", "PaymentMode" };
+        public static readonly string[] InstallmentCountFieldKinds = { "Summer_PaymentInstallmentCount", "SUM2026_PaymentInstallmentCount" };
+        public static readonly string[] InstallmentsTotalFieldKinds = { "Summer_PaymentInstallmentsTotal", "SUM2026_PaymentInstallmentsTotal" };
 
         public static readonly string[] EmployeeIdFieldKinds = { "Emp_Id", "SUM2026_OwnerFileNumber", "EmployeeFileNumber", "FileNumber", "EmployeeId" };
         public static readonly string[] EmployeeNameFieldKinds = { "Emp_Name", "SUM2026_OwnerName", "EmployeeName", "Name", "ArabicName", "DisplayName" };
@@ -61,6 +64,45 @@ namespace Persistence.Services.Summer
         {
             public const string Worker = "WORKER_MEMBER";
             public const string NonWorker = "NON_WORKER_MEMBER";
+        }
+
+        public static class PaymentModes
+        {
+            public const string Cash = "CASH";
+            public const string Installment = "INSTALLMENT";
+            public const int MinInstallmentCount = 2;
+            public const int MaxInstallmentCount = 6;
+            public const int DefaultInstallmentCount = 6;
+        }
+
+        public static string[] GetInstallmentAmountFieldKinds(int installmentNo)
+        {
+            var number = Math.Clamp(installmentNo, 1, PaymentModes.MaxInstallmentCount);
+            return new[]
+            {
+                $"Summer_PaymentInstallment{number}Amount",
+                $"SUM2026_PaymentInstallment{number}Amount"
+            };
+        }
+
+        public static string[] GetInstallmentPaidFieldKinds(int installmentNo)
+        {
+            var number = Math.Clamp(installmentNo, 1, PaymentModes.MaxInstallmentCount);
+            return new[]
+            {
+                $"Summer_PaymentInstallment{number}Paid",
+                $"SUM2026_PaymentInstallment{number}Paid"
+            };
+        }
+
+        public static string[] GetInstallmentPaidAtFieldKinds(int installmentNo)
+        {
+            var number = Math.Clamp(installmentNo, 1, PaymentModes.MaxInstallmentCount);
+            return new[]
+            {
+                $"Summer_PaymentInstallment{number}PaidAtUtc",
+                $"SUM2026_PaymentInstallment{number}PaidAtUtc"
+            };
         }
 
         public static class PricingFieldKinds

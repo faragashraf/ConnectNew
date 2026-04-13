@@ -68,12 +68,14 @@ namespace Api.Controllers
             string UserEmail = HttpContext.User.Claims.First(f => f.Type == "UserEmail").Value;
             var ipv4 = HttpContext.Connection.RemoteIpAddress!.MapToIPv4().ToString();
             var hasSummerAdminPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerAdmin);
+            var hasSummerGeneralManagerPermission = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
             var result = await _unitOfWork.dynamicFormRepository.CreateRequest(
                 messageRequest,
                 userId,
                 UserEmail,
                 ipv4,
-                hasSummerAdminPermission);
+                hasSummerAdminPermission,
+                hasSummerGeneralManagerPermission);
             var hasBlacklistBlock = result?.Errors?.Any(error =>
                 string.Equals(error?.Code, "SUMMER_BLACKLIST_BLOCKED", StringComparison.OrdinalIgnoreCase)) == true;
             if (hasBlacklistBlock)
@@ -99,6 +101,11 @@ namespace Api.Controllers
                 requiredFunction,
                 ResolveFunctionsTokenFromHeaders(),
                 _summerFunctionsTokenValidationParameters);
+        }
+
+        private bool HasRequiredRole(string requiredRole)
+        {
+            return SummerFunctionClaimGuard.HasRequiredRole(HttpContext?.User, requiredRole);
         }
 
         private string? ResolveFunctionsTokenFromHeaders()
