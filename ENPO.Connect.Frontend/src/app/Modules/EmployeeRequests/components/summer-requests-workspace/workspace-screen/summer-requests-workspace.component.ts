@@ -19,6 +19,7 @@ import { DynamicMetadataService } from 'src/app/shared/services/helper/dynamic-m
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
 import { SignalRService } from 'src/app/shared/services/SignalRServices/SignalR.service';
+import { AttachmentValidationExecutionResultDto } from 'src/app/shared/services/BackendServices/AttachmentValidation/AttachmentValidation.dto';
 import {
   SUMMER_DESTINATION_CATALOG_KEY,
   SUMMER_DYNAMIC_APPLICATION_ID
@@ -64,7 +65,7 @@ import {
   toDisplayOrDash
 } from '../summer-requests-workspace.utils';
 
-type FileBucket = 'cancel' | 'payment' | 'transfer';
+type FileBucket = 'cancel' | 'transfer';
 type SummerPaymentStatusCode = 'PAID' | 'UNPAID';
 
 interface SummerPaymentSnapshot {
@@ -90,6 +91,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   readonly dynamicSummerConfigRouteKey = 'admins/summer-requests/dynamic-booking';
   readonly paymentInFutureMessage = SUMMER_UI_TEXTS_AR.errors.paymentInFuture;
   readonly destinationAccessDeniedMessage = SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE;
+  readonly summerPaymentReceiptDocumentTypeCode = 'SUMMER_PAYMENT_RECEIPT';
   destinations: SummerDestinationConfig[] = [];
   hasSummerAdminPermission = false;
   loadingDestinations = false;
@@ -102,6 +104,9 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   cancelAttachments: File[] = [];
   paymentAttachments: File[] = [];
   transferAttachments: File[] = [];
+  paymentAttachmentsValid = false;
+  paymentAttachmentValidationResult: AttachmentValidationExecutionResultDto | null = null;
+  paymentAttachmentResetToken = 0;
 
   myRequests: SummerRequestSummaryDto[] = [];
   selectedRequestId: number | null = null;
@@ -623,8 +628,6 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
     if (bucket === 'cancel') {
       this.cancelAttachments = [...this.cancelAttachments, ...validFiles];
-    } else if (bucket === 'payment') {
-      this.paymentAttachments = [...this.paymentAttachments, ...validFiles];
     } else {
       this.transferAttachments = [...this.transferAttachments, ...validFiles];
     }
@@ -637,11 +640,21 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   removeFile(bucket: FileBucket, index: number): void {
     if (bucket === 'cancel') {
       this.cancelAttachments = this.cancelAttachments.filter((_, current) => current !== index);
-    } else if (bucket === 'payment') {
-      this.paymentAttachments = this.paymentAttachments.filter((_, current) => current !== index);
     } else {
       this.transferAttachments = this.transferAttachments.filter((_, current) => current !== index);
     }
+  }
+
+  onPaymentAttachmentsChange(files: File[]): void {
+    this.paymentAttachments = [...(files ?? [])];
+  }
+
+  onPaymentAttachmentsValidityChange(isValid: boolean): void {
+    this.paymentAttachmentsValid = Boolean(isValid);
+  }
+
+  onPaymentAttachmentsValidationResultChange(result: AttachmentValidationExecutionResultDto | null): void {
+    this.paymentAttachmentValidationResult = result;
   }
 
   submitCancel(): void {
@@ -701,8 +714,11 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.paymentAttachments.length === 0) {
-      this.msg.msgError('خطأ', '<h5>يجب إرفاق ملف واحد على الأقل قبل تسجيل السداد.</h5>', true);
+    if (!this.paymentAttachmentsValid) {
+      const firstError = (this.paymentAttachmentValidationResult?.errors ?? [])
+        .map(item => String(item ?? '').trim())
+        .find(item => item.length > 0);
+      this.msg.msgError('خطأ', `<h5>${firstError || 'يرجى مراجعة مرفقات السداد قبل التنفيذ.'}</h5>`, true);
       return;
     }
 
@@ -741,6 +757,9 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           this.updatePaymentDateValidators();
           this.applyPaymentStatusEditAccess();
           this.paymentAttachments = [];
+          this.paymentAttachmentsValid = false;
+          this.paymentAttachmentValidationResult = null;
+          this.paymentAttachmentResetToken += 1;
           if (response.data) {
             this.upsertMyRequestSummary(response.data);
           } else if (this.selectedRequestId) {
@@ -852,6 +871,9 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     this.selectedRequestDetailsError = '';
     this.paymentSnapshot = null;
     this.paymentAttachments = [];
+    this.paymentAttachmentsValid = false;
+    this.paymentAttachmentValidationResult = null;
+    this.paymentAttachmentResetToken += 1;
     this.paymentForm.reset(
       {
         paymentStatus: 'PAID',

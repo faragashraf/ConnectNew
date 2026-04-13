@@ -24,6 +24,7 @@ using Persistence.Services.DynamicSubjects.AdminCatalog;
 using Persistence.Services.DynamicSubjects.AdminRouting;
 using Persistence.Services.DynamicSubjects.FieldAccess;
 using Persistence.Services.DynamicSubjects.RuntimeCatalog;
+using Persistence.Services.AttachmentValidation;
 using Persistence.Services.Notifications;
 using Persistence.UnitOfWorks;
 using SignalR.Notification;
@@ -95,6 +96,7 @@ builder.Services.AddScoped<IDynamicSubjectsAdminAccessPolicyService, DynamicSubj
 builder.Services.AddScoped<IFieldAccessResolutionService, FieldAccessResolutionService>();
 builder.Services.AddScoped<IDynamicSubjectsRealtimePublisher, DynamicSubjectsRealtimePublisher>();
 builder.Services.AddScoped<ISubjectReferenceGenerator, ReferenceNumberGeneratorService>();
+builder.Services.AddScoped<IAttachmentValidationService, AttachmentValidationService>();
 builder.Services.AddHostedService<SummerPaymentAutoCancellationHostedService>();
 builder.Services.AddSingleton<ENPOCreateLogFile>(provider => new ENPOCreateLogFile("YourStringValue", "YourSecondStringValue", FileExtension.txt));
 

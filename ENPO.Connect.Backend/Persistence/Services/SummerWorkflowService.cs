@@ -13,10 +13,12 @@ using Microsoft.Extensions.Options;
 using Models.Attachment;
 using Models.Correspondance;
 using Models.DTO.Common;
+using Models.DTO.Correspondance.AttachmentValidation;
 using Models.DTO.Correspondance.Enums;
 using Models.DTO.Correspondance.Summer;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.AttachmentValidation;
 using Persistence.Services.Notifications;
 using Persistence.Services.Summer;
 
@@ -34,6 +36,7 @@ namespace Persistence.Services
         private readonly SummerPricingService _summerPricingService;
         private readonly SummerBookingBlacklistService _summerBookingBlacklistService;
         private readonly SummerUnitFreezeService _summerUnitFreezeService;
+        private readonly IAttachmentValidationService? _attachmentValidationService;
 
         private const int CapacityLockTimeoutMs = 15000;
         private const int AdminActionGateTimeoutMs = 10000;
@@ -48,6 +51,7 @@ namespace Persistence.Services
         private const string PaidAtUtcFieldKind = SummerWorkflowDomainConstants.PaidAtUtcFieldKind;
         private const string PaymentStatusFieldKind = SummerWorkflowDomainConstants.PaymentStatusFieldKind;
         private const string ActionTypeFieldKind = SummerWorkflowDomainConstants.ActionTypeFieldKind;
+        private const string SummerPaymentReceiptDocumentTypeCode = "SUMMER_PAYMENT_RECEIPT";
         private const string RequestPaymentStatePaidCode = "PAID";
         private const string RequestPaymentStateUnpaidCode = "UNPAID";
         private const string RequestPaymentStatePartialPaidCode = "PARTIAL_PAID";
@@ -142,7 +146,8 @@ namespace Persistence.Services
             IConnectNotificationService notificationService,
             IOptions<ApplicationConfig> options,
             IOptionsMonitor<ResortBookingBlacklistOptions> resortBookingBlacklistOptions,
-            ILogger<SummerWorkflowService> logger)
+            ILogger<SummerWorkflowService> logger,
+            IAttachmentValidationService? attachmentValidationService = null)
         {
             _connectContext = connectContext;
             _attachHeldContext = attachHeldContext;
@@ -154,6 +159,7 @@ namespace Persistence.Services
             _summerPricingService = new SummerPricingService(_connectContext);
             _summerBookingBlacklistService = new SummerBookingBlacklistService(resortBookingBlacklistOptions);
             _summerUnitFreezeService = new SummerUnitFreezeService(_connectContext, _logger);
+            _attachmentValidationService = attachmentValidationService;
         }
 
         public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear, int? messageId = null)
@@ -2908,9 +2914,36 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (request.files == null || request.files.Count == 0)
+                var attachmentsValidation = await ValidateSummerPaymentAttachmentsAsync(request.files, userId);
+                if (!attachmentsValidation.IsSuccess)
                 {
-                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تسجيل السداد بدون مرفقات. يجب إرفاق مستند واحد على الأقل." });
+                    foreach (var validationError in attachmentsValidation.Errors)
+                    {
+                        response.Errors.Add(validationError);
+                    }
+                    return response;
+                }
+
+                var validationResult = attachmentsValidation.Data;
+                if (validationResult != null && !validationResult.IsValid)
+                {
+                    foreach (var validationMessage in validationResult.Errors.Where(item => !string.IsNullOrWhiteSpace(item)))
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "400",
+                            Message = validationMessage
+                        });
+                    }
+
+                    if (!response.Errors.Any())
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "400",
+                            Message = "تعذر اعتماد مرفقات السداد وفق قواعد التحقق."
+                        });
+                    }
                     return response;
                 }
 
@@ -3067,6 +3100,66 @@ namespace Persistence.Services
             catch (Exception ex)
             {
                 response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        private async Task<CommonResponse<AttachmentValidationExecutionResultDto>> ValidateSummerPaymentAttachmentsAsync(
+            List<IFormFile>? files,
+            string userId)
+        {
+            if (_attachmentValidationService == null)
+            {
+                return BuildLegacyPaymentAttachmentValidationFallback(files);
+            }
+
+            var validationResponse = await _attachmentValidationService.ValidateAsync(
+                new AttachmentValidationExecuteRequest
+                {
+                    DocumentTypeCode = SummerPaymentReceiptDocumentTypeCode,
+                    files = files ?? new List<IFormFile>()
+                },
+                userId);
+
+            if (validationResponse.IsSuccess)
+            {
+                return validationResponse;
+            }
+
+            var settingsMissing = validationResponse.Errors.Any(error =>
+                string.Equals(error.Code, "404", StringComparison.OrdinalIgnoreCase));
+            if (settingsMissing)
+            {
+                return BuildLegacyPaymentAttachmentValidationFallback(files);
+            }
+
+            return validationResponse;
+        }
+
+        private static CommonResponse<AttachmentValidationExecutionResultDto> BuildLegacyPaymentAttachmentValidationFallback(List<IFormFile>? files)
+        {
+            var response = new CommonResponse<AttachmentValidationExecutionResultDto>();
+            var filesCount = files?.Count ?? 0;
+            var isValid = filesCount > 0;
+
+            response.Data = new AttachmentValidationExecutionResultDto
+            {
+                DocumentTypeCode = SummerPaymentReceiptDocumentTypeCode,
+                DocumentTypeNameAr = "مرفق سداد المصايف",
+                ValidationMode = "UploadAndValidate",
+                IsValidationRequired = true,
+                FilesCount = filesCount,
+                IsValid = isValid
+            };
+
+            if (!isValid)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "لا يمكن تسجيل السداد بدون مرفقات. يجب إرفاق مستند واحد على الأقل."
+                });
             }
 
             return response;

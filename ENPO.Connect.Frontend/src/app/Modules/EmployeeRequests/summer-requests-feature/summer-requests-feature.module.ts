@@ -23,6 +23,7 @@ import { SummerUnitFreezeCreatePageComponent } from '../components/summer-unit-f
 import { SummerUnitFreezeListPageComponent } from '../components/summer-unit-freeze-list-page/summer-unit-freeze-list-page.component';
 import { SummerUnitFreezeDetailsPageComponent } from '../components/summer-unit-freeze-details-page/summer-unit-freeze-details-page.component';
 import { SummerWaveBookingsPrintPageComponent } from '../components/summer-wave-bookings-print-page/summer-wave-bookings-print-page.component';
+import { AttachmentValidationUploaderModule } from 'src/app/shared/components/attachment-validation-uploader/attachment-validation-uploader.module';
 
 @NgModule({
   declarations: [
@@ -51,7 +52,8 @@ import { SummerWaveBookingsPrintPageComponent } from '../components/summer-wave-
     FormsModule,
     ReactiveFormsModule,
     RouterModule,
-    GenericModuleModule
+    GenericModuleModule,
+    AttachmentValidationUploaderModule
   ],
   exports: [
     SummerRequestsWorkspaceComponent,

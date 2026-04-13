@@ -41,6 +41,11 @@ const routes: Routes = [
     loadChildren: () => import('./Modules/admin-control-center-catalog/admin-control-center-catalog.module')
       .then(m => m.AdminControlCenterCatalogModule)
   },
+  {
+    path: 'Admin/AttachmentValidation',
+    loadChildren: () => import('./Modules/attachment-validation/attachment-validation.module')
+      .then(m => m.AttachmentValidationModule)
+  },
   { path: 'Admin', loadChildren: () => import('./Modules/admins/admins.module').then(m => m.AdminsModule) },
   { path: 'Docs', loadChildren: () => import('./Modules/docs/docs.module').then(m => m.DocsModule) },
   { path: 'AdminCer', loadChildren: () => import('./Modules/AdminCertificates/AdminCer.module').then(m => m.AdminCerModule) },

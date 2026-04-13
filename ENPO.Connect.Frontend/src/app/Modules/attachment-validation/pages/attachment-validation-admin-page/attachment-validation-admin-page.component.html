@@ -1,0 +1,277 @@
+<section class="attachment-validation-admin" dir="rtl">
+  <header class="page-header">
+    <h2>إدارة التحقق من المرفقات</h2>
+    <p>إعدادات ديناميكية لإدارة أنواع المستندات والقواعد وربطها بدون تعديل الكود.</p>
+    <button pButton type="button" label="تحديث البيانات" class="p-button-sm" (click)="loadWorkspace()" [disabled]="workspaceLoading"></button>
+  </header>
+
+  <div class="preview-card" *ngIf="documentTypes.length > 0">
+    <h3>تجربة فورية للرفع والتحقق</h3>
+    <p>هذا الجزء يستخدم نفس المكون العام الذي يمكن استدعاؤه من أي شاشة.</p>
+
+    <label>
+      <span>نوع المستند للتجربة</span>
+      <p-dropdown
+        [options]="documentTypes"
+        optionLabel="documentTypeNameAr"
+        optionValue="documentTypeCode"
+        [(ngModel)]="previewDocumentTypeCode"
+        [showClear]="false"
+        appendTo="body"
+        placeholder="اختر نوع المستند"
+      ></p-dropdown>
+    </label>
+
+    <app-attachment-validation-uploader
+      [documentTypeCode]="previewDocumentTypeCode"
+      [label]="'رفع مرفق تجريبي'"
+      [required]="true"
+    ></app-attachment-validation-uploader>
+  </div>
+
+  <p-tabView>
+    <p-tabPanel header="أنواع المستندات">
+      <form [formGroup]="documentTypeForm" class="form-grid" (ngSubmit)="saveDocumentType()">
+        <label>
+          <span>كود نوع المستند</span>
+          <input pInputText formControlName="documentTypeCode" placeholder="مثال: SUMMER_PAYMENT_RECEIPT" />
+        </label>
+
+        <label>
+          <span>اسم نوع المستند (عربي)</span>
+          <input pInputText formControlName="documentTypeNameAr" placeholder="مثال: مرفق سداد المصايف" />
+        </label>
+
+        <label class="full-width">
+          <span>الوصف</span>
+          <textarea pInputTextarea rows="2" formControlName="descriptionAr"></textarea>
+        </label>
+
+        <label>
+          <span>نمط التشغيل</span>
+          <p-dropdown
+            [options]="validationModeOptions"
+            optionLabel="label"
+            optionValue="value"
+            formControlName="validationMode"
+            appendTo="body"
+          ></p-dropdown>
+        </label>
+
+        <label class="switch-row">
+          <span>إلزامية التحقق</span>
+          <p-inputSwitch formControlName="isValidationRequired"></p-inputSwitch>
+        </label>
+
+        <label class="switch-row">
+          <span>نشط</span>
+          <p-inputSwitch formControlName="isActive"></p-inputSwitch>
+        </label>
+
+        <div class="actions full-width">
+          <button pButton type="submit" label="حفظ" [loading]="savingDocumentType"></button>
+          <button pButton type="button" label="إفراغ" class="p-button-secondary" (click)="resetDocumentTypeForm()"></button>
+        </div>
+      </form>
+
+      <p-table [value]="documentTypes" [loading]="workspaceLoading" responsiveLayout="scroll" styleClass="mt-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>الاسم</th>
+            <th>الكود</th>
+            <th>النمط</th>
+            <th>إلزامي</th>
+            <th>نشط</th>
+            <th>إجراءات</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item>
+          <tr>
+            <td>{{ item.documentTypeNameAr }}</td>
+            <td>{{ item.documentTypeCode }}</td>
+            <td>{{ item.validationMode === 'UploadAndValidate' ? 'رفع + تحقق' : 'رفع فقط' }}</td>
+            <td>{{ item.isValidationRequired ? 'نعم' : 'لا' }}</td>
+            <td>{{ item.isActive ? 'نعم' : 'لا' }}</td>
+            <td class="actions-cell">
+              <button pButton type="button" label="تعديل" class="p-button-sm" (click)="editDocumentType(item)"></button>
+              <button
+                pButton
+                type="button"
+                label="تعطيل"
+                class="p-button-sm p-button-danger"
+                (click)="deactivateDocumentType(item)"
+                [disabled]="!item.isActive"
+              ></button>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </p-tabPanel>
+
+    <p-tabPanel header="قواعد التحقق">
+      <form [formGroup]="ruleForm" class="form-grid" (ngSubmit)="saveRule()">
+        <label>
+          <span>كود القاعدة</span>
+          <input pInputText formControlName="ruleCode" placeholder="مثال: ALLOWED_EXTENSIONS" />
+        </label>
+
+        <label>
+          <span>اسم القاعدة (عربي)</span>
+          <input pInputText formControlName="ruleNameAr" placeholder="مثال: الامتدادات المسموحة" />
+        </label>
+
+        <label class="full-width">
+          <span>الوصف</span>
+          <textarea pInputTextarea rows="2" formControlName="descriptionAr"></textarea>
+        </label>
+
+        <label class="full-width">
+          <span>مخطط المعاملات JSON</span>
+          <textarea pInputTextarea rows="3" formControlName="parameterSchemaJson" placeholder='{"extensions":[".pdf",".jpg"]}'></textarea>
+        </label>
+
+        <label class="switch-row">
+          <span>قاعدة نظام</span>
+          <p-inputSwitch formControlName="isSystemRule"></p-inputSwitch>
+        </label>
+
+        <label class="switch-row">
+          <span>نشطة</span>
+          <p-inputSwitch formControlName="isActive"></p-inputSwitch>
+        </label>
+
+        <div class="actions full-width">
+          <button pButton type="submit" label="حفظ" [loading]="savingRule"></button>
+          <button pButton type="button" label="إفراغ" class="p-button-secondary" (click)="resetRuleForm()"></button>
+        </div>
+      </form>
+
+      <p-table [value]="rules" [loading]="workspaceLoading" responsiveLayout="scroll" styleClass="mt-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>الاسم</th>
+            <th>الكود</th>
+            <th>قاعدة نظام</th>
+            <th>نشطة</th>
+            <th>إجراءات</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item>
+          <tr>
+            <td>{{ item.ruleNameAr }}</td>
+            <td>{{ item.ruleCode }}</td>
+            <td>{{ item.isSystemRule ? 'نعم' : 'لا' }}</td>
+            <td>{{ item.isActive ? 'نعم' : 'لا' }}</td>
+            <td class="actions-cell">
+              <button pButton type="button" label="تعديل" class="p-button-sm" (click)="editRule(item)"></button>
+              <button
+                pButton
+                type="button"
+                label="تعطيل"
+                class="p-button-sm p-button-danger"
+                (click)="deactivateRule(item)"
+                [disabled]="!item.isActive"
+              ></button>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </p-tabPanel>
+
+    <p-tabPanel header="ربط القواعد بالأنواع">
+      <form [formGroup]="bindingForm" class="form-grid" (ngSubmit)="saveBinding()">
+        <label>
+          <span>نوع المستند</span>
+          <p-dropdown
+            [options]="documentTypeOptions"
+            optionLabel="label"
+            optionValue="value"
+            formControlName="documentTypeId"
+            appendTo="body"
+            placeholder="اختر"
+          ></p-dropdown>
+        </label>
+
+        <label>
+          <span>القاعدة</span>
+          <p-dropdown
+            [options]="ruleOptions"
+            optionLabel="label"
+            optionValue="value"
+            formControlName="ruleId"
+            appendTo="body"
+            placeholder="اختر"
+          ></p-dropdown>
+        </label>
+
+        <label>
+          <span>ترتيب التنفيذ</span>
+          <input type="number" pInputText formControlName="ruleOrder" min="1" />
+        </label>
+
+        <label class="switch-row">
+          <span>نشط</span>
+          <p-inputSwitch formControlName="isActive"></p-inputSwitch>
+        </label>
+
+        <label class="switch-row">
+          <span>إجباري</span>
+          <p-inputSwitch formControlName="isRequired"></p-inputSwitch>
+        </label>
+
+        <label class="switch-row">
+          <span>إيقاف عند الفشل</span>
+          <p-inputSwitch formControlName="stopOnFailure"></p-inputSwitch>
+        </label>
+
+        <label class="full-width">
+          <span>رسالة الفشل (اختياري)</span>
+          <input pInputText formControlName="failureMessageAr" />
+        </label>
+
+        <label class="full-width">
+          <span>معاملات الربط JSON (اختياري)</span>
+          <textarea pInputTextarea rows="3" formControlName="parametersJson" placeholder='{"min":1}'></textarea>
+        </label>
+
+        <div class="actions full-width">
+          <button pButton type="submit" label="حفظ" [loading]="savingBinding"></button>
+          <button pButton type="button" label="إفراغ" class="p-button-secondary" (click)="resetBindingForm()"></button>
+        </div>
+      </form>
+
+      <p-table [value]="bindings" [loading]="workspaceLoading" responsiveLayout="scroll" styleClass="mt-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>نوع المستند</th>
+            <th>القاعدة</th>
+            <th>الترتيب</th>
+            <th>إجباري</th>
+            <th>نشط</th>
+            <th>إجراءات</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item>
+          <tr>
+            <td>{{ item.documentTypeNameAr }}</td>
+            <td>{{ item.ruleNameAr }}</td>
+            <td>{{ item.ruleOrder }}</td>
+            <td>{{ item.isRequired ? 'نعم' : 'لا' }}</td>
+            <td>{{ item.isActive ? 'نعم' : 'لا' }}</td>
+            <td class="actions-cell">
+              <button pButton type="button" label="تعديل" class="p-button-sm" (click)="editBinding(item)"></button>
+              <button
+                pButton
+                type="button"
+                label="تعطيل"
+                class="p-button-sm p-button-danger"
+                (click)="deactivateBinding(item)"
+                [disabled]="!item.isActive"
+              ></button>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </p-tabPanel>
+  </p-tabView>
+</section>

@@ -259,18 +259,17 @@
                   <span class="optional-label">ملاحظات السداد</span>
                   <textarea rows="3" formControlName="notes" placeholder="ملاحظات السداد"></textarea>
                 </label>
-                <label class="file-picker compact">
-                  <span class="required-label">إرفاق مستندات السداد</span>
-                  <input type="file" accept=".pdf,image/*" multiple (change)="addFiles($event, 'payment')" />
-                </label>
-                <div class="file-list" *ngIf="paymentAttachments.length > 0">
-                  <div class="file-chip" *ngFor="let file of paymentAttachments; let i = index">
-                    <span>{{ file.name }}</span>
-                    <button type="button" (click)="removeFile('payment', i)">حذف</button>
-                  </div>
-                </div>
-                <p class="warn" *ngIf="paymentAttachments.length === 0">يلزم مرفق واحد على الأقل لتسجيل السداد.</p>
-                <button type="submit" class="primary" [disabled]="submittingPayment || paymentForm.invalid || paymentAttachments.length === 0">
+                <app-attachment-validation-uploader
+                  [documentTypeCode]="summerPaymentReceiptDocumentTypeCode"
+                  [label]="'إرفاق مستندات السداد'"
+                  [required]="true"
+                  [disabled]="submittingPayment"
+                  [resetToken]="paymentAttachmentResetToken"
+                  (filesChange)="onPaymentAttachmentsChange($event)"
+                  (validityChange)="onPaymentAttachmentsValidityChange($event)"
+                  (validationResultChange)="onPaymentAttachmentsValidationResultChange($event)"
+                ></app-attachment-validation-uploader>
+                <button type="submit" class="primary" [disabled]="submittingPayment || paymentForm.invalid || !paymentAttachmentsValid">
                   {{ submittingPayment ? 'جاري التنفيذ...' : 'تسجيل السداد' }}
                 </button>
               </form>

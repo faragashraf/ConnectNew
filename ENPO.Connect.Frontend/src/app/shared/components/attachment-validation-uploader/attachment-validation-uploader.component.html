@@ -1,0 +1,36 @@
+<div class="attachment-validation-uploader" [class.disabled]="disabled">
+  <label class="file-picker" [class.required]="isValidationRequired">
+    <span>
+      {{ label }}
+      <small *ngIf="isValidationRequired">(إلزامي)</small>
+    </span>
+    <input
+      type="file"
+      [accept]="acceptAttribute"
+      [multiple]="allowMultiple"
+      [disabled]="disabled || loadingSettings || validating"
+      (change)="onSelectFiles($event)"
+    />
+  </label>
+
+  <small class="info" *ngIf="info.length > 0">{{ info }}</small>
+
+  <div class="loading" *ngIf="loadingSettings || validating">
+    <p-progressSpinner styleClass="spinner-sm" strokeWidth="5" [style]="{ width: '28px', height: '28px' }"></p-progressSpinner>
+    <span>{{ loadingSettings ? 'جاري تحميل إعدادات التحقق...' : 'جاري التحقق من المرفقات...' }}</span>
+  </div>
+
+  <div class="file-list" *ngIf="files.length > 0">
+    <div class="file-chip" *ngFor="let file of files; let i = index">
+      <span>{{ file.name }}</span>
+      <button type="button" [disabled]="disabled || validating" (click)="removeFile(i)">حذف</button>
+    </div>
+  </div>
+
+  <div class="messages" *ngIf="errors.length > 0 || warnings.length > 0">
+    <p class="error" *ngFor="let error of errors">{{ error }}</p>
+    <p class="warn" *ngFor="let warning of warnings">{{ warning }}</p>
+  </div>
+
+  <p class="warn" *ngIf="isValidationRequired && files.length === 0">يلزم إرفاق ملف واحد على الأقل.</p>
+</div>
