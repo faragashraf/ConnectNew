@@ -137,7 +137,8 @@ namespace Api.Controllers
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
             var ip = HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "0.0.0.0";
-            return _summerWorkflowService.PayAsync(request, userId, ip);
+            var hasSummerAdminPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerAdmin);
+            return _summerWorkflowService.PayAsync(request, userId, ip, hasSummerAdminPermission);
         }
 
         [HttpPost(nameof(Transfer))]

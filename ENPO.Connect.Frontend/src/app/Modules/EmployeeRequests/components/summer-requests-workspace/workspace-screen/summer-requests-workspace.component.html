@@ -218,6 +218,38 @@
             <div class="workflow-grid">
               <form [formGroup]="paymentForm" class="workflow-card" (ngSubmit)="submitPayment()">
                 <h4>تسجيل السداد</h4>
+                <div class="payment-snapshot" *ngIf="paymentSnapshot as snapshot">
+                  <div class="payment-snapshot-row">
+                    <span>طريقة السداد</span>
+                    <strong>{{ snapshot.paymentModeLabel }}</strong>
+                  </div>
+                  <div class="payment-snapshot-row">
+                    <span>البيان</span>
+                    <strong>{{ snapshot.installmentLabel }}</strong>
+                  </div>
+                  <div class="payment-snapshot-row">
+                    <span>مبلغ السداد</span>
+                    <strong>{{ snapshot.amountText }}</strong>
+                  </div>
+                  <div class="payment-snapshot-row">
+                    <span>تاريخ السداد الحالي</span>
+                    <strong>{{ snapshot.paidAtDisplay }}</strong>
+                  </div>
+                  <div class="payment-snapshot-row">
+                    <span>حالة السداد الحالية</span>
+                    <strong>{{ snapshot.statusLabel }}</strong>
+                  </div>
+                </div>
+                <label>
+                  <span class="required-label">حالة السداد</span>
+                  <select formControlName="paymentStatus">
+                    <option value="PAID">مسدد</option>
+                    <option value="UNPAID">غير مسدد</option>
+                  </select>
+                </label>
+                <small class="optional-label" *ngIf="!canEditPaymentStatus">
+                  تعديل حالة السداد متاح فقط لمستخدمي إدارة المصايف.
+                </small>
                 <label>
                   <span class="required-label">تاريخ ووقت السداد</span>
                   <input type="datetime-local" step="1" formControlName="paidAtLocal" [attr.max]="getPaymentMaxDateTimeLocal()" />

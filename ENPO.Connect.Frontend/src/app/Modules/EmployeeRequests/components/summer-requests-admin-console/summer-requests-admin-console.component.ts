@@ -217,7 +217,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: '', label: 'الكل' },
     { value: 'Paid', label: 'مسدد' },
     { value: 'Unpaid', label: 'غير مسدد' },
-    { value: 'OverdueUnpaid', label: 'متأخر وغير مسدد' }
+    { value: 'PartialPaid', label: 'مسدد عدد {0} من {1}' }
   ];
 
   readonly actionOptions: Array<{ value: SummerAdminActionCode; label: string }> = [
@@ -2183,7 +2183,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     const collectedAmount = Number(row?.collectedAmount ?? 0) || 0;
     const uncollectedAmount = Number(row?.uncollectedAmount ?? 0) || 0;
     if (collectedAmount > 0 && uncollectedAmount > 0) {
-      return 'مسدد جزئيًا';
+      return 'مسدد عدد من الأقساط';
     }
 
     return 'غير مسدد';

@@ -1,0 +1,8 @@
+2026-04-13 13:36:54 | Class: helperService | Method: ValidateFileSizes | Line: 53 | Message: Starting ValidateFileSizes method.. 
+2026-04-13 13:36:54 | Class: helperService | Method: ValidateFileSizes | Line: 70 | Message: ValidateFileSizes method completed.. 
+2026-04-13 13:36:54 | Class: helperService | Method: CreateReply | Line: 76 | Message: Starting CreateReply method.. 
+2026-04-13 13:36:55 | Class: helperService | Method: CreateReply | Line: 78 | Message: Generated replyId: 5476. 
+2026-04-13 13:36:55 | Class: helperService | Method: CreateReply | Line: 89 | Message: CreateReply method completed.. 
+2026-04-13 13:36:55 | Class: helperService | Method: SaveAttachments | Line: 95 | Message: Starting SaveAttachments method.. 
+2026-04-13 13:36:55 | Class: helperService | Method: SaveAttachments | Line: 108 | Message: Attachment saved: بعض الامور المطلوبة فى شاشة اليوزر.pdf. 
+2026-04-13 13:36:55 | Class: helperService | Method: SaveAttachments | Line: 111 | Message: SaveAttachments method completed.. 

@@ -55,7 +55,7 @@
               </span>
             </td>
             <td>{{ resolveDate(request.paymentDueAtUtc) }}</td>
-            <td>{{ request.paidAtUtc ? 'مسدد' : 'غير مسدد' }}</td>
+            <td>{{ request.paymentStateLabel || (request.paidAtUtc ? 'مسدد' : 'غير مسدد') }}</td>
           </ng-container>
 
           <ng-template #employeeRow>
@@ -121,4 +121,3 @@
     </div>
   </div>
 </section>
-

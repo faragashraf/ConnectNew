@@ -262,9 +262,9 @@
       <strong>{{ stats.unpaidCount }}</strong>
     </article>
 
-    <article class="metric-card warn clickable" [class.active]="isPaymentQuickFilterActive('OverdueUnpaid')" (click)="applyPaymentQuickFilter('OverdueUnpaid')">
-      <span>متأخر وغير مسدد</span>
-      <strong>{{ stats.overdueUnpaidCount }}</strong>
+    <article class="metric-card warn clickable" [class.active]="isPaymentQuickFilterActive('PartialPaid')" (click)="applyPaymentQuickFilter('PartialPaid')">
+      <span>مسدد عدد من الأقساط</span>
+      <strong>{{ stats.partialPaidCount }}</strong>
     </article>
   </section>
 

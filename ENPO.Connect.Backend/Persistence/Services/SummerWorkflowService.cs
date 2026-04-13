@@ -47,6 +47,9 @@ namespace Persistence.Services
         private const string PaidAtUtcFieldKind = SummerWorkflowDomainConstants.PaidAtUtcFieldKind;
         private const string PaymentStatusFieldKind = SummerWorkflowDomainConstants.PaymentStatusFieldKind;
         private const string ActionTypeFieldKind = SummerWorkflowDomainConstants.ActionTypeFieldKind;
+        private const string RequestPaymentStatePaidCode = "PAID";
+        private const string RequestPaymentStateUnpaidCode = "UNPAID";
+        private const string RequestPaymentStatePartialPaidCode = "PARTIAL_PAID";
         private static readonly string[] WaveCodeFieldKinds = SummerWorkflowDomainConstants.WaveCodeFieldKinds;
         private static readonly string[] WaveLabelFieldKinds = SummerWorkflowDomainConstants.WaveLabelFieldKinds;
         private static readonly string[] FamilyCountFieldKinds = SummerWorkflowDomainConstants.FamilyCountFieldKinds;
@@ -220,6 +223,7 @@ namespace Persistence.Services
                         workflowStateCode,
                         TransferReviewRequiredCode,
                         StringComparison.OrdinalIgnoreCase);
+                    var paymentState = ResolveRequestPaymentStateSnapshot(messageFields);
 
                     summaries.Add(new SummerRequestSummaryDto
                     {
@@ -240,7 +244,11 @@ namespace Persistence.Services
                         NeedsTransferReview = needsTransferReview,
                         CreatedAt = ResolveRequestCreatedAtUtc(message, messageFields),
                         PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, PaymentDueAtUtcFieldKind)),
-                        PaidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind)),
+                        PaidAtUtc = paymentState.PaidAtUtc,
+                        PaymentStateCode = paymentState.PaymentStateCode,
+                        PaymentStateLabel = paymentState.PaymentStateLabel,
+                        PaidInstallmentsCount = paymentState.PaidInstallmentsCount,
+                        TotalInstallmentsCount = paymentState.TotalInstallmentsCount,
                         TransferUsed = ParseInt(GetFieldValue(messageFields, "Summer_TransferCount"), 0) > 0
                     });
                 }
@@ -622,6 +630,7 @@ namespace Persistence.Services
                         workflowStateCode,
                         TransferReviewRequiredCode,
                         StringComparison.OrdinalIgnoreCase);
+                    var paymentState = ResolveRequestPaymentStateSnapshot(messageFields);
 
                     summaries.Add(new SummerRequestSummaryDto
                     {
@@ -642,7 +651,11 @@ namespace Persistence.Services
                         NeedsTransferReview = needsTransferReview,
                         CreatedAt = ResolveRequestCreatedAtUtc(message, messageFields),
                         PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, PaymentDueAtUtcFieldKind)),
-                        PaidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind)),
+                        PaidAtUtc = paymentState.PaidAtUtc,
+                        PaymentStateCode = paymentState.PaymentStateCode,
+                        PaymentStateLabel = paymentState.PaymentStateLabel,
+                        PaidInstallmentsCount = paymentState.PaidInstallmentsCount,
+                        TotalInstallmentsCount = paymentState.TotalInstallmentsCount,
                         TransferUsed = ParseInt(GetFieldValue(messageFields, "Summer_TransferCount"), 0) > 0
                     });
                 }
@@ -653,7 +666,7 @@ namespace Persistence.Services
                 var normalizedStatus = NormalizeSearchToken(query.Status);
                 var requestedMessageStatus = ResolveRequestedStatusMessageStatus(requestedStatusRaw);
                 var requestedStatusCode = ResolveDashboardStatusCode(requestedStatusRaw);
-                var normalizedPaymentState = NormalizeSearchToken(query.PaymentState);
+                var requestedPaymentState = ResolveRequestedPaymentStateFilter(query.PaymentState);
                 var normalizedSearch = NormalizeSearchToken(query.Search);
                 var nowUtc = DateTime.UtcNow;
 
@@ -711,32 +724,33 @@ namespace Persistence.Services
                         }
                     }
 
-                    if (!string.IsNullOrWhiteSpace(normalizedPaymentState))
+                    if (requestedPaymentState != PaymentStateFilterKind.Any)
                     {
-                        var isPaid = item.PaidAtUtc.HasValue;
+                        var paymentStateCode = NormalizeSearchToken(item.PaymentStateCode);
+                        var isPaid = paymentStateCode == NormalizeSearchToken(RequestPaymentStatePaidCode);
+                        var isPartialPaid = paymentStateCode == NormalizeSearchToken(RequestPaymentStatePartialPaidCode);
+                        var isUnpaid = paymentStateCode == NormalizeSearchToken(RequestPaymentStateUnpaidCode);
                         var isOverdueUnpaid = !isPaid
+                            && !isPartialPaid
                             && item.PaymentDueAtUtc.HasValue
                             && item.PaymentDueAtUtc.Value < nowUtc;
 
-                        var isPaidFilter = normalizedPaymentState is "paid" or "مسدد";
-                        var isUnpaidFilter = normalizedPaymentState is "unpaid" or "غيرمسدد";
-                        var isOverdueUnpaidFilter = normalizedPaymentState is
-                            "overdue"
-                            or "overdueunpaid"
-                            or "متاخرغيرمسدد"
-                            or "متأخرغيرمسدد";
-
-                        if (isPaidFilter && !isPaid)
+                        if (requestedPaymentState == PaymentStateFilterKind.Paid && !isPaid)
                         {
                             return false;
                         }
 
-                        if (isUnpaidFilter && isPaid)
+                        if (requestedPaymentState == PaymentStateFilterKind.Unpaid && !isUnpaid)
                         {
                             return false;
                         }
 
-                        if (isOverdueUnpaidFilter && !isOverdueUnpaid)
+                        if (requestedPaymentState == PaymentStateFilterKind.PartialPaid && !isPartialPaid)
+                        {
+                            return false;
+                        }
+
+                        if (requestedPaymentState == PaymentStateFilterKind.OverdueUnpaid && !isOverdueUnpaid)
                         {
                             return false;
                         }
@@ -826,6 +840,9 @@ namespace Persistence.Services
 
                 var requests = listResponse.Data?.ToList() ?? new List<SummerRequestSummaryDto>();
                 var nowUtc = DateTime.UtcNow;
+                var paidStateToken = NormalizeSearchToken(RequestPaymentStatePaidCode);
+                var partialPaidStateToken = NormalizeSearchToken(RequestPaymentStatePartialPaidCode);
+                var unpaidStateToken = NormalizeSearchToken(RequestPaymentStateUnpaidCode);
                 var scopeCategoryName = requests
                     .Where(r => !string.IsNullOrWhiteSpace(r.CategoryName))
                     .Select(r => r.CategoryName)
@@ -858,10 +875,11 @@ namespace Persistence.Services
                             ResolveDashboardStatusCode(ResolveDashboardStatusLabel(r)),
                             "REJECTED",
                             StringComparison.OrdinalIgnoreCase)),
-                    PaidCount = requests.Count(r => r.PaidAtUtc.HasValue),
-                    UnpaidCount = requests.Count(r => !r.PaidAtUtc.HasValue),
+                    PaidCount = requests.Count(r => NormalizeSearchToken(r.PaymentStateCode) == paidStateToken),
+                    PartialPaidCount = requests.Count(r => NormalizeSearchToken(r.PaymentStateCode) == partialPaidStateToken),
+                    UnpaidCount = requests.Count(r => NormalizeSearchToken(r.PaymentStateCode) == unpaidStateToken),
                     OverdueUnpaidCount = requests.Count(r =>
-                        !r.PaidAtUtc.HasValue
+                        NormalizeSearchToken(r.PaymentStateCode) == unpaidStateToken
                         && r.PaymentDueAtUtc.HasValue
                         && r.PaymentDueAtUtc.Value < nowUtc),
                     ByDestination = requests
@@ -2240,6 +2258,87 @@ namespace Persistence.Services
             public string CollectionStatusLabel { get; }
         }
 
+        private readonly struct RequestPaymentStateSnapshot
+        {
+            public RequestPaymentStateSnapshot(
+                string paymentStateCode,
+                string paymentStateLabel,
+                int paidInstallmentsCount,
+                int totalInstallmentsCount,
+                DateTime? paidAtUtc,
+                bool isFullyPaid,
+                bool isPartiallyPaid)
+            {
+                PaymentStateCode = paymentStateCode;
+                PaymentStateLabel = paymentStateLabel;
+                PaidInstallmentsCount = paidInstallmentsCount;
+                TotalInstallmentsCount = totalInstallmentsCount;
+                PaidAtUtc = paidAtUtc;
+                IsFullyPaid = isFullyPaid;
+                IsPartiallyPaid = isPartiallyPaid;
+            }
+
+            public string PaymentStateCode { get; }
+            public string PaymentStateLabel { get; }
+            public int PaidInstallmentsCount { get; }
+            public int TotalInstallmentsCount { get; }
+            public DateTime? PaidAtUtc { get; }
+            public bool IsFullyPaid { get; }
+            public bool IsPartiallyPaid { get; }
+        }
+
+        private enum PaymentStateFilterKind
+        {
+            Any = 0,
+            Paid = 1,
+            Unpaid = 2,
+            PartialPaid = 3,
+            OverdueUnpaid = 4
+        }
+
+        private static RequestPaymentStateSnapshot ResolveRequestPaymentStateSnapshot(IEnumerable<TkmendField> fields)
+        {
+            var paymentModeCode = ResolvePaymentModeCode(fields);
+            var totalInstallmentsCount = ResolveTotalInstallmentsCount(fields, paymentModeCode);
+            var paidInstallmentsCount = Math.Clamp(
+                ResolvePaidInstallmentsCount(fields, totalInstallmentsCount),
+                0,
+                Math.Max(1, totalInstallmentsCount));
+            var isFullyPaid = paidInstallmentsCount >= totalInstallmentsCount;
+            var isPartiallyPaid = paidInstallmentsCount > 0 && !isFullyPaid;
+
+            string paymentStateCode;
+            string paymentStateLabel;
+            if (isFullyPaid)
+            {
+                paymentStateCode = RequestPaymentStatePaidCode;
+                paymentStateLabel = "مسدد";
+            }
+            else if (isPartiallyPaid)
+            {
+                paymentStateCode = RequestPaymentStatePartialPaidCode;
+                paymentStateLabel = $"مسدد عدد {paidInstallmentsCount} من {totalInstallmentsCount}";
+            }
+            else
+            {
+                paymentStateCode = RequestPaymentStateUnpaidCode;
+                paymentStateLabel = "غير مسدد";
+            }
+
+            var paidAtUtc = isFullyPaid
+                ? ResolveLatestPaidInstallmentAtUtc(fields, totalInstallmentsCount) ?? ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind))
+                : (DateTime?)null;
+
+            return new RequestPaymentStateSnapshot(
+                paymentStateCode,
+                paymentStateLabel,
+                paidInstallmentsCount,
+                totalInstallmentsCount,
+                paidAtUtc,
+                isFullyPaid,
+                isPartiallyPaid);
+        }
+
         private static PaymentCollectionSnapshot ResolvePaymentCollectionSnapshot(
             IEnumerable<TkmendField> fields,
             decimal finalAmount)
@@ -2247,23 +2346,14 @@ namespace Persistence.Services
             var normalizedFinalAmount = NormalizeMoneyAmount(finalAmount);
             var paymentModeCode = ResolvePaymentModeCode(fields);
             var paymentModeLabel = ResolvePaymentModeLabel(paymentModeCode);
-            var paymentStatusToken = NormalizeSearchToken(GetFieldValue(fields, PaymentStatusFieldKind));
-            var paidAtUtc = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind));
+            var paymentState = ResolveRequestPaymentStateSnapshot(fields);
 
-            var isFullyCollected = paymentStatusToken == "paid" || paidAtUtc.HasValue;
-            decimal collectedAmount;
-            if (isFullyCollected)
-            {
-                collectedAmount = normalizedFinalAmount;
-            }
-            else if (IsInstallmentPaymentMode(paymentModeCode))
-            {
-                collectedAmount = ResolveCollectedInstallmentsAmount(fields);
-            }
-            else
-            {
-                collectedAmount = 0m;
-            }
+            var isFullyCollected = paymentState.IsFullyPaid;
+            var collectedAmount = paymentState.IsFullyPaid
+                ? normalizedFinalAmount
+                : IsInstallmentPaymentMode(paymentModeCode)
+                    ? ResolveCollectedInstallmentsAmount(fields, paymentState.TotalInstallmentsCount)
+                    : 0m;
 
             collectedAmount = NormalizeMoneyAmount(Math.Max(0m, collectedAmount));
             if (normalizedFinalAmount > 0m)
@@ -2278,6 +2368,12 @@ namespace Persistence.Services
                 uncollectedAmount = 0m;
                 isFullyCollected = true;
             }
+            else if (paymentState.IsFullyPaid)
+            {
+                collectedAmount = normalizedFinalAmount;
+                uncollectedAmount = 0m;
+                isFullyCollected = true;
+            }
             else if (uncollectedAmount <= 0m)
             {
                 collectedAmount = normalizedFinalAmount;
@@ -2287,8 +2383,8 @@ namespace Persistence.Services
 
             var collectionStatusLabel = isFullyCollected
                 ? "مسدد"
-                : collectedAmount > 0m
-                    ? "مسدد جزئيًا"
+                : paymentState.IsPartiallyPaid
+                    ? paymentState.PaymentStateLabel
                     : "غير مسدد";
 
             return new PaymentCollectionSnapshot(
@@ -2300,15 +2396,140 @@ namespace Persistence.Services
                 collectionStatusLabel);
         }
 
-        private static decimal ResolveCollectedInstallmentsAmount(IEnumerable<TkmendField> fields)
+        private static int ResolveTotalInstallmentsCount(IEnumerable<TkmendField> fields, string paymentModeCode)
         {
-            var total = 0m;
+            if (IsCashPaymentMode(paymentModeCode))
+            {
+                return 1;
+            }
+
+            var explicitInstallmentCount = ParseInt(GetFirstFieldValue(fields, InstallmentCountFieldKinds), 0);
+            if (explicitInstallmentCount > 0)
+            {
+                return Math.Clamp(explicitInstallmentCount, 1, SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            }
+
+            var inferredInstallmentCount = ResolveInferredInstallmentsCount(fields);
+            if (inferredInstallmentCount > 0)
+            {
+                return inferredInstallmentCount;
+            }
+
+            return Math.Max(1, SummerWorkflowDomainConstants.PaymentModes.MinInstallmentCount);
+        }
+
+        private static int ResolveInferredInstallmentsCount(IEnumerable<TkmendField> fields)
+        {
+            var inferredInstallments = 0;
             for (var installmentNo = 1; installmentNo <= SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount; installmentNo++)
             {
-                var isPaid = ParseBooleanLike(GetFirstFieldValue(
+                var hasAmount = ParseDecimal(
+                    GetFirstFieldValue(fields, SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo)),
+                    0m) > 0m;
+                var hasPaidFlag = ParseBooleanLike(GetFirstFieldValue(
                     fields,
-                    SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo))) == true;
-                if (!isPaid)
+                    SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo))).HasValue;
+                var hasPaidAt = ResolveInstallmentPaidAtUtc(fields, installmentNo).HasValue;
+
+                if (hasAmount || hasPaidFlag || hasPaidAt)
+                {
+                    inferredInstallments = installmentNo;
+                }
+            }
+
+            return Math.Clamp(inferredInstallments, 0, SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+        }
+
+        private static int ResolvePaidInstallmentsCount(IEnumerable<TkmendField> fields, int totalInstallmentsCount)
+        {
+            var normalizedTotalInstallments = Math.Clamp(
+                totalInstallmentsCount,
+                1,
+                SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            var paidInstallmentsCount = 0;
+            for (var installmentNo = 1; installmentNo <= normalizedTotalInstallments; installmentNo++)
+            {
+                if (IsInstallmentMarkedPaid(fields, installmentNo))
+                {
+                    paidInstallmentsCount += 1;
+                }
+            }
+
+            return paidInstallmentsCount;
+        }
+
+        private static DateTime? ResolveLatestPaidInstallmentAtUtc(IEnumerable<TkmendField> fields, int totalInstallmentsCount)
+        {
+            var normalizedTotalInstallments = Math.Clamp(
+                totalInstallmentsCount,
+                1,
+                SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            DateTime? latestPaidAtUtc = null;
+            for (var installmentNo = 1; installmentNo <= normalizedTotalInstallments; installmentNo++)
+            {
+                if (!IsInstallmentMarkedPaid(fields, installmentNo))
+                {
+                    continue;
+                }
+
+                var installmentPaidAtUtc = ResolveInstallmentPaidAtUtc(fields, installmentNo);
+                if (!installmentPaidAtUtc.HasValue)
+                {
+                    continue;
+                }
+
+                if (!latestPaidAtUtc.HasValue || installmentPaidAtUtc.Value > latestPaidAtUtc.Value)
+                {
+                    latestPaidAtUtc = installmentPaidAtUtc.Value;
+                }
+            }
+
+            return latestPaidAtUtc;
+        }
+
+        private static DateTime? ResolveInstallmentPaidAtUtc(IEnumerable<TkmendField> fields, int installmentNo)
+        {
+            return ParseDate(GetFirstFieldValue(
+                fields,
+                SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo)));
+        }
+
+        private static bool IsInstallmentMarkedPaid(IEnumerable<TkmendField> fields, int installmentNo)
+        {
+            var explicitPaidFlag = ParseBooleanLike(GetFirstFieldValue(
+                fields,
+                SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo)));
+            if (explicitPaidFlag.HasValue)
+            {
+                return explicitPaidFlag.Value;
+            }
+
+            if (ResolveInstallmentPaidAtUtc(fields, installmentNo).HasValue)
+            {
+                return true;
+            }
+
+            if (installmentNo == 1)
+            {
+                if (ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind)).HasValue)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static decimal ResolveCollectedInstallmentsAmount(IEnumerable<TkmendField> fields, int totalInstallmentsCount)
+        {
+            var total = 0m;
+            var normalizedTotalInstallments = Math.Clamp(
+                totalInstallmentsCount,
+                1,
+                SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            for (var installmentNo = 1; installmentNo <= normalizedTotalInstallments; installmentNo++)
+            {
+                if (!IsInstallmentMarkedPaid(fields, installmentNo))
                 {
                     continue;
                 }
@@ -2416,6 +2637,32 @@ namespace Persistence.Services
             }
 
             return label;
+        }
+
+        private static string ResolveRequestedPaymentStatusCode(string? rawStatus)
+        {
+            var normalized = NormalizeSearchToken(rawStatus);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return "PAID";
+            }
+
+            var normalizedWithoutSeparators = normalized
+                .Replace("_", string.Empty)
+                .Replace("-", string.Empty);
+
+            var parsedBoolean = ParseBooleanLike(normalizedWithoutSeparators);
+            if (parsedBoolean.HasValue)
+            {
+                return parsedBoolean.Value ? "PAID" : "PENDING_PAYMENT";
+            }
+
+            return normalizedWithoutSeparators switch
+            {
+                "paid" or "completed" or "confirmed" or "مسدد" or "تمالسداد" => "PAID",
+                "unpaid" or "notpaid" or "pending" or "pendingpayment" or "غيرمسدد" or "غيرمدفوع" => "PENDING_PAYMENT",
+                _ => "PAID"
+            };
         }
 
         private static bool? ParseBooleanLike(string? value)
@@ -2644,7 +2891,11 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerRequestSummaryDto>> PayAsync(SummerPayRequest request, string userId, string ip)
+        public async Task<CommonResponse<SummerRequestSummaryDto>> PayAsync(
+            SummerPayRequest request,
+            string userId,
+            string ip,
+            bool hasSummerAdminPermission = false)
         {
             var response = new CommonResponse<SummerRequestSummaryDto>();
             request ??= new SummerPayRequest();
@@ -2663,6 +2914,24 @@ namespace Persistence.Services
 
                 if (!ValidateAllowedAttachmentExtensions(request.files, response))
                 {
+                    return response;
+                }
+
+                var requestedPaymentStatusCode = ResolveRequestedPaymentStatusCode(request.PaymentStatus);
+                var isPaidStatus = string.Equals(
+                    requestedPaymentStatusCode,
+                    "PAID",
+                    StringComparison.OrdinalIgnoreCase);
+
+                if (!hasSummerAdminPermission
+                    && !isPaidStatus
+                    && !string.IsNullOrWhiteSpace(request.PaymentStatus))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "تعديل حالة السداد متاح فقط لإدارة المصايف."
+                    });
                     return response;
                 }
 
@@ -2709,7 +2978,7 @@ namespace Persistence.Services
                 var hasCreatedAtAnchor = ParseDate(rawCreatedAtField).HasValue;
 
                 _logger.LogInformation(
-                    "Summer payment validation start. MessageId={MessageId}, PaidAtInputRaw={PaidAtInputRaw}, PaidAtRawUtc={PaidAtRawUtc:o}, PaidAtUtc={PaidAtUtc:o}, CreatedAtAnchorRaw={CreatedAtAnchorRaw}, CreatedAtAnchorFound={CreatedAtAnchorFound}, ResolvedCreatedAtRawUtc={ResolvedCreatedAtRawUtc:o}, ResolvedCreatedAtUtc={ResolvedCreatedAtUtc:o}, DueAtRawUtc={DueAtRawUtc:o}, DueAtUtc={DueAtUtc:o}, PaidAtOffset={PaidAtOffset}, PaidAtProvided={PaidAtProvided}",
+                    "Summer payment validation start. MessageId={MessageId}, PaidAtInputRaw={PaidAtInputRaw}, PaidAtRawUtc={PaidAtRawUtc:o}, PaidAtUtc={PaidAtUtc:o}, CreatedAtAnchorRaw={CreatedAtAnchorRaw}, CreatedAtAnchorFound={CreatedAtAnchorFound}, ResolvedCreatedAtRawUtc={ResolvedCreatedAtRawUtc:o}, ResolvedCreatedAtUtc={ResolvedCreatedAtUtc:o}, DueAtRawUtc={DueAtRawUtc:o}, DueAtUtc={DueAtUtc:o}, PaidAtOffset={PaidAtOffset}, PaidAtProvided={PaidAtProvided}, RequestedPaymentStatus={RequestedPaymentStatus}, EffectivePaidStatus={EffectivePaidStatus}, HasSummerAdminPermission={HasSummerAdminPermission}",
                     message.MessageId,
                     request.PaidAtUtc?.ToString("o"),
                     paidAtRawUtc,
@@ -2721,9 +2990,12 @@ namespace Persistence.Services
                     dueAtRawUtc,
                     dueAtUtc,
                     request.PaidAtUtc?.Offset.ToString(),
-                    request.PaidAtUtc.HasValue);
+                    request.PaidAtUtc.HasValue,
+                    request.PaymentStatus,
+                    isPaidStatus ? "PAID" : "PENDING_PAYMENT",
+                    hasSummerAdminPermission);
 
-                if (paidAtUtc > nowUtc)
+                if (isPaidStatus && paidAtUtc > nowUtc)
                 {
                     _logger.LogWarning(
                         "Summer payment rejected: paid date in future. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, NowUtc={NowUtc:o}",
@@ -2738,7 +3010,7 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (paidAtUtc > dueAtUtc)
+                if (isPaidStatus && paidAtUtc > dueAtUtc)
                 {
                     _logger.LogWarning(
                         "Summer payment rejected: payment window expired. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, DueAtUtc={DueAtUtc:o}, DueAtRawUtc={DueAtRawUtc:o}",
@@ -2758,22 +3030,41 @@ namespace Persistence.Services
                 using var attachTx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
                 try
                 {
+                    var effectivePaymentStatus = isPaidStatus ? "PAID" : "PENDING_PAYMENT";
+                    var effectivePaidAtValue = isPaidStatus ? paidAtUtc.ToString("o") : string.Empty;
+
                     UpsertField(fields, message.MessageId, ActionTypeFieldKind, "PAY");
-                    UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "PAID");
+                    UpsertField(fields, message.MessageId, PaymentStatusFieldKind, effectivePaymentStatus);
                     UpsertField(fields, message.MessageId, RequestCreatedAtUtcFieldKind, requestCreatedAtUtc.ToString("o"));
-                    UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, paidAtUtc.ToString("o"));
+                    UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, effectivePaidAtValue);
                     UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, dueAtUtc.ToString("o"));
-                    UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
+                    if (isPaidStatus)
+                    {
+                        UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
+                    }
+                    UpsertFieldRange(
+                        fields,
+                        message.MessageId,
+                        SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(1),
+                        isPaidStatus ? "true" : "false");
+                    UpsertFieldRange(
+                        fields,
+                        message.MessageId,
+                        SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(1),
+                        effectivePaidAtValue);
                     if (!string.IsNullOrWhiteSpace(request.Notes))
                     {
                         UpsertField(fields, message.MessageId, "Summer_PaymentNotes", request.Notes.Trim());
                     }
 
+                    var paymentReplyMessage = isPaidStatus
+                        ? "تم تسجيل السداد بنجاح."
+                        : "تم تحديث حالة السداد إلى غير مسدد.";
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
                         string.IsNullOrWhiteSpace(request.Notes)
-                            ? "تم تسجيل السداد بنجاح."
-                            : $"تم تسجيل السداد بنجاح. الملاحظات: {request.Notes.Trim()}",
+                            ? paymentReplyMessage
+                            : $"{paymentReplyMessage} الملاحظات: {request.Notes.Trim()}",
                         userId,
                         ip,
                         request.files);
@@ -2783,11 +3074,12 @@ namespace Persistence.Services
                     await attachTx.CommitAsync();
                     await connectTx.CommitAsync();
                     _logger.LogInformation(
-                        "Summer payment accepted. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, CreatedAtUtc={CreatedAtUtc:o}, DueAtUtc={DueAtUtc:o}",
+                        "Summer payment accepted. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, CreatedAtUtc={CreatedAtUtc:o}, DueAtUtc={DueAtUtc:o}, PaymentStatus={PaymentStatus}",
                         message.MessageId,
                         paidAtUtc,
                         requestCreatedAtUtc,
-                        dueAtUtc);
+                        dueAtUtc,
+                        effectivePaymentStatus);
                 }
                 catch
                 {
@@ -2864,10 +3156,9 @@ namespace Persistence.Services
                     && !string.IsNullOrWhiteSpace(initiatedByUserId);
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
-                var paymentStatus = (GetFieldValue(fields, PaymentStatusFieldKind) ?? string.Empty).Trim();
-                var paidAtUtc = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind));
+                var paymentState = ResolveRequestPaymentStateSnapshot(fields);
                 var adminLastAction = (GetFieldValue(fields, "Summer_AdminLastAction") ?? string.Empty).Trim();
-                var wasPaid = paidAtUtc.HasValue || string.Equals(paymentStatus, "PAID", StringComparison.OrdinalIgnoreCase);
+                var wasPaid = paymentState.IsFullyPaid || paymentState.IsPartiallyPaid;
                 var wasFinalApproved = string.Equals(adminLastAction, SummerAdminActionCatalog.Codes.FinalApprove, StringComparison.OrdinalIgnoreCase)
                     || message.Status == MessageStatus.Replied;
                 var requiresTransferReview = wasPaid || wasFinalApproved;
@@ -4072,6 +4363,7 @@ SELECT @result;
                 workflowStateCode,
                 TransferReviewRequiredCode,
                 StringComparison.OrdinalIgnoreCase);
+            var paymentState = ResolveRequestPaymentStateSnapshot(fields);
 
             return new SummerRequestSummaryDto
             {
@@ -4092,7 +4384,11 @@ SELECT @result;
                 NeedsTransferReview = needsTransferReview,
                 CreatedAt = ResolveRequestCreatedAtUtc(message, fields),
                 PaymentDueAtUtc = ParseDate(GetFieldValue(fields, PaymentDueAtUtcFieldKind)),
-                PaidAtUtc = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind)),
+                PaidAtUtc = paymentState.PaidAtUtc,
+                PaymentStateCode = paymentState.PaymentStateCode,
+                PaymentStateLabel = paymentState.PaymentStateLabel,
+                PaidInstallmentsCount = paymentState.PaidInstallmentsCount,
+                TotalInstallmentsCount = paymentState.TotalInstallmentsCount,
                 TransferUsed = ParseInt(GetFieldValue(fields, "Summer_TransferCount"), 0) > 0
             };
         }
@@ -4606,6 +4902,28 @@ SELECT @result;
                 "يتطلبمراجعةبعدالتحويل" or "transferreviewrequired" or "transfer_review_required" => TransferReviewRequiredCode,
                 "تمتمراجعةالتحويل" or "transferreviewresolved" or "transfer_review_resolved" => TransferReviewResolvedCode,
                 _ => token.ToUpperInvariant()
+            };
+        }
+
+        private static PaymentStateFilterKind ResolveRequestedPaymentStateFilter(string? rawPaymentState)
+        {
+            var token = NormalizeSearchToken(rawPaymentState);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return PaymentStateFilterKind.Any;
+            }
+
+            var compactToken = token
+                .Replace("_", string.Empty)
+                .Replace("-", string.Empty);
+
+            return compactToken switch
+            {
+                "paid" or "مسدد" => PaymentStateFilterKind.Paid,
+                "unpaid" or "غيرمسدد" => PaymentStateFilterKind.Unpaid,
+                "partialpaid" or "partial" or "مسددجزئي" or "مسددعدد" => PaymentStateFilterKind.PartialPaid,
+                "overdue" or "overdueunpaid" or "متاخرغيرمسدد" or "متأخرغيرمسدد" => PaymentStateFilterKind.OverdueUnpaid,
+                _ => PaymentStateFilterKind.Any
             };
         }
 

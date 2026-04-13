@@ -48,6 +48,10 @@ export interface SummerRequestSummaryDto {
   createdAt?: string;
   paymentDueAtUtc?: string;
   paidAtUtc?: string;
+  paymentStateCode?: string;
+  paymentStateLabel?: string;
+  paidInstallmentsCount?: number;
+  totalInstallmentsCount?: number;
   transferUsed: boolean;
 }
 
@@ -242,6 +246,7 @@ export interface SummerCancelFormRequest {
 export interface SummerPayFormRequest {
   messageId: number;
   paidAtUtc?: string;
+  paymentStatus?: string;
   forceOverride: boolean;
   notes?: string;
   files?: FileParameter[];
@@ -292,6 +297,7 @@ export interface SummerAdminDashboardDto {
   repliedCount: number;
   rejectedCount: number;
   paidCount: number;
+  partialPaidCount: number;
   unpaidCount: number;
   overdueUnpaidCount: number;
   byDestination: SummerDashboardBucketDto[];

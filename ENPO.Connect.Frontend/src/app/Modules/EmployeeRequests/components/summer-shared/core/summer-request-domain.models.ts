@@ -10,6 +10,7 @@ export type SummerRequestStatusCode =
 export type SummerPaymentStatusCode =
   | 'PENDING_PAYMENT'
   | 'PAID'
+  | 'PARTIAL_PAID'
   | 'CANCELLED_AUTO'
   | 'CANCELLED_ADMIN'
   | 'CANCELLED_USER'
@@ -81,4 +82,3 @@ export interface SummerRequestDetails extends SummerRequest {
   attachments: Array<{ id: number; name: string; size?: number }>;
   updates: Array<{ id: number; author: string; message: string; created?: string }>;
 }
-

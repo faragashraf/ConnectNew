@@ -23,6 +23,10 @@ public class SummerRequestSummaryDto
     public DateTime? CreatedAt { get; set; }
     public DateTime? PaymentDueAtUtc { get; set; }
     public DateTime? PaidAtUtc { get; set; }
+    public string PaymentStateCode { get; set; } = string.Empty;
+    public string PaymentStateLabel { get; set; } = string.Empty;
+    public int PaidInstallmentsCount { get; set; }
+    public int TotalInstallmentsCount { get; set; }
     public bool TransferUsed { get; set; }
 }
 
@@ -237,6 +241,7 @@ public class SummerPayRequest
 {
     public int MessageId { get; set; }
     public DateTimeOffset? PaidAtUtc { get; set; }
+    public string? PaymentStatus { get; set; }
     public bool ForceOverride { get; set; }
     public string? Notes { get; set; }
     public List<IFormFile>? files { get; set; } = new();
@@ -278,6 +283,7 @@ public class SummerAdminDashboardDto
     public int RepliedCount { get; set; }
     public int RejectedCount { get; set; }
     public int PaidCount { get; set; }
+    public int PartialPaidCount { get; set; }
     public int UnpaidCount { get; set; }
     public int OverdueUnpaidCount { get; set; }
     public List<SummerDashboardBucketDto> ByDestination { get; set; } = new();

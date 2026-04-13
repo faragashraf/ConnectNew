@@ -864,6 +864,39 @@ button.ghost:hover:not(:disabled) {
   font-size: 16px;
 }
 
+.payment-snapshot {
+  border: 1px solid #d8e8f4;
+  border-radius: 12px;
+  background: #f8fcff;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.payment-snapshot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px dashed #e1ecf6;
+  padding-bottom: 4px;
+}
+
+.payment-snapshot-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.payment-snapshot-row span {
+  color: #4e697d;
+  font-size: 12px;
+}
+
+.payment-snapshot-row strong {
+  color: #153f5e;
+  font-size: 13px;
+}
+
 .mini-capacity-grid {
   display: flex;
   flex-wrap: wrap;

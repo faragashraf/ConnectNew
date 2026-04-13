@@ -158,6 +158,9 @@ export class SummerWorkflowController {
     if (body.paidAtUtc) {
       formData.append('PaidAtUtc', body.paidAtUtc);
     }
+    if (body.paymentStatus) {
+      formData.append('PaymentStatus', body.paymentStatus);
+    }
     formData.append('ForceOverride', String(body.forceOverride));
     formData.append('Notes', body.notes ?? '');
     this.appendFiles(formData, body.files);
