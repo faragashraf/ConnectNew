@@ -43,7 +43,7 @@ export class AuthNewGuardService {
     const requiredRoleId = route.data?.['roleId'];
 
     if (requiredFunc) {
-      const hasPermission = this.hasFunctionPermission(requiredFunc, funcToken);
+      const hasPermission = this.hasFunctionPermission(requiredFunc, token, funcToken);
 
       if (!hasPermission) {
         this.router.navigate(['/Auth/AccessDenied']);
@@ -65,23 +65,50 @@ export class AuthNewGuardService {
   // ===============================
   // 🔐 Permission Check
   // ===============================
-  private hasFunctionPermission(requiredFunc: string, funcToken: string): boolean {
+  private hasFunctionPermission(requiredFunc: string, token: string, funcToken: string): boolean {
+
+    const normalizedRequiredFunc = `${requiredFunc ?? ''}`.trim();
+    if (!normalizedRequiredFunc) {
+      return false;
+    }
 
     try {
       const decoded = this.jwtHelper.decodeToken(funcToken);
       const functions = decoded?.functions;
 
-      if (!functions) return false;
-
-      if (Array.isArray(functions)) {
-        return functions.includes(requiredFunc);
+      if (!functions) {
+        return this.hasSummerRoleFallbackPermission(normalizedRequiredFunc, token, funcToken);
       }
 
-      return functions === requiredFunc;
+      if (Array.isArray(functions)) {
+        if (functions.includes(normalizedRequiredFunc)) {
+          return true;
+        }
+        return this.hasSummerRoleFallbackPermission(normalizedRequiredFunc, token, funcToken);
+      }
+
+      if (`${functions}` === normalizedRequiredFunc) {
+        return true;
+      }
+
+      return this.hasSummerRoleFallbackPermission(normalizedRequiredFunc, token, funcToken);
 
     } catch {
-      return false;
+      return this.hasSummerRoleFallbackPermission(normalizedRequiredFunc, token, funcToken);
     }
+  }
+
+  private hasSummerRoleFallbackPermission(requiredFunc: string, token: string, funcToken: string): boolean {
+    if (requiredFunc === 'SummerAdminFunc') {
+      return this.hasRolePermission('2020', token, funcToken)
+        || this.hasRolePermission('2021', token, funcToken);
+    }
+
+    if (requiredFunc === 'SummerGeneralManagerFunc') {
+      return this.hasRolePermission('2021', token, funcToken);
+    }
+
+    return false;
   }
 
   private hasRolePermission(requiredRoleId: string, ...tokens: Array<string | null>): boolean {

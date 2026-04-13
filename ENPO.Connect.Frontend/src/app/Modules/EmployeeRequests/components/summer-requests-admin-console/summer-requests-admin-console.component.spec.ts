@@ -8,6 +8,7 @@ describe('SummerRequestsAdminConsoleComponent - SummerGeneralManagerFunc', () =>
     getPricingCatalogSpy: jasmine.Spy;
     savePricingCatalogSpy: jasmine.Spy;
     checkAuthFunSpy: jasmine.Spy;
+    checkAuthRoleSpy: jasmine.Spy;
   } {
     const getPricingCatalogSpy = jasmine.createSpy('getPricingCatalog').and.returnValue(of({
       isSuccess: true,
@@ -20,6 +21,7 @@ describe('SummerRequestsAdminConsoleComponent - SummerGeneralManagerFunc', () =>
       errors: []
     }));
     const checkAuthFunSpy = jasmine.createSpy('checkAuthFun').and.returnValue(hasSummerPricingPermission);
+    const checkAuthRoleSpy = jasmine.createSpy('checkAuthRole').and.returnValue(hasSummerPricingPermission);
 
     const component = new SummerRequestsAdminConsoleComponent(
       new FormBuilder(),
@@ -33,6 +35,7 @@ describe('SummerRequestsAdminConsoleComponent - SummerGeneralManagerFunc', () =>
       {} as any,
       {
         checkAuthFun: checkAuthFunSpy,
+        checkAuthRole: checkAuthRoleSpy,
         authObject$: of(null)
       } as any,
       {
@@ -51,12 +54,13 @@ describe('SummerRequestsAdminConsoleComponent - SummerGeneralManagerFunc', () =>
       component,
       getPricingCatalogSpy,
       savePricingCatalogSpy,
-      checkAuthFunSpy
+      checkAuthFunSpy,
+      checkAuthRoleSpy
     };
   }
 
   it('blocks pricing load and save actions when SummerGeneralManagerFunc is missing', () => {
-    const { component, getPricingCatalogSpy, savePricingCatalogSpy, checkAuthFunSpy } = createComponent(false);
+    const { component, getPricingCatalogSpy, savePricingCatalogSpy, checkAuthFunSpy, checkAuthRoleSpy } = createComponent(false);
     component.pricingRecords = [{} as any];
 
     (component as any).refreshSummerPricingAccess();
@@ -64,6 +68,7 @@ describe('SummerRequestsAdminConsoleComponent - SummerGeneralManagerFunc', () =>
     component.savePricingCatalog();
 
     expect(checkAuthFunSpy).toHaveBeenCalledWith('SummerGeneralManagerFunc');
+    expect(checkAuthRoleSpy).toHaveBeenCalledWith('2021');
     expect(component.canManageSummerPricing).toBeFalse();
     expect(getPricingCatalogSpy).not.toHaveBeenCalled();
     expect(savePricingCatalogSpy).not.toHaveBeenCalled();

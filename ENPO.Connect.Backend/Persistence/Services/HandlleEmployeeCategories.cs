@@ -322,7 +322,7 @@ namespace Persistence.Services
             var allowAdminFrozenBooking = false;
             if (useFrozenInventory)
             {
-                allowAdminFrozenBooking = canManageSummerCategory;
+                allowAdminFrozenBooking = runtime.HasSummerAdminPermission || canManageSummerCategory;
                 if (!allowAdminFrozenBooking)
                 {
                     response.Errors.Add(new Error

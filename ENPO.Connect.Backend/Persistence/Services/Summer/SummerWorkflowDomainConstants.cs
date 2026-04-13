@@ -143,6 +143,7 @@ namespace Persistence.Services.Summer
 
         public static class AuthorizationRoles
         {
+            public const string SummerAdmin = "2020";
             public const string SummerGeneralManager = "2021";
         }
     }

@@ -1827,7 +1827,8 @@ namespace Persistence.Services
             int categoryId,
             string waveCode,
             string userId,
-            bool includeFrozenUnits = false)
+            bool includeFrozenUnits = false,
+            bool hasSummerAdminPermission = false)
         {
             var response = new CommonResponse<IEnumerable<SummerWaveCapacityDto>>();
             try
@@ -1848,7 +1849,7 @@ namespace Persistence.Services
                 var includeFrozenStock = false;
                 if (includeFrozenUnits)
                 {
-                    includeFrozenStock = await CanUserManageSummerCategoryAsync(userId, categoryId);
+                    includeFrozenStock = hasSummerAdminPermission || await CanUserManageSummerCategoryAsync(userId, categoryId);
                     if (!includeFrozenStock)
                     {
                         response.Errors.Add(new Error

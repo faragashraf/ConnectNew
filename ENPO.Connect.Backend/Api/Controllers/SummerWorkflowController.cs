@@ -63,7 +63,13 @@ namespace Api.Controllers
         public Task<CommonResponse<IEnumerable<SummerWaveCapacityDto>>> GetWaveCapacity(int categoryId, string waveCode, bool includeFrozenUnits = false)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            return _summerWorkflowService.GetWaveCapacityAsync(categoryId, waveCode, userId, includeFrozenUnits);
+            var hasSummerAdminPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerAdmin);
+            return _summerWorkflowService.GetWaveCapacityAsync(
+                categoryId,
+                waveCode,
+                userId,
+                includeFrozenUnits,
+                hasSummerAdminPermission);
         }
 
         [HttpGet(nameof(GetWaveBookingsPrintReport))]

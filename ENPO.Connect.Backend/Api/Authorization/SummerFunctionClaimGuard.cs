@@ -22,6 +22,8 @@ namespace Api.Authorization
         private static readonly IReadOnlyDictionary<string, string[]> FunctionRoleFallbackMap =
             new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
             {
+                // Summer admins (role 2020) and general managers (role 2021) both inherit SummerAdminFunc capabilities.
+                ["SummerAdminFunc"] = new[] { "2020", "2021" },
                 // Summer pricing admins in current production authorization matrix.
                 ["SummerGeneralManagerFunc"] = new[] { "2021" }
             };

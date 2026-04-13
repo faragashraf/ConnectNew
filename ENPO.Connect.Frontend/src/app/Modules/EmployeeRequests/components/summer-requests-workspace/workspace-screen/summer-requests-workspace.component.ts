@@ -1562,7 +1562,13 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   private refreshDestinationAccess(): void {
     try {
-      this.hasSummerAdminPermission = this.authObjectsService.checkAuthFun('SummerAdminFunc');
+      const hasSummerGeneralManagerPermission =
+        this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc')
+        || this.authObjectsService.checkAuthRole('2021');
+      this.hasSummerAdminPermission =
+        this.authObjectsService.checkAuthFun('SummerAdminFunc')
+        || this.authObjectsService.checkAuthRole('2020')
+        || hasSummerGeneralManagerPermission;
     } catch {
       this.hasSummerAdminPermission = false;
     }

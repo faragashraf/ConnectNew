@@ -123,6 +123,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   canUseProxyRegistration = false;
   canSelectMembershipType = false;
   canUseFrozenUnitsInCurrentFlow = false;
+  hasSummerGeneralManagerPermission = false;
 
   bookingCapacityLoading = false;
   bookingWaveCapacities: SummerWaveCapacityDto[] = [];
@@ -255,11 +256,11 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   }
 
   get canEditInstallmentPlanManually(): boolean {
-    return this.canSelectMembershipType;
+    return this.hasSummerGeneralManagerPermission;
   }
 
   get canManageInstallmentPaymentState(): boolean {
-    return this.canSelectMembershipType;
+    return this.hasSummerGeneralManagerPermission;
   }
 
   get installmentPlanTotalAmount(): number {
@@ -2039,15 +2040,23 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
   private refreshProxyModeAccess(): void {
     try {
-      const hasSummerAdminPermission = this.authObjectsService.checkAuthFun('SummerAdminFunc');
-      const hasSummerGeneralManagerPermission = this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc');
+      const hasSummerGeneralManagerPermission =
+        this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc')
+        || this.authObjectsService.checkAuthRole('2021');
+      const hasSummerAdminPermission =
+        this.authObjectsService.checkAuthFun('SummerAdminFunc')
+        || this.authObjectsService.checkAuthRole('2020')
+        || hasSummerGeneralManagerPermission;
+
+      this.hasSummerGeneralManagerPermission = hasSummerGeneralManagerPermission;
       this.canUseProxyRegistration = hasSummerAdminPermission;
-      this.canSelectMembershipType = hasSummerGeneralManagerPermission;
-      this.canUseFrozenUnitsInCurrentFlow = hasSummerGeneralManagerPermission;
+      this.canSelectMembershipType = hasSummerAdminPermission;
+      this.canUseFrozenUnitsInCurrentFlow = hasSummerAdminPermission;
       if (!this.canUseFrozenUnitsInCurrentFlow) {
         this.includeFrozenUnitsInBooking = false;
       }
     } catch {
+      this.hasSummerGeneralManagerPermission = false;
       this.canUseProxyRegistration = false;
       this.canSelectMembershipType = false;
       this.canUseFrozenUnitsInCurrentFlow = false;

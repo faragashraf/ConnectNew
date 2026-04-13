@@ -604,27 +604,40 @@ export class AuthObjectsService {
     }
   }
   checkAuthFun(fnc: string): boolean {
-    const funcToken = localStorage.getItem('ConnectFunctions')
-    if (!funcToken) {
-      return false
+    const normalizedFunction = `${fnc ?? ''}`.trim();
+    if (!normalizedFunction) {
+      return false;
     }
 
-    const decoded: any = this.jwtHelper.decodeToken(funcToken)
-    if (!decoded) {
-      return false
+    let hasFunctionClaim = false;
+    const funcToken = localStorage.getItem('ConnectFunctions');
+    if (funcToken) {
+      try {
+        const decoded: any = this.jwtHelper.decodeToken(funcToken);
+        const fncs = decoded?.functions;
+        if (Array.isArray(fncs)) {
+          hasFunctionClaim = fncs.includes(normalizedFunction);
+        } else if (fncs !== null && fncs !== undefined) {
+          hasFunctionClaim = `${fncs}` === normalizedFunction;
+        }
+      } catch {
+        hasFunctionClaim = false;
+      }
     }
 
-    const fncs = decoded.functions
-    if (!fncs) {
-      return false
+    if (hasFunctionClaim) {
+      return true;
     }
 
-    if (Array.isArray(fncs)) {
-      // return true if the function exists in the array
-      return fncs.includes(fnc)
-    } else {
-      return fncs === fnc
+    if (normalizedFunction === 'SummerAdminFunc') {
+      return this.checkAuthRole('2020') || this.checkAuthRole('2021');
     }
+
+    if (normalizedFunction === 'SummerGeneralManagerFunc') {
+      return this.checkAuthRole('2021');
+    }
+
+    return false;
   }
   checkAuthRole(roleId: string): boolean {
     const normalizedRequiredRoleId = `${roleId ?? ''}`.trim();

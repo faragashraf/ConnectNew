@@ -3137,8 +3137,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   private refreshSummerPricingAccess(): void {
     try {
-      const hasSummerPricingFunction = this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc');
-      this.canManageSummerPricing = hasSummerPricingFunction;
+      this.canManageSummerPricing =
+        this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc')
+        || this.authObjectsService.checkAuthRole('2021');
     } catch {
       this.canManageSummerPricing = false;
     }
