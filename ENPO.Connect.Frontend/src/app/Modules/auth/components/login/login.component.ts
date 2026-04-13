@@ -17,12 +17,8 @@ import { environment } from 'src/environments/environment';
 
 type LoginQueryParams = {
   username: string | null;
-  password: string | null;
-};
-
-type LoginCredentials = {
-  username: string;
-  password: string;
+  hasUsernameParam: boolean;
+  hasOnlyUsernameParam: boolean;
 };
 
 @Component({
@@ -69,10 +65,9 @@ export class LoginComponent implements OnInit, AfterViewInit {
   googlePlayUrl = 'https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2';
   appStoreUrl = 'https://apps.apple.com/app/google-authenticator/id388497605';
   isAutoLoginInProgress = false;
+  isUsernameReadOnlyFromUrl = false;
 
   private readonly autoLoginUsernameParam = 'username';
-  private readonly autoLoginPasswordParam = 'password';
-  private readonly summerRequestsRoute = '/EmployeeRequests/SummerRequests';
   private hasAttemptedAutoLogin = false;
   private autoLoginProbeAttempts = 0;
   private readonly autoLoginProbeMaxAttempts = 20;
@@ -423,72 +418,74 @@ export class LoginComponent implements OnInit, AfterViewInit {
     }
 
     const rawParams = this.readLoginQueryParams();
-    const credentials = this.validateAutoLoginCredentials(rawParams);
-    if (!credentials) {
+    const username = this.validateAutoLoginUsername(rawParams);
+    if (!username) {
       return;
     }
 
     this.hasAttemptedAutoLogin = true;
     this.stopAutoLoginProbe();
-    this.stripLoginCredentialsFromUrl();
+    this.stripLoginUsernameFromUrl();
 
     this.mode = 'credentials';
+    this.isUsernameReadOnlyFromUrl = true;
     this.loginForm.patchValue(
       {
-        username: credentials.username,
-        password: credentials.password
+        username,
+        password: ''
       },
       { emitEvent: false }
     );
-
-    this.executePasswordLogin(
-      credentials.username,
-      credentials.password,
-      true,
-      this.summerRequestsRoute
-    );
+    this.loginForm.get('password')?.markAsPristine();
+    this.loginForm.get('password')?.markAsUntouched();
+    this.msg.msgInfo('يرجى ادخال كلمة المرور الخاصه بمنصة تواصل', 'تنبيه');
+    this.focusPasswordInput();
   }
 
   private readLoginQueryParams(): LoginQueryParams {
-    const fromRoute: LoginQueryParams = {
-      username: this.route.snapshot.queryParamMap.get(this.autoLoginUsernameParam),
-      password: this.route.snapshot.queryParamMap.get(this.autoLoginPasswordParam)
-    };
-
-    if (fromRoute.username !== null && fromRoute.password !== null) {
+    const fromRoute = this.readLoginQueryParamsFromRoute();
+    if (fromRoute.hasUsernameParam) {
       return fromRoute;
     }
 
     const fromLocation = this.readLoginQueryParamsFromLocation();
-    const fromRawHref = this.readLoginQueryParamsFromRawHref();
-    return {
-      username: fromRoute.username ?? fromLocation.username ?? fromRawHref.username,
-      password: fromRoute.password ?? fromLocation.password ?? fromRawHref.password
-    };
+    if (fromLocation.hasUsernameParam) {
+      return fromLocation;
+    }
+
+    return this.readLoginQueryParamsFromRawHref();
   }
 
-  private validateAutoLoginCredentials(rawParams: LoginQueryParams): LoginCredentials | null {
-    const username = String(rawParams.username ?? '');
-    const password = String(rawParams.password ?? '');
+  private validateAutoLoginUsername(rawParams: LoginQueryParams): string | null {
+    const username = String(rawParams.username ?? '').trim();
 
-    if (!username.trim() || !password.trim()) {
+    if (!rawParams.hasOnlyUsernameParam || !username) {
       return null;
     }
 
-    return {
-      username,
-      password
-    };
+    return username;
+  }
+
+  private readLoginQueryParamsFromRoute(): LoginQueryParams {
+    const queryParams = new URLSearchParams();
+    this.route.snapshot.queryParamMap.keys.forEach((key) => {
+      const values = this.route.snapshot.queryParamMap.getAll(key);
+      if (values.length === 0) {
+        queryParams.append(key, '');
+        return;
+      }
+
+      values.forEach((value) => queryParams.append(key, value));
+    });
+
+    return this.buildLoginQueryParams(queryParams);
   }
 
   private readLoginQueryParamsFromLocation(): LoginQueryParams {
     try {
       const currentUrl = new URL(window.location.href);
-      const fromSearch: LoginQueryParams = {
-        username: currentUrl.searchParams.get(this.autoLoginUsernameParam),
-        password: currentUrl.searchParams.get(this.autoLoginPasswordParam)
-      };
-      if (fromSearch.username !== null || fromSearch.password !== null) {
+      const fromSearch = this.buildLoginQueryParams(currentUrl.searchParams);
+      if (fromSearch.hasUsernameParam) {
         return fromSearch;
       }
 
@@ -497,17 +494,14 @@ export class LoginComponent implements OnInit, AfterViewInit {
         : currentUrl.hash;
       const queryStartIndex = normalizedHash.indexOf('?');
       if (queryStartIndex < 0) {
-        return { username: null, password: null };
+        return this.emptyLoginQueryParams();
       }
 
       const queryString = normalizedHash.substring(queryStartIndex + 1);
       const searchParams = new URLSearchParams(queryString);
-      return {
-        username: searchParams.get(this.autoLoginUsernameParam),
-        password: searchParams.get(this.autoLoginPasswordParam)
-      };
+      return this.buildLoginQueryParams(searchParams);
     } catch {
-      return { username: null, password: null };
+      return this.emptyLoginQueryParams();
     }
   }
 
@@ -515,14 +509,38 @@ export class LoginComponent implements OnInit, AfterViewInit {
     const href = String(window.location.href ?? '');
     const query = this.extractQueryStringFromRawHref(href);
     if (!query) {
-      return { username: null, password: null };
+      return this.emptyLoginQueryParams();
     }
 
     const params = new URLSearchParams(query);
+    return this.buildLoginQueryParams(params);
+  }
+
+  private buildLoginQueryParams(params: URLSearchParams): LoginQueryParams {
+    const keys: string[] = [];
+    params.forEach((_, key) => keys.push(key));
+    const hasUsernameParam = params.has(this.autoLoginUsernameParam);
+
     return {
       username: params.get(this.autoLoginUsernameParam),
-      password: params.get(this.autoLoginPasswordParam)
+      hasUsernameParam,
+      hasOnlyUsernameParam: hasUsernameParam && keys.length > 0 && keys.every((key) => key === this.autoLoginUsernameParam)
     };
+  }
+
+  private emptyLoginQueryParams(): LoginQueryParams {
+    return {
+      username: null,
+      hasUsernameParam: false,
+      hasOnlyUsernameParam: false
+    };
+  }
+
+  private focusPasswordInput(): void {
+    setTimeout(() => {
+      const passwordInput = document.getElementById('password') as HTMLInputElement | null;
+      passwordInput?.focus();
+    }, 0);
   }
 
   private extractQueryStringFromRawHref(href: string): string {
@@ -575,18 +593,13 @@ export class LoginComponent implements OnInit, AfterViewInit {
     this.autoLoginProbeTimer = null;
   }
 
-  private stripLoginCredentialsFromUrl(): void {
+  private stripLoginUsernameFromUrl(): void {
     try {
       const currentUrl = new URL(window.location.href);
       let changed = false;
 
       if (currentUrl.searchParams.has(this.autoLoginUsernameParam)) {
         currentUrl.searchParams.delete(this.autoLoginUsernameParam);
-        changed = true;
-      }
-
-      if (currentUrl.searchParams.has(this.autoLoginPasswordParam)) {
-        currentUrl.searchParams.delete(this.autoLoginPasswordParam);
         changed = true;
       }
 
@@ -600,11 +613,9 @@ export class LoginComponent implements OnInit, AfterViewInit {
         const hashQuery = normalizedHash.substring(queryStartIndex + 1);
         const hashParams = new URLSearchParams(hashQuery);
         const hadHashUsername = hashParams.has(this.autoLoginUsernameParam);
-        const hadHashPassword = hashParams.has(this.autoLoginPasswordParam);
 
-        if (hadHashUsername || hadHashPassword) {
+        if (hadHashUsername) {
           hashParams.delete(this.autoLoginUsernameParam);
-          hashParams.delete(this.autoLoginPasswordParam);
           const cleanedHashQuery = hashParams.toString();
           currentUrl.hash = cleanedHashQuery ? `${hashPath}?${cleanedHashQuery}` : hashPath;
           changed = true;

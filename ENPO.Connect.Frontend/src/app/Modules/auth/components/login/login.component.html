@@ -135,6 +135,7 @@
                         <span class="p-float-label">
                             <i class="pi pi-user field-icon-right"></i>
                             <input pInputText id="username" formControlName="username" class="w-full has-icon-right"
+                                [readonly]="isUsernameReadOnlyFromUrl"
                                 [ngClass]="{'ng-invalid ng-dirty': loginForm.get('username')?.touched && loginForm.get('username')?.invalid}" />
                             <label for="username">اسم المستخدم</label>
                         </span>
