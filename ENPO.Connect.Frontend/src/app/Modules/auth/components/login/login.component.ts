@@ -18,7 +18,8 @@ import { environment } from 'src/environments/environment';
 type LoginQueryParams = {
   username: string | null;
   hasUsernameParam: boolean;
-  hasOnlyUsernameParam: boolean;
+  hasReturnUrlParam: boolean;
+  hasExactLoginParams: boolean;
 };
 
 @Component({
@@ -68,6 +69,7 @@ export class LoginComponent implements OnInit, AfterViewInit {
   isUsernameReadOnlyFromUrl = false;
 
   private readonly autoLoginUsernameParam = 'username';
+  private readonly autoLoginReturnUrlParam = 'returnUrl';
   private hasAttemptedAutoLogin = false;
   private autoLoginProbeAttempts = 0;
   private readonly autoLoginProbeMaxAttempts = 20;
@@ -444,12 +446,12 @@ export class LoginComponent implements OnInit, AfterViewInit {
 
   private readLoginQueryParams(): LoginQueryParams {
     const fromRoute = this.readLoginQueryParamsFromRoute();
-    if (fromRoute.hasUsernameParam) {
+    if (fromRoute.hasUsernameParam || fromRoute.hasReturnUrlParam) {
       return fromRoute;
     }
 
     const fromLocation = this.readLoginQueryParamsFromLocation();
-    if (fromLocation.hasUsernameParam) {
+    if (fromLocation.hasUsernameParam || fromLocation.hasReturnUrlParam) {
       return fromLocation;
     }
 
@@ -459,7 +461,7 @@ export class LoginComponent implements OnInit, AfterViewInit {
   private validateAutoLoginUsername(rawParams: LoginQueryParams): string | null {
     const username = String(rawParams.username ?? '').trim();
 
-    if (!rawParams.hasOnlyUsernameParam || !username) {
+    if (!rawParams.hasExactLoginParams || !username) {
       return null;
     }
 
@@ -485,7 +487,7 @@ export class LoginComponent implements OnInit, AfterViewInit {
     try {
       const currentUrl = new URL(window.location.href);
       const fromSearch = this.buildLoginQueryParams(currentUrl.searchParams);
-      if (fromSearch.hasUsernameParam) {
+      if (fromSearch.hasUsernameParam || fromSearch.hasReturnUrlParam) {
         return fromSearch;
       }
 
@@ -520,11 +522,19 @@ export class LoginComponent implements OnInit, AfterViewInit {
     const keys: string[] = [];
     params.forEach((_, key) => keys.push(key));
     const hasUsernameParam = params.has(this.autoLoginUsernameParam);
+    const hasReturnUrlParam = params.has(this.autoLoginReturnUrlParam);
+    const hasExactLoginParams =
+      hasUsernameParam
+      && hasReturnUrlParam
+      && keys.length === 2
+      && keys[0] === this.autoLoginUsernameParam
+      && keys[1] === this.autoLoginReturnUrlParam;
 
     return {
       username: params.get(this.autoLoginUsernameParam),
       hasUsernameParam,
-      hasOnlyUsernameParam: hasUsernameParam && keys.length > 0 && keys.every((key) => key === this.autoLoginUsernameParam)
+      hasReturnUrlParam,
+      hasExactLoginParams
     };
   }
 
@@ -532,7 +542,8 @@ export class LoginComponent implements OnInit, AfterViewInit {
     return {
       username: null,
       hasUsernameParam: false,
-      hasOnlyUsernameParam: false
+      hasReturnUrlParam: false,
+      hasExactLoginParams: false
     };
   }
 
