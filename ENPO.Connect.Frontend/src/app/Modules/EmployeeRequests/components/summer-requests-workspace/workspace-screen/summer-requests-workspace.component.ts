@@ -248,7 +248,20 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   get transferDestination(): SummerDestinationConfig | undefined {
     const categoryId = this.getNumberValue(this.transferForm.get('toCategoryId'));
-    return this.destinations.find(item => item.categoryId === categoryId);
+    return this.transferDestinationOptions.find(item => item.categoryId === categoryId);
+  }
+
+  get transferDestinationOptions(): SummerDestinationConfig[] {
+    const request = this.selectedRequest;
+    if (!request) {
+      return [];
+    }
+
+    if (this.hasSummerAdminPermission) {
+      return this.destinations;
+    }
+
+    return this.destinations.filter(item => item.categoryId === request.categoryId);
   }
 
   get transferWaves(): SummerWaveDefinition[] {
@@ -773,6 +786,14 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const currentRequest = this.selectedRequest;
+    if (!this.hasSummerAdminPermission
+      && currentRequest
+      && destination.categoryId !== currentRequest.categoryId) {
+      this.msg.msgError('خطأ', '<h5>التحويل للمستخدم متاح بين الأفواج داخل نفس المصيف فقط.</h5>', true);
+      return;
+    }
+
     const newFamilyCount = this.getNumberValue(this.transferForm.get('newFamilyCount'));
     const maxFamilyOption = destination.familyOptions.length > 0 ? Math.max(...destination.familyOptions) : 0;
     const newExtraCount = this.getNumberValue(this.transferForm.get('newExtraCount'));
@@ -849,7 +870,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
     this.transferForm.patchValue(
       {
-        toCategoryId: null,
+        toCategoryId: this.hasSummerAdminPermission ? null : (current.categoryId ?? null),
         toWaveCode: '',
         newFamilyCount: null,
         newExtraCount: 0,
@@ -858,6 +879,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       { emitEvent: false }
     );
     this.transferWaveCapacities = [];
+    this.applyTransferRules(this.getNumberValue(this.transferForm.get('toCategoryId')));
     this.applyTransferExtraRules();
     this.loadSelectedRequestDetails(messageId);
   }
@@ -1735,7 +1757,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private applyTransferRules(categoryId: number): void {
-    const destination = this.destinations.find(item => item.categoryId === categoryId);
+    const destination = this.transferDestinationOptions.find(item => item.categoryId === categoryId);
     if (!destination) {
       this.transferWaveCapacities = [];
       this.transferForm.patchValue(

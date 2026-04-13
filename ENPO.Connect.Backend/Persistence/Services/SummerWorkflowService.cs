@@ -217,6 +217,12 @@ namespace Persistence.Services
                         continue;
                     }
 
+                    var isProxyBooking = ParseBooleanLike(GetFirstFieldValue(messageFields, SummerWorkflowDomainConstants.ProxyModeFieldKinds));
+                    if (isProxyBooking == true)
+                    {
+                        continue;
+                    }
+
                     var seasonFromField = ParseInt(GetFieldValue(messageFields, "SummerSeasonYear"), 0);
                     if (seasonFromField > 0 && seasonFromField != seasonYear)
                     {
@@ -3076,7 +3082,8 @@ namespace Persistence.Services
             string? initiatedByUserId = null,
             MessageStatus? previousStatusForAdminAction = null,
             string? adminActionComment = null,
-            DateTime? adminActionAtUtc = null)
+            DateTime? adminActionAtUtc = null,
+            bool hasSummerAdminPermission = false)
         {
             var response = new CommonResponse<SummerRequestSummaryDto>();
             request ??= new SummerTransferRequest();
@@ -3108,6 +3115,17 @@ namespace Persistence.Services
                 if (!await CanUserEditSummerMessageAsync(userId, message))
                 {
                     response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بالتعديل على هذا الطلب." });
+                    return response;
+                }
+
+                var canTransferAcrossDestinations = hasSummerAdminPermission;
+                if (!canTransferAcrossDestinations && message.CategoryCd != request.ToCategoryId)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "التحويل للمستخدم متاح بين الأفواج داخل نفس المصيف فقط."
+                    });
                     return response;
                 }
 

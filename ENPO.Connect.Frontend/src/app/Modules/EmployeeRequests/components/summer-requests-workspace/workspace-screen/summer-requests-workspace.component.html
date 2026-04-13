@@ -287,7 +287,7 @@
                   <span class="required-label">المصيف المستهدف</span>
                   <select formControlName="toCategoryId">
                     <option [ngValue]="null">اختر</option>
-                    <option *ngFor="let destination of destinations; trackBy: destinationTrackBy" [ngValue]="destination.categoryId">
+                    <option *ngFor="let destination of transferDestinationOptions; trackBy: destinationTrackBy" [ngValue]="destination.categoryId">
                       {{ destination.name }}
                     </option>
                   </select>
