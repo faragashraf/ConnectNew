@@ -137,7 +137,7 @@
             [ngModel]="selectedPaymentMode"
             [ngModelOptions]="{ standalone: true }"
             (ngModelChange)="onPaymentModeChanged($event)"
-            [disabled]="submitting || loadingMetadata || loadingEditRequest">
+            [disabled]="submitting || loadingMetadata || loadingEditRequest || !canEditPaymentPlanSettings">
             <option *ngFor="let option of paymentModeOptions" [ngValue]="option.value">
               {{ option.label }}
             </option>
@@ -149,7 +149,7 @@
             [ngModel]="selectedInstallmentCount"
             [ngModelOptions]="{ standalone: true }"
             (ngModelChange)="onInstallmentCountChanged($event)"
-            [disabled]="submitting || loadingMetadata || loadingEditRequest">
+            [disabled]="submitting || loadingMetadata || loadingEditRequest || !canEditPaymentPlanSettings">
             <option *ngFor="let count of installmentCountOptions" [ngValue]="count">
               {{ count }}
             </option>
@@ -204,9 +204,9 @@
         <strong>{{ formatPriceValue(quote.grandTotal) }}</strong>
       </div>
       <p class="warn" *ngIf="isInstallmentMode && installmentPlanError.length > 0">{{ installmentPlanError }}</p>
-      <!-- <small class="mode-note" *ngIf="isInstallmentMode && !canEditInstallmentPlanManually">
-        تعديل قيم الأقساط وتسجيل السداد متاحان للمدير العام فقط.
-      </small> -->
+      <small class="mode-note" *ngIf="!canEditPaymentPlanSettings">
+        تعديل أسلوب السداد وعدد الأقساط وقيم الأقساط وحالة السداد متاح للمدير العام فقط.
+      </small>
     </section>
 
     <p class="pricing-note" *ngIf="!pricingQuoteLoading && pricingQuote as quote">

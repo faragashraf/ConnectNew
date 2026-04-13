@@ -1309,6 +1309,70 @@
         </ng-container>
       </section>
 
+      <section class="payment-card" *ngIf="canShowPaymentCard">
+        <h4>تسجيل السداد</h4>
+        <form [formGroup]="paymentForm" (ngSubmit)="submitPayment()" class="action-form payment-form">
+          <div class="payment-snapshot" *ngIf="paymentSnapshot as snapshot">
+            <div class="payment-snapshot-row">
+              <span>طريقة السداد</span>
+              <strong>{{ snapshot.paymentModeLabel }}</strong>
+            </div>
+            <div class="payment-snapshot-row">
+              <span>البيان</span>
+              <strong>{{ snapshot.installmentLabel }}</strong>
+            </div>
+            <div class="payment-snapshot-row">
+              <span>مبلغ السداد</span>
+              <strong>{{ snapshot.amountText }}</strong>
+            </div>
+            <div class="payment-snapshot-row">
+              <span>تاريخ السداد الحالي</span>
+              <strong>{{ snapshot.paidAtDisplay }}</strong>
+            </div>
+            <div class="payment-snapshot-row">
+              <span>حالة السداد الحالية</span>
+              <strong>{{ snapshot.statusLabel }}</strong>
+            </div>
+          </div>
+
+          <label>
+            <span>حالة السداد</span>
+            <select formControlName="paymentStatus">
+              <option value="PAID">مسدد</option>
+              <option value="UNPAID">غير مسدد</option>
+            </select>
+          </label>
+
+          <label>
+            <span>تاريخ ووقت السداد</span>
+            <input type="datetime-local" step="1" formControlName="paidAtLocal" [attr.max]="getPaymentMaxDateTimeLocal()" />
+          </label>
+          <p class="help-text warn" *ngIf="hasPaymentInFutureError()">{{ paymentInFutureMessage }}</p>
+
+          <label>
+            <span>ملاحظات السداد</span>
+            <textarea rows="2" formControlName="notes" placeholder="ملاحظات اختيارية"></textarea>
+          </label>
+
+          <label class="file-picker">
+            <span>مرفقات السداد</span>
+            <input type="file" multiple accept=".pdf,image/*" (change)="addPaymentFiles($event)" />
+          </label>
+
+          <div class="files" *ngIf="paymentAttachments.length > 0">
+            <div class="file" *ngFor="let file of paymentAttachments; let i = index">
+              <span>{{ file.name }}</span>
+              <button type="button" (click)="removePaymentFile(i)">حذف</button>
+            </div>
+          </div>
+          <p class="help-text warn" *ngIf="paymentAttachments.length === 0">يلزم مرفق واحد على الأقل لتسجيل السداد.</p>
+
+          <button type="submit" class="primary" [disabled]="submittingPayment || paymentForm.invalid || paymentAttachments.length === 0 || !selectedRequestId">
+            {{ submittingPayment ? 'جاري التنفيذ...' : 'تسجيل السداد' }}
+          </button>
+        </form>
+      </section>
+
       <section class="action-card">
         <h4>تنفيذ إجراء إداري</h4>
         <form [formGroup]="actionForm" (ngSubmit)="submitAdminAction()" class="action-form">
@@ -1332,42 +1396,26 @@
             <span>تعليق الإدارة</span>
             <textarea rows="3" formControlName="comment" placeholder="أدخل رد/تعليق الإدارة"></textarea>
           </label>
+          <small class="comment-counter">
+            عدد الأحرف: {{ adminCommentCurrentLength }} / {{ adminCommentMaxLengthDisplay }}
+          </small>
+          <small class="help-text warn" *ngIf="actionForm.get('comment')?.touched && actionForm.get('comment')?.hasError('maxlength')">
+            الحد الأقصى لتعليق الإدارة 300 حرف (ويستثنى إجراء إداري داخلي).
+          </small>
+          <small class="help-text warn" *ngIf="actionForm.get('comment')?.touched && actionForm.get('comment')?.hasError('pattern')">
+            تعليق الإدارة يقبل الأحرف فقط (عربي/English) لجميع الإجراءات باستثناء إجراء إداري داخلي.
+          </small>
+          <small class="help-text admin-note">
+            ملاحظة: يتم إرسال رسالة نصية للموظف ببيانات الطلب الأساسية (اسم المصيف، رقم الطلب، موعد الفوج) وتعليق الإدارة في جميع الإجراءات.
+          </small>
+          <small class="help-text admin-note">
+            ملاحظة: عند اختيار "إجراء إداري داخلي" لا يتم إرسال رسالة نصية للموظف.
+          </small>
 
           <label class="checkbox-row">
             <input type="checkbox" formControlName="force" />
             <span>تنفيذ إجباري (عند الحاجة)</span>
           </label>
-
-          <ng-container *ngIf="isTransferActionSelected">
-            <label>
-              <span>المصيف المستهدف</span>
-              <select formControlName="toCategoryId">
-                <option [ngValue]="null">اختر</option>
-                <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">{{ destination.name }}</option>
-              </select>
-            </label>
-
-            <label>
-              <span>الفوج المستهدف</span>
-              <select formControlName="toWaveCode">
-                <option [ngValue]="''">اختر</option>
-                <option *ngFor="let wave of transferWaves" [ngValue]="wave.code">{{ wave.code }} - {{ wave.startsAtLabel }}</option>
-              </select>
-            </label>
-
-            <label>
-              <span>عدد الأفراد</span>
-              <select formControlName="newFamilyCount">
-                <option [ngValue]="null">اختر</option>
-                <option *ngFor="let option of transferFamilyOptions" [ngValue]="option">{{ option }}</option>
-              </select>
-            </label>
-
-            <label>
-              <span>عدد الأفراد الإضافيين</span>
-              <input type="number" min="0" formControlName="newExtraCount" />
-            </label>
-          </ng-container>
 
           <label class="file-picker">
             <span>مرفقات الإجراء</span>

@@ -1913,6 +1913,7 @@ button.ghost:hover:not(:disabled) {
 .fields-card,
 .attachments-card,
 .updates-card,
+.payment-card,
 .action-card {
   border: 1px solid #d5e4f2;
   border-radius: 16px;
@@ -1990,6 +1991,52 @@ button.ghost:hover:not(:disabled) {
 .action-form {
   display: grid;
   gap: 10px;
+}
+
+.comment-counter {
+  display: block;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-note {
+  display: block;
+  color: #d97706;
+  font-weight: 700;
+}
+
+.payment-snapshot {
+  border: 1px solid #d8e8f4;
+  border-radius: 12px;
+  background: #f8fcff;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.payment-snapshot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px dashed #e1ecf6;
+  padding-bottom: 4px;
+}
+
+.payment-snapshot-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.payment-snapshot-row span {
+  color: #4e697d;
+  font-size: 12px;
+}
+
+.payment-snapshot-row strong {
+  color: #153f5e;
+  font-size: 13px;
 }
 
 .checkbox-row {

@@ -149,25 +149,68 @@ namespace Persistence.Services
         {
             ["OWNER_NAME"] = "اسم صاحب الطلب",
             ["OWNER_FILE_NUMBER"] = "رقم ملف صاحب الطلب",
+            ["OWNER_NATIONAL_ID"] = "الرقم القومي",
             ["OWNER_PHONE"] = "رقم هاتف صاحب الطلب",
             ["OWNER_EXTRA_PHONE"] = "هاتف إضافي",
+            ["SEASON_YEAR"] = "موسم الحجز",
+            ["DESTINATION_NAME"] = "اسم المصيف",
+            ["DESTINATION_ID"] = "كود المصيف",
+            ["WAVE_CODE"] = "الفوج",
+            ["WAVE_LABEL"] = "بيان الفوج",
+            ["STAY_MODE"] = "نوع الحجز",
+            ["PROXY_MODE"] = "تسجيل بالنيابة",
+            ["USE_FROZEN_UNIT"] = "تضمين الوحدات المجمدة",
             ["FAMILY_COUNT"] = "عدد الأفراد",
             ["EXTRA_COUNT"] = "أفراد إضافيون",
             ["COMPANION_NAME"] = "اسم المرافق",
             ["COMPANION_AGE"] = "سن (للأطفال)",
-            ["COMPANION_RELATION"] = "صلة القرابة"
+            ["COMPANION_RELATION"] = "صلة القرابة",
+            ["COMPANION_NATIONAL_ID"] = "الرقم القومي للمرافق"
         };
         private static readonly Dictionary<string, string> SummerAuditFallbackGroupByAlias = new(StringComparer.OrdinalIgnoreCase)
         {
             ["OWNER_NAME"] = "بيانات صاحب الطلب",
             ["OWNER_FILE_NUMBER"] = "بيانات صاحب الطلب",
+            ["OWNER_NATIONAL_ID"] = "بيانات صاحب الطلب",
             ["OWNER_PHONE"] = "بيانات صاحب الطلب",
             ["OWNER_EXTRA_PHONE"] = "بيانات صاحب الطلب",
+            ["SEASON_YEAR"] = "بيانات الحجز",
+            ["DESTINATION_NAME"] = "بيانات الحجز",
+            ["DESTINATION_ID"] = "بيانات الحجز",
+            ["WAVE_CODE"] = "بيانات الحجز",
+            ["WAVE_LABEL"] = "بيانات الحجز",
+            ["STAY_MODE"] = "بيانات الحجز",
+            ["PROXY_MODE"] = "بيانات صاحب الطلب",
+            ["USE_FROZEN_UNIT"] = "بيانات الحجز",
             ["FAMILY_COUNT"] = "بيانات الحجز",
             ["EXTRA_COUNT"] = "بيانات الحجز",
             ["COMPANION_NAME"] = "بيانات المرافقين",
             ["COMPANION_AGE"] = "بيانات المرافقين",
-            ["COMPANION_RELATION"] = "بيانات المرافقين"
+            ["COMPANION_RELATION"] = "بيانات المرافقين",
+            ["COMPANION_NATIONAL_ID"] = "بيانات المرافقين"
+        };
+        private static readonly Dictionary<string, string> SummerAuditKnownValueLabels = new(StringComparer.OrdinalIgnoreCase)
+        {
+            [SummerWorkflowDomainConstants.StayModes.ResidenceOnly] = "إقامة فقط",
+            [SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport] = "إقامة وانتقالات",
+            [SummerWorkflowDomainConstants.PaymentModes.Cash] = "كاش",
+            [SummerWorkflowDomainConstants.PaymentModes.Installment] = "تقسيط",
+            [SummerWorkflowDomainConstants.PricingModes.AccommodationOnlyAllowed] = "إقامة فقط",
+            [SummerWorkflowDomainConstants.PricingModes.AccommodationAndTransportationOptional] = "إقامة وانتقالات (اختياري)",
+            [SummerWorkflowDomainConstants.PricingModes.TransportationMandatoryIncluded] = "انتقالات إلزامية ومضمنة",
+            [SummerWorkflowDomainConstants.MembershipTypes.Worker] = "عضو عامل",
+            [SummerWorkflowDomainConstants.MembershipTypes.NonWorker] = "عضو غير عامل",
+            ["PENDING_PAYMENT"] = "بانتظار السداد",
+            ["PAID"] = "مسدد",
+            ["UNPAID"] = "غير مسدد",
+            ["PARTIAL_PAID"] = "مسدد جزئي",
+            ["CANCELLED_ADMIN"] = "ملغي إداريًا",
+            ["CANCELLED_USER"] = "ملغي من صاحب الطلب",
+            ["CANCELLED_AUTO"] = "ملغي تلقائيًا",
+            ["CANCELLED"] = "ملغي",
+            ["OVERDUE"] = "متأخر",
+            ["TRANSFER_REVIEW_REQUIRED"] = "يتطلب مراجعة بعد التحويل",
+            ["TRANSFER_REVIEW_RESOLVED"] = "تمت مراجعة التحويل"
         };
 
         public HandleEmployeeCategories(
@@ -651,7 +694,12 @@ namespace Persistence.Services
                     }
 
                     var assignedSector = messageRequest.AssignedSectorId ?? messageRequest.CreatedBy;
-                    var reply = _helperService.CreateReply(messageId, replyText, messageRequest.CreatedBy, assignedSector, "0.0.0.0");
+                    var replyAuthorId = isEditOperation
+                        ? (string.IsNullOrWhiteSpace(normalizedActorUserId)
+                            ? (messageRequest.CreatedBy ?? string.Empty).Trim()
+                            : normalizedActorUserId)
+                        : (messageRequest.CreatedBy ?? string.Empty).Trim();
+                    var reply = _helperService.CreateReply(messageId, replyText, replyAuthorId, assignedSector, "0.0.0.0");
 
                     if (isEditOperation)
                     {
@@ -1409,13 +1457,12 @@ SELECT @result;
             var normalizedGrandTotal = NormalizeMoney(grandTotal);
             var incomingPaymentModeRaw = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.PaymentModeFieldKinds);
             var incomingPaymentMode = NormalizePaymentModeToken(incomingPaymentModeRaw);
+            var hasExistingSnapshot = existingSnapshot != null && existingSnapshot.Count > 0;
 
             var resolvedPaymentMode = incomingPaymentMode;
             if (!hasSummerGeneralManagerPermission
                 && isEditOperation
-                && existingSnapshot != null
-                && existingSnapshot.Count > 0
-                && string.IsNullOrWhiteSpace(incomingPaymentModeRaw))
+                && hasExistingSnapshot)
             {
                 resolvedPaymentMode = NormalizePaymentModeToken(
                     GetFirstSnapshotValue(existingSnapshot, SummerWorkflowDomainConstants.PaymentModeFieldKinds));
@@ -1455,7 +1502,6 @@ SELECT @result;
             var maxInstallmentCount = SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount;
             var defaultInstallmentCount = SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount;
             var minInstallmentCount = SummerWorkflowDomainConstants.PaymentModes.MinInstallmentCount;
-            var hasExistingSnapshot = existingSnapshot != null && existingSnapshot.Count > 0;
 
             var incomingInstallmentCountRaw = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.InstallmentCountFieldKinds);
             if (!TryResolveInstallmentCount(
@@ -1483,9 +1529,7 @@ SELECT @result;
                 && isEditOperation
                 && hasExistingSnapshot)
             {
-                resolvedInstallmentCount = string.IsNullOrWhiteSpace(incomingInstallmentCountRaw)
-                    ? existingInstallmentCount
-                    : incomingInstallmentCount;
+                resolvedInstallmentCount = existingInstallmentCount;
             }
 
             if (resolvedInstallmentCount < minInstallmentCount || resolvedInstallmentCount > maxInstallmentCount)
@@ -2285,8 +2329,8 @@ SELECT @result;
                 var fieldName = metadata?.FieldLabel ?? fieldKind;
                 var operation = GetAuditOperationArabic(oldField, newField);
                 var instanceGroupId = newField?.InstanceGroupId ?? oldField?.InstanceGroupId ?? 1;
-                var beforeValue = FormatAuditValue(oldValue);
-                var afterValue = FormatAuditValue(newValue);
+                var beforeValue = FormatAuditValue(oldValue, fieldKind, metadata);
+                var afterValue = FormatAuditValue(newValue, fieldKind, metadata);
 
                 auditEntries.Add(new SummerFieldAuditEntry
                 {
@@ -2321,7 +2365,9 @@ SELECT @result;
                 {
                     categoryMand.MendField,
                     GroupName = mandGroup != null ? mandGroup.GroupName : null,
-                    FieldLabel = mend != null ? mend.CDMendLbl : null
+                    FieldLabel = mend != null ? mend.CDMendLbl : null,
+                    FieldType = mend != null ? mend.CdmendType : null,
+                    FieldOptions = mend != null ? mend.CdmendTbl : null
                 }).ToListAsync();
 
             var result = new Dictionary<string, SummerFieldAuditMetadata>(StringComparer.OrdinalIgnoreCase);
@@ -2336,7 +2382,9 @@ SELECT @result;
                 result[fieldKind] = new SummerFieldAuditMetadata
                 {
                     GroupName = NormalizeAuditText(row.GroupName),
-                    FieldLabel = NormalizeAuditText(row.FieldLabel)
+                    FieldLabel = NormalizeAuditText(row.FieldLabel),
+                    FieldType = NormalizeAuditText(row.FieldType),
+                    FieldOptions = row.FieldOptions
                 };
             }
 
@@ -2381,10 +2429,317 @@ SELECT @result;
                 .Trim();
         }
 
-        private static string FormatAuditValue(string? value)
+        private static string FormatAuditValue(
+            string? value,
+            string? fieldKind = null,
+            SummerFieldAuditMetadata? metadata = null)
         {
             var normalized = NormalizeAuditText(value);
-            return string.IsNullOrWhiteSpace(normalized) ? "(فارغ)" : normalized;
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return "(فارغ)";
+            }
+
+            var optionLabel = ResolveAuditOptionLabelFromMetadata(metadata, normalized);
+            if (!string.IsNullOrWhiteSpace(optionLabel))
+            {
+                return optionLabel;
+            }
+
+            if (!string.IsNullOrWhiteSpace(fieldKind))
+            {
+                var canonicalAlias = ResolveSummerAuditAlias(fieldKind);
+                var mappedBooleanValue = ResolveBooleanAuditDisplayText(normalized, canonicalAlias, metadata);
+                if (!string.IsNullOrWhiteSpace(mappedBooleanValue))
+                {
+                    return mappedBooleanValue;
+                }
+            }
+
+            if (SummerAuditKnownValueLabels.TryGetValue(normalized, out var knownLabel)
+                && !string.IsNullOrWhiteSpace(knownLabel))
+            {
+                return knownLabel;
+            }
+
+            return normalized;
+        }
+
+        private static string? ResolveAuditOptionLabelFromMetadata(SummerFieldAuditMetadata? metadata, string normalizedValue)
+        {
+            if (metadata == null || string.IsNullOrWhiteSpace(normalizedValue))
+            {
+                return null;
+            }
+
+            var optionCandidates = TryParseAuditFieldOptions(metadata.FieldOptions);
+            if (optionCandidates.Count == 0)
+            {
+                return null;
+            }
+
+            return optionCandidates.TryGetValue(normalizedValue, out var mappedLabel)
+                && !string.IsNullOrWhiteSpace(mappedLabel)
+                ? mappedLabel
+                : null;
+        }
+
+        private static Dictionary<string, string> TryParseAuditFieldOptions(string? rawOptions)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var normalizedOptions = NormalizeAuditText(rawOptions);
+            if (string.IsNullOrWhiteSpace(normalizedOptions)
+                || string.Equals(normalizedOptions, "[]", StringComparison.Ordinal))
+            {
+                return result;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(normalizedOptions);
+                if (document.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in document.RootElement.EnumerateArray())
+                    {
+                        AppendAuditOptionCandidate(result, item);
+                    }
+
+                    return result;
+                }
+
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    return result;
+                }
+
+                foreach (var arrayContainerName in new[] { "options", "items", "data", "list", "values" })
+                {
+                    if (!TryGetJsonPropertyIgnoreCase(document.RootElement, arrayContainerName, out var arrayContainer)
+                        || arrayContainer.ValueKind != JsonValueKind.Array)
+                    {
+                        continue;
+                    }
+
+                    foreach (var item in arrayContainer.EnumerateArray())
+                    {
+                        AppendAuditOptionCandidate(result, item);
+                    }
+                }
+
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    var key = NormalizeAuditText(property.Name);
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        continue;
+                    }
+
+                    if (property.Value.ValueKind == JsonValueKind.Object)
+                    {
+                        var labelFromObject = ExtractJsonTextProperty(property.Value, "name")
+                            ?? ExtractJsonTextProperty(property.Value, "label")
+                            ?? ExtractJsonTextProperty(property.Value, "text")
+                            ?? ExtractJsonTextProperty(property.Value, "title");
+                        if (!string.IsNullOrWhiteSpace(labelFromObject) && !result.ContainsKey(key))
+                        {
+                            result[key] = labelFromObject;
+                        }
+
+                        continue;
+                    }
+
+                    var directLabel = ExtractJsonElementText(property.Value);
+                    if (!string.IsNullOrWhiteSpace(directLabel) && !result.ContainsKey(key))
+                    {
+                        result[key] = directLabel;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore invalid/legacy option payloads.
+            }
+
+            return result;
+        }
+
+        private static void AppendAuditOptionCandidate(Dictionary<string, string> result, JsonElement item)
+        {
+            if (result == null)
+            {
+                return;
+            }
+
+            if (item.ValueKind == JsonValueKind.Object)
+            {
+                var key = ExtractJsonTextProperty(item, "key")
+                    ?? ExtractJsonTextProperty(item, "code")
+                    ?? ExtractJsonTextProperty(item, "value")
+                    ?? ExtractJsonTextProperty(item, "id");
+                var label = ExtractJsonTextProperty(item, "name")
+                    ?? ExtractJsonTextProperty(item, "label")
+                    ?? ExtractJsonTextProperty(item, "text")
+                    ?? ExtractJsonTextProperty(item, "title")
+                    ?? key;
+                if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(label))
+                {
+                    return;
+                }
+
+                if (!result.ContainsKey(key))
+                {
+                    result[key] = label;
+                }
+
+                return;
+            }
+
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                return;
+            }
+
+            var stringValue = NormalizeAuditText(item.GetString());
+            if (string.IsNullOrWhiteSpace(stringValue))
+            {
+                return;
+            }
+
+            if (!result.ContainsKey(stringValue))
+            {
+                result[stringValue] = stringValue;
+            }
+        }
+
+        private static string? ExtractJsonTextProperty(JsonElement element, string propertyName)
+        {
+            if (element.ValueKind != JsonValueKind.Object
+                || string.IsNullOrWhiteSpace(propertyName)
+                || !TryGetJsonPropertyIgnoreCase(element, propertyName, out var propertyValue))
+            {
+                return null;
+            }
+
+            return ExtractJsonElementText(propertyValue);
+        }
+
+        private static bool TryGetJsonPropertyIgnoreCase(
+            JsonElement element,
+            string propertyName,
+            out JsonElement propertyValue)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        propertyValue = property.Value;
+                        return true;
+                    }
+                }
+            }
+
+            propertyValue = default;
+            return false;
+        }
+
+        private static string? ExtractJsonElementText(JsonElement propertyValue)
+        {
+            return propertyValue.ValueKind switch
+            {
+                JsonValueKind.String => NormalizeAuditText(propertyValue.GetString()),
+                JsonValueKind.Number => NormalizeAuditText(propertyValue.GetRawText()),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => null
+            };
+        }
+
+        private static string? ResolveBooleanAuditDisplayText(
+            string normalizedValue,
+            string canonicalAlias,
+            SummerFieldAuditMetadata? metadata)
+        {
+            var allowNumericTokens = IsLikelyBooleanAuditField(canonicalAlias, metadata);
+            if (!TryParseBooleanAuditValue(normalizedValue, allowNumericTokens, out var booleanValue))
+            {
+                return null;
+            }
+
+            return canonicalAlias switch
+            {
+                "PROXY_MODE" => booleanValue ? "مسجل بالنيابة" : "غير مسجل بالنيابة",
+                "USE_FROZEN_UNIT" => booleanValue ? "يشمل الوحدات المجمدة" : "لا يشمل الوحدات المجمدة",
+                _ => booleanValue ? "نعم" : "لا"
+            };
+        }
+
+        private static bool IsLikelyBooleanAuditField(string canonicalAlias, SummerFieldAuditMetadata? metadata)
+        {
+            if (string.Equals(canonicalAlias, "PROXY_MODE", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(canonicalAlias, "USE_FROZEN_UNIT", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var normalizedFieldType = NormalizeAuditText(metadata?.FieldType);
+            if (string.IsNullOrWhiteSpace(normalizedFieldType))
+            {
+                return false;
+            }
+
+            return normalizedFieldType.Contains("toggle", StringComparison.OrdinalIgnoreCase)
+                || normalizedFieldType.Contains("switch", StringComparison.OrdinalIgnoreCase)
+                || normalizedFieldType.Contains("checkbox", StringComparison.OrdinalIgnoreCase)
+                || normalizedFieldType.Contains("boolean", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryParseBooleanAuditValue(string? value, bool allowNumericTokens, out bool parsed)
+        {
+            parsed = false;
+            var normalized = NormalizeAuditText(value);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return false;
+            }
+
+            if (string.Equals(normalized, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "yes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "y", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "نعم", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = true;
+                return true;
+            }
+
+            if (string.Equals(normalized, "false", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "no", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "n", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "لا", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = false;
+                return true;
+            }
+
+            if (!allowNumericTokens)
+            {
+                return false;
+            }
+
+            if (string.Equals(normalized, "1", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = true;
+                return true;
+            }
+
+            if (string.Equals(normalized, "0", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = false;
+                return true;
+            }
+
+            return false;
         }
 
         private static string TruncateAuditValue(string? value, int maxLength)
@@ -2611,14 +2966,24 @@ SELECT @result;
 
             AddSummerAuditAliasRange(map, "OWNER_NAME", SummerWorkflowDomainConstants.EmployeeNameFieldKinds);
             AddSummerAuditAliasRange(map, "OWNER_FILE_NUMBER", SummerWorkflowDomainConstants.EmployeeIdFieldKinds);
+            AddSummerAuditAliasRange(map, "OWNER_NATIONAL_ID", SummerWorkflowDomainConstants.EmployeeNationalIdFieldKinds);
             AddSummerAuditAliasRange(map, "OWNER_PHONE", SummerWorkflowDomainConstants.EmployeePhoneFieldKinds);
             AddSummerAuditAliasRange(map, "OWNER_EXTRA_PHONE", SummerWorkflowDomainConstants.EmployeeExtraPhoneFieldKinds);
+            AddSummerAuditAliasRange(map, "SEASON_YEAR", SummerWorkflowDomainConstants.SeasonYearFieldKinds);
+            AddSummerAuditAliasRange(map, "DESTINATION_ID", SummerWorkflowDomainConstants.DestinationIdFieldKinds);
+            AddSummerAuditAliasRange(map, "DESTINATION_NAME", SummerWorkflowDomainConstants.DestinationNameFieldKinds);
+            AddSummerAuditAliasRange(map, "WAVE_CODE", SummerWorkflowDomainConstants.WaveCodeFieldKinds);
+            AddSummerAuditAliasRange(map, "WAVE_LABEL", SummerWorkflowDomainConstants.WaveLabelFieldKinds);
+            AddSummerAuditAliasRange(map, "STAY_MODE", SummerWorkflowDomainConstants.StayModeFieldKinds);
+            AddSummerAuditAliasRange(map, "PROXY_MODE", SummerWorkflowDomainConstants.ProxyModeFieldKinds);
+            AddSummerAuditAliasRange(map, "USE_FROZEN_UNIT", SummerWorkflowDomainConstants.UseFrozenUnitFieldKinds);
             AddSummerAuditAliasRange(map, "FAMILY_COUNT", SummerWorkflowDomainConstants.FamilyCountFieldKinds);
             AddSummerAuditAliasRange(map, "EXTRA_COUNT", SummerWorkflowDomainConstants.ExtraCountFieldKinds);
 
             AddSummerAuditAliasRange(map, "COMPANION_NAME", new[] { "SUM2026_CompanionName", "CompanionName", "Companion_Name", "CompanionNameAr" });
             AddSummerAuditAliasRange(map, "COMPANION_AGE", new[] { "SUM2026_CompanionAge", "CompanionAge", "Companion_Age" });
             AddSummerAuditAliasRange(map, "COMPANION_RELATION", new[] { "SUM2026_CompanionRelation", "CompanionRelation", "Companion_Relation" });
+            AddSummerAuditAliasRange(map, "COMPANION_NATIONAL_ID", new[] { "SUM2026_CompanionNationalId", "CompanionNationalId", "Companion_NationalId" });
 
             return map;
         }
@@ -2732,6 +3097,8 @@ SELECT @result;
         {
             public string? GroupName { get; set; }
             public string? FieldLabel { get; set; }
+            public string? FieldType { get; set; }
+            public string? FieldOptions { get; set; }
         }
 
         private sealed class SummerFieldAuditEntry

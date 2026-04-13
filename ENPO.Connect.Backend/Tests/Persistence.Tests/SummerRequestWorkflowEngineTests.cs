@@ -53,22 +53,11 @@ public class SummerRequestWorkflowEngineTests
         Assert.Equal(MessageStatus.Rejected, result.TargetState);
     }
 
-    [Fact]
-    public void Resolve_Blocks_ApproveTransfer_For_Rejected_State()
-    {
-        var result = _engine.Resolve(MessageStatus.Rejected, SummerAdminActionCatalog.Codes.ApproveTransfer);
-
-        Assert.False(result.IsAllowed);
-        Assert.Equal(SummerRequestWorkflowEngine.InvalidTransitionMessage, result.ErrorMessage);
-    }
-
     [Theory]
     [InlineData(MessageStatus.Printed, SummerAdminActionCatalog.Codes.FinalApprove)]
     [InlineData(MessageStatus.Printed, SummerAdminActionCatalog.Codes.ManualCancel)]
-    [InlineData(MessageStatus.Printed, SummerAdminActionCatalog.Codes.ApproveTransfer)]
     [InlineData(MessageStatus.All, SummerAdminActionCatalog.Codes.FinalApprove)]
     [InlineData(MessageStatus.All, SummerAdminActionCatalog.Codes.ManualCancel)]
-    [InlineData(MessageStatus.All, SummerAdminActionCatalog.Codes.ApproveTransfer)]
     public void Resolve_Blocks_StateChanging_AdminActions_For_CompletedLike_States(
         MessageStatus currentState,
         string actionCode)
@@ -84,13 +73,17 @@ public class SummerRequestWorkflowEngineTests
     [InlineData(MessageStatus.New)]
     [InlineData(MessageStatus.InProgress)]
     [InlineData(MessageStatus.Replied)]
-    public void Resolve_Allows_ApproveTransfer_For_Open_States(MessageStatus currentState)
+    [InlineData(MessageStatus.Rejected)]
+    [InlineData(MessageStatus.Printed)]
+    [InlineData(MessageStatus.All)]
+    public void Resolve_Allows_InternalAdminAction_For_All_States(MessageStatus currentState)
     {
-        var result = _engine.Resolve(currentState, SummerAdminActionCatalog.Codes.ApproveTransfer);
+        var result = _engine.Resolve(currentState, SummerAdminActionCatalog.Codes.InternalAdminAction);
 
         Assert.True(result.IsAllowed);
-        Assert.True(result.ChangesState);
-        Assert.Null(result.TargetState);
+        Assert.False(result.ChangesState);
+        Assert.Equal(currentState, result.TargetState);
+        Assert.True(result.IsBypassAction);
     }
 
     [Fact]

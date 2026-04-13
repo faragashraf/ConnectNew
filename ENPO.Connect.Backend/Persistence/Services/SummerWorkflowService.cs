@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using ENPO.Dto.HubSync;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +51,11 @@ namespace Persistence.Services
         private const string RequestPaymentStatePaidCode = "PAID";
         private const string RequestPaymentStateUnpaidCode = "UNPAID";
         private const string RequestPaymentStatePartialPaidCode = "PARTIAL_PAID";
+        private const int AdminActionCommentMaxLength = 300;
+        private const int InternalAdminActionCommentMaxLength = 2000;
+        private static readonly Regex AdminActionCommentLettersRegex = new(
+            @"^[\p{L}\s]+$",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly string[] WaveCodeFieldKinds = SummerWorkflowDomainConstants.WaveCodeFieldKinds;
         private static readonly string[] WaveLabelFieldKinds = SummerWorkflowDomainConstants.WaveLabelFieldKinds;
         private static readonly string[] FamilyCountFieldKinds = SummerWorkflowDomainConstants.FamilyCountFieldKinds;
@@ -1431,6 +1437,10 @@ namespace Persistence.Services
                 }
 
                 var comment = (request.Comment ?? string.Empty).Trim();
+                if (!ValidateAdminActionComment(actionCode, comment, response))
+                {
+                    return response;
+                }
                 var attemptedAtUtc = DateTime.UtcNow;
 
                 await using var adminActionGateLease = await AdminActionExecutionGate.TryEnterAsync(request.MessageId, AdminActionGateTimeoutMs);
@@ -1496,56 +1506,6 @@ namespace Persistence.Services
                 }
 
                 message = messageToProcess;
-                if (actionCode == SummerAdminActionCatalog.Codes.ApproveTransfer)
-                {
-                    if (!request.ToCategoryId.HasValue || string.IsNullOrWhiteSpace(request.ToWaveCode))
-                    {
-                        response.Errors.Add(new Error { Code = "400", Message = "بيانات التحويل غير مكتملة (المصيف والفوج المستهدفان مطلوبان)." });
-                        return response;
-                    }
-
-                    var transferResponse = await TransferAsync(new SummerTransferRequest
-                    {
-                        MessageId = request.MessageId,
-                        ToCategoryId = request.ToCategoryId.Value,
-                        ToWaveCode = request.ToWaveCode.Trim(),
-                        NewFamilyCount = request.NewFamilyCount,
-                        NewExtraCount = request.NewExtraCount,
-                        Notes = request.Comment,
-                        files = request.files
-                    },
-                    userId,
-                    ip,
-                    notifyResponsibleAdmins: false,
-                    notifyOwner: true,
-                    initiatedAdminActionCode: actionCode,
-                    initiatedByUserId: userId,
-                    previousStatusForAdminAction: messageToProcess.Status,
-                    adminActionComment: comment,
-                    adminActionAtUtc: attemptedAtUtc);
-
-                    if (!transferResponse.IsSuccess)
-                    {
-                        foreach (var error in transferResponse.Errors)
-                        {
-                            response.Errors.Add(error);
-                        }
-                        return response;
-                    }
-
-                    response.Data = transferResponse.Data;
-                    if (transferResponse.Data != null)
-                    {
-                        await NotifyEmployeeOnAdminActionAsync(transferResponse.Data, actionCode, comment, includeSignalR: false);
-                    }
-
-                    _logger.LogInformation(
-                        "Summer admin transfer action completed. MessageId={MessageId}, ActionCode={ActionCode}, NotifiedOwnerOnly={NotifiedOwnerOnly}",
-                        request.MessageId,
-                        actionCode,
-                        true);
-                    return response;
-                }
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
 
@@ -1610,6 +1570,12 @@ namespace Persistence.Services
                             ? "تم تسجيل تعليق إداري على الطلب."
                             : comment;
                     }
+                    else if (actionCode == SummerAdminActionCatalog.Codes.InternalAdminAction)
+                    {
+                        replyMessage = string.IsNullOrWhiteSpace(comment)
+                            ? "تم تسجيل إجراء إداري داخلي على الطلب."
+                            : comment;
+                    }
                     else
                     {
                         response.Errors.Add(new Error { Code = "400", Message = "نوع الإجراء غير مدعوم." });
@@ -1643,7 +1609,8 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(request.MessageId);
-                if (response.Data != null)
+                if (response.Data != null
+                    && !string.Equals(actionCode, SummerAdminActionCatalog.Codes.InternalAdminAction, StringComparison.OrdinalIgnoreCase))
                 {
                     await NotifyEmployeeOnAdminActionAsync(response.Data, actionCode, comment, includeSignalR: false);
                 }
@@ -3555,11 +3522,24 @@ namespace Persistence.Services
                 return;
             }
 
+            if (string.Equals(actionCode, SummerAdminActionCatalog.Codes.InternalAdminAction, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(
+                    "Summer admin-action SMS skipped for internal admin action. MessageId={MessageId}, EmployeeId={EmployeeId}",
+                    summary.MessageId,
+                    summary.EmployeeId);
+                return;
+            }
+
             var templates = _applicationConfig.NotificationChannels?.Summer ?? new SummerNotificationTemplates();
+            var normalizedComment = string.IsNullOrWhiteSpace(comment) ? string.Empty : comment.Trim();
+            var adminCommentLine = string.IsNullOrWhiteSpace(normalizedComment)
+                ? string.Empty
+                : $"تعليق الإدارة: {normalizedComment}";
             var placeholders = BuildNotificationPlaceholders(
                 summary,
                 ResolveAdminActionLabel(actionCode),
-                string.IsNullOrWhiteSpace(comment) ? string.Empty : $"تعليق الإدارة: {comment.Trim()}",
+                adminCommentLine,
                 null);
 
             var smsTemplate = string.IsNullOrWhiteSpace(templates.AdminActionSmsTemplate)
@@ -3570,7 +3550,16 @@ namespace Persistence.Services
                 ? "تم تحديث طلب المصيف {RequestRef} من إدارة المصايف. نوع الإجراء: {ActionLabel}."
                 : templates.AdminActionSignalRTemplate;
 
-            var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+            var renderedSmsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+            var requestDetailsLine = $"بيانات الطلب: المصيف {FormatSmsValue(summary.CategoryName)} - رقم الطلب {FormatSmsValue(summary.RequestRef)} - موعد الفوج {FormatSmsValue(summary.WaveCode)}.";
+            var smsMessage = string.Join(
+                " ",
+                new[]
+                {
+                    renderedSmsMessage?.Trim(),
+                    requestDetailsLine,
+                    adminCommentLine
+                }.Where(item => !string.IsNullOrWhiteSpace(item)));
             var signalRMessage = _notificationService.RenderTemplate(signalRTemplate, placeholders);
             var signalRTitle = string.IsNullOrWhiteSpace(templates.AdminActionSignalRTitle)
                 ? "إدارة طلبات المصايف"
@@ -3701,6 +3690,12 @@ namespace Persistence.Services
         private static string ResolveAdminActionLabel(string actionCode)
         {
             return SummerAdminActionCatalog.ResolveLabel(actionCode);
+        }
+
+        private static string FormatSmsValue(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(normalized) ? "-" : normalized;
         }
 
         private static string ResolvePreferredMobile(string? primary, string? secondary)
@@ -4320,6 +4315,47 @@ SELECT @result;
             return _helperService.ValidateFileSizes(files, response);
         }
 
+        private static bool ValidateAdminActionComment<T>(string actionCode, string? comment, CommonResponse<T> response)
+        {
+            var normalizedComment = (comment ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedComment))
+            {
+                return true;
+            }
+
+            var isInternalAdminAction = string.Equals(
+                actionCode,
+                SummerAdminActionCatalog.Codes.InternalAdminAction,
+                StringComparison.OrdinalIgnoreCase);
+            var maxLength = isInternalAdminAction
+                ? InternalAdminActionCommentMaxLength
+                : AdminActionCommentMaxLength;
+
+            if (normalizedComment.Length > maxLength)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = isInternalAdminAction
+                        ? $"تعليق الإدارة في الإجراء الإداري الداخلي لا يجب أن يزيد عن {InternalAdminActionCommentMaxLength} حرف."
+                        : $"تعليق الإدارة لا يجب أن يزيد عن {AdminActionCommentMaxLength} حرف."
+                });
+                return false;
+            }
+
+            if (!isInternalAdminAction && !AdminActionCommentLettersRegex.IsMatch(normalizedComment))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "تعليق الإدارة يقبل الأحرف فقط لجميع الإجراءات باستثناء الإجراء الإداري الداخلي."
+                });
+                return false;
+            }
+
+            return true;
+        }
+
         protected virtual Reply CreateReplyEntity(int messageId, string msg, string userId, string parentSectorId, string ip)
         {
             if (_helperService == null)
@@ -4839,6 +4875,7 @@ SELECT @result;
             {
                 SummerAdminActionCatalog.Codes.FinalApprove => "اعتماد نهائي",
                 SummerAdminActionCatalog.Codes.Comment => "رد إداري",
+                SummerAdminActionCatalog.Codes.InternalAdminAction => "إجراء إداري داخلي",
                 SummerAdminActionCatalog.Codes.ManualCancel => "إلغاء يدوي",
                 SummerAdminActionCatalog.Codes.ApproveTransfer => "اعتماد تحويل",
                 _ => messageStatus.GetDescription()
@@ -4896,6 +4933,7 @@ SELECT @result;
                 "adminreply" or "admin_reply" or "reply" or "ردإداري" or "رداداري" => "ADMIN_REPLY",
                 "replied" or "تمالرد" => "REPLIED",
                 "finalapprove" or "final_approve" or "اعتمادنهائي" => SummerAdminActionCatalog.Codes.FinalApprove,
+                "internaladminaction" or "internal_admin_action" or "اجراءاداريداخلي" => SummerAdminActionCatalog.Codes.InternalAdminAction,
                 "approvetransfer" or "approve_transfer" or "اعتمادتحويل" => SummerAdminActionCatalog.Codes.ApproveTransfer,
                 "manualcancel" or "manual_cancel" or "الغاءيدوي" or "إلغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
                 "rejected" or "مرفوض" or "ملغي" or "مرفوض/ملغي" => "REJECTED",

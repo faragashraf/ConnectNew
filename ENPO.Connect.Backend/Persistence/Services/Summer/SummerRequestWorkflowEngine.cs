@@ -18,14 +18,14 @@ namespace Persistence.Services.Summer
 
         private static readonly HashSet<string> CommentLikeActions = new(StringComparer.OrdinalIgnoreCase)
         {
-            SummerAdminActionCatalog.Codes.Comment
+            SummerAdminActionCatalog.Codes.Comment,
+            SummerAdminActionCatalog.Codes.InternalAdminAction
         };
 
         private static readonly HashSet<string> StateActions = new(StringComparer.OrdinalIgnoreCase)
         {
             SummerAdminActionCatalog.Codes.FinalApprove,
-            SummerAdminActionCatalog.Codes.ManualCancel,
-            SummerAdminActionCatalog.Codes.ApproveTransfer
+            SummerAdminActionCatalog.Codes.ManualCancel
         };
 
         private static readonly IReadOnlyDictionary<MessageStatus, HashSet<string>> AllowedActionsByState =
@@ -38,7 +38,8 @@ namespace Persistence.Services.Summer
                 {
                     SummerAdminActionCatalog.Codes.FinalApprove,
                     SummerAdminActionCatalog.Codes.ManualCancel,
-                    SummerAdminActionCatalog.Codes.Comment
+                    SummerAdminActionCatalog.Codes.Comment,
+                    SummerAdminActionCatalog.Codes.InternalAdminAction
                 },
                 [MessageStatus.Printed] = new HashSet<string>(CommentLikeActions, StringComparer.OrdinalIgnoreCase),
                 [MessageStatus.All] = new HashSet<string>(CommentLikeActions, StringComparer.OrdinalIgnoreCase)
@@ -93,10 +94,7 @@ namespace Persistence.Services.Summer
                 currentState,
                 normalizedAction,
                 targetState: null,
-                changesState: string.Equals(
-                    normalizedAction,
-                    SummerAdminActionCatalog.Codes.ApproveTransfer,
-                    StringComparison.OrdinalIgnoreCase),
+                changesState: false,
                 isBypassAction: false);
         }
 
@@ -129,7 +127,7 @@ namespace Persistence.Services.Summer
                 SummerAdminActionCatalog.Codes.FinalApprove,
                 SummerAdminActionCatalog.Codes.ManualCancel,
                 SummerAdminActionCatalog.Codes.Comment,
-                SummerAdminActionCatalog.Codes.ApproveTransfer
+                SummerAdminActionCatalog.Codes.InternalAdminAction
             };
         }
 

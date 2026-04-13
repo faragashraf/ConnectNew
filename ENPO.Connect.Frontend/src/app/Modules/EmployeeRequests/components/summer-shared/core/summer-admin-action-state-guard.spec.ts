@@ -19,9 +19,9 @@ describe('summer-admin-action-state-guard', () => {
     expect(isAdminActionAllowedForCurrentStatus('note', 'Replied')).toBeTrue();
   });
 
-  it('blocks transfer approval when current state is rejected/cancelled', () => {
-    expect(isAdminActionAllowedForCurrentStatus('APPROVE_TRANSFER', 'Rejected')).toBeFalse();
-    expect(isAdminActionAllowedForCurrentStatus('APPROVE_TRANSFER', 'مرفوض')).toBeFalse();
+  it('always allows internal admin action regardless of current state', () => {
+    expect(isAdminActionAllowedForCurrentStatus('INTERNAL_ADMIN_ACTION', 'Rejected')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('INTERNAL_ADMIN_ACTION', 'مرفوض')).toBeTrue();
   });
 
   it('matches the state-flow rule: pending -> approved -> rejected -> approved, then approving again is blocked', () => {
@@ -34,8 +34,8 @@ describe('summer-admin-action-state-guard', () => {
   it('treats completed/printed states as terminal for state-changing admin actions', () => {
     expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'Printed')).toBeFalse();
     expect(isAdminActionAllowedForCurrentStatus('MANUAL_CANCEL', 'Completed')).toBeFalse();
-    expect(isAdminActionAllowedForCurrentStatus('APPROVE_TRANSFER', 'تم')).toBeFalse();
     expect(isAdminActionAllowedForCurrentStatus('COMMENT', 'Printed')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('INTERNAL_ADMIN_ACTION', 'Printed')).toBeTrue();
     expect(resolveBlockedActionForCurrentStatus('تم')).toBe('FINAL_APPROVE');
   });
 });

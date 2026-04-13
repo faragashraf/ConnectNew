@@ -378,7 +378,9 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
           return;
         }
 
-        row.get(controlName)?.patchValue((matched as any).fildTxt ?? null, { emitEvent: false });
+        const rawFieldValue = (matched as any).fildTxt ?? null;
+        const normalizedFieldValue = this.normalizeFieldValueForControl(controlName, rawFieldValue);
+        row.get(controlName)?.patchValue(normalizedFieldValue, { emitEvent: false });
       });
     };
 
@@ -470,6 +472,50 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '');
+  }
+
+  private normalizeFieldValueForControl(controlFullName: string, value: unknown): unknown {
+    const controlType = String(this.genericFormService.GetPropertyValue(controlFullName, 'cdmendType') ?? '')
+      .trim()
+      .toLowerCase();
+    const isBooleanControl = controlType.includes('toggle')
+      || controlType.includes('switch')
+      || controlType.includes('checkbox')
+      || controlType.includes('boolean');
+
+    if (!isBooleanControl) {
+      return value;
+    }
+
+    const parsedBoolean = this.parseBooleanLike(value);
+    if (parsedBoolean === null) {
+      return value === null || value === undefined || String(value).trim().length === 0
+        ? false
+        : value;
+    }
+
+    return parsedBoolean;
+  }
+
+  private parseBooleanLike(value: unknown): boolean | null {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y' || normalized === 'نعم') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'n' || normalized === 'لا') {
+      return false;
+    }
+
+    return null;
   }
 
   private resolveCreatedBy(): string {

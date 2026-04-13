@@ -186,6 +186,15 @@ export class SummerNotificationDisplayMapperService {
       };
     }
 
+    if (action === 'INTERNAL_ADMIN_ACTION') {
+      return {
+        title: this.summerTitle,
+        message: 'تم تسجيل إجراء إداري داخلي.',
+        type: 'Info',
+        isSummerEvent: true
+      };
+    }
+
     if (action === 'APPROVE_TRANSFER') {
       return {
         title: this.summerTitle,

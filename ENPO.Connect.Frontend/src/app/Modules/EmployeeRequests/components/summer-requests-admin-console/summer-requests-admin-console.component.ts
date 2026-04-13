@@ -1,5 +1,5 @@
 ﻿import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subscription, firstValueFrom } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { MessageDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
@@ -180,6 +180,18 @@ type RequestPrintPaymentPlanRow = {
   paidAt: string;
 };
 
+type SummerAdminPaymentStatusCode = 'PAID' | 'UNPAID';
+
+type SummerAdminPaymentSnapshot = {
+  paymentModeLabel: string;
+  installmentLabel: string;
+  amountText: string;
+  paidAtDisplay: string;
+  paidAtLocal: string;
+  statusCode: SummerAdminPaymentStatusCode;
+  statusLabel: string;
+};
+
 @Component({
   selector: 'app-summer-requests-admin-console',
   templateUrl: './summer-requests-admin-console.component.html',
@@ -224,21 +236,24 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: SUMMER_ADMIN_ACTION.COMMENT, label: 'تعليق / رد إداري' },
     { value: SUMMER_ADMIN_ACTION.FINAL_APPROVE, label: 'اعتماد نهائي' },
     { value: SUMMER_ADMIN_ACTION.MANUAL_CANCEL, label: 'إلغاء يدوي' },
-    { value: SUMMER_ADMIN_ACTION.APPROVE_TRANSFER, label: 'اعتماد تحويل' }
+    { value: SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION, label: 'إجراء إداري داخلي' }
   ];
 
   filtersForm: FormGroup;
   actionForm: FormGroup;
+  paymentForm: FormGroup;
 
   dashboard: SummerAdminDashboardDto | null = null;
   requests: SummerRequestSummaryDto[] = [];
   selectedRequestId: number | null = null;
   selectedRequestDetails: MessageDto | null = null;
+  paymentSnapshot: SummerAdminPaymentSnapshot | null = null;
 
   loadingDashboard = false;
   loadingRequests = false;
   loadingDetails = false;
   submittingAction = false;
+  submittingPayment = false;
   adminInlineEditDialogVisible = false;
   adminInlineEditRequestId: number | null = null;
 
@@ -254,8 +269,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     SUMMER_ADMIN_ACTION.FINAL_APPROVE,
     SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
     SUMMER_ADMIN_ACTION.COMMENT,
-    SUMMER_ADMIN_ACTION.APPROVE_TRANSFER
+    SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION
   ]);
+  private readonly adminActionCommentPattern = /^[A-Za-z\u0600-\u06FF\s]+$/;
+  private readonly adminActionCommentMaxLength = 300;
+  private readonly internalAdminActionCommentMaxLength = 2000;
 
   capacityDialogVisible = false;
   loadingWaveCapacity = false;
@@ -292,11 +310,14 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   pricingSeasonYear = this.seasonYear;
   pricingRecords: SummerPricingCatalogRecordDto[] = [];
   canManageSummerPricing = false;
+  canManageSummerPayments = false;
   defaultPricingGroupsExpanded = false;
   private pricingGroupExpandedState: Record<string, boolean> = {};
 
   actionAttachments: File[] = [];
+  paymentAttachments: File[] = [];
   private readonly allowedAttachmentExtensions = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
+  private readonly paymentInFutureErrorKey = 'paymentInFuture';
   private readonly subscriptions = new Subscription();
   private requestsLoadVersion = 0;
   private dashboardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -304,6 +325,21 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   });
+  private readonly paymentDateNotInFutureValidator = (control: AbstractControl) => {
+    const paidAtLocal = String(control?.value ?? '').trim();
+    if (!paidAtLocal) {
+      return null;
+    }
+
+    const paidAt = this.parseDateTimeLocalInput(paidAtLocal);
+    if (!paidAt) {
+      return null;
+    }
+
+    return this.toComparableUnixSecond(paidAt) > this.toComparableUnixSecond(new Date())
+      ? { [this.paymentInFutureErrorKey]: true }
+      : null;
+  };
   waveBookingsPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
   waveBookingsPrintTotalPages = 0;
   resortBookingsPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
@@ -351,23 +387,32 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     this.actionForm = this.fb.group({
       actionCode: [SUMMER_ADMIN_ACTION.COMMENT, Validators.required],
-      comment: ['', Validators.maxLength(2000)],
-      force: [false],
-      toCategoryId: [null],
-      toWaveCode: [''],
-      newFamilyCount: [null],
-      newExtraCount: [0]
+      comment: ['', Validators.maxLength(this.adminActionCommentMaxLength)],
+      force: [false]
     });
+
+    this.paymentForm = this.fb.group({
+      paymentStatus: ['PAID'],
+      paidAtLocal: [''],
+      notes: ['', Validators.maxLength(1000)]
+    });
+    this.updatePaymentDateValidators();
+    this.applyPaymentStatusEditAccess();
   }
 
   ngOnInit(): void {
     this.defaultPricingGroupsExpanded = this.resolveDefaultPricingGroupExpandState();
+    this.refreshSummerPaymentAccess();
+    this.applyPaymentStatusEditAccess();
     this.refreshSummerPricingAccess();
     this.bindActionRules();
+    this.bindPaymentRules();
     this.bindFilterDependencies();
     this.bindSignalRefresh();
     const authSub = this.authObjectsService.authObject$.subscribe(() => {
+      this.refreshSummerPaymentAccess();
       this.refreshSummerPricingAccess();
+      this.applyPaymentStatusEditAccess();
     });
     this.subscriptions.add(authSub);
     this.loadDestinationCatalog();
@@ -431,17 +476,16 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.requests.find(item => item.messageId === this.selectedRequestId);
   }
 
-  get transferDestination(): SummerDestinationConfig | undefined {
-    const categoryId = Number(this.actionForm.get('toCategoryId')?.value ?? 0);
-    return this.destinations.find(item => item.categoryId === categoryId);
+  get paymentInFutureMessage(): string {
+    return SUMMER_UI_TEXTS_AR.errors.paymentInFuture;
   }
 
-  get transferWaves(): SummerWaveDefinition[] {
-    return this.transferDestination?.waves ?? [];
+  get canShowPaymentCard(): boolean {
+    return this.canManageSummerPayments;
   }
 
-  get transferFamilyOptions(): number[] {
-    return this.transferDestination?.familyOptions ?? [];
+  get canEditPaymentStatus(): boolean {
+    return this.canManageSummerPayments;
   }
 
   get dashboardScopeCategoryId(): number | null {
@@ -795,11 +839,6 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return buildSummerRequestCompanions(this.selectedRequestDetails?.fields);
   }
 
-  get isTransferActionSelected(): boolean {
-    const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
-    return normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER;
-  }
-
   get isSelectedActionBlockedByCurrentState(): boolean {
     const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
     if (!normalized) {
@@ -818,6 +857,17 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return decision.isAllowed
       ? ''
       : (decision.errorMessage || SUMMER_UI_TEXTS_AR.errors.invalidAdminActionForCurrentState);
+  }
+
+  get adminCommentCurrentLength(): number {
+    return String(this.actionForm.get('comment')?.value ?? '').length;
+  }
+
+  get adminCommentMaxLengthDisplay(): number {
+    const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
+    return normalized === SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION
+      ? this.internalAdminActionCommentMaxLength
+      : this.adminActionCommentMaxLength;
   }
 
   isActionBlockedByCurrentState(actionCode: SummerAdminActionCode): boolean {
@@ -1929,6 +1979,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         if (this.selectedRequestId && !this.requests.some(item => item.messageId === this.selectedRequestId)) {
           this.selectedRequestId = null;
           this.selectedRequestDetails = null;
+          this.refreshPaymentSnapshot();
         }
       },
       error: () => {
@@ -1954,6 +2005,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   selectRequest(messageId: number): void {
     this.selectedRequestId = messageId;
     this.selectedRequestDetails = null;
+    this.resetPaymentFormForCurrentSelection();
     this.patchActionDefaultsForSelectedRequest();
     this.loadSelectedRequestDetails(messageId);
   }
@@ -2014,11 +2066,6 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (actionCode === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER && (!raw.toCategoryId || !String(raw.toWaveCode ?? '').trim())) {
-      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidTransferData}</h5>`, true);
-      return;
-    }
-
     this.submittingAction = true;
     this.spinner.show(SUMMER_UI_TEXTS_AR.loading.adminAction);
     this.summerWorkflowController.executeAdminAction({
@@ -2026,10 +2073,6 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       actionCode,
       comment: String(raw.comment ?? '').trim(),
       force: Boolean(raw.force),
-      toCategoryId: raw.toCategoryId,
-      toWaveCode: String(raw.toWaveCode ?? '').trim(),
-      newFamilyCount: raw.newFamilyCount,
-      newExtraCount: raw.newExtraCount,
       files: this.toFileParameters(this.actionAttachments)
     }).subscribe({
       next: response => {
@@ -2053,6 +2096,127 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         this.spinner.hide();
       }
     });
+  }
+
+  submitPayment(): void {
+    if (!this.canManageSummerPayments) {
+      this.msg.msgError('خطأ', '<h5>تسجيل السداد متاح فقط لصلاحية إدارة المصايف.</h5>', true);
+      return;
+    }
+
+    this.paymentForm.markAllAsTouched();
+    if (this.paymentForm.invalid) {
+      if (this.hasPaymentInFutureError()) {
+        this.msg.msgError('خطأ', `<h5>${this.paymentInFutureMessage}</h5>`, true);
+      } else {
+        this.msg.msgError('خطأ', '<h5>يرجى إدخال بيانات السداد بشكل صحيح.</h5>', true);
+      }
+      return;
+    }
+
+    if (!this.selectedRequestId) {
+      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب أولًا.</h5>', true);
+      return;
+    }
+
+    if (this.paymentAttachments.length === 0) {
+      this.msg.msgError('خطأ', '<h5>يجب إرفاق ملف واحد على الأقل قبل تسجيل السداد.</h5>', true);
+      return;
+    }
+
+    const paymentFormValue = this.paymentForm.getRawValue();
+    const paymentStatus = this.normalizePaymentStatusSelection(paymentFormValue.paymentStatus);
+    const isPaidStatus = paymentStatus === 'PAID';
+    const paidAtLocal = isPaidStatus
+      ? String(paymentFormValue.paidAtLocal ?? '').trim()
+      : '';
+    const paidAtParsed = this.parseDateTimeLocalInput(paidAtLocal);
+    if (isPaidStatus && !paidAtParsed) {
+      this.msg.msgError('خطأ', '<h5>يرجى تحديد تاريخ ووقت سداد صالح.</h5>', true);
+      return;
+    }
+    const paidAtUtcIso = isPaidStatus && paidAtParsed ? paidAtParsed.toISOString() : '';
+
+    this.submittingPayment = true;
+    this.spinner.show('جاري تسجيل السداد...');
+    this.summerWorkflowController.pay({
+      messageId: this.selectedRequestId,
+      paidAtUtc: paidAtUtcIso,
+      paymentStatus,
+      forceOverride: false,
+      notes: String(this.paymentForm.get('notes')?.value ?? '').trim(),
+      files: this.toFileParameters(this.paymentAttachments)
+    }).subscribe({
+      next: response => {
+        if (response?.isSuccess) {
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.payCompleted);
+          this.paymentAttachments = [];
+          this.paymentForm.patchValue({
+            paymentStatus: 'PAID',
+            paidAtLocal: '',
+            notes: ''
+          }, { emitEvent: false });
+          this.updatePaymentDateValidators();
+          this.applyPaymentStatusEditAccess();
+
+          if (this.selectedRequestId) {
+            this.loadSelectedRequestDetails(this.selectedRequestId);
+            this.applyRealtimeRequestUpdate(this.createLocalRequestUpdateEvent(this.selectedRequestId, 'UPDATE'));
+          }
+          this.loadRequests();
+          this.scheduleDashboardRefresh();
+        } else {
+          this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
+        }
+      },
+      error: () => {
+        this.msg.msgError('خطأ', '<h5>تعذر تسجيل السداد حاليًا.</h5>', true);
+      },
+      complete: () => {
+        this.submittingPayment = false;
+        this.spinner.hide();
+      }
+    });
+  }
+
+  addPaymentFiles(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const files = Array.from(input?.files ?? []);
+    if (!files.length) {
+      return;
+    }
+
+    const validFiles = files.filter(file => this.isAllowedAttachmentFile(file));
+    const invalidFiles = files.filter(file => !this.isAllowedAttachmentFile(file));
+
+    if (invalidFiles.length > 0) {
+      this.msg.msgError(
+        'نوع ملف غير مسموح',
+        `<h5>يسمح فقط بملفات PDF والصور. الملفات المرفوضة: ${invalidFiles.map(file => file.name).join(' ، ')}</h5>`,
+        true
+      );
+    }
+
+    this.paymentAttachments = [...this.paymentAttachments, ...validFiles];
+    if (input) {
+      input.value = '';
+    }
+  }
+
+  removePaymentFile(index: number): void {
+    this.paymentAttachments = this.paymentAttachments.filter((_, i) => i !== index);
+  }
+
+  hasPaymentInFutureError(): boolean {
+    const control = this.paymentForm.get('paidAtLocal');
+    return Boolean(
+      control?.hasError(this.paymentInFutureErrorKey)
+      && (control.touched || control.dirty)
+    );
+  }
+
+  getPaymentMaxDateTimeLocal(): string {
+    return this.toDateTimeLocalInputValue(new Date());
   }
 
   addActionFiles(event: Event): void {
@@ -2662,74 +2826,318 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   private bindActionRules(): void {
     const actionCodeSub = this.actionForm.get('actionCode')?.valueChanges.subscribe(value => {
       const normalized = this.normalizeActionCode(value);
-      const toCategoryControl = this.actionForm.get('toCategoryId');
-      const toWaveControl = this.actionForm.get('toWaveCode');
-      const familyControl = this.actionForm.get('newFamilyCount');
-      const extraControl = this.actionForm.get('newExtraCount');
-
-      if (!toCategoryControl || !toWaveControl || !familyControl || !extraControl) {
-        return;
-      }
+      const commentControl = this.actionForm.get('comment');
 
       const currentValue = String(value ?? '').trim();
       if (normalized && currentValue !== normalized) {
         this.actionForm.patchValue({ actionCode: normalized }, { emitEvent: false });
       }
 
-      if (normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER) {
-        toCategoryControl.setValidators([Validators.required]);
-        toWaveControl.setValidators([Validators.required]);
-        familyControl.setValidators([Validators.required, Validators.min(1)]);
-        extraControl.setValidators([Validators.min(0)]);
-      } else {
-        toCategoryControl.clearValidators();
-        toWaveControl.clearValidators();
-        familyControl.clearValidators();
-        extraControl.clearValidators();
-        this.actionForm.patchValue({
-          toCategoryId: null,
-          toWaveCode: '',
-          newFamilyCount: null,
-          newExtraCount: 0
-        }, { emitEvent: false });
-      }
-
-      toCategoryControl.updateValueAndValidity({ emitEvent: false });
-      toWaveControl.updateValueAndValidity({ emitEvent: false });
-      familyControl.updateValueAndValidity({ emitEvent: false });
-      extraControl.updateValueAndValidity({ emitEvent: false });
+      this.applyAdminCommentValidators(normalized, commentControl);
     });
 
     if (actionCodeSub) {
       this.subscriptions.add(actionCodeSub);
     }
 
-    const transferDestinationSub = this.actionForm.get('toCategoryId')?.valueChanges.subscribe(value => {
-      const destination = this.destinations.find(item => item.categoryId === Number(value));
-      if (!destination) {
-        this.actionForm.patchValue({ toWaveCode: '', newFamilyCount: null }, { emitEvent: false });
-        return;
-      }
+    const initialActionCode = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
+    this.applyAdminCommentValidators(initialActionCode, this.actionForm.get('comment'));
+  }
 
-      const selectedWave = String(this.actionForm.get('toWaveCode')?.value ?? '').trim();
-      if (!destination.waves.some(wave => wave.code === selectedWave)) {
-        this.actionForm.patchValue({ toWaveCode: '' }, { emitEvent: false });
-      }
+  private applyAdminCommentValidators(actionCode: SummerAdminActionCode | '', commentControl: AbstractControl | null): void {
+    if (!commentControl) {
+      return;
+    }
 
-      const selectedFamily = Number(this.actionForm.get('newFamilyCount')?.value ?? 0);
-      if (!destination.familyOptions.includes(selectedFamily)) {
-        this.actionForm.patchValue({ newFamilyCount: null }, { emitEvent: false });
-      }
+    if (actionCode === SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION) {
+      commentControl.setValidators([Validators.maxLength(this.internalAdminActionCommentMaxLength)]);
+      commentControl.updateValueAndValidity({ emitEvent: false });
+      return;
+    }
+
+    commentControl.setValidators([
+      Validators.maxLength(this.adminActionCommentMaxLength),
+      Validators.pattern(this.adminActionCommentPattern)
+    ]);
+    commentControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private bindPaymentRules(): void {
+    const paymentStatusSub = this.paymentForm.get('paymentStatus')?.valueChanges.subscribe(() => {
+      this.updatePaymentDateValidators();
     });
 
-    if (transferDestinationSub) {
-      this.subscriptions.add(transferDestinationSub);
+    if (paymentStatusSub) {
+      this.subscriptions.add(paymentStatusSub);
     }
+  }
+
+  private resetPaymentFormForCurrentSelection(): void {
+    this.paymentAttachments = [];
+    this.paymentSnapshot = null;
+    this.paymentForm.reset(
+      {
+        paymentStatus: 'PAID',
+        paidAtLocal: '',
+        notes: ''
+      },
+      { emitEvent: false }
+    );
+    this.updatePaymentDateValidators();
+    this.applyPaymentStatusEditAccess();
+  }
+
+  private refreshPaymentSnapshot(): void {
+    this.paymentSnapshot = this.buildPaymentSnapshot();
+
+    const notesValue = String(this.paymentForm.get('notes')?.value ?? '').trim();
+    const paymentStatusControl = this.paymentForm.get('paymentStatus');
+    const paidAtControl = this.paymentForm.get('paidAtLocal');
+    if (!paymentStatusControl || !paidAtControl) {
+      return;
+    }
+
+    paymentStatusControl.setValue(this.paymentSnapshot?.statusCode ?? 'PAID', { emitEvent: false });
+    paidAtControl.setValue(this.paymentSnapshot?.paidAtLocal ?? '', { emitEvent: false });
+    this.paymentForm.get('notes')?.setValue(notesValue, { emitEvent: false });
+    this.updatePaymentDateValidators();
+    this.applyPaymentStatusEditAccess();
+  }
+
+  private buildPaymentSnapshot(): SummerAdminPaymentSnapshot | null {
+    const request = this.selectedRequest;
+    const details = this.selectedRequestDetails;
+    if (!request && !details) {
+      return null;
+    }
+
+    const planRows = this.selectedRequestPaymentPlanRows;
+    const firstRow = planRows.length > 0 ? planRows[0] : null;
+    const paymentModeLabel = String(this.selectedRequestPaymentMethodLabel ?? '').trim() || '-';
+
+    const firstInstallmentPaidRaw = this.resolvePaymentFieldTextByAliases([
+      ...this.resolveInstallmentPaidFieldKeys(1),
+      'Summer_PaymentInstallment1Paid',
+      'SUM2026_PaymentInstallment1Paid'
+    ]);
+    const paymentStatusRaw = this.resolvePaymentFieldTextByAliases([
+      'Summer_PaymentStatus',
+      'SUM2026_PaymentStatus',
+      'PaymentStatus'
+    ]);
+    const parsedInstallmentPaid = this.parsePaymentBooleanLike(firstInstallmentPaidRaw);
+    const statusCode = parsedInstallmentPaid !== null
+      ? (parsedInstallmentPaid ? 'PAID' : 'UNPAID')
+      : this.normalizePaymentStatusSelection(paymentStatusRaw || firstRow?.paidState);
+
+    const paidAtRaw = this.resolvePaymentFieldTextByAliases([
+      ...this.resolveInstallmentPaidAtFieldKeys(1),
+      'Summer_PaymentInstallment1PaidAtUtc',
+      'SUM2026_PaymentInstallment1PaidAtUtc',
+      'Summer_PaidAtUtc',
+      'SUM2026_PaidAtUtc',
+      'PaidAtUtc'
+    ]);
+    const paidAtDisplay = firstRow?.paidAt && String(firstRow.paidAt).trim().length > 0
+      ? String(firstRow.paidAt).trim()
+      : (paidAtRaw.length > 0 ? this.formatDate(paidAtRaw) : '-');
+    const paidAtLocal = statusCode === 'PAID'
+      ? this.toDateTimeLocalInputFromUtc(paidAtRaw)
+      : '';
+
+    return {
+      paymentModeLabel,
+      installmentLabel: String(firstRow?.title ?? '').trim() || (paymentModeLabel === 'كاش' ? 'دفعة كاش' : 'القسط الأول'),
+      amountText: String(firstRow?.amount ?? '').trim() || '-',
+      paidAtDisplay: paidAtDisplay.length > 0 ? paidAtDisplay : '-',
+      paidAtLocal,
+      statusCode,
+      statusLabel: statusCode === 'PAID' ? 'مسدد' : 'غير مسدد'
+    };
+  }
+
+  private updatePaymentDateValidators(): void {
+    const paidAtControl = this.paymentForm.get('paidAtLocal');
+    if (!paidAtControl) {
+      return;
+    }
+
+    if (this.isSelectedPaymentStatusPaid()) {
+      paidAtControl.setValidators([Validators.required, this.paymentDateNotInFutureValidator]);
+    } else {
+      paidAtControl.setValidators([this.paymentDateNotInFutureValidator]);
+    }
+
+    paidAtControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private applyPaymentStatusEditAccess(): void {
+    const paymentStatusControl = this.paymentForm.get('paymentStatus');
+    if (!paymentStatusControl) {
+      return;
+    }
+
+    if (this.canManageSummerPayments) {
+      paymentStatusControl.enable({ emitEvent: false });
+    } else {
+      paymentStatusControl.disable({ emitEvent: false });
+    }
+  }
+
+  private isSelectedPaymentStatusPaid(): boolean {
+    if (!this.canManageSummerPayments) {
+      return true;
+    }
+
+    const paymentStatus = this.paymentForm.get('paymentStatus')?.value;
+    return this.normalizePaymentStatusSelection(paymentStatus) === 'PAID';
+  }
+
+  private normalizePaymentStatusSelection(value: unknown): SummerAdminPaymentStatusCode {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return 'PAID';
+    }
+
+    const compact = normalized
+      .replace(/[\s_-]+/g, '')
+      .replace('إ', 'ا')
+      .replace('أ', 'ا')
+      .replace('آ', 'ا');
+
+    if (
+      compact === 'paid'
+      || compact === 'true'
+      || compact === '1'
+      || compact === 'yes'
+      || compact === 'y'
+      || compact === 'مسدد'
+      || compact === 'تمالسداد'
+    ) {
+      return 'PAID';
+    }
+
+    return 'UNPAID';
+  }
+
+  private resolvePaymentFieldTextByAliases(aliases: string[]): string {
+    const fields = this.selectedRequestDetails?.fields ?? [];
+    const normalizedAliases = aliases
+      .map(alias => String(alias ?? '').trim().toLowerCase())
+      .filter(alias => alias.length > 0);
+
+    if (normalizedAliases.length === 0) {
+      return '';
+    }
+
+    for (const alias of normalizedAliases) {
+      const matched = fields.find(field =>
+        String(field?.fildKind ?? '')
+          .trim()
+          .toLowerCase() === alias);
+      const text = String(matched?.fildTxt ?? '').trim();
+      if (text.length > 0) {
+        return text;
+      }
+    }
+
+    return '';
+  }
+
+  private resolveInstallmentPaidFieldKeys(installmentNo: number): string[] {
+    const normalizedNo = Math.max(1, Math.min(6, Math.floor(Number(installmentNo) || 1)));
+    return [
+      `Summer_PaymentInstallment${normalizedNo}Paid`,
+      `SUM2026_PaymentInstallment${normalizedNo}Paid`
+    ];
+  }
+
+  private resolveInstallmentPaidAtFieldKeys(installmentNo: number): string[] {
+    const normalizedNo = Math.max(1, Math.min(6, Math.floor(Number(installmentNo) || 1)));
+    return [
+      `Summer_PaymentInstallment${normalizedNo}PaidAtUtc`,
+      `SUM2026_PaymentInstallment${normalizedNo}PaidAtUtc`
+    ];
+  }
+
+  private parsePaymentBooleanLike(value: unknown): boolean | null {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    const compact = normalized
+      .replace(/[\s_-]+/g, '')
+      .replace('إ', 'ا')
+      .replace('أ', 'ا')
+      .replace('آ', 'ا');
+
+    if (compact === 'true' || compact === '1' || compact === 'yes' || compact === 'y' || compact === 'نعم') {
+      return true;
+    }
+
+    if (compact === 'false' || compact === '0' || compact === 'no' || compact === 'n' || compact === 'لا') {
+      return false;
+    }
+
+    return null;
+  }
+
+  private toDateTimeLocalInputFromUtc(value: string): string {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    return this.toDateTimeLocalInputValue(parsed);
+  }
+
+  private toDateTimeLocalInputValue(value: Date): string {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const pad = (part: number): string => String(part).padStart(2, '0');
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hour = pad(date.getHours());
+    const minute = pad(date.getMinutes());
+    const second = pad(date.getSeconds());
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+  }
+
+  private parseDateTimeLocalInput(value: unknown): Date | null {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  private toComparableUnixSecond(value: Date): number {
+    return Math.floor(value.getTime() / 1000);
   }
 
   /**
    * Mirrors backend NormalizeActionCode:
-   * FINAL_APPROVE | MANUAL_CANCEL | COMMENT | APPROVE_TRANSFER
+   * FINAL_APPROVE | MANUAL_CANCEL | COMMENT | INTERNAL_ADMIN_ACTION
    */
   private normalizeActionCode(actionCode: unknown): SummerAdminActionCode | '' {
     const normalized = normalizeSummerAdminActionCode(actionCode);
@@ -2965,12 +3373,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.actionForm.patchValue({
       actionCode: SUMMER_ADMIN_ACTION.COMMENT,
       comment: '',
-      force: false,
-      toCategoryId: request.categoryId,
-      toWaveCode: request.waveCode,
-      newFamilyCount: null,
-      newExtraCount: 0
+      force: false
     }, { emitEvent: false });
+    this.applyAdminCommentValidators(SUMMER_ADMIN_ACTION.COMMENT, this.actionForm.get('comment'));
   }
 
   private enableWaveBookingsPrintMode(): void {
@@ -3149,6 +3554,27 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
   }
 
+  private refreshSummerPaymentAccess(): void {
+    try {
+      const hasSummerGeneralManager =
+        this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc')
+        || this.authObjectsService.checkAuthRole('2021');
+      this.canManageSummerPayments =
+        this.authObjectsService.checkAuthFun('SummerAdminFunc')
+        || this.authObjectsService.checkAuthRole('2020')
+        || hasSummerGeneralManager;
+    } catch {
+      this.canManageSummerPayments = false;
+    }
+
+    if (!this.canManageSummerPayments) {
+      this.resetPaymentFormForCurrentSelection();
+      return;
+    }
+
+    this.applyPaymentStatusEditAccess();
+  }
+
   private resetPricingStateForUnauthorizedUser(): void {
     this.pricingCatalogLoading = false;
     this.pricingCatalogSaving = false;
@@ -3163,9 +3589,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.dynamicFormController.getRequestById(messageId).subscribe({
       next: response => {
         this.selectedRequestDetails = response?.isSuccess ? response.data : null;
+        this.refreshPaymentSnapshot();
       },
       error: () => {
         this.selectedRequestDetails = null;
+        this.refreshPaymentSnapshot();
       },
       complete: () => {
         this.loadingDetails = false;

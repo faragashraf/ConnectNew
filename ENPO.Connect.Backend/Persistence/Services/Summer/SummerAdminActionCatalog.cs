@@ -7,6 +7,7 @@ namespace Persistence.Services.Summer
             public const string FinalApprove = "FINAL_APPROVE";
             public const string ManualCancel = "MANUAL_CANCEL";
             public const string Comment = "COMMENT";
+            public const string InternalAdminAction = "INTERNAL_ADMIN_ACTION";
             public const string ApproveTransfer = "APPROVE_TRANSFER";
         }
 
@@ -17,6 +18,7 @@ namespace Persistence.Services.Summer
                 Codes.FinalApprove => "اعتماد نهائي",
                 Codes.ManualCancel => "إلغاء إداري",
                 Codes.Comment => "تعليق إداري",
+                Codes.InternalAdminAction => "إجراء إداري داخلي",
                 Codes.ApproveTransfer => "اعتماد التحويل",
                 _ => (actionCode ?? string.Empty).Trim()
             };
@@ -30,6 +32,7 @@ namespace Persistence.Services.Summer
                 "finalapprove" or "approve" or "اعتمادنهائي" or "اعتماد" or "final_approve" => Codes.FinalApprove,
                 "manual_cancel" or "manualcancel" or "cancel" or "reject" or "rejection" or "الغاءيدوي" or "الغاء" or "رفض" => Codes.ManualCancel,
                 "comment" or "reply" or "note" or "admin_note" or "administrative_note" or "تعليق" or "رد" or "ملاحظة" or "ملاحظه" or "ملاحظةادارية" => Codes.Comment,
+                "internal_admin_action" or "internaladminaction" or "internalaction" or "internal_action" or "اجراءاداريداخلي" or "اجراءاداريداخلى" or "اجراءداخلي" => Codes.InternalAdminAction,
                 "approvetransfer" or "approve_transfer" or "transferapprove" or "اعتمادالتحويل" => Codes.ApproveTransfer,
                 _ => string.Empty
             };

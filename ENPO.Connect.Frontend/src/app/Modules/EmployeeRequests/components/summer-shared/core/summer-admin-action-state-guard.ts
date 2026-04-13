@@ -82,12 +82,9 @@ function isActionAllowedByState(actionCode: SummerAdminActionCode, currentState:
     return true;
   }
 
-  if (currentState === 'REJECTED') {
-    return actionCode !== SUMMER_ADMIN_ACTION.APPROVE_TRANSFER;
-  }
-
   if (currentState === 'COMPLETED') {
-    return actionCode === SUMMER_ADMIN_ACTION.COMMENT;
+    return actionCode === SUMMER_ADMIN_ACTION.COMMENT
+      || actionCode === SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION;
   }
 
   return true;
@@ -119,7 +116,10 @@ export function resolveAdminActionDecisionForCurrentStatus(
     };
   }
 
-  if (normalizedAction === SUMMER_ADMIN_ACTION.COMMENT) {
+  if (
+    normalizedAction === SUMMER_ADMIN_ACTION.COMMENT
+    || normalizedAction === SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION
+  ) {
     return {
       actionCode: normalizedAction,
       isAllowed: true,

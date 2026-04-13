@@ -259,6 +259,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return this.hasSummerGeneralManagerPermission;
   }
 
+  get canEditPaymentPlanSettings(): boolean {
+    return this.hasSummerGeneralManagerPermission;
+  }
+
   get canManageInstallmentPaymentState(): boolean {
     return this.hasSummerGeneralManagerPermission;
   }
@@ -298,6 +302,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   }
 
   onPaymentModeChanged(value: string | null | undefined): void {
+    if (!this.canEditPaymentPlanSettings) {
+      return;
+    }
+
     const normalized = this.normalizePaymentMode(String(value ?? ''));
     if (normalized === this.paymentModeValue) {
       return;
@@ -322,6 +330,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   }
 
   onInstallmentCountChanged(value: number | string | null | undefined): void {
+    if (!this.canEditPaymentPlanSettings) {
+      return;
+    }
+
     const normalizedCount = this.normalizeInstallmentCount(value);
     if (normalizedCount === this.installmentCountValue) {
       return;
@@ -1448,11 +1460,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         profile['phone'],
         localStorage.getItem('MobileNumber')
       ),
-      extraPhone: this.coalesceText(
-        profile['PhoneWhats'],
-        profile['SecondaryPhone'],
-        localStorage.getItem('ExtraPhoneNumber')
-      )
+      extraPhone: ''
     };
   }
 
