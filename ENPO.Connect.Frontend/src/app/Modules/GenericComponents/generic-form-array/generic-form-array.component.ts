@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnDestroy, Output } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { GenericFormsService } from '../GenericForms.service';
 import { Subject, debounceTime, takeUntil } from 'rxjs';
 import { CdCategoryMandDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
@@ -84,5 +84,25 @@ export class GenericFormArrayComponent implements OnDestroy {
     return String(this.genericFormService.GetPropertyValue(this.controlFullName, 'cdmendType') ?? '')
       .trim()
       .toLowerCase();
+  }
+
+  shouldShowRequiredAsterisk(): boolean {
+    if (this.isNotRequired) return false;
+
+    const fieldToken = this.genericFormService.GetPropertyValue(this.controlFullName, 'cdmendTxt');
+    if (this.genericFormService.filedIsRequired(fieldToken)) return true;
+
+    return this.isControlDynamicallyRequired(this.control);
+  }
+
+  private isControlDynamicallyRequired(control: AbstractControl | null | undefined): boolean {
+    if (!control || control.disabled) return false;
+
+    if (typeof (control as any).hasValidator === 'function') {
+      return (control as any).hasValidator(Validators.required);
+    }
+
+    const validationResult = control.validator ? control.validator(control) : null;
+    return !!(validationResult && validationResult['required']);
   }
 }

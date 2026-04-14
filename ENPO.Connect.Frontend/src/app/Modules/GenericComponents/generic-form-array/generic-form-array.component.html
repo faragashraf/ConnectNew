@@ -5,9 +5,7 @@
     <label *ngIf="genericFormService.GetPropertyValue(controlFullName,'cdmendType')!=='LABLE'" [for]="controlFullName"
         [ngClass]="{'alert-danger':genericFormService.returnFormErrors(controlFullName)}">
         {{genericFormService.GetPropertyValue(controlFullName,'cdMendLbl')}}
-        : <span style="color: red;"
-            *ngIf="!isNotRequired && (genericFormService.filedIsRequired(genericFormService.GetPropertyValue(controlFullName,'cdmendTxt')) 
-            || (genericFormService.filedIsRequired(genericFormService.GetPropertyValue(controlFullName,'cdmendTxt')) && control.enabled))">*</span></label>
+        : <span style="color: red;" *ngIf="shouldShowRequiredAsterisk()">*</span></label>
 
 
 

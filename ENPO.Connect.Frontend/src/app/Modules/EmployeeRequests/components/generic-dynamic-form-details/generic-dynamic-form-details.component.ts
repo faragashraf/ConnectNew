@@ -22,6 +22,7 @@ export class GenericDynamicFormDetailsComponent implements OnChanges, OnDestroy 
   @Input() fileParameters: FileParameter[] = [];
   @Input() customFilteredCategoryMand: CdCategoryMandDto[] = [];
   @Input() submitDisabled = false;
+  @Input() allowGroupInstanceActions = true;
 
   @Output() ticketFormChange = new EventEmitter<FormGroup>();
   @Output() submitFormChange = new EventEmitter<FormGroup>();
