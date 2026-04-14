@@ -36,6 +36,18 @@ describe('FieldLibraryBindingPageComponent - Custom Reference Components Editor'
     );
   });
 
+  it('shows field-library JSON edit action only for selectable field types', () => {
+    expect(component.canEditFieldLibraryJson({ type: 'Dropdown' } as any)).toBeTrue();
+    expect(component.canEditFieldLibraryJson({ type: 'RadioButton' } as any)).toBeTrue();
+    expect(component.canEditFieldLibraryJson({ type: 'DropdownTree' } as any)).toBeTrue();
+    expect(component.canEditFieldLibraryJson({ type: 'InputText' } as any)).toBeFalse();
+  });
+
+  it('treats unknown field types as not editable in field-library JSON action', () => {
+    expect(component.canEditFieldLibraryJson({ type: 'CustomUnknownType' } as any)).toBeFalse();
+    expect(component.canEditFieldLibraryJson(null)).toBeFalse();
+  });
+
   it('should keep month component in FormArray and include it in save payload', () => {
     component.referencePolicyForm.patchValue({
       referencePolicyEnabled: true,
@@ -676,7 +688,7 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     localStorage.removeItem('connect:field-library-binding:APP-UNIT:100');
   });
 
-  it('keeps backend displaySettings canonical even if local dynamic runtime edits exist in binding screen', async () => {
+  it('persists dynamic runtime in displaySettings when saved from binding screen', async () => {
     let latestDisplaySettingsJson = JSON.stringify({
       readonly: false,
       isReadonly: false
@@ -925,7 +937,7 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     expect(component.dynamicRuntimeBuilderVisible).toBeFalse();
     expect(component.bindings[0].dynamicRuntimeJson).toContain('"optionLoader"');
     expect(String(component.bindings[0].displaySettingsJson ?? '')).toContain('"dynamicRuntime"');
-    expect(component.stepMessage).toContain('محليًا فقط');
+    expect(component.stepMessage).toContain('اضغط "حفظ في قاعدة البيانات"');
     expect(dynamicSubjectsController.upsertAdminCategoryFieldLinks).not.toHaveBeenCalled();
 
     await component.onSaveToBackend();
@@ -936,12 +948,18 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
     expect(dynamicSubjectsController.upsertAdminCategoryFieldLinks).toHaveBeenCalledTimes(1);
     const upsertRequest = dynamicSubjectsController.upsertAdminCategoryFieldLinks.calls.mostRecent().args[1];
     const sentDisplaySettings = String(upsertRequest?.links?.[0]?.displaySettingsJson ?? '');
-    expect(JSON.parse(sentDisplaySettings)).toEqual({ readonly: false, isReadonly: false });
-    expect(JSON.parse(docSourcePayloadDisplaySettingsJson)).toEqual({ readonly: false, isReadonly: false });
-    expect(JSON.parse(backendStoredDisplaySettingsJson)).toEqual({ readonly: false, isReadonly: false });
-    expect(sentDisplaySettings).not.toContain('"dynamicRuntime"');
-    expect(docSourcePayloadDisplaySettingsJson).not.toContain('"dynamicRuntime"');
-    expect(backendStoredDisplaySettingsJson).not.toContain('"dynamicRuntime"');
+    const parsedSentDisplaySettings = JSON.parse(sentDisplaySettings);
+    const parsedPersistedDisplaySettings = JSON.parse(docSourcePayloadDisplaySettingsJson);
+    const parsedBackendDisplaySettings = JSON.parse(backendStoredDisplaySettingsJson);
+    expect(parsedSentDisplaySettings.readonly).toBeFalse();
+    expect(parsedSentDisplaySettings.isReadonly).toBeFalse();
+    expect(parsedSentDisplaySettings.dynamicRuntime?.optionLoader?.integration?.sourceType).toBe('powerbi');
+    expect(parsedSentDisplaySettings.dynamicRuntime?.optionLoader?.integration?.statementId).toBe(65);
+    expect(parsedPersistedDisplaySettings.dynamicRuntime?.optionLoader?.integration?.statementId).toBe(65);
+    expect(parsedBackendDisplaySettings.dynamicRuntime?.optionLoader?.integration?.statementId).toBe(65);
+    expect(sentDisplaySettings).toContain('"dynamicRuntime"');
+    expect(docSourcePayloadDisplaySettingsJson).toContain('"dynamicRuntime"');
+    expect(backendStoredDisplaySettingsJson).toContain('"dynamicRuntime"');
     expect(dynamicSubjectsController.upsertSubjectTypeAdminConfig).not.toHaveBeenCalled();
 
     const reloadedBinding = component.bindings.find(item => item.fieldKey === fieldKey);
@@ -950,8 +968,8 @@ describe('FieldLibraryBindingPageComponent - DOC_SOURCE Save/Read Round Trip', (
       return;
     }
 
-    expect(String(reloadedBinding.displaySettingsJson ?? '')).not.toContain('"dynamicRuntime"');
-    expect(String(reloadedBinding.dynamicRuntimeJson ?? '')).toBe('');
+    expect(String(reloadedBinding.displaySettingsJson ?? '')).toContain('"dynamicRuntime"');
+    expect(String(reloadedBinding.dynamicRuntimeJson ?? '')).toContain('"optionLoader"');
     expect(localStorage.getItem(draftStorageKey)).toBeNull();
   });
 

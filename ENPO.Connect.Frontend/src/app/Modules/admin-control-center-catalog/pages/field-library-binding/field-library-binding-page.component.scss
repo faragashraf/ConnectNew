@@ -230,6 +230,11 @@
   margin-bottom: 0.35rem;
 }
 
+.field-library-json-edit-button-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .dynamic-runtime-mirror {
   margin: 0;
   border: 1px solid #d9e7f1;

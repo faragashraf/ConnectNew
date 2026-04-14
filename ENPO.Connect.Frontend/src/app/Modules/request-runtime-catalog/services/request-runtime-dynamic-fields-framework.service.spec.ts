@@ -451,6 +451,131 @@ describe('RequestRuntimeDynamicFieldsFrameworkService', () => {
       { key: '2', name: 'صادر' }
     ]);
   });
+
+  it('resolves external integration token auth mode to bearer authorization header', () => {
+    const forms = buildGenericFormsStub();
+    const dynamicControls = new FormGroup({
+      'source|0': new FormControl('AA')
+    });
+
+    const controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>([
+      ['source|0', { fieldKey: 'source', instanceGroupId: 1 }]
+    ]);
+
+    const fields: RequestRuntimeFieldDefinitionDto[] = [
+      createRuntimeField('source', {
+        optionLoader: {
+          trigger: 'blur',
+          integration: {
+            sourceType: 'external',
+            fullUrl: 'https://example.test/api/options',
+            method: 'GET',
+            auth: {
+              mode: 'token',
+              token: { source: 'static', staticValue: 'abc123' }
+            },
+            query: [
+              { name: 'q', value: { source: 'field', fieldKey: 'source' } }
+            ]
+          },
+          responseListPath: 'items',
+          responseValuePath: 'key',
+          responseLabelPath: 'name'
+        }
+      })
+    ];
+
+    facade.executeDynamicExternalRequest.and.returnValue(of({
+      data: {
+        items: [
+          { key: '1', name: 'وارد' }
+        ]
+      }
+    }));
+
+    service.bind({
+      dynamicControls,
+      genericFormService: forms as unknown as GenericFormsService,
+      fieldDefinitions: fields,
+      controlMap
+    });
+
+    service.handleGenericEvent({ controlFullName: 'source|0', eventType: 'blur' });
+
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledTimes(1);
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledWith({
+      fullUrl: 'https://example.test/api/options',
+      method: 'GET',
+      requestFormat: 'json',
+      authMode: 'token',
+      query: { q: 'AA' },
+      headers: { Authorization: 'Bearer abc123' },
+      body: undefined
+    });
+  });
+
+  it('resolves external integration basic auth mode to basic authorization header', () => {
+    const forms = buildGenericFormsStub();
+    const dynamicControls = new FormGroup({
+      'source|0': new FormControl('AA')
+    });
+
+    const controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>([
+      ['source|0', { fieldKey: 'source', instanceGroupId: 1 }]
+    ]);
+
+    const fields: RequestRuntimeFieldDefinitionDto[] = [
+      createRuntimeField('source', {
+        optionLoader: {
+          trigger: 'blur',
+          integration: {
+            sourceType: 'external',
+            fullUrl: 'https://example.test/api/options',
+            method: 'GET',
+            auth: {
+              mode: 'basic',
+              username: { source: 'static', staticValue: 'runtime_user' },
+              password: { source: 'static', staticValue: 'runtime_pass' }
+            },
+            query: [
+              { name: 'q', value: { source: 'field', fieldKey: 'source' } }
+            ]
+          },
+          responseListPath: 'items',
+          responseValuePath: 'key',
+          responseLabelPath: 'name'
+        }
+      })
+    ];
+
+    facade.executeDynamicExternalRequest.and.returnValue(of({
+      data: {
+        items: [
+          { key: '1', name: 'وارد' }
+        ]
+      }
+    }));
+
+    service.bind({
+      dynamicControls,
+      genericFormService: forms as unknown as GenericFormsService,
+      fieldDefinitions: fields,
+      controlMap
+    });
+
+    service.handleGenericEvent({ controlFullName: 'source|0', eventType: 'blur' });
+
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledTimes(1);
+    expect(facade.executeDynamicExternalRequest).toHaveBeenCalledWith({
+      fullUrl: 'https://example.test/api/options',
+      method: 'GET',
+      requestFormat: 'json',
+      authMode: 'basic',
+      query: { q: 'AA' },
+      headers: { Authorization: 'Basic cnVudGltZV91c2VyOnJ1bnRpbWVfcGFzcw==' },
+      body: undefined
+    });
+  });
 });
 
 function createRuntimeField(fieldKey: string, dynamicRuntime: unknown): RequestRuntimeFieldDefinitionDto {

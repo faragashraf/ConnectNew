@@ -214,6 +214,8 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
   ];
   readonly dynamicRuntimeAuthModeOptions: Array<{ label: string; value: RequestRuntimeDynamicIntegrationAuthMode }> = [
     { label: 'Bearer الحالي', value: 'bearerCurrent' },
+    { label: 'Token ثابت', value: 'token' },
+    { label: 'Basic Authentication', value: 'basic' },
     { label: 'بدون مصادقة', value: 'none' },
     { label: 'رؤوس مخصصة', value: 'custom' }
   ];
@@ -440,6 +442,28 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
       categoryId: this.currentCategoryId,
       applicationId: this.currentApplicationId
     };
+  }
+
+  buildFieldLibraryJsonEditorQueryParams(binding: Pick<BoundFieldItem, 'fieldKey'>): Record<string, string | number | null> {
+    return {
+      categoryId: this.currentCategoryId,
+      applicationId: this.currentApplicationId,
+      editFieldKey: this.normalizeNullable(binding?.fieldKey),
+      editApplicationId: this.currentApplicationId,
+      openApiSettings: '1'
+    };
+  }
+
+  canEditFieldLibraryJson(binding: Pick<BoundFieldItem, 'type'> | null | undefined): boolean {
+    const normalizedType = this.normalizeNullable((binding?.type ?? '').toString())
+      ?.replace(/[\s_-]/g, '')
+      .toLowerCase();
+
+    return normalizedType === 'dropdown'
+      || normalizedType === 'radiobutton'
+      || normalizedType === 'radiobuttons'
+      || normalizedType === 'dropdowntree'
+      || normalizedType === 'treedropdown';
   }
 
   get filteredReusableFields(): ReusableFieldLibraryItem[] {
@@ -777,7 +801,7 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
     this.onCancelDynamicRuntimeBuilder();
     this.onBindingChanged();
     this.stepMessageSeverity = 'warn';
-    this.stepMessage = 'تم تطبيق إعدادات السلوك الديناميكي على الحقل محليًا فقط. اضغط "حفظ في قاعدة البيانات" لتثبيت التعديل فعليًا.';
+    this.stepMessage = 'تم تطبيق إعدادات السلوك الديناميكي على الحقل. اضغط "حفظ في قاعدة البيانات" لتثبيت التعديل فعليًا.';
   }
 
   onAddDynamicRuntimeBinding(
@@ -1509,7 +1533,9 @@ export class FieldLibraryBindingPageComponent implements OnInit, OnChanges, OnDe
           isActive: true,
           displayOrder: binding.displayOrder,
           isVisible: existingLink?.isVisible ?? true,
-          displaySettingsJson: existingLink?.displaySettingsJson ?? undefined
+          displaySettingsJson: this.normalizeNullable(binding.displaySettingsJson)
+            ?? this.normalizeNullable(existingLink?.displaySettingsJson)
+            ?? undefined
         };
       });
 

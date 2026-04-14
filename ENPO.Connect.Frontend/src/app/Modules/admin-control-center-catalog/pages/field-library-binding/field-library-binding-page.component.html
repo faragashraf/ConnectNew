@@ -557,59 +557,13 @@
                     <button
                       pButton
                       type="button"
-                      class="p-button-text p-button-sm"
-                      label="مُنشئ التكامل"
-                      icon="pi pi-sliders-h"
-                      [disabled]="true"
-                      (click)="onOpenDynamicRuntimeBuilder(row)">
+                      class="p-button-text p-button-sm field-library-json-edit-button"
+                      [class.field-library-json-edit-button-hidden]="!canEditFieldLibraryJson(row)"
+                      label="تعديل JSON من مكتبة الحقول"
+                      icon="pi pi-external-link"
+                      [routerLink]="['/Admin/ControlCenterCatalog/field-library']"
+                      [queryParams]="buildFieldLibraryJsonEditorQueryParams(row)">
                     </button>
-                    <button
-                      pButton
-                      type="button"
-                      class="p-button-text p-button-sm"
-                      [label]="isDynamicRuntimeAdvancedModeOpen(row) ? 'إخفاء JSON المتقدم' : 'وضع JSON المتقدم'"
-                      icon="pi pi-code"
-                      [disabled]="true"
-                      (click)="toggleDynamicRuntimeAdvancedMode(row)">
-                    </button>
-                  </div>
-                  <pre class="dynamic-runtime-mirror"><code [innerText]="getDynamicRuntimeMirrorSummary(row)"></code></pre>
-                  <small class="field-note">{{ getBindingOptionSourceSummary(row) }}</small>
-                  <div class="dynamic-runtime-advanced" *ngIf="isDynamicRuntimeAdvancedModeOpen(row)">
-                    <label>JSON متقدم (اختياري)</label>
-                    <textarea
-                      pInputTextarea
-                      rows="6"
-                      [autoResize]="true"
-                      [ngModel]="getDynamicRuntimeAdvancedDraft(row)"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="onDynamicRuntimeAdvancedDraftChange(row, $event)"
-                      placeholder='مثال: {"optionLoader":{"integration":{"sourceType":"powerbi","statementId":65}}}'>
-                    </textarea>
-                    <small class="field-note">
-                      وضع متقدم للمراجعة أو التعديل اليدوي فقط. لا يتم تطبيق التعديل إلا عند الضغط على "تطبيق JSON المتقدم".
-                    </small>
-                    <small class="error" *ngIf="getDynamicRuntimeAdvancedError(row) as advancedRuntimeError">
-                      {{ advancedRuntimeError }}
-                    </small>
-                    <div class="dynamic-runtime-advanced-actions">
-                      <button
-                        pButton
-                        type="button"
-                        class="p-button-sm"
-                        label="تطبيق JSON المتقدم"
-                        icon="pi pi-check"
-                        (click)="onApplyDynamicRuntimeAdvancedDraft(row)">
-                      </button>
-                      <button
-                        pButton
-                        type="button"
-                        class="p-button-sm p-button-outlined"
-                        label="استعادة من إعدادات الحقل"
-                        icon="pi pi-refresh"
-                        (click)="onResetDynamicRuntimeAdvancedDraft(row)">
-                      </button>
-                    </div>
                   </div>
                 </td>
                 <td class="actions-col">

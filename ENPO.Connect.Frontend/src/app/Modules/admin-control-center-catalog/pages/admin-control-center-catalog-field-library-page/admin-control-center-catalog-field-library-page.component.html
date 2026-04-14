@@ -141,6 +141,15 @@
               <button
                 pButton
                 type="button"
+                class="p-button-text row-api-settings-button"
+                [class.row-api-settings-button-hidden]="!canOpenApiSettingsForFieldType(row.fieldType)"
+                icon="pi pi-cloud"
+                [disabled]="loadingFieldDetails"
+                (click)="onEditFieldApiSettings(row, $event)">
+              </button>
+              <button
+                pButton
+                type="button"
                 class="p-button-text p-button-danger"
                 icon="pi pi-trash"
                 [loading]="deletingFieldIdentity === composeFieldIdentity(row.applicationId, row.fieldKey)"
@@ -336,22 +345,71 @@
           <div class="field span-two advanced-data-editor">
             <div class="advanced-data-header">
               <label>مصدر خيارات الحقل <span class="required" *ngIf="requiresOptionsPayload">*</span></label>
-              <button
-                pButton
-                type="button"
-                icon="pi pi-plus"
-                label="إضافة صف"
-                class="p-button-sm p-button-outlined"
-                (click)="onAddAdvancedDataRow()">
-              </button>
+              <div class="advanced-data-actions">
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-cloud"
+                  label="إعدادات API"
+                  class="p-button-sm p-button-outlined field-editor-api-settings-button"
+                  [class.field-editor-api-settings-button-hidden]="!isEditMode || !canOpenApiSettingsForFieldType(fieldForm.get('fieldType')?.value)"
+                  (click)="onOpenApiSettingsDialog()">
+                </button>
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-plus"
+                  label="إضافة صف"
+                  class="p-button-sm p-button-outlined"
+                  (click)="onAddAdvancedDataRow()">
+                </button>
+              </div>
             </div>
 
             <p class="advanced-data-hint">
               أدخل البيانات بصيغة مفتاح/قيمة. سيتم الحفظ تلقائيًا بصيغة جيسون منظمة ومتوافقة مع النظام الحالي.
             </p>
+            <small class="field-note" *ngIf="!isEditMode">
+              إعدادات API للحقل تظهر بعد إنشاء الحقل أو فتحه في وضع التعديل.
+            </small>
 
             <div class="advanced-data-warning" *ngIf="advancedDataParseMessage.length > 0">
               {{ advancedDataParseMessage }}
+            </div>
+
+            <div class="field advanced-json-editor">
+              <label for="advancedDataRawJson">تحرير JSON المباشر</label>
+              <textarea
+                id="advancedDataRawJson"
+                pInputTextarea
+                rows="6"
+                [autoResize]="true"
+                [ngModel]="advancedDataRawJsonDraft"
+                [ngModelOptions]="{ standalone: true }"
+                (ngModelChange)="onAdvancedDataRawJsonChanged($event)"
+                placeholder='مثال: [{"name":"جاري فضي","key":"جاري فضي"}]'>
+              </textarea>
+              <small class="field-note">
+                يمكن لصق JSON ثابت مباشرةً (مثل مصفوفة عناصر تحتوي `name` و `key`) ثم الضغط على "تطبيق JSON على الصفوف".
+              </small>
+              <div class="advanced-json-actions">
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-sm p-button-outlined"
+                  icon="pi pi-check"
+                  label="تطبيق JSON على الصفوف"
+                  (click)="onApplyAdvancedDataRawJson()">
+                </button>
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-sm p-button-text"
+                  icon="pi pi-refresh"
+                  label="إعادة توليد JSON من الصفوف"
+                  (click)="onResetAdvancedDataRawJsonFromRows()">
+                </button>
+              </div>
             </div>
 
             <div class="advanced-table-wrap">
@@ -427,6 +485,236 @@
       [loading]="savingField"
       [disabled]="!canSaveField"
       (click)="onSaveField()">
+    </button>
+  </ng-template>
+</p-dialog>
+
+<p-dialog
+  [(visible)]="apiSettingsDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(960px, 96vw)' }"
+  [contentStyle]="{ 'max-height': '80vh', overflow: 'auto' }"
+  header="إعدادات تحميل الخيارات من API"
+  appendTo="body"
+  (onHide)="onApiSettingsDialogHide()"
+  styleClass="rtl-dialog field-api-settings-dialog">
+  <section class="api-settings-dialog" dir="rtl">
+    <p class="api-settings-hint">
+      هذه الشاشة تغطي الحالتين الديناميكيتين: API داخلي (Power BI) و API خارجي، مع دعم `token` و `basic authentication`.
+    </p>
+
+    <div class="api-settings-message" *ngIf="apiSettingsMessage.length > 0">
+      {{ apiSettingsMessage }}
+    </div>
+
+    <form [formGroup]="apiSettingsForm" class="api-settings-form" novalidate>
+      <div class="api-settings-toolbar">
+        <div class="api-settings-quick-actions">
+          <button
+            pButton
+            type="button"
+            class="p-button-sm p-button-outlined"
+            icon="pi pi-bolt"
+            label="تجهيز API داخلي"
+            (click)="onApplyApiInternalPreset()">
+          </button>
+          <button
+            pButton
+            type="button"
+            class="p-button-sm p-button-outlined"
+            icon="pi pi-globe"
+            label="تجهيز API خارجي"
+            (click)="onApplyApiExternalPreset()">
+          </button>
+          <button
+            pButton
+            type="button"
+            class="p-button-sm p-button-outlined"
+            icon="pi pi-code"
+            label="توليد JSON من الإعدادات"
+            (click)="onGenerateApiRuntimeJsonFromForm()">
+          </button>
+          <button
+            pButton
+            type="button"
+            class="p-button-sm p-button-text"
+            icon="pi pi-check"
+            label="تطبيق JSON على الإعدادات"
+            (click)="onApplyApiRuntimeJsonToForm()">
+          </button>
+        </div>
+      </div>
+
+      <div class="api-settings-grid">
+        <div class="field">
+          <label for="apiSourceType">نوع المصدر <span class="required">*</span></label>
+          <p-dropdown
+            inputId="apiSourceType"
+            [options]="apiSettingsSourceTypeOptions"
+            optionLabel="label"
+            optionValue="value"
+            formControlName="sourceType"
+            appendTo="body"
+            [showClear]="false">
+          </p-dropdown>
+          <small class="field-error" *ngIf="isApiSettingsInvalid('sourceType')">
+            {{ apiSettingsValidationMessage('sourceType', 'نوع المصدر') }}
+          </small>
+        </div>
+
+        <div class="field">
+          <label for="apiTrigger">متى يتم التحميل <span class="required">*</span></label>
+          <p-dropdown
+            inputId="apiTrigger"
+            [options]="apiSettingsTriggerOptions"
+            optionLabel="label"
+            optionValue="value"
+            formControlName="trigger"
+            appendTo="body"
+            [showClear]="false">
+          </p-dropdown>
+          <small class="field-error" *ngIf="isApiSettingsInvalid('trigger')">
+            {{ apiSettingsValidationMessage('trigger', 'متى يتم التحميل') }}
+          </small>
+        </div>
+
+        <div class="field">
+          <label for="apiAuthMode">نمط المصادقة <span class="required">*</span></label>
+          <p-dropdown
+            inputId="apiAuthMode"
+            [options]="apiSettingsAuthModeOptions"
+            optionLabel="label"
+            optionValue="value"
+            formControlName="authMode"
+            appendTo="body"
+            [showClear]="false">
+          </p-dropdown>
+          <small class="field-error" *ngIf="isApiSettingsInvalid('authMode')">
+            {{ apiSettingsValidationMessage('authMode', 'نمط المصادقة') }}
+          </small>
+        </div>
+
+        <div class="field">
+          <label for="apiRequestFormat">تنسيق الطلب <span class="required">*</span></label>
+          <input pInputText id="apiRequestFormat" formControlName="requestFormat" placeholder="json" />
+          <small class="field-error" *ngIf="isApiSettingsInvalid('requestFormat')">
+            {{ apiSettingsValidationMessage('requestFormat', 'تنسيق الطلب') }}
+          </small>
+        </div>
+
+        <div class="field" *ngIf="apiSettingsSourceType === 'powerbi'">
+          <label for="apiStatementId">رقم العبارة الداخلية (statementId) <span class="required">*</span></label>
+          <input pInputText id="apiStatementId" type="number" min="1" formControlName="statementId" />
+          <small class="field-error" *ngIf="isApiSettingsInvalid('statementId')">
+            {{ apiSettingsValidationMessage('statementId', 'رقم العبارة الداخلية') }}
+          </small>
+        </div>
+
+        <div class="field" *ngIf="apiSettingsSourceType === 'external'">
+          <label for="apiFullUrl">رابط API الخارجي (fullUrl) <span class="required">*</span></label>
+          <input pInputText id="apiFullUrl" formControlName="fullUrl" placeholder="https://example.com/api/options" />
+          <small class="field-error" *ngIf="isApiSettingsInvalid('fullUrl')">
+            {{ apiSettingsValidationMessage('fullUrl', 'عنوان API الخارجي') }}
+          </small>
+        </div>
+
+        <div class="field" *ngIf="apiSettingsSourceType === 'external'">
+          <label for="apiMethod">طريقة الاستدعاء</label>
+          <p-dropdown
+            inputId="apiMethod"
+            [options]="apiSettingsHttpMethodOptions"
+            optionLabel="label"
+            optionValue="value"
+            formControlName="method"
+            appendTo="body"
+            [showClear]="false">
+          </p-dropdown>
+        </div>
+
+        <div class="field" *ngIf="apiSettingsAuthModeValue === 'token'">
+          <label for="apiTokenValue">Token ثابت <span class="required">*</span></label>
+          <input pInputText id="apiTokenValue" formControlName="tokenValue" placeholder="ضع قيمة التوكن" />
+          <small class="field-error" *ngIf="isApiSettingsInvalid('tokenValue')">
+            {{ apiSettingsValidationMessage('tokenValue', 'Token الثابت') }}
+          </small>
+        </div>
+
+        <div class="field" *ngIf="apiSettingsAuthModeValue === 'basic'">
+          <label for="apiUsername">اسم المستخدم <span class="required">*</span></label>
+          <input pInputText id="apiUsername" formControlName="username" placeholder="api_user" />
+          <small class="field-error" *ngIf="isApiSettingsInvalid('username')">
+            {{ apiSettingsValidationMessage('username', 'اسم المستخدم') }}
+          </small>
+        </div>
+
+        <div class="field" *ngIf="apiSettingsAuthModeValue === 'basic'">
+          <label for="apiPassword">كلمة المرور <span class="required">*</span></label>
+          <input pInputText id="apiPassword" type="password" formControlName="password" placeholder="api_password" />
+          <small class="field-error" *ngIf="isApiSettingsInvalid('password')">
+            {{ apiSettingsValidationMessage('password', 'كلمة المرور') }}
+          </small>
+        </div>
+
+        <div class="field">
+          <label for="apiResponseListPath">مسار قائمة النتائج <span class="required">*</span></label>
+          <input pInputText id="apiResponseListPath" formControlName="responseListPath" placeholder="data" />
+          <small class="field-error" *ngIf="isApiSettingsInvalid('responseListPath')">
+            {{ apiSettingsValidationMessage('responseListPath', 'مسار قائمة النتائج') }}
+          </small>
+        </div>
+
+        <div class="field">
+          <label for="apiResponseValuePath">مسار قيمة العنصر <span class="required">*</span></label>
+          <input pInputText id="apiResponseValuePath" formControlName="responseValuePath" placeholder="id" />
+          <small class="field-error" *ngIf="isApiSettingsInvalid('responseValuePath')">
+            {{ apiSettingsValidationMessage('responseValuePath', 'مسار قيمة العنصر') }}
+          </small>
+        </div>
+
+        <div class="field">
+          <label for="apiResponseLabelPath">مسار اسم العنصر <span class="required">*</span></label>
+          <input pInputText id="apiResponseLabelPath" formControlName="responseLabelPath" placeholder="name" />
+          <small class="field-error" *ngIf="isApiSettingsInvalid('responseLabelPath')">
+            {{ apiSettingsValidationMessage('responseLabelPath', 'مسار اسم العنصر') }}
+          </small>
+        </div>
+      </div>
+    </form>
+
+    <div class="field">
+      <label for="apiSettingsRuntimeJson">JSON الخاص بالسلوك الديناميكي</label>
+      <textarea
+        id="apiSettingsRuntimeJson"
+        pInputTextarea
+        rows="14"
+        [autoResize]="true"
+        [ngModel]="apiSettingsRuntimeJsonDraft"
+        [ngModelOptions]="{ standalone: true }"
+        (ngModelChange)="onApiSettingsRuntimeJsonDraftChanged($event)"
+        placeholder='مثال: {"optionLoader":{"integration":{"sourceType":"external","fullUrl":"https://example.com/api/options"}}}'>
+      </textarea>
+      <small class="field-note">
+        يمكنك تعديل JSON مباشرةً ثم الضغط على "تطبيق JSON على الإعدادات" لتحديث الحقول تلقائيًا.
+      </small>
+    </div>
+
+    <small class="field-note">
+      يتم الحفظ على مستوى ربط الحقل بالتصنيف الحالي (displaySettingsJson). لو الحقل غير مربوط لن يتم حفظ الإعداد.
+    </small>
+  </section>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" class="p-button-text" label="إغلاق" (click)="apiSettingsDialogVisible = false"></button>
+    <button
+      pButton
+      type="button"
+      label="حفظ إعدادات API"
+      icon="pi pi-save"
+      [loading]="apiSettingsSaving || apiSettingsLoading"
+      [disabled]="!canSaveApiSettings"
+      (click)="onSaveApiSettingsToCategoryLink()">
     </button>
   </ng-template>
 </p-dialog>

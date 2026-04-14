@@ -2,7 +2,12 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 import { forkJoin, Subscription } from 'rxjs';
-import { CommonResponse } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
+import {
+  CommonResponse,
+  SubjectCategoryFieldLinkAdminDto,
+  SubjectCategoryFieldLinkUpsertItemDto
+} from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
+import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
 import { DynamicSubjectsAdminCatalogController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
 import {
   AdminCatalogApplicationDto,
@@ -24,6 +29,15 @@ type AdvancedDataRow = {
   rowId: number;
   key: string;
   value: string;
+};
+
+type ApiDynamicAuthMode = 'none' | 'bearerCurrent' | 'token' | 'basic';
+type ApiDynamicSourceType = 'powerbi' | 'external';
+type ApiDynamicTrigger = 'init' | 'change' | 'blur';
+type ApiDynamicHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH';
+type FieldEditorOpenOptions = {
+  showFieldDialog?: boolean;
+  openApiSettingsDialog?: boolean;
 };
 
 @Component({
@@ -56,6 +70,21 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     mask: ['', [Validators.maxLength(30)]],
     cdmendTbl: [''],
     cdmendSql: [null, [Validators.min(1)]]
+  });
+  readonly apiSettingsForm: FormGroup = this.fb.group({
+    sourceType: ['powerbi', [Validators.required]],
+    trigger: ['change', [Validators.required]],
+    requestFormat: ['json', [Validators.required, Validators.maxLength(20)]],
+    statementId: [null],
+    fullUrl: ['', [Validators.maxLength(500)]],
+    method: ['GET', [Validators.required]],
+    responseListPath: ['data', [Validators.required, Validators.maxLength(200)]],
+    responseValuePath: ['id', [Validators.required, Validators.maxLength(200)]],
+    responseLabelPath: ['name', [Validators.required, Validators.maxLength(200)]],
+    authMode: ['none', [Validators.required]],
+    tokenValue: ['', [Validators.maxLength(4000)]],
+    username: ['', [Validators.maxLength(200)]],
+    password: ['', [Validators.maxLength(200)]]
   });
 
   applications: AdminCatalogApplicationDto[] = [];
@@ -123,15 +152,54 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
   advancedDataRows: AdvancedDataRow[] = [];
   advancedDataRowsTouched = false;
   advancedDataParseMessage = '';
+  advancedDataRawJsonDraft = '';
+  apiSettingsDialogVisible = false;
+  apiSettingsLoading = false;
+  apiSettingsSaving = false;
+  apiSettingsTouched = false;
+  apiSettingsRuntimeJsonDraft = '';
+  apiSettingsMessage = '';
+  readonly apiSettingsSourceTypeOptions: Array<{ label: string; value: ApiDynamicSourceType }> = [
+    { label: 'داخلي (Power BI)', value: 'powerbi' },
+    { label: 'خارجي (External API)', value: 'external' }
+  ];
+  readonly apiSettingsTriggerOptions: Array<{ label: string; value: ApiDynamicTrigger }> = [
+    { label: 'عند التغيير', value: 'change' },
+    { label: 'عند التهيئة', value: 'init' },
+    { label: 'عند فقدان التركيز', value: 'blur' }
+  ];
+  readonly apiSettingsHttpMethodOptions: Array<{ label: string; value: ApiDynamicHttpMethod }> = [
+    { label: 'GET', value: 'GET' },
+    { label: 'POST', value: 'POST' },
+    { label: 'PUT', value: 'PUT' },
+    { label: 'PATCH', value: 'PATCH' }
+  ];
+  readonly apiSettingsAuthModeOptions: Array<{ label: string; value: ApiDynamicAuthMode }> = [
+    { label: 'بدون مصادقة', value: 'none' },
+    { label: 'Bearer الحالي', value: 'bearerCurrent' },
+    { label: 'Token ثابت', value: 'token' },
+    { label: 'Basic Authentication', value: 'basic' }
+  ];
 
   private advancedDataRowSeed = 0;
+  private readonly apiSettingsUrlPattern = /^https?:\/\/.+/i;
+  private apiSettingsRuntimeExtraSections: Record<string, unknown> = {};
+  private apiSettingsOptionLoaderBase: Record<string, unknown> = {};
+  private apiSettingsIntegrationBase: Record<string, unknown> = {};
+  private apiSettingsAuthBase: Record<string, unknown> = {};
+  private apiSettingsLastEditedSource: 'form' | 'json' | null = null;
   private pendingPersistenceRefresh = false;
+  private pendingRouteEditFieldKey: string | null = null;
+  private pendingRouteEditApplicationId: string | null = null;
+  private pendingRouteOpenFieldEditor = false;
+  private pendingRouteOpenApiSettings = false;
   private readonly subscriptions = new Subscription();
 
   constructor(
     private readonly fb: FormBuilder,
     private readonly route: ActivatedRoute,
-    private readonly adminCatalogController: DynamicSubjectsAdminCatalogController
+    private readonly adminCatalogController: DynamicSubjectsAdminCatalogController,
+    private readonly dynamicSubjectsController: DynamicSubjectsController
   ) {}
 
   ngOnInit(): void {
@@ -139,15 +207,27 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       this.route.queryParamMap.subscribe(params => {
         const routeCategoryId = this.readCategoryIdFromParams(params);
         const routeApplicationId = this.readApplicationIdFromParams(params);
+        const routeEditFieldKey = this.readEditFieldKeyFromParams(params);
+        const routeEditApplicationId = this.readEditApplicationIdFromParams(params);
+        const routeOpenFieldEditor = this.readOpenFieldEditorFromParams(params);
+        const routeOpenApiSettings = this.readOpenApiSettingsFromParams(params);
         const cachedContext = this.readCatalogContextCache();
 
         this.contextCategoryId = routeCategoryId ?? cachedContext.categoryId;
         this.contextApplicationId = routeApplicationId ?? cachedContext.applicationId;
         this.persistCatalogContextCache(this.contextCategoryId, this.contextApplicationId);
+        this.pendingRouteEditFieldKey = routeEditFieldKey;
+        this.pendingRouteEditApplicationId = routeEditApplicationId
+          ?? routeApplicationId
+          ?? cachedContext.applicationId;
+        this.pendingRouteOpenFieldEditor = routeOpenFieldEditor;
+        this.pendingRouteOpenApiSettings = routeOpenApiSettings;
 
         if (!this.normalizeText(this.selectedApplicationFilter) && this.contextApplicationId) {
           this.selectedApplicationFilter = this.contextApplicationId;
         }
+
+        this.tryOpenPendingRouteFieldEditor();
       })
     );
 
@@ -167,6 +247,16 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       this.subscriptions.add(maxValueControl.valueChanges.subscribe(() => this.validateRange()));
     }
 
+    this.subscriptions.add(
+      this.apiSettingsForm.valueChanges.subscribe(() => {
+        this.applyApiSettingsFormRules();
+        if (!this.apiSettingsLoading && !this.apiSettingsSaving) {
+          this.apiSettingsTouched = true;
+          this.apiSettingsLastEditedSource = 'form';
+        }
+      })
+    );
+    this.applyApiSettingsFormRules();
     this.applyFieldTypeRules();
     this.loadBootstrapData();
   }
@@ -185,6 +275,23 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       && this.areMandatoryFieldsCompleted
       && !this.fieldForm.hasError('rangeError')
       && !this.hasAdvancedDataValidationError;
+  }
+
+  get apiSettingsSourceType(): ApiDynamicSourceType {
+    const value = this.normalizeText(this.apiSettingsForm.get('sourceType')?.value)?.toLowerCase();
+    return value === 'external' ? 'external' : 'powerbi';
+  }
+
+  get apiSettingsAuthModeValue(): ApiDynamicAuthMode {
+    const mode = this.normalizeText(this.apiSettingsForm.get('authMode')?.value) ?? 'none';
+    return this.normalizeApiAuthMode(mode);
+  }
+
+  get canSaveApiSettings(): boolean {
+    return !this.apiSettingsSaving
+      && !this.apiSettingsLoading
+      && this.apiSettingsForm.valid
+      && (this.apiSettingsLastEditedSource !== 'json' || this.parseApiRuntimeJsonDraft(this.apiSettingsRuntimeJsonDraft) !== undefined);
   }
 
   get applicationSelectOptions(): SelectOption[] {
@@ -378,6 +485,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     this.setIdentityControlsDisabled(false);
     this.applyFieldTypeRules();
     this.validateRange();
+    this.resetApiSettingsEditorState();
   }
 
   onEditField(row: AdminCatalogFieldListItemDto, event?: Event): void {
@@ -385,9 +493,37 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
 
     const applicationId = this.normalizeText(row.applicationId);
     const fieldKey = this.normalizeText(row.fieldKey);
-    if (!applicationId || !fieldKey || this.loadingFieldDetails) {
+    if (!applicationId || !fieldKey) {
       return;
     }
+
+    this.openFieldEditor(applicationId, fieldKey, { showFieldDialog: true, openApiSettingsDialog: false });
+  }
+
+  onEditFieldApiSettings(row: AdminCatalogFieldListItemDto, event?: Event): void {
+    event?.stopPropagation();
+
+    if (!this.canOpenApiSettingsForFieldType(row?.fieldType)) {
+      this.showMessage('warn', 'إعدادات API متاحة فقط لحقول Dropdown و RadioButton و DropdownTree.');
+      return;
+    }
+
+    const applicationId = this.normalizeText(row.applicationId);
+    const fieldKey = this.normalizeText(row.fieldKey);
+    if (!applicationId || !fieldKey) {
+      return;
+    }
+
+    this.openFieldEditor(applicationId, fieldKey, { showFieldDialog: false, openApiSettingsDialog: true });
+  }
+
+  private openFieldEditor(applicationId: string, fieldKey: string, options?: FieldEditorOpenOptions): void {
+    if (this.loadingFieldDetails) {
+      return;
+    }
+
+    const showFieldDialog = options?.showFieldDialog !== false;
+    const openApiSettingsDialog = options?.openApiSettingsDialog === true;
 
     this.loadingFieldDetails = true;
     this.adminCatalogController.getField(applicationId, fieldKey).subscribe({
@@ -403,7 +539,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
         }
 
         this.editingIdentity = { applicationId, fieldKey };
-        this.dialogVisible = true;
+        this.dialogVisible = showFieldDialog;
         this.fieldForm.reset({
           applicationId: details.applicationId,
           fieldKey: details.fieldKey,
@@ -432,6 +568,10 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
         this.setIdentityControlsDisabled(true);
         this.applyFieldTypeRules();
         this.validateRange();
+
+        if (openApiSettingsDialog) {
+          this.onOpenApiSettingsDialog();
+        }
       },
       error: () => {
         this.showMessage('error', 'حدث خطأ أثناء تحميل تفاصيل الحقل.');
@@ -532,6 +672,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
           this.showMessage('success', 'تم تعديل الحقل بنجاح.');
           this.hasCrudMutation = true;
           this.pendingPersistenceRefresh = true;
+          this.resetApiSettingsEditorState();
 
           if (savedField) {
             this.selectedFieldIdentity = this.composeFieldIdentity(savedField.applicationId, savedField.fieldKey);
@@ -562,6 +703,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
         this.showMessage('success', 'تم إنشاء الحقل بنجاح.');
         this.hasCrudMutation = true;
         this.pendingPersistenceRefresh = true;
+        this.resetApiSettingsEditorState();
 
         if (savedField) {
           this.selectedFieldIdentity = this.composeFieldIdentity(savedField.applicationId, savedField.fieldKey);
@@ -608,6 +750,36 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     return `${label} غير صالح.`;
   }
 
+  isApiSettingsInvalid(controlName: string): boolean {
+    const control = this.apiSettingsForm.get(controlName);
+    return !!control && control.invalid && (control.touched || control.dirty);
+  }
+
+  apiSettingsValidationMessage(controlName: string, label: string): string {
+    const control = this.apiSettingsForm.get(controlName);
+    if (!control?.errors) {
+      return '';
+    }
+
+    if (control.errors['required']) {
+      return `${label} مطلوب.`;
+    }
+
+    if (control.errors['maxlength']) {
+      return `${label} يجب ألا يزيد عن ${control.errors['maxlength'].requiredLength} حرفًا.`;
+    }
+
+    if (control.errors['min']) {
+      return `${label} يجب أن يكون ${control.errors['min'].min} أو أكبر.`;
+    }
+
+    if (control.errors['pattern']) {
+      return `${label} غير صالح.`;
+    }
+
+    return `${label} غير صالح.`;
+  }
+
   trackByField(_index: number, item: AdminCatalogFieldListItemDto): string {
     return this.composeFieldIdentity(item.applicationId, item.fieldKey);
   }
@@ -621,6 +793,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     this.advancedDataRowsTouched = true;
     this.advancedDataParseMessage = '';
     this.syncAdvancedDataControl();
+    this.syncAdvancedDataRawJsonDraftFromRows();
     this.applyFieldTypeRules();
   }
 
@@ -634,6 +807,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     this.advancedDataRowsTouched = true;
     this.advancedDataParseMessage = '';
     this.syncAdvancedDataControl();
+    this.syncAdvancedDataRawJsonDraftFromRows();
     this.applyFieldTypeRules();
   }
 
@@ -641,7 +815,829 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     this.advancedDataRowsTouched = true;
     this.advancedDataParseMessage = '';
     this.syncAdvancedDataControl();
+    this.syncAdvancedDataRawJsonDraftFromRows();
     this.applyFieldTypeRules();
+  }
+
+  onAdvancedDataRawJsonChanged(value: string): void {
+    this.advancedDataRawJsonDraft = String(value ?? '');
+  }
+
+  onApplyAdvancedDataRawJson(): void {
+    this.hydrateAdvancedDataEditor(this.advancedDataRawJsonDraft);
+    this.advancedDataRowsTouched = true;
+    this.syncAdvancedDataControl();
+    this.syncAdvancedDataRawJsonDraftFromRows();
+    this.applyFieldTypeRules();
+  }
+
+  onResetAdvancedDataRawJsonFromRows(): void {
+    this.syncAdvancedDataRawJsonDraftFromRows();
+  }
+
+  onOpenApiSettingsDialog(): void {
+    if (!this.isEditMode || !this.editingIdentity) {
+      this.showMessage('warn', 'افتح الحقل في وضع التعديل أولًا ثم ادخل على إعدادات API.');
+      return;
+    }
+
+    if (!this.canOpenApiSettingsForFieldType(this.fieldForm.get('fieldType')?.value)) {
+      this.showMessage('warn', 'إعدادات API متاحة فقط لحقول Dropdown و RadioButton و DropdownTree.');
+      return;
+    }
+
+    this.apiSettingsDialogVisible = true;
+    this.loadApiSettingsForEditingField();
+  }
+
+  onApiSettingsDialogHide(): void {
+    this.apiSettingsLoading = false;
+    this.apiSettingsSaving = false;
+  }
+
+  onApiSettingsRuntimeJsonDraftChanged(value: string): void {
+    this.apiSettingsRuntimeJsonDraft = String(value ?? '');
+    this.apiSettingsTouched = true;
+    this.apiSettingsLastEditedSource = 'json';
+  }
+
+  onApplyApiInternalPreset(): void {
+    this.applyApiSettingsPreset('powerbi');
+    this.apiSettingsMessage = 'تم تجهيز إعدادات API الداخلي. راجع القيم ثم احفظ.';
+  }
+
+  onApplyApiExternalPreset(): void {
+    this.applyApiSettingsPreset('external');
+    this.apiSettingsMessage = 'تم تجهيز إعدادات API الخارجي. راجع القيم ثم احفظ.';
+  }
+
+  onGenerateApiRuntimeJsonFromForm(): void {
+    this.applyApiSettingsFormRules();
+    this.apiSettingsForm.markAllAsTouched();
+    if (this.apiSettingsForm.invalid) {
+      this.apiSettingsMessage = this.resolveApiSettingsFormValidationMessage()
+        ?? 'أكمل الحقول المطلوبة في إعدادات API أولًا.';
+      return;
+    }
+
+    const runtimePayload = this.buildApiRuntimePayloadFromForm();
+    this.apiSettingsRuntimeJsonDraft = JSON.stringify(runtimePayload, null, 2);
+    this.apiSettingsTouched = true;
+    this.apiSettingsLastEditedSource = 'form';
+    this.apiSettingsMessage = 'تم توليد JSON من إعدادات الشاشة بنجاح.';
+  }
+
+  onApplyApiRuntimeJsonToForm(): void {
+    const parsedPayload = this.parseApiRuntimeJsonDraft(this.apiSettingsRuntimeJsonDraft);
+    if (parsedPayload === undefined) {
+      this.apiSettingsMessage = 'تعذر تطبيق JSON لأن الصيغة غير صحيحة.';
+      return;
+    }
+
+    if (parsedPayload == null) {
+      this.resetApiSettingsFormDefaults();
+      this.apiSettingsMessage = 'تم مسح JSON وإعادة الإعدادات الافتراضية.';
+      this.apiSettingsTouched = true;
+      this.apiSettingsLastEditedSource = 'json';
+      return;
+    }
+
+    const runtimePayload = this.resolveRuntimePayloadForEditor(parsedPayload);
+    if (!runtimePayload) {
+      this.apiSettingsMessage = 'JSON الحالي لا يحتوي إعدادات optionLoader قابلة للتحويل إلى شاشة الإعدادات.';
+      return;
+    }
+
+    this.applyApiRuntimePayloadToForm(runtimePayload);
+    this.apiSettingsTouched = true;
+    this.apiSettingsLastEditedSource = 'json';
+    this.apiSettingsMessage = 'تم تحليل JSON وتحديث حقول الإعدادات بنجاح.';
+  }
+
+  onSaveApiSettingsToCategoryLink(): void {
+    if (!this.isEditMode || !this.editingIdentity) {
+      this.apiSettingsMessage = 'لا يمكن حفظ إعدادات API إلا بعد فتح الحقل في وضع التعديل.';
+      return;
+    }
+
+    const categoryId = this.toPositiveInt(this.contextCategoryId);
+    if (!categoryId) {
+      this.apiSettingsMessage = 'تعذر الحفظ: يجب فتح الشاشة بسياق تصنيف صالح (categoryId).';
+      return;
+    }
+
+    if (this.apiSettingsLastEditedSource === 'json') {
+      const parsedPayload = this.parseApiRuntimeJsonDraft(this.apiSettingsRuntimeJsonDraft);
+      if (parsedPayload === undefined) {
+        this.apiSettingsMessage = 'تعذر حفظ إعدادات API لأن JSON غير صالح. راجع الصيغة ثم حاول مرة أخرى.';
+        return;
+      }
+
+      if (parsedPayload != null) {
+        const runtimePayloadForForm = this.resolveRuntimePayloadForEditor(parsedPayload);
+        if (!runtimePayloadForForm) {
+          this.apiSettingsMessage = 'JSON الحالي لا يحتوي إعدادات optionLoader صالحة للحفظ.';
+          return;
+        }
+
+        this.applyApiRuntimePayloadToForm(runtimePayloadForForm);
+      }
+    }
+
+    this.applyApiSettingsFormRules();
+    this.apiSettingsForm.markAllAsTouched();
+    if (this.apiSettingsForm.invalid) {
+      this.apiSettingsMessage = this.resolveApiSettingsFormValidationMessage()
+        ?? 'أكمل الحقول المطلوبة في إعدادات API أولًا.';
+      return;
+    }
+
+    const runtimePayload = this.buildApiRuntimePayloadFromForm();
+    this.apiSettingsRuntimeJsonDraft = JSON.stringify(runtimePayload, null, 2);
+    this.apiSettingsLastEditedSource = 'form';
+    this.apiSettingsSaving = true;
+    this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId).subscribe({
+      next: response => {
+        if (!response?.isSuccess) {
+          this.apiSettingsMessage = this.readResponseError(response, 'تعذر تحميل روابط الحقول لحفظ إعدادات API.');
+          this.apiSettingsSaving = false;
+          return;
+        }
+
+        const links = [...(response.data ?? [])];
+        const targetLink = this.findEditingFieldLink(links);
+        if (!targetLink) {
+          this.apiSettingsMessage = 'الحقل غير مربوط حاليًا بهذا التصنيف، لذلك لا يمكن حفظ إعدادات API له.';
+          this.apiSettingsSaving = false;
+          return;
+        }
+
+        const payloadLinks: SubjectCategoryFieldLinkUpsertItemDto[] = links
+          .map(link => this.toCategoryLinkUpsertItem(link, targetLink, runtimePayload))
+          .filter((item): item is SubjectCategoryFieldLinkUpsertItemDto => item != null);
+        if (payloadLinks.length === 0) {
+          this.apiSettingsMessage = 'تعذر حفظ إعدادات API لأن روابط الحقول الحالية غير صالحة.';
+          this.apiSettingsSaving = false;
+          return;
+        }
+
+        const normalizedPayloadLinks = this.normalizeCategoryLinkDisplayOrders(payloadLinks);
+
+        this.dynamicSubjectsController.upsertAdminCategoryFieldLinks(categoryId, { links: normalizedPayloadLinks }).subscribe({
+          next: saveResponse => {
+            if (!saveResponse?.isSuccess) {
+              this.apiSettingsMessage = this.readResponseError(saveResponse, 'تعذر حفظ إعدادات API للحقل.');
+              return;
+            }
+
+            this.apiSettingsTouched = false;
+            this.apiSettingsLastEditedSource = null;
+            this.apiSettingsMessage = 'تم حفظ إعدادات API للحقل بنجاح.';
+            this.showMessage('success', 'تم حفظ إعدادات API للحقل المرتبط بالتصنيف بنجاح.');
+          },
+          error: () => {
+            this.apiSettingsMessage = 'حدث خطأ أثناء حفظ إعدادات API للحقل.';
+          },
+          complete: () => {
+            this.apiSettingsSaving = false;
+          }
+        });
+      },
+      error: () => {
+        this.apiSettingsMessage = 'حدث خطأ أثناء تحميل روابط التصنيف لحفظ إعدادات API.';
+        this.apiSettingsSaving = false;
+      }
+    });
+  }
+
+  private loadApiSettingsForEditingField(): void {
+    this.apiSettingsMessage = '';
+    this.apiSettingsTouched = false;
+    this.apiSettingsLastEditedSource = null;
+    this.resetApiSettingsFormDefaults();
+
+    if (!this.isEditMode || !this.editingIdentity) {
+      this.apiSettingsRuntimeJsonDraft = '';
+      return;
+    }
+
+    const categoryId = this.toPositiveInt(this.contextCategoryId);
+    if (!categoryId) {
+      this.apiSettingsRuntimeJsonDraft = '';
+      this.apiSettingsMessage = 'لا يوجد categoryId صالح. يمكن تجهيز JSON لكن الحفظ على التصنيف لن يعمل.';
+      return;
+    }
+
+    this.apiSettingsLoading = true;
+    this.dynamicSubjectsController.getAdminCategoryFieldLinks(categoryId).subscribe({
+      next: response => {
+        if (!response?.isSuccess) {
+          this.apiSettingsRuntimeJsonDraft = '';
+          this.apiSettingsMessage = this.readResponseError(response, 'تعذر تحميل إعدادات API الحالية لهذا الحقل.');
+          return;
+        }
+
+        const links = response.data ?? [];
+        const targetLink = this.findEditingFieldLink(links);
+        if (!targetLink) {
+          this.apiSettingsRuntimeJsonDraft = '';
+          this.apiSettingsMessage = 'الحقل غير مربوط بهذا التصنيف حاليًا. يمكنك تجهيز JSON الآن وربطه بعد إضافة الحقل في شاشة الربط.';
+          return;
+        }
+
+        const runtimePayload = this.extractDynamicRuntimePayloadFromDisplaySettings(targetLink.displaySettingsJson);
+        if (!runtimePayload) {
+          this.apiSettingsRuntimeJsonDraft = '';
+          this.apiSettingsMessage = 'لا توجد إعدادات API محفوظة لهذا الحقل حاليًا.';
+          return;
+        }
+
+        const resolvedRuntimePayload = this.resolveRuntimePayloadForEditor(runtimePayload);
+        if (!resolvedRuntimePayload) {
+          this.apiSettingsRuntimeJsonDraft = JSON.stringify(runtimePayload, null, 2);
+          this.apiSettingsMessage = 'تم تحميل JSON محفوظ لكنه لا يطابق شاشة الإعدادات بالكامل. يمكن تعديله من JSON مباشرة.';
+          return;
+        }
+
+        this.applyApiRuntimePayloadToForm(resolvedRuntimePayload);
+        this.apiSettingsRuntimeJsonDraft = JSON.stringify(resolvedRuntimePayload, null, 2);
+        this.apiSettingsLastEditedSource = null;
+      },
+      error: () => {
+        this.apiSettingsRuntimeJsonDraft = '';
+        this.apiSettingsMessage = 'حدث خطأ أثناء تحميل إعدادات API الحالية.';
+      },
+      complete: () => {
+        this.apiSettingsLoading = false;
+      }
+    });
+  }
+
+  private toCategoryLinkUpsertItem(
+    link: SubjectCategoryFieldLinkAdminDto,
+    targetLink: SubjectCategoryFieldLinkAdminDto,
+    runtimePayload: Record<string, unknown> | null
+  ): SubjectCategoryFieldLinkUpsertItemDto | null {
+    const fieldKey = this.normalizeText(link.fieldKey);
+    const groupId = this.toPositiveInt(link.groupId);
+    if (!fieldKey || !groupId) {
+      return null;
+    }
+
+    const mendSql = this.toPositiveInt(link.mendSql) ?? undefined;
+    const displayOrder = this.toPositiveInt(link.displayOrder) ?? 1;
+    const isTarget = Number(link.mendSql ?? 0) === Number(targetLink.mendSql ?? 0)
+      || this.isSameText(link.fieldKey, targetLink.fieldKey);
+    const displaySettingsJson = isTarget
+      ? this.mergeDynamicRuntimeIntoDisplaySettings(link.displaySettingsJson, runtimePayload)
+      : (this.normalizeText(link.displaySettingsJson) ?? undefined);
+
+    return {
+      mendSql,
+      fieldKey,
+      groupId,
+      isActive: link.isActive === true,
+      displayOrder,
+      isVisible: link.isVisible === true,
+      displaySettingsJson
+    };
+  }
+
+  private normalizeCategoryLinkDisplayOrders(
+    links: SubjectCategoryFieldLinkUpsertItemDto[]
+  ): SubjectCategoryFieldLinkUpsertItemDto[] {
+    const resolvedDisplayOrders = links.map(item => this.toPositiveInt(item.displayOrder));
+    const hasInvalidDisplayOrder = resolvedDisplayOrders.some(value => !value);
+    const distinctDisplayOrderCount = new Set(
+      resolvedDisplayOrders.filter((value): value is number => !!value)
+    ).size;
+    const hasDuplicatedDisplayOrder = distinctDisplayOrderCount !== links.length;
+
+    if (!hasInvalidDisplayOrder && !hasDuplicatedDisplayOrder) {
+      const stableDisplayOrders = resolvedDisplayOrders as number[];
+      return links.map((item, index) => ({
+        ...item,
+        displayOrder: stableDisplayOrders[index]
+      }));
+    }
+
+    return [...links]
+      .sort((left, right) => {
+        const leftDisplayOrder = this.toPositiveInt(left.displayOrder) ?? 1;
+        const rightDisplayOrder = this.toPositiveInt(right.displayOrder) ?? 1;
+        if (leftDisplayOrder !== rightDisplayOrder) {
+          return leftDisplayOrder - rightDisplayOrder;
+        }
+
+        const leftMendSql = this.toPositiveInt(left.mendSql) ?? Number.MAX_SAFE_INTEGER;
+        const rightMendSql = this.toPositiveInt(right.mendSql) ?? Number.MAX_SAFE_INTEGER;
+        if (leftMendSql !== rightMendSql) {
+          return leftMendSql - rightMendSql;
+        }
+
+        const leftFieldKey = this.normalizeText(left.fieldKey) ?? '';
+        const rightFieldKey = this.normalizeText(right.fieldKey) ?? '';
+        return leftFieldKey.localeCompare(rightFieldKey, 'en', { sensitivity: 'base' });
+      })
+      .map((item, index) => ({
+        ...item,
+        displayOrder: index + 1
+      }));
+  }
+
+  private findEditingFieldLink(links: SubjectCategoryFieldLinkAdminDto[]): SubjectCategoryFieldLinkAdminDto | null {
+    const editing = this.editingIdentity;
+    if (!editing) {
+      return null;
+    }
+
+    const normalizedFieldKey = this.normalizeText(editing.fieldKey);
+    if (!normalizedFieldKey) {
+      return null;
+    }
+
+    const normalizedApplicationId = this.normalizeText(editing.applicationId);
+    const directMatch = links.find(item =>
+      this.isSameText(item.fieldKey, normalizedFieldKey)
+      && (normalizedApplicationId == null
+        || this.normalizeText(item.applicationId) == null
+        || this.isSameText(item.applicationId, normalizedApplicationId)));
+
+    return directMatch ?? null;
+  }
+
+  private parseApiRuntimeJsonDraft(raw: string): Record<string, unknown> | null | undefined {
+    const normalized = this.normalizeText(raw);
+    if (!normalized) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(normalized);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return undefined;
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private extractDynamicRuntimePayloadFromDisplaySettings(displaySettingsJson: string | null | undefined): Record<string, unknown> | null {
+    const displaySettings = this.parseJsonObject(displaySettingsJson);
+    if (!displaySettings) {
+      return null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(displaySettings, 'dynamicRuntime')) {
+      return this.parseRuntimePayload(displaySettings['dynamicRuntime']);
+    }
+
+    if (this.looksLikeRuntimePayload(displaySettings)) {
+      return displaySettings;
+    }
+
+    return null;
+  }
+
+  private parseRuntimePayload(value: unknown): Record<string, unknown> | null {
+    if (!value) {
+      return null;
+    }
+
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        return null;
+      }
+
+      return null;
+    }
+
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+
+    return null;
+  }
+
+  private looksLikeRuntimePayload(payload: Record<string, unknown>): boolean {
+    const optionLoader = payload['optionLoader'];
+    const asyncValidation = payload['asyncValidation'];
+    const actions = payload['actions'];
+
+    return (optionLoader != null && typeof optionLoader === 'object' && !Array.isArray(optionLoader))
+      || (asyncValidation != null && typeof asyncValidation === 'object' && !Array.isArray(asyncValidation))
+      || Array.isArray(actions);
+  }
+
+  private mergeDynamicRuntimeIntoDisplaySettings(
+    currentDisplaySettingsJson: string | null | undefined,
+    runtimePayload: Record<string, unknown> | null
+  ): string | undefined {
+    const displaySettings = this.parseJsonObject(currentDisplaySettingsJson) ?? {};
+    if (runtimePayload && Object.keys(runtimePayload).length > 0) {
+      displaySettings['dynamicRuntime'] = runtimePayload;
+    } else if (Object.prototype.hasOwnProperty.call(displaySettings, 'dynamicRuntime')) {
+      delete displaySettings['dynamicRuntime'];
+    }
+
+    if (Object.keys(displaySettings).length === 0) {
+      return undefined;
+    }
+
+    return JSON.stringify(displaySettings);
+  }
+
+  private parseJsonObject(payload: string | null | undefined): Record<string, unknown> | null {
+    const normalized = this.normalizeText(payload);
+    if (!normalized) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(normalized);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  private inferApiAuthMode(runtimePayload: Record<string, unknown>): ApiDynamicAuthMode {
+    const optionLoader = this.readObject(runtimePayload['optionLoader']);
+    const integration = this.readObject(optionLoader?.['integration']);
+    const auth = this.readObject(integration?.['auth']);
+    const normalizedMode = String(auth?.['mode'] ?? '');
+    return this.normalizeApiAuthMode(normalizedMode);
+  }
+
+  private normalizeApiAuthMode(mode: string): ApiDynamicAuthMode {
+    const normalizedMode = mode.trim().toLowerCase();
+    if (normalizedMode === 'bearercurrent' || normalizedMode === 'bearer_current' || normalizedMode === 'bearer-current') {
+      return 'bearerCurrent';
+    }
+
+    if (normalizedMode === 'token' || normalizedMode === 'bearertoken' || normalizedMode === 'bearer_token' || normalizedMode === 'bearer-token') {
+      return 'token';
+    }
+
+    if (normalizedMode === 'basic' || normalizedMode === 'basicauth' || normalizedMode === 'basic_auth' || normalizedMode === 'basic-auth') {
+      return 'basic';
+    }
+
+    return 'none';
+  }
+
+  private applyApiSettingsFormRules(): void {
+    const sourceType = this.apiSettingsSourceType;
+    const authMode = this.apiSettingsAuthModeValue;
+
+    const statementIdControl = this.apiSettingsForm.get('statementId');
+    const fullUrlControl = this.apiSettingsForm.get('fullUrl');
+    const tokenValueControl = this.apiSettingsForm.get('tokenValue');
+    const usernameControl = this.apiSettingsForm.get('username');
+    const passwordControl = this.apiSettingsForm.get('password');
+
+    if (sourceType === 'powerbi') {
+      statementIdControl?.setValidators([Validators.required, Validators.min(1)]);
+      fullUrlControl?.setValidators([Validators.maxLength(500)]);
+    } else {
+      statementIdControl?.clearValidators();
+      fullUrlControl?.setValidators([Validators.required, Validators.maxLength(500), Validators.pattern(this.apiSettingsUrlPattern)]);
+    }
+
+    if (authMode === 'token') {
+      tokenValueControl?.setValidators([Validators.required, Validators.maxLength(4000)]);
+      usernameControl?.setValidators([Validators.maxLength(200)]);
+      passwordControl?.setValidators([Validators.maxLength(200)]);
+    } else if (authMode === 'basic') {
+      tokenValueControl?.setValidators([Validators.maxLength(4000)]);
+      usernameControl?.setValidators([Validators.required, Validators.maxLength(200)]);
+      passwordControl?.setValidators([Validators.required, Validators.maxLength(200)]);
+    } else {
+      tokenValueControl?.setValidators([Validators.maxLength(4000)]);
+      usernameControl?.setValidators([Validators.maxLength(200)]);
+      passwordControl?.setValidators([Validators.maxLength(200)]);
+    }
+
+    statementIdControl?.updateValueAndValidity({ emitEvent: false });
+    fullUrlControl?.updateValueAndValidity({ emitEvent: false });
+    tokenValueControl?.updateValueAndValidity({ emitEvent: false });
+    usernameControl?.updateValueAndValidity({ emitEvent: false });
+    passwordControl?.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private applyApiSettingsPreset(sourceType: ApiDynamicSourceType): void {
+    const currentAuthMode = this.apiSettingsAuthModeValue;
+    const currentStatementId = this.toPositiveInt(this.apiSettingsForm.get('statementId')?.value) ?? 65;
+    const currentMethod = this.normalizeText(this.apiSettingsForm.get('method')?.value)?.toUpperCase() ?? 'GET';
+    const safeMethod: ApiDynamicHttpMethod = ['GET', 'POST', 'PUT', 'PATCH'].includes(currentMethod)
+      ? currentMethod as ApiDynamicHttpMethod
+      : 'GET';
+
+    this.apiSettingsForm.patchValue({
+      sourceType,
+      trigger: 'change',
+      requestFormat: 'json',
+      statementId: sourceType === 'powerbi' ? currentStatementId : null,
+      fullUrl: sourceType === 'external'
+        ? (this.normalizeText(this.apiSettingsForm.get('fullUrl')?.value) ?? 'https://example.com/api/options')
+        : '',
+      method: safeMethod,
+      responseListPath: 'data',
+      responseValuePath: 'id',
+      responseLabelPath: 'name',
+      authMode: currentAuthMode
+    }, { emitEvent: false });
+    this.applyApiSettingsFormRules();
+
+    const runtimePayload = this.buildApiRuntimePayloadFromForm();
+    this.apiSettingsRuntimeJsonDraft = JSON.stringify(runtimePayload, null, 2);
+    this.apiSettingsTouched = true;
+    this.apiSettingsLastEditedSource = 'form';
+  }
+
+  private resolveApiSettingsFormValidationMessage(): string | null {
+    const validationLabels: Array<{ control: string; label: string }> = [
+      { control: 'sourceType', label: 'نوع المصدر' },
+      { control: 'trigger', label: 'متى يتم التحميل' },
+      { control: 'requestFormat', label: 'تنسيق الطلب' },
+      { control: 'statementId', label: 'رقم العبارة الداخلية' },
+      { control: 'fullUrl', label: 'عنوان API الخارجي' },
+      { control: 'method', label: 'طريقة الاستدعاء' },
+      { control: 'responseListPath', label: 'مسار قائمة النتائج' },
+      { control: 'responseValuePath', label: 'مسار قيمة العنصر' },
+      { control: 'responseLabelPath', label: 'مسار اسم العنصر' },
+      { control: 'authMode', label: 'نمط المصادقة' },
+      { control: 'tokenValue', label: 'Token الثابت' },
+      { control: 'username', label: 'اسم المستخدم' },
+      { control: 'password', label: 'كلمة المرور' }
+    ];
+
+    for (const item of validationLabels) {
+      if (this.apiSettingsForm.get(item.control)?.invalid) {
+        return this.apiSettingsValidationMessage(item.control, item.label);
+      }
+    }
+
+    return null;
+  }
+
+  canOpenApiSettingsForFieldType(fieldType: unknown): boolean {
+    const normalized = (this.normalizeText(fieldType) ?? '')
+      .replace(/[\s_-]/g, '')
+      .toLowerCase();
+
+    return normalized === 'dropdown'
+      || normalized === 'radiobutton'
+      || normalized === 'radiobuttons'
+      || normalized === 'dropdowntree'
+      || normalized === 'treedropdown';
+  }
+
+  private buildApiRuntimePayloadFromForm(): Record<string, unknown> {
+    const raw = this.apiSettingsForm.getRawValue();
+    const sourceType = this.apiSettingsSourceType;
+    const authMode = this.apiSettingsAuthModeValue;
+    const requestFormat = this.normalizeText(raw.requestFormat) ?? 'json';
+    const triggerRaw = (this.normalizeText(raw.trigger) ?? 'change').toLowerCase();
+    const trigger: ApiDynamicTrigger = triggerRaw === 'init' || triggerRaw === 'blur' ? triggerRaw : 'change';
+    const responseListPath = this.normalizeText(raw.responseListPath) ?? 'data';
+    const responseValuePath = this.normalizeText(raw.responseValuePath) ?? 'id';
+    const responseLabelPath = this.normalizeText(raw.responseLabelPath) ?? 'name';
+
+    const authBase = { ...this.apiSettingsAuthBase };
+    delete authBase['mode'];
+    delete authBase['token'];
+    delete authBase['username'];
+    delete authBase['password'];
+
+    const integration = {
+      ...this.apiSettingsIntegrationBase,
+      sourceType,
+      requestFormat,
+      auth: {
+        ...authBase,
+        ...this.buildApiAuthConfigForMode(
+          authMode,
+          this.normalizeText(raw.tokenValue),
+          this.normalizeText(raw.username),
+          this.normalizeText(raw.password))
+      }
+    } as Record<string, unknown>;
+
+    if (sourceType === 'powerbi') {
+      delete integration['fullUrl'];
+      delete integration['method'];
+      integration['statementId'] = this.toPositiveInt(raw.statementId) ?? 1;
+    } else {
+      const methodRaw = this.normalizeText(raw.method)?.toUpperCase() ?? 'GET';
+      const method: ApiDynamicHttpMethod = ['GET', 'POST', 'PUT', 'PATCH'].includes(methodRaw)
+        ? methodRaw as ApiDynamicHttpMethod
+        : 'GET';
+      delete integration['statementId'];
+      integration['fullUrl'] = this.normalizeText(raw.fullUrl) ?? 'https://example.com/api/options';
+      integration['method'] = method;
+    }
+
+    const optionLoader = {
+      ...this.apiSettingsOptionLoaderBase,
+      trigger,
+      integration,
+      responseListPath,
+      responseValuePath,
+      responseLabelPath
+    } as Record<string, unknown>;
+
+    return {
+      ...this.apiSettingsRuntimeExtraSections,
+      optionLoader
+    };
+  }
+
+  private applyApiRuntimePayloadToForm(runtimePayload: Record<string, unknown>): void {
+    const optionLoader = this.readObject(runtimePayload['optionLoader']) ?? {};
+    const integration = this.readObject(optionLoader['integration']) ?? {};
+    const auth = this.readObject(integration['auth']) ?? {};
+
+    const sourceTypeCandidate = this.normalizeText(integration['sourceType'])?.toLowerCase();
+    const resolvedSourceType: ApiDynamicSourceType = sourceTypeCandidate === 'external'
+      || (sourceTypeCandidate == null && this.normalizeText(integration['fullUrl']) != null)
+      ? 'external'
+      : 'powerbi';
+    const triggerRaw = this.normalizeText(optionLoader['trigger'])?.toLowerCase();
+    const trigger: ApiDynamicTrigger = triggerRaw === 'init' || triggerRaw === 'blur' ? triggerRaw : 'change';
+    const methodRaw = this.normalizeText(integration['method'])?.toUpperCase() ?? 'GET';
+    const method: ApiDynamicHttpMethod = ['GET', 'POST', 'PUT', 'PATCH'].includes(methodRaw)
+      ? methodRaw as ApiDynamicHttpMethod
+      : 'GET';
+    const authMode = this.inferApiAuthMode(runtimePayload);
+    const tokenValue = this.readApiBindingValue(auth['token']);
+    const username = this.readApiBindingValue(auth['username']);
+    const password = this.readApiBindingValue(auth['password']);
+    const requestFormat = this.normalizeText(integration['requestFormat']) ?? 'json';
+    const statementId = this.toPositiveInt(integration['statementId']);
+    const fullUrl = this.normalizeText(integration['fullUrl']) ?? '';
+    const responseListPath = this.normalizeText(optionLoader['responseListPath']) ?? 'data';
+    const responseValuePath = this.normalizeText(optionLoader['responseValuePath']) ?? 'id';
+    const responseLabelPath = this.normalizeText(optionLoader['responseLabelPath']) ?? 'name';
+
+    this.apiSettingsRuntimeExtraSections = this.copyObjectExcludingKeys(runtimePayload, ['optionLoader']);
+    this.apiSettingsOptionLoaderBase = this.copyObjectExcludingKeys(optionLoader, [
+      'trigger',
+      'integration',
+      'responseListPath',
+      'responseValuePath',
+      'responseLabelPath'
+    ]);
+    this.apiSettingsIntegrationBase = this.copyObjectExcludingKeys(integration, [
+      'sourceType',
+      'requestFormat',
+      'auth',
+      'statementId',
+      'fullUrl',
+      'method'
+    ]);
+    this.apiSettingsAuthBase = this.copyObjectExcludingKeys(auth, ['mode', 'token', 'username', 'password']);
+
+    this.apiSettingsForm.patchValue({
+      sourceType: resolvedSourceType,
+      trigger,
+      requestFormat,
+      statementId,
+      fullUrl,
+      method,
+      responseListPath,
+      responseValuePath,
+      responseLabelPath,
+      authMode,
+      tokenValue,
+      username,
+      password
+    }, { emitEvent: false });
+    this.applyApiSettingsFormRules();
+    this.apiSettingsLastEditedSource = null;
+  }
+
+  private resolveRuntimePayloadForEditor(payload: Record<string, unknown>): Record<string, unknown> | null {
+    if (this.looksLikeRuntimePayload(payload)) {
+      return payload;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'dynamicRuntime')) {
+      const runtimePayload = this.parseRuntimePayload(payload['dynamicRuntime']);
+      if (runtimePayload && this.looksLikeRuntimePayload(runtimePayload)) {
+        return runtimePayload;
+      }
+    }
+
+    return null;
+  }
+
+  private readApiBindingValue(value: unknown): string {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return this.normalizeText(value) ?? '';
+    }
+
+    const payload = this.readObject(value);
+    return this.normalizeText(payload?.['staticValue'] ?? payload?.['value']) ?? '';
+  }
+
+  private copyObjectExcludingKeys(source: Record<string, unknown>, excludedKeys: string[]): Record<string, unknown> {
+    return Object.entries(source)
+      .filter(([key]) => !excludedKeys.includes(key))
+      .reduce((accumulator, [key, value]) => {
+        accumulator[key] = value;
+        return accumulator;
+      }, {} as Record<string, unknown>);
+  }
+
+  private buildApiAuthConfigForMode(
+    mode: ApiDynamicAuthMode,
+    tokenValue?: string | null,
+    username?: string | null,
+    password?: string | null
+  ): Record<string, unknown> {
+    if (mode === 'bearerCurrent') {
+      return { mode: 'bearerCurrent' };
+    }
+
+    if (mode === 'token') {
+      return {
+        mode: 'token',
+        token: {
+          source: 'static',
+          staticValue: tokenValue ?? 'ضع_التوكن_هنا'
+        }
+      };
+    }
+
+    if (mode === 'basic') {
+      return {
+        mode: 'basic',
+        username: {
+          source: 'static',
+          staticValue: username ?? 'api_user'
+        },
+        password: {
+          source: 'static',
+          staticValue: password ?? 'api_password'
+        }
+      };
+    }
+
+    return { mode: 'none' };
+  }
+
+  private readObject(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+
+    return value as Record<string, unknown>;
+  }
+
+  private resetApiSettingsEditorState(): void {
+    this.apiSettingsDialogVisible = false;
+    this.apiSettingsLoading = false;
+    this.apiSettingsSaving = false;
+    this.apiSettingsTouched = false;
+    this.apiSettingsLastEditedSource = null;
+    this.apiSettingsRuntimeJsonDraft = '';
+    this.apiSettingsMessage = '';
+    this.resetApiSettingsFormDefaults();
+  }
+
+  private resetApiSettingsFormDefaults(): void {
+    this.apiSettingsRuntimeExtraSections = {};
+    this.apiSettingsOptionLoaderBase = {};
+    this.apiSettingsIntegrationBase = {};
+    this.apiSettingsAuthBase = {};
+    this.apiSettingsForm.reset({
+      sourceType: 'powerbi',
+      trigger: 'change',
+      requestFormat: 'json',
+      statementId: null,
+      fullUrl: '',
+      method: 'GET',
+      responseListPath: 'data',
+      responseValuePath: 'id',
+      responseLabelPath: 'name',
+      authMode: 'none',
+      tokenValue: '',
+      username: '',
+      password: ''
+    }, { emitEvent: false });
+    this.applyApiSettingsFormRules();
   }
 
   composeFieldIdentity(applicationId: string, fieldKey: string): string {
@@ -699,6 +1695,7 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
 
         this.fields = [...(response.data ?? [])];
         this.loadedFields = true;
+        this.tryOpenPendingRouteFieldEditor();
 
         if (this.pendingPersistenceRefresh) {
           this.persistenceVerified = true;
@@ -712,6 +1709,53 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       complete: () => {
         this.loadingFields = false;
       }
+    });
+  }
+
+  private tryOpenPendingRouteFieldEditor(): void {
+    const pendingFieldKey = this.normalizeText(this.pendingRouteEditFieldKey);
+    const shouldOpenFieldEditor = this.pendingRouteOpenFieldEditor;
+    const shouldOpenApiSettings = this.pendingRouteOpenApiSettings;
+
+    if (!pendingFieldKey) {
+      return;
+    }
+
+    if (!shouldOpenFieldEditor && !shouldOpenApiSettings) {
+      this.pendingRouteEditFieldKey = null;
+      this.pendingRouteEditApplicationId = null;
+      return;
+    }
+
+    if (this.loadingFieldDetails || this.dialogVisible || this.apiSettingsDialogVisible) {
+      return;
+    }
+
+    let targetApplicationId = this.normalizeText(this.pendingRouteEditApplicationId)
+      ?? this.normalizeText(this.selectedApplicationFilter)
+      ?? this.contextApplicationId;
+
+    if (!targetApplicationId) {
+      const matchedField = this.fields.find(item => this.isSameText(item.fieldKey, pendingFieldKey));
+      targetApplicationId = this.normalizeText(matchedField?.applicationId);
+    }
+
+    if (!targetApplicationId) {
+      return;
+    }
+
+    this.pendingRouteEditFieldKey = null;
+    this.pendingRouteEditApplicationId = null;
+    this.pendingRouteOpenFieldEditor = false;
+    this.pendingRouteOpenApiSettings = false;
+    this.selectedFieldIdentity = this.composeFieldIdentity(targetApplicationId, pendingFieldKey);
+    if (!this.isSameText(this.selectedApplicationFilter, targetApplicationId)) {
+      this.selectedApplicationFilter = targetApplicationId;
+    }
+
+    this.openFieldEditor(targetApplicationId, pendingFieldKey, {
+      showFieldDialog: shouldOpenFieldEditor,
+      openApiSettingsDialog: shouldOpenApiSettings
     });
   }
 
@@ -946,7 +1990,30 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
       : [this.createAdvancedDataRow('', '')];
     this.advancedDataRowsTouched = false;
     this.advancedDataParseMessage = parsed.parseMessage;
+    this.advancedDataRawJsonDraft = this.resolveAdvancedDataRawJsonDraft(payload, parsed.rows);
     this.syncAdvancedDataControl();
+  }
+
+  private resolveAdvancedDataRawJsonDraft(
+    payload: string | null | undefined,
+    parsedRows: AdvancedDataRow[]
+  ): string {
+    const raw = String(payload ?? '').trim();
+    if (raw.length > 0) {
+      const parsedJson = this.parseLooseJson(raw);
+      if (parsedJson !== null) {
+        try {
+          return JSON.stringify(parsedJson, null, 2);
+        } catch {
+          return raw;
+        }
+      }
+
+      return raw;
+    }
+
+    const serializedRows = this.serializeAdvancedDataRows(parsedRows);
+    return serializedRows ? this.prettyPrintJson(serializedRows) : '';
   }
 
   private parseAdvancedDataRows(payload: string | null | undefined): { rows: AdvancedDataRow[]; parseMessage: string } {
@@ -1145,6 +2212,24 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     control.updateValueAndValidity({ emitEvent: false });
   }
 
+  private syncAdvancedDataRawJsonDraftFromRows(): void {
+    const serialized = this.serializeAdvancedDataRows(this.advancedDataRows);
+    this.advancedDataRawJsonDraft = serialized ? this.prettyPrintJson(serialized) : '';
+  }
+
+  private prettyPrintJson(payload: string): string {
+    const normalizedPayload = String(payload ?? '').trim();
+    if (normalizedPayload.length === 0) {
+      return '';
+    }
+
+    try {
+      return JSON.stringify(JSON.parse(normalizedPayload), null, 2);
+    } catch {
+      return normalizedPayload;
+    }
+  }
+
   private resolveCdmendTblForSubmit(rawValue: unknown): string | undefined {
     if (this.requiresOptionsPayload || this.advancedDataRowsTouched) {
       return this.serializeAdvancedDataRows(this.advancedDataRows);
@@ -1178,6 +2263,58 @@ export class AdminControlCenterCatalogFieldLibraryPageComponent implements OnIni
     }
 
     return null;
+  }
+
+  private readEditFieldKeyFromParams(params: ParamMap): string | null {
+    for (const key of ['editFieldKey', 'fieldKey']) {
+      const value = this.normalizeText(params.get(key));
+      if (value != null) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  private readEditApplicationIdFromParams(params: ParamMap): string | null {
+    for (const key of ['editApplicationId', 'targetApplicationId']) {
+      const value = this.normalizeText(params.get(key));
+      if (value != null) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  private readOpenFieldEditorFromParams(params: ParamMap): boolean {
+    return this.readBooleanFlagFromParams(params, ['openFieldEditor', 'openEditDialog']);
+  }
+
+  private readOpenApiSettingsFromParams(params: ParamMap): boolean {
+    return this.readBooleanFlagFromParams(params, ['openApiSettings', 'openJsonSettings']);
+  }
+
+  private readBooleanFlagFromParams(params: ParamMap, keys: string[]): boolean {
+    for (const key of keys) {
+      const rawValue = this.normalizeText(params.get(key));
+      if (rawValue == null) {
+        continue;
+      }
+
+      const normalized = rawValue.toLowerCase();
+      if (normalized === '1' || normalized === 'true' || normalized === 'yes') {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private isSameText(left: string | null | undefined, right: string | null | undefined): boolean {
+    const normalizedLeft = this.normalizeText(left)?.toLowerCase();
+    const normalizedRight = this.normalizeText(right)?.toLowerCase();
+    return normalizedLeft != null && normalizedRight != null && normalizedLeft === normalizedRight;
   }
 
   private toNonNegativeInt(value: unknown): number {

@@ -142,7 +142,7 @@ export type RequestRuntimeDynamicTrigger = 'init' | 'change' | 'blur';
 export type RequestRuntimeDynamicHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH';
 export type RequestRuntimeDynamicIntegrationSourceType = 'powerbi' | 'external';
 export type RequestRuntimeDynamicIntegrationValueSource = 'static' | 'field' | 'claim';
-export type RequestRuntimeDynamicIntegrationAuthMode = 'none' | 'bearerCurrent' | 'custom';
+export type RequestRuntimeDynamicIntegrationAuthMode = 'none' | 'bearerCurrent' | 'token' | 'basic' | 'custom';
 export type RequestRuntimeDynamicRequestFormat = 'json' | 'xml';
 
 export interface RequestRuntimeDynamicIntegrationValueBinding {
@@ -160,6 +160,9 @@ export interface RequestRuntimeDynamicIntegrationNameValueBinding {
 
 export interface RequestRuntimeDynamicIntegrationAuthConfig {
   mode?: RequestRuntimeDynamicIntegrationAuthMode;
+  token?: RequestRuntimeDynamicIntegrationValueBinding;
+  username?: RequestRuntimeDynamicIntegrationValueBinding;
+  password?: RequestRuntimeDynamicIntegrationValueBinding;
   customHeaders?: RequestRuntimeDynamicIntegrationNameValueBinding[];
 }
 
@@ -612,13 +615,19 @@ function readAuthConfig(value: unknown): RequestRuntimeDynamicIntegrationAuthCon
 
   const payload = value as Record<string, unknown>;
   const mode = normalizeAuthMode(payload['mode']) ?? undefined;
+  const token = readValueBinding(payload['token']) ?? undefined;
+  const username = readValueBinding(payload['username']) ?? undefined;
+  const password = readValueBinding(payload['password']) ?? undefined;
   const customHeaders = readNameValueBindings(payload['customHeaders']) ?? undefined;
-  if (!mode && !customHeaders) {
+  if (!mode && !token && !username && !password && !customHeaders) {
     return null;
   }
 
   return {
     mode,
+    token,
+    username,
+    password,
     customHeaders
   };
 }
@@ -798,6 +807,14 @@ function normalizeAuthMode(value: unknown): RequestRuntimeDynamicIntegrationAuth
 
   if (normalized === 'bearercurrent' || normalized === 'bearer_current' || normalized === 'bearer-current') {
     return 'bearerCurrent';
+  }
+
+  if (normalized === 'token' || normalized === 'bearertoken' || normalized === 'bearer_token' || normalized === 'bearer-token') {
+    return 'token';
+  }
+
+  if (normalized === 'basic' || normalized === 'basicauth' || normalized === 'basic_auth' || normalized === 'basic-auth') {
+    return 'basic';
   }
 
   if (normalized === 'custom') {

@@ -1640,9 +1640,8 @@ public sealed partial class DynamicSubjectsService
                     DisplaySettingsJson = NormalizeNullable(item.DisplaySettingsJson)
                 })
                 .ToList();
-            var containsLegacyFieldLevelPayload = normalizedIncomingItems.Any(item =>
-                item.IsVisible == false
-                || item.DisplaySettingsJson != null);
+            var containsLegacyVisibilityPayload = normalizedIncomingItems.Any(item =>
+                item.IsVisible == false);
 
             var invalidFieldKeyRow = normalizedIncomingItems
                 .FirstOrDefault(item => string.IsNullOrWhiteSpace(item.FieldKey));
@@ -1689,14 +1688,14 @@ public sealed partial class DynamicSubjectsService
                     IsActive = item.IsActive,
                     DisplayOrder = item.DisplayOrder,
                     IsVisible = true,
-                    DisplaySettingsJson = null
+                    DisplaySettingsJson = item.DisplaySettingsJson
                 })
                 .ToList();
 
-            if (containsLegacyFieldLevelPayload)
+            if (containsLegacyVisibilityPayload)
             {
                 _logger?.LogInformation(
-                    "Ignoring legacy field-level payload during field-links upsert for category {CategoryId}; binding endpoint now accepts linking/order only.",
+                    "Ignoring legacy visibility payload during field-links upsert for category {CategoryId}; binding endpoint now persists displaySettingsJson but keeps links visible.",
                     categoryId);
             }
 
@@ -1709,6 +1708,35 @@ public sealed partial class DynamicSubjectsService
                 response.Errors.Add(new Error { Code = "400", Message = $"الحقل '{duplicatedField}' مكرر داخل نفس النوع." });
                 return response;
             }
+
+            var existingLinks = await _connectContext.AdminCatalogCategoryFieldBindings
+                .Where(item => item.CategoryId == categoryId)
+                .ToListAsync(cancellationToken);
+            var existingCategoryFieldKeys = existingLinks
+                .Select(item => NormalizeNullable(item.MendField))
+                .Where(item => item != null)
+                .Select(item => item!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var existingCategoryMendSqls = existingLinks
+                .Select(item => item.MendSql)
+                .ToHashSet();
+            var existingLegacyLinks = await _connectContext.CdCategoryMands
+                .AsNoTracking()
+                .Where(item => item.MendCategory == categoryId)
+                .Select(item => new
+                {
+                    item.MendSql,
+                    item.MendField
+                })
+                .ToListAsync(cancellationToken);
+            var existingLegacyFieldKeys = existingLegacyLinks
+                .Select(item => NormalizeNullable(item.MendField))
+                .Where(item => item != null)
+                .Select(item => item!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var existingLegacyMendSqls = existingLegacyLinks
+                .Select(item => item.MendSql)
+                .ToHashSet();
 
             var requestedFieldKeys = safeItems
                 .Select(item => item.FieldKey)
@@ -1731,11 +1759,80 @@ public sealed partial class DynamicSubjectsService
             var existingFieldsSet = existingFields
                 .Select(item => item.CdmendTxt)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var missingField = requestedFieldKeys.FirstOrDefault(key => !existingFieldsSet.Contains(key));
-            if (!string.IsNullOrWhiteSpace(missingField))
+            var missingItem = safeItems.FirstOrDefault(item =>
             {
-                response.Errors.Add(new Error { Code = "400", Message = $"الحقل '{missingField}' غير موجود أو غير مفعل." });
+                if (existingFieldsSet.Contains(item.FieldKey)
+                    || existingCategoryFieldKeys.Contains(item.FieldKey)
+                    || existingLegacyFieldKeys.Contains(item.FieldKey))
+                {
+                    return false;
+                }
+
+                if (item.MendSql.HasValue
+                    && (existingCategoryMendSqls.Contains(item.MendSql.Value)
+                        || existingLegacyMendSqls.Contains(item.MendSql.Value)))
+                {
+                    return false;
+                }
+
+                return true;
+            });
+            if (missingItem != null)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = $"الحقل '{missingItem.FieldKey}' غير موجود أو غير مفعل." });
                 return response;
+            }
+            var existingFieldsByKey = existingFields
+                .GroupBy(item => item.CdmendTxt, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var item in safeItems)
+            {
+                var normalizedDisplaySettingsJson = NormalizeNullable(item.DisplaySettingsJson);
+                item.DisplaySettingsJson = normalizedDisplaySettingsJson;
+                if (normalizedDisplaySettingsJson == null)
+                {
+                    continue;
+                }
+
+                if (!existingFieldsByKey.TryGetValue(item.FieldKey, out var existingFieldMetadata))
+                {
+                    continue;
+                }
+
+                if (!TryInspectDisplaySettingsPayload(
+                        normalizedDisplaySettingsJson,
+                        out var runtimeInspection,
+                        out var displaySettingsValidationError))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = displaySettingsValidationError
+                            ?? $"فشل حفظ الحقل '{item.FieldKey}' بسبب displaySettingsJson غير صالح."
+                    });
+                    return response;
+                }
+
+                if (!runtimeInspection.HasRuntimePayload)
+                {
+                    continue;
+                }
+
+                var (fieldBusinessValidationError, _optionSourceDiagnostics) = ValidateAdminFieldBusinessRules(
+                    item.FieldKey,
+                    existingFieldMetadata.CDMendLbl ?? item.FieldKey,
+                    existingFieldMetadata.CdmendType,
+                    existingFieldMetadata.CdmendDatatype,
+                    existingFieldMetadata.DefaultValue,
+                    existingFieldMetadata.OptionsPayload,
+                    normalizedDisplaySettingsJson,
+                    runtimeInspection);
+                if (fieldBusinessValidationError != null)
+                {
+                    response.Errors.Add(fieldBusinessValidationError);
+                    return response;
+                }
             }
 
             var categoryApplicationId = NormalizeNullable(category.ApplicationId);
@@ -1815,10 +1912,6 @@ public sealed partial class DynamicSubjectsService
                 });
                 return response;
             }
-
-            var existingLinks = await _connectContext.AdminCatalogCategoryFieldBindings
-                .Where(item => item.CategoryId == categoryId)
-                .ToListAsync(cancellationToken);
 
             int? nextGeneratedMendSql = null;
 
@@ -1908,7 +2001,7 @@ public sealed partial class DynamicSubjectsService
                         MendSql = link.MendSql,
                         DisplayOrder = item.DisplayOrder,
                         IsVisible = true,
-                        DisplaySettingsJson = null,
+                        DisplaySettingsJson = item.DisplaySettingsJson,
                         LastModifiedBy = normalizedUserId,
                         LastModifiedAtUtc = DateTime.UtcNow
                     };
@@ -1917,6 +2010,10 @@ public sealed partial class DynamicSubjectsService
                 else
                 {
                     setting.DisplayOrder = item.DisplayOrder;
+                    if (item.DisplaySettingsJson != null)
+                    {
+                        setting.DisplaySettingsJson = item.DisplaySettingsJson;
+                    }
                     setting.LastModifiedBy = normalizedUserId;
                     setting.LastModifiedAtUtc = DateTime.UtcNow;
                 }

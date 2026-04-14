@@ -9,6 +9,7 @@ import {
   RequestRuntimeDynamicFieldBehaviorConfig,
   RequestRuntimeDynamicHttpMethod,
   RequestRuntimeDynamicHttpRequestConfig,
+  RequestRuntimeDynamicIntegrationAuthConfig,
   RequestRuntimeDynamicIntegrationAuthMode,
   RequestRuntimeDynamicIntegrationNameValueBinding,
   RequestRuntimeDynamicIntegrationRequestConfig,
@@ -518,9 +519,12 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
     const query = this.resolveNameValueBindingsToRecord(integration.query, sourceFieldKey, sourceValue);
     const requestHeaders = this.resolveNameValueBindingsToRecord(integration.headers, sourceFieldKey, sourceValue);
     const authMode = this.normalizeAuthMode(integration.auth?.mode);
-    const authHeaders = authMode === 'custom'
-      ? this.resolveNameValueBindingsToRecord(integration.auth?.customHeaders, sourceFieldKey, sourceValue)
-      : {};
+    const authHeaders = this.resolveAuthHeaders(
+      authMode,
+      integration.auth,
+      sourceFieldKey,
+      sourceValue
+    );
     const headers = this.mergeHeaderRecords(requestHeaders, authHeaders);
     const bodyRecord = this.resolveNameValueBindingsToRecord(integration.body, sourceFieldKey, sourceValue);
     const body = Object.keys(bodyRecord).length > 0 ? bodyRecord : undefined;
@@ -534,6 +538,46 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
       headers: Object.keys(headers).length > 0 ? headers : undefined,
       body
     };
+  }
+
+  private resolveAuthHeaders(
+    authMode: RequestRuntimeDynamicIntegrationAuthMode,
+    authConfig: RequestRuntimeDynamicIntegrationAuthConfig | undefined,
+    sourceFieldKey: string,
+    sourceValue: string
+  ): Record<string, string> {
+    if (authMode === 'custom') {
+      return this.resolveNameValueBindingsToRecord(authConfig?.customHeaders, sourceFieldKey, sourceValue);
+    }
+
+    if (authMode === 'token') {
+      const tokenValue = this.resolveIntegrationValueBinding(authConfig?.token, sourceFieldKey, sourceValue);
+      const normalizedToken = this.normalizeString(tokenValue);
+      if (!normalizedToken) {
+        return {};
+      }
+
+      return {
+        Authorization: `Bearer ${normalizedToken}`
+      };
+    }
+
+    if (authMode === 'basic') {
+      const username = this.resolveIntegrationValueBinding(authConfig?.username, sourceFieldKey, sourceValue);
+      const password = this.resolveIntegrationValueBinding(authConfig?.password, sourceFieldKey, sourceValue);
+      const normalizedUsername = this.normalizeString(username);
+      if (!normalizedUsername) {
+        return {};
+      }
+
+      const authPayload = `${normalizedUsername}:${password ?? ''}`;
+      const encodedAuthPayload = this.encodeBase64(authPayload);
+      return {
+        Authorization: `Basic ${encodedAuthPayload}`
+      };
+    }
+
+    return {};
   }
 
   private resolveNameValueBindingsToRecord(
@@ -940,6 +984,14 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
       return 'none';
     }
 
+    if (normalized === 'token' || normalized === 'bearertoken' || normalized === 'bearer_token' || normalized === 'bearer-token') {
+      return 'token';
+    }
+
+    if (normalized === 'basic' || normalized === 'basicauth' || normalized === 'basic_auth' || normalized === 'basic-auth') {
+      return 'basic';
+    }
+
     if (normalized === 'custom') {
       return 'custom';
     }
@@ -985,6 +1037,19 @@ export class RequestRuntimeDynamicFieldsFrameworkService implements OnDestroy {
   private normalizeString(value: unknown): string | null {
     const normalized = String(value ?? '').trim();
     return normalized.length > 0 ? normalized : null;
+  }
+
+  private encodeBase64(value: string): string {
+    const normalized = String(value ?? '');
+    try {
+      return btoa(unescape(encodeURIComponent(normalized)));
+    } catch {
+      try {
+        return btoa(normalized);
+      } catch {
+        return '';
+      }
+    }
   }
 
   private finalizeAsyncValidationResult(
