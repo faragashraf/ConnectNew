@@ -2,7 +2,7 @@ import { FormBuilder } from '@angular/forms';
 import { of } from 'rxjs';
 import { SummerRequestsAdminConsoleComponent } from './summer-requests-admin-console.component';
 
-describe('SummerRequestsAdminConsoleComponent - SummerGeneralManagerFunc', () => {
+describe('SummerRequestsAdminConsoleComponent - ConnectSupperAdminFunc', () => {
   function createComponent(hasSummerPricingPermission: boolean): {
     component: SummerRequestsAdminConsoleComponent;
     getPricingCatalogSpy: jasmine.Spy;
@@ -59,7 +59,7 @@ describe('SummerRequestsAdminConsoleComponent - SummerGeneralManagerFunc', () =>
     };
   }
 
-  it('blocks pricing load and save actions when SummerGeneralManagerFunc is missing', () => {
+  it('blocks pricing load and save actions when ConnectSupperAdminFunc is missing', () => {
     const { component, getPricingCatalogSpy, savePricingCatalogSpy, checkAuthFunSpy, checkAuthRoleSpy } = createComponent(false);
     component.pricingRecords = [{} as any];
 
@@ -67,15 +67,15 @@ describe('SummerRequestsAdminConsoleComponent - SummerGeneralManagerFunc', () =>
     component.loadPricingCatalog();
     component.savePricingCatalog();
 
-    expect(checkAuthFunSpy).toHaveBeenCalledWith('SummerGeneralManagerFunc');
-    expect(checkAuthRoleSpy).toHaveBeenCalledWith('2021');
+    expect(checkAuthFunSpy).toHaveBeenCalledWith('ConnectSupperAdminFunc');
+    expect(checkAuthRoleSpy).toHaveBeenCalledWith('2003');
     expect(component.canManageSummerPricing).toBeFalse();
     expect(getPricingCatalogSpy).not.toHaveBeenCalled();
     expect(savePricingCatalogSpy).not.toHaveBeenCalled();
     expect(component.pricingRecords.length).toBe(0);
   });
 
-  it('allows pricing load and save actions when SummerGeneralManagerFunc is granted', () => {
+  it('allows pricing load and save actions when ConnectSupperAdminFunc is granted', () => {
     const { component, getPricingCatalogSpy, savePricingCatalogSpy } = createComponent(true);
     component.pricingRecords = [];
 

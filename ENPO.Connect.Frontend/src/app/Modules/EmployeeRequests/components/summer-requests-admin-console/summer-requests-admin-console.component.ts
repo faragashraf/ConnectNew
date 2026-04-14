@@ -3543,8 +3543,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   private refreshSummerPricingAccess(): void {
     try {
       this.canManageSummerPricing =
-        this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc')
-        || this.authObjectsService.checkAuthRole('2021');
+        this.authObjectsService.checkAuthFun('ConnectSupperAdminFunc')
+        || this.authObjectsService.checkAuthRole('2003');
     } catch {
       this.canManageSummerPricing = false;
     }
