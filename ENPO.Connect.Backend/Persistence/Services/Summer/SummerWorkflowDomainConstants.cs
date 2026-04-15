@@ -71,8 +71,8 @@ namespace Persistence.Services.Summer
             public const string Cash = "CASH";
             public const string Installment = "INSTALLMENT";
             public const int MinInstallmentCount = 2;
-            public const int MaxInstallmentCount = 6;
-            public const int DefaultInstallmentCount = 6;
+            public const int MaxInstallmentCount = 7;
+            public const int DefaultInstallmentCount = 7;
         }
 
         public static string[] GetInstallmentAmountFieldKinds(int installmentNo)

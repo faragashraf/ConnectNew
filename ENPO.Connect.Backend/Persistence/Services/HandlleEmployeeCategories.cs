@@ -113,36 +113,42 @@ namespace Persistence.Services
             "Summer_PaymentInstallment4Amount",
             "Summer_PaymentInstallment5Amount",
             "Summer_PaymentInstallment6Amount",
+            "Summer_PaymentInstallment7Amount",
             "SUM2026_PaymentInstallment1Amount",
             "SUM2026_PaymentInstallment2Amount",
             "SUM2026_PaymentInstallment3Amount",
             "SUM2026_PaymentInstallment4Amount",
             "SUM2026_PaymentInstallment5Amount",
             "SUM2026_PaymentInstallment6Amount",
+            "SUM2026_PaymentInstallment7Amount",
             "Summer_PaymentInstallment1Paid",
             "Summer_PaymentInstallment2Paid",
             "Summer_PaymentInstallment3Paid",
             "Summer_PaymentInstallment4Paid",
             "Summer_PaymentInstallment5Paid",
             "Summer_PaymentInstallment6Paid",
+            "Summer_PaymentInstallment7Paid",
             "SUM2026_PaymentInstallment1Paid",
             "SUM2026_PaymentInstallment2Paid",
             "SUM2026_PaymentInstallment3Paid",
             "SUM2026_PaymentInstallment4Paid",
             "SUM2026_PaymentInstallment5Paid",
             "SUM2026_PaymentInstallment6Paid",
+            "SUM2026_PaymentInstallment7Paid",
             "Summer_PaymentInstallment1PaidAtUtc",
             "Summer_PaymentInstallment2PaidAtUtc",
             "Summer_PaymentInstallment3PaidAtUtc",
             "Summer_PaymentInstallment4PaidAtUtc",
             "Summer_PaymentInstallment5PaidAtUtc",
             "Summer_PaymentInstallment6PaidAtUtc",
+            "Summer_PaymentInstallment7PaidAtUtc",
             "SUM2026_PaymentInstallment1PaidAtUtc",
             "SUM2026_PaymentInstallment2PaidAtUtc",
             "SUM2026_PaymentInstallment3PaidAtUtc",
             "SUM2026_PaymentInstallment4PaidAtUtc",
             "SUM2026_PaymentInstallment5PaidAtUtc",
-            "SUM2026_PaymentInstallment6PaidAtUtc"
+            "SUM2026_PaymentInstallment6PaidAtUtc",
+            "SUM2026_PaymentInstallment7PaidAtUtc"
         };
         private static readonly Dictionary<string, string> SummerAuditAliasMap = BuildSummerAuditAliasMap();
         private static readonly Dictionary<string, string> SummerAuditFallbackFieldLabelByAlias = new(StringComparer.OrdinalIgnoreCase)
@@ -615,6 +621,11 @@ namespace Persistence.Services
                         UpsertRequestField(messageRequest.Fields, "RequestRef", requestRef);
                         ApplyPricingMessageIdentity(pricingQuote, messageId, requestRef);
                         ApplyPricingSnapshotFields(messageRequest.Fields, pricingQuote);
+                        AlignPricingDisplayAndSmsFieldsForOwnerMessage(
+                            messageRequest.Fields,
+                            messageId,
+                            requestRef,
+                            categoryInfo.Category.CatId);
 
                         existingMessage.Subject = messageRequest.Subject;
                         existingMessage.Description = messageRequest.Description;
@@ -669,6 +680,12 @@ namespace Persistence.Services
                         replyText = "تم إنشاء طلب المصيف.";
                         capacityAction = "CREATE";
                     }
+
+                    AlignPricingDisplayAndSmsFieldsForOwnerMessage(
+                        messageRequest.Fields,
+                        messageId,
+                        messageRequest.RequestRef,
+                        categoryInfo.Category.CatId);
 
                     if (!allowAdminFrozenBooking)
                     {
@@ -1165,12 +1182,13 @@ SELECT @result;
 
             var smsText = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.SmsText });
             var whatsappText = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText });
+            var normalizedSmsText = BuildOwnerPricingSmsText(message, fields, smsText);
             if (string.IsNullOrWhiteSpace(whatsappText))
             {
                 whatsappText = smsText;
             }
 
-            if (string.IsNullOrWhiteSpace(smsText) && string.IsNullOrWhiteSpace(whatsappText))
+            if (string.IsNullOrWhiteSpace(normalizedSmsText) && string.IsNullOrWhiteSpace(whatsappText))
             {
                 return;
             }
@@ -1197,12 +1215,12 @@ SELECT @result;
                 ? $"SUMMER-{message.MessageId}"
                 : message.RequestRef.Trim();
 
-            if (!string.IsNullOrWhiteSpace(smsText))
+            if (!string.IsNullOrWhiteSpace(normalizedSmsText))
             {
                 var smsResponse = await _notificationService.SendSmsAsync(new SmsDispatchRequest
                 {
                     MobileNumber = mobile,
-                    Message = smsText.Trim(),
+                    Message = normalizedSmsText.Trim(),
                     UserId = string.IsNullOrWhiteSpace(ownerId) ? "SYSTEM" : ownerId,
                     ReferenceNo = referenceNo
                 });
@@ -1228,6 +1246,205 @@ SELECT @result;
                     _logger.AppendLine($"Owner pricing WhatsApp notification failed for MessageId={message.MessageId}. Errors={whatsappErrors}");
                 }
             }
+        }
+
+        private static void AlignPricingDisplayAndSmsFieldsForOwnerMessage(
+            List<TkmendField>? fields,
+            int messageId,
+            string? requestRef,
+            int categoryId)
+        {
+            if (fields == null || fields.Count == 0 || messageId <= 0)
+            {
+                return;
+            }
+
+            var baseSmsText = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.SmsText });
+            var smsText = BuildOwnerPricingSmsText(
+                new MessageDto
+                {
+                    MessageId = messageId,
+                    RequestRef = (requestRef ?? string.Empty).Trim(),
+                    CategoryCd = categoryId
+                },
+                fields,
+                baseSmsText);
+
+            if (string.IsNullOrWhiteSpace(smsText))
+            {
+                return;
+            }
+
+            UpsertRequestField(fields, SummerWorkflowDomainConstants.PricingFieldKinds.SmsText, smsText);
+            UpsertRequestField(fields, SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText, smsText);
+        }
+
+        private static string BuildOwnerPricingSmsText(
+            MessageDto? message,
+            IEnumerable<TkmendField>? fields,
+            string? fallbackText)
+        {
+            var safeFields = fields ?? Enumerable.Empty<TkmendField>();
+            var bookingNumber = string.IsNullOrWhiteSpace(message?.RequestRef)
+                ? $"SUMMER-{message?.MessageId ?? 0}"
+                : message.RequestRef.Trim();
+            var referenceNumber = message?.MessageId > 0
+                ? message.MessageId.ToString(CultureInfo.InvariantCulture)
+                : bookingNumber;
+
+            var destinationName = GetFirstFieldValue(safeFields, SummerWorkflowDomainConstants.DestinationNameFieldKinds);
+            if (string.IsNullOrWhiteSpace(destinationName))
+            {
+                destinationName = message != null && message.CategoryCd > 0
+                    ? $"المصيف رقم {message.CategoryCd}"
+                    : "-";
+            }
+
+            var paymentModeToken = NormalizePaymentModeToken(GetFirstFieldValue(safeFields, SummerWorkflowDomainConstants.PaymentModeFieldKinds));
+            var paymentModeLabel = string.Equals(
+                paymentModeToken,
+                SummerWorkflowDomainConstants.PaymentModes.Installment,
+                StringComparison.OrdinalIgnoreCase)
+                ? "تقسيط"
+                : "كاش";
+
+            var grandTotal = NormalizeMoney(ParseDecimal(GetFirstFieldValue(
+                safeFields,
+                new[] { SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal })));
+
+            var waveDateText = ResolveWaveDateTextForOwnerSms(safeFields);
+            var paymentDueDateText = ResolvePaymentDueDateTextForOwnerSms(safeFields);
+            var paymentPlanSegment = BuildOwnerPaymentPlanSmsSegment(safeFields, paymentModeToken, grandTotal);
+
+            var summary = $"رقم الحجز: {bookingNumber}، المرجعي: {referenceNumber}، المصيف: {destinationName}، تاريخ الفوج: {waveDateText}، طريقة السداد: {paymentModeLabel}، {paymentPlanSegment}، إجمالي الحجز: {FormatDecimalValue(grandTotal)} جنيه";
+            if (!string.IsNullOrWhiteSpace(paymentDueDateText))
+            {
+                summary = $"{summary}. يرجى السداد قبل موعد أقصاه {paymentDueDateText}.";
+            }
+            else
+            {
+                summary = $"{summary}.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(summary))
+            {
+                return summary;
+            }
+
+            return (fallbackText ?? string.Empty).Trim();
+        }
+
+        private static string BuildOwnerPaymentPlanSmsSegment(
+            IEnumerable<TkmendField>? fields,
+            string paymentModeToken,
+            decimal grandTotal)
+        {
+            var safeFields = fields ?? Enumerable.Empty<TkmendField>();
+            var normalizedGrandTotal = NormalizeMoney(grandTotal);
+
+            if (!string.Equals(
+                    paymentModeToken,
+                    SummerWorkflowDomainConstants.PaymentModes.Installment,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var cashAmount = normalizedGrandTotal;
+                if (cashAmount <= 0m)
+                {
+                    cashAmount = NormalizeMoney(ParseDecimal(GetFirstFieldValue(
+                        safeFields,
+                        SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(1))));
+                }
+
+                return $"قيمة السداد النقدي: {FormatDecimalValue(cashAmount)} جنيه";
+            }
+
+            var rawInstallmentCount = ParseInt(
+                GetFirstFieldValue(safeFields, SummerWorkflowDomainConstants.InstallmentCountFieldKinds),
+                SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount);
+            var installmentCount = Math.Clamp(
+                rawInstallmentCount,
+                1,
+                SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            var tailInstallmentsCount = Math.Max(0, installmentCount - 1);
+            var downPaymentAmount = NormalizeMoney(ParseDecimal(GetFirstFieldValue(
+                safeFields,
+                SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(1))));
+
+            var installmentAmounts = new List<decimal>();
+            for (var installmentNo = 2; installmentNo <= installmentCount; installmentNo++)
+            {
+                var amount = NormalizeMoney(ParseDecimal(GetFirstFieldValue(
+                    safeFields,
+                    SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo))));
+                installmentAmounts.Add(amount);
+            }
+
+            if (downPaymentAmount <= 0m
+                && normalizedGrandTotal > 0m
+                && installmentAmounts.Count > 0)
+            {
+                downPaymentAmount = NormalizeMoney(normalizedGrandTotal - installmentAmounts.Sum());
+            }
+
+            if (tailInstallmentsCount <= 0)
+            {
+                return $"مقدم الحجز: {FormatDecimalValue(Math.Max(0m, downPaymentAmount))} جنيه";
+            }
+
+            var firstInstallmentAmount = installmentAmounts.FirstOrDefault();
+            var hasEqualInstallments = installmentAmounts.Count == tailInstallmentsCount
+                && installmentAmounts.All(value => Math.Abs(value - firstInstallmentAmount) <= 0.01m);
+
+            if (hasEqualInstallments)
+            {
+                return $"مقدم الحجز: {FormatDecimalValue(Math.Max(0m, downPaymentAmount))} جنيه، عدد الأقساط: {tailInstallmentsCount}، قيمة كل قسط: {FormatDecimalValue(Math.Max(0m, firstInstallmentAmount))} جنيه";
+            }
+
+            var installmentsText = string.Join(
+                "، ",
+                installmentAmounts.Select((value, index) => $"القسط {index + 1}: {FormatDecimalValue(Math.Max(0m, value))} جنيه"));
+            if (installmentsText.Length == 0)
+            {
+                installmentsText = "قيمة القسط: -";
+            }
+
+            return $"مقدم الحجز: {FormatDecimalValue(Math.Max(0m, downPaymentAmount))} جنيه، عدد الأقساط: {tailInstallmentsCount}، {installmentsText}";
+        }
+
+        private static string ResolveWaveDateTextForOwnerSms(IEnumerable<TkmendField>? fields)
+        {
+            var waveDateValue = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.WaveDate });
+            if (DateTime.TryParse(
+                    waveDateValue,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var waveDateUtc))
+            {
+                return waveDateUtc.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            }
+
+            var waveLabel = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.WaveLabelFieldKinds);
+            if (SummerCalendarRules.TryParseWaveLabelDateUtc(waveLabel, out var waveStartUtc))
+            {
+                return waveStartUtc.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            }
+
+            return "-";
+        }
+
+        private static string ResolvePaymentDueDateTextForOwnerSms(IEnumerable<TkmendField>? fields)
+        {
+            var dueDateValue = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind });
+            if (!DateTime.TryParse(
+                    dueDateValue,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var paymentDueUtc))
+            {
+                return string.Empty;
+            }
+
+            return paymentDueUtc.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
         }
 
         private static void ApplyPricingSnapshotFields(List<TkmendField>? fields, SummerPricingQuoteDto quote)
@@ -1524,12 +1741,14 @@ SELECT @result;
                 return false;
             }
 
-            var resolvedInstallmentCount = incomingInstallmentCount;
-            if (!hasSummerGeneralManagerPermission
-                && isEditOperation
-                && hasExistingSnapshot)
+            var resolvedInstallmentCount = defaultInstallmentCount;
+            if (isEditOperation && hasExistingSnapshot)
             {
                 resolvedInstallmentCount = existingInstallmentCount;
+            }
+            else if (hasSummerGeneralManagerPermission)
+            {
+                resolvedInstallmentCount = incomingInstallmentCount;
             }
 
             if (resolvedInstallmentCount < minInstallmentCount || resolvedInstallmentCount > maxInstallmentCount)
@@ -1714,6 +1933,78 @@ SELECT @result;
         {
             var count = installmentCount > 0 ? installmentCount : 1;
             var normalizedTotal = NormalizeMoney(totalAmount);
+            if (count == SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount && normalizedTotal > 0m)
+            {
+                return BuildReservationInstallments(normalizedTotal);
+            }
+
+            return BuildEvenInstallmentsByCents(normalizedTotal, count);
+        }
+
+        private static decimal[] BuildReservationInstallments(decimal normalizedTotal)
+        {
+            const decimal downPaymentTargetPercent = 20m;
+            var installmentsTailCount = SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount - 1;
+            var bestStep = 0m;
+            var bestInstallmentValue = 0m;
+            var bestDownPayment = 0m;
+            var bestScore = decimal.MaxValue;
+
+            foreach (var step in new[] { 50m, 100m })
+            {
+                if (step <= 0m)
+                {
+                    continue;
+                }
+
+                var targetDownPayment = normalizedTotal * (downPaymentTargetPercent / 100m);
+                var roundedTargetDownPayment = RoundToNearestStep(targetDownPayment, step);
+                var installmentValue = RoundToNearestStep(
+                    (normalizedTotal - roundedTargetDownPayment) / installmentsTailCount,
+                    step);
+
+                if (installmentValue < 0m)
+                {
+                    continue;
+                }
+
+                var downPayment = NormalizeMoney(normalizedTotal - (installmentValue * installmentsTailCount));
+                if (downPayment <= 0m)
+                {
+                    continue;
+                }
+
+                var downPaymentPercent = (downPayment / normalizedTotal) * 100m;
+                var score = Math.Abs(downPaymentPercent - downPaymentTargetPercent);
+                if (score < bestScore
+                    || (score == bestScore && (bestStep <= 0m || step < bestStep)))
+                {
+                    bestScore = score;
+                    bestStep = step;
+                    bestInstallmentValue = NormalizeMoney(installmentValue);
+                    bestDownPayment = downPayment;
+                }
+            }
+
+            if (bestStep <= 0m)
+            {
+                return BuildEvenInstallmentsByCents(
+                    normalizedTotal,
+                    SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount);
+            }
+
+            var result = new decimal[SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount];
+            result[0] = bestDownPayment;
+            for (var index = 1; index < result.Length; index++)
+            {
+                result[index] = bestInstallmentValue;
+            }
+
+            return result;
+        }
+
+        private static decimal[] BuildEvenInstallmentsByCents(decimal normalizedTotal, int count)
+        {
             var totalCents = decimal.ToInt64(normalizedTotal * 100m);
             var baseCents = totalCents / count;
             var remainder = totalCents % count;
@@ -1726,6 +2017,17 @@ SELECT @result;
             }
 
             return values;
+        }
+
+        private static decimal RoundToNearestStep(decimal value, decimal step)
+        {
+            if (step <= 0m)
+            {
+                return NormalizeMoney(value);
+            }
+
+            var roundedUnits = Math.Round(value / step, 0, MidpointRounding.AwayFromZero);
+            return NormalizeMoney(roundedUnits * step);
         }
 
         private static string GetFirstSnapshotValue(

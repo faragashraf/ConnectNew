@@ -143,30 +143,18 @@
             </option>
           </select>
         </label>
-        <label *ngIf="isInstallmentMode">
-          <span class="required-label">عدد الأقساط</span>
-          <select
-            [ngModel]="selectedInstallmentCount"
-            [ngModelOptions]="{ standalone: true }"
-            (ngModelChange)="onInstallmentCountChanged($event)"
-            [disabled]="submitting || loadingMetadata || loadingEditRequest || !canEditPaymentPlanSettings">
-            <option *ngFor="let count of installmentCountOptions" [ngValue]="count">
-              {{ count }}
-            </option>
-          </select>
-        </label>
         <small class="mode-note" *ngIf="isInstallmentMode">
-          يتم إنشاء {{ selectedInstallmentCount }} أقساط تلقائيًا من إجمالي الحجز حسب العدد المختار.
+          يتم إنشاء 7 مبالغ تلقائيًا من إجمالي الحجز: مقدم حجز + 6 أقساط متساوية.
         </small>
       </div>
 
       <div class="installment-grid" *ngIf="isInstallmentMode">
         <article class="installment-card" *ngFor="let installment of installmentPlan">
           <header>
-            <strong>القسط {{ installment.installmentNo }}</strong>
+            <strong>{{ resolveInstallmentTitle(installment.installmentNo) }}</strong>
           </header>
           <label>
-            <span>قيمة القسط</span>
+            <span>{{ resolveInstallmentAmountLabel(installment.installmentNo) }}</span>
             <input
               type="number"
               min="0"

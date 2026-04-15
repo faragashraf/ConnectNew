@@ -182,7 +182,7 @@ export class SummerRequestFieldsGridComponent {
 
       rows.push({
         installmentNo,
-        title: `القسط ${installmentNo}`,
+        title: this.resolveInstallmentTitle(installmentNo),
         amount: this.ensureCurrency(item.amount),
         paidState,
         paidAt
@@ -202,6 +202,11 @@ export class SummerRequestFieldsGridComponent {
 
     const text = String(value ?? '').trim();
     return text.length > 0 ? text : '-';
+  }
+
+  private resolveInstallmentTitle(installmentNo: number): string {
+    const normalizedNo = Math.max(1, Math.floor(Number(installmentNo) || 1));
+    return normalizedNo === 1 ? 'مقدم الحجز' : `القسط ${normalizedNo - 1}`;
   }
 
   private resolvePaymentModeKind(modeValue: string, fieldRows: GenericFieldRow[]): PaymentModeKind {

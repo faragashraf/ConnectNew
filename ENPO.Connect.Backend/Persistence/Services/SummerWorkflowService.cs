@@ -329,8 +329,8 @@ namespace Persistence.Services
                     .AsNoTracking()
                     .Where(field => field.FildRelted == message.MessageId)
                     .ToListAsync();
-                var paidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind));
-                if (!hasSummerAdminPermission && (message.Status == MessageStatus.Rejected || paidAtUtc.HasValue))
+                var paymentState = ResolveRequestPaymentStateSnapshot(messageFields);
+                if (!hasSummerAdminPermission && (message.Status == MessageStatus.Rejected || paymentState.PaidAtUtc.HasValue))
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "لا يمكن إنشاء رابط تعديل لهذا الطلب في حالته الحالية." });
                     return response;
@@ -528,8 +528,8 @@ namespace Persistence.Services
                     .AsNoTracking()
                     .Where(field => field.FildRelted == message.MessageId)
                     .ToListAsync();
-                var paidAtUtc = ParseDate(GetFieldValue(messageFields, PaidAtUtcFieldKind));
-                if (!hasSummerAdminPermission && (message.Status == MessageStatus.Rejected || paidAtUtc.HasValue))
+                var paymentState = ResolveRequestPaymentStateSnapshot(messageFields);
+                if (!hasSummerAdminPermission && (message.Status == MessageStatus.Rejected || paymentState.PaidAtUtc.HasValue))
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تعديل الطلب في حالته الحالية." });
                     return response;

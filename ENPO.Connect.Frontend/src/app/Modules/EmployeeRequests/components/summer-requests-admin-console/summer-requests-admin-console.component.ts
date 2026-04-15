@@ -1036,7 +1036,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         : (paidAt !== '-' ? 'مسدد' : 'غير مسدد');
 
       rows.push({
-        title: `القسط ${installmentNo}`,
+        title: this.resolveInstallmentTitle(installmentNo),
         amount: this.ensureRequestCurrency(item.amount),
         paidState,
         paidAt
@@ -2947,7 +2947,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     return {
       paymentModeLabel,
-      installmentLabel: String(firstRow?.title ?? '').trim() || (paymentModeLabel === 'كاش' ? 'دفعة كاش' : 'القسط الأول'),
+      installmentLabel: String(firstRow?.title ?? '').trim() || (paymentModeLabel === 'كاش' ? 'دفعة كاش' : 'مقدم الحجز'),
       amountText: String(firstRow?.amount ?? '').trim() || '-',
       paidAtDisplay: paidAtDisplay.length > 0 ? paidAtDisplay : '-',
       paidAtLocal,
@@ -3045,7 +3045,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   private resolveInstallmentPaidFieldKeys(installmentNo: number): string[] {
-    const normalizedNo = Math.max(1, Math.min(6, Math.floor(Number(installmentNo) || 1)));
+    const normalizedNo = Math.max(1, Math.min(7, Math.floor(Number(installmentNo) || 1)));
     return [
       `Summer_PaymentInstallment${normalizedNo}Paid`,
       `SUM2026_PaymentInstallment${normalizedNo}Paid`
@@ -3053,11 +3053,16 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   private resolveInstallmentPaidAtFieldKeys(installmentNo: number): string[] {
-    const normalizedNo = Math.max(1, Math.min(6, Math.floor(Number(installmentNo) || 1)));
+    const normalizedNo = Math.max(1, Math.min(7, Math.floor(Number(installmentNo) || 1)));
     return [
       `Summer_PaymentInstallment${normalizedNo}PaidAtUtc`,
       `SUM2026_PaymentInstallment${normalizedNo}PaidAtUtc`
     ];
+  }
+
+  private resolveInstallmentTitle(installmentNo: number): string {
+    const normalizedNo = Math.max(1, Math.floor(Number(installmentNo) || 1));
+    return normalizedNo === 1 ? 'مقدم الحجز' : `القسط ${normalizedNo - 1}`;
   }
 
   private parsePaymentBooleanLike(value: unknown): boolean | null {

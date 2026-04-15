@@ -1,6 +1,7 @@
 ﻿import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { ElementRef, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { ListRequestModel, MessageDto, RequestedData, SearchKind, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
@@ -66,6 +67,7 @@ import {
 
 type FileBucket = 'cancel' | 'payment' | 'transfer';
 type SummerPaymentStatusCode = 'PAID' | 'UNPAID';
+const SUMMER_INSTALLMENTS_MAX_COUNT = 7;
 
 interface SummerPaymentSnapshot {
   paymentModeCode: 'INSTALLMENT' | 'CASH';
@@ -88,6 +90,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   readonly pdfReferenceTitle = SUMMER_PDF_REFERENCE_TITLE;
   readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   readonly dynamicSummerConfigRouteKey = 'admins/summer-requests/dynamic-booking';
+  readonly summerGuideVideoPath = 'assets/videos/Summer.mp4';
+  // Temporary UI toggle requested by business: keep payment visible and hide transfer/cancel for now.
+  readonly showTransferWorkflowCard = false;
+  readonly showCancelWorkflowCard = false;
   readonly paymentInFutureMessage = SUMMER_UI_TEXTS_AR.errors.paymentInFuture;
   readonly destinationAccessDeniedMessage = SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE;
   destinations: SummerDestinationConfig[] = [];
@@ -129,6 +135,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   creatingEditLink = false;
   resolvingEditToken = false;
   isAdminEditHost = false;
+  showGuideVideoDialog = true;
+
+  @ViewChild('summerGuideVideoPlayer')
+  private summerGuideVideoPlayer?: ElementRef<HTMLVideoElement>;
 
   private readonly paymentInFutureErrorKey = 'paymentInFuture';
   private readonly subscriptions = new Subscription();
@@ -205,6 +215,20 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     this.subscriptions.unsubscribe();
   }
 
+  openGuideVideoDialog(): void {
+    this.showGuideVideoDialog = true;
+  }
+
+  onGuideVideoDialogHide(): void {
+    const player = this.summerGuideVideoPlayer?.nativeElement;
+    if (!player) {
+      return;
+    }
+
+    player.pause();
+    player.currentTime = 0;
+  }
+
   get selectedRequest(): SummerRequestSummaryDto | undefined {
     if (!this.selectedRequestId) {
       return undefined;
@@ -236,6 +260,18 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
   get canEditPaymentStatus(): boolean {
     return this.hasSummerAdminPermission;
+  }
+
+  get paymentWorkflowTabHeader(): string {
+    if (this.showTransferWorkflowCard || this.showCancelWorkflowCard) {
+      return 'السداد / التحويل / الاعتذار';
+    }
+
+    return 'السداد';
+  }
+
+  get isPaymentOnlyWorkflowMode(): boolean {
+    return !this.showTransferWorkflowCard && !this.showCancelWorkflowCard;
   }
 
   get isEditMode(): boolean {
@@ -1509,7 +1545,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const paymentModeCode = this.resolvePaymentModeCode(fields);
     const paymentModeLabel = paymentModeCode === 'INSTALLMENT' ? 'تقسيط' : 'كاش';
     const installmentLabel = paymentModeCode === 'INSTALLMENT'
-      ? 'القسط الأول'
+      ? 'مقدم الحجز'
       : 'قسط واحد (كاش)';
 
     const amount = paymentModeCode === 'INSTALLMENT'
@@ -1611,7 +1647,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private resolveInstallmentAmountFieldKeys(installmentNo: number): string[] {
-    const normalizedNo = Math.max(1, Math.min(6, Math.floor(Number(installmentNo) || 1)));
+    const normalizedNo = Math.max(1, Math.min(SUMMER_INSTALLMENTS_MAX_COUNT, Math.floor(Number(installmentNo) || 1)));
     return [
       `Summer_PaymentInstallment${normalizedNo}Amount`,
       `SUM2026_PaymentInstallment${normalizedNo}Amount`
@@ -1619,7 +1655,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private resolveInstallmentPaidFieldKeys(installmentNo: number): string[] {
-    const normalizedNo = Math.max(1, Math.min(6, Math.floor(Number(installmentNo) || 1)));
+    const normalizedNo = Math.max(1, Math.min(SUMMER_INSTALLMENTS_MAX_COUNT, Math.floor(Number(installmentNo) || 1)));
     return [
       `Summer_PaymentInstallment${normalizedNo}Paid`,
       `SUM2026_PaymentInstallment${normalizedNo}Paid`
@@ -1627,7 +1663,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private resolveInstallmentPaidAtFieldKeys(installmentNo: number): string[] {
-    const normalizedNo = Math.max(1, Math.min(6, Math.floor(Number(installmentNo) || 1)));
+    const normalizedNo = Math.max(1, Math.min(SUMMER_INSTALLMENTS_MAX_COUNT, Math.floor(Number(installmentNo) || 1)));
     return [
       `Summer_PaymentInstallment${normalizedNo}PaidAtUtc`,
       `SUM2026_PaymentInstallment${normalizedNo}PaidAtUtc`

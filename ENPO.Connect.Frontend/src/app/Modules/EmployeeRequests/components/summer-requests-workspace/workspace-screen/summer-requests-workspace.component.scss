@@ -27,6 +27,88 @@
     linear-gradient(180deg, var(--summer-bg-1), var(--summer-bg-2));
 }
 
+.video-guide-trigger {
+  position: fixed;
+  top: calc(var(--main-navbar-height, 74px) + 12px);
+  left: 14px;
+  z-index: 1200;
+  width: 46px;
+  height: 46px;
+  border: 1px solid #c7dced;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0d597f;
+  background: linear-gradient(180deg, #ffffff, #eef6ff);
+  box-shadow: 0 10px 24px rgba(12, 50, 80, 0.12);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.video-guide-trigger i {
+  font-size: 19px;
+}
+
+.video-guide-trigger:hover {
+  transform: translateY(-1px) scale(1.02);
+  border-color: #8ab9d9;
+  box-shadow: 0 14px 28px rgba(12, 50, 80, 0.16);
+}
+
+.video-guide-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(42, 154, 192, 0.24), 0 14px 28px rgba(12, 50, 80, 0.16);
+}
+
+.summer-guide-video-shell {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: linear-gradient(180deg, #f9fdff, #f1f8ff);
+}
+
+.summer-guide-video-player {
+  width: 100%;
+  max-height: min(72vh, 640px);
+  border-radius: 14px;
+  border: 1px solid #d4e5f3;
+  background: #081a28;
+  box-shadow: 0 12px 28px rgba(9, 35, 56, 0.16);
+}
+
+.summer-guide-video-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.summer-guide-video-actions a {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f6695;
+  text-decoration: underline;
+}
+
+::ng-deep .summer-guide-video-dialog .p-dialog-header {
+  border-bottom: 1px solid #dfeaf4;
+  background: linear-gradient(180deg, #ffffff, #f4f9ff);
+}
+
+::ng-deep .summer-guide-video-dialog {
+  direction: rtl;
+  text-align: right;
+}
+
+::ng-deep .summer-guide-video-dialog .p-dialog-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #184863;
+}
+
+::ng-deep .summer-guide-video-dialog .p-dialog-content {
+  padding: 0 !important;
+}
+
 .hero {
   display: flex;
   justify-content: space-between;
@@ -843,6 +925,10 @@ button.ghost:hover:not(:disabled) {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.workflow-grid.payment-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .workflow-card {
   border: 1px solid #d4e4f2;
   border-radius: 16px;
@@ -947,6 +1033,13 @@ button.ghost:hover:not(:disabled) {
 }
 
 @media (max-width: 860px) {
+  .video-guide-trigger {
+    top: calc(var(--main-navbar-height, 74px) + 8px);
+    left: 10px;
+    width: 42px;
+    height: 42px;
+  }
+
   .hero {
     flex-direction: column;
   }

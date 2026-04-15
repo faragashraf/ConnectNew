@@ -595,9 +595,10 @@ function resolveCanonicalFieldMeta(
   const installmentAmountMatch = normalized.match(/paymentinstallment(\d+)amount/);
   if (installmentAmountMatch) {
     const installmentNo = Math.max(1, Number(installmentAmountMatch[1] ?? '1'));
+    const installmentLabel = installmentNo === 1 ? 'قيمة مقدم الحجز' : `قيمة القسط ${installmentNo - 1}`;
     return {
       id: `payment_installment_${installmentNo}_amount`,
-      label: `قيمة القسط ${installmentNo}`,
+      label: installmentLabel,
       group: 'workflow',
       order: 220 + (installmentNo * 3)
     };
@@ -606,9 +607,10 @@ function resolveCanonicalFieldMeta(
   const installmentPaidAtMatch = normalized.match(/paymentinstallment(\d+)paidat/);
   if (installmentPaidAtMatch) {
     const installmentNo = Math.max(1, Number(installmentPaidAtMatch[1] ?? '1'));
+    const installmentPaidAtLabel = installmentNo === 1 ? 'تاريخ سداد مقدم الحجز' : `تاريخ سداد القسط ${installmentNo - 1}`;
     return {
       id: `payment_installment_${installmentNo}_paid_at`,
-      label: `تاريخ سداد القسط ${installmentNo}`,
+      label: installmentPaidAtLabel,
       group: 'workflow',
       order: 221 + (installmentNo * 3)
     };
@@ -617,9 +619,10 @@ function resolveCanonicalFieldMeta(
   const installmentPaidMatch = normalized.match(/paymentinstallment(\d+)paid/);
   if (installmentPaidMatch) {
     const installmentNo = Math.max(1, Number(installmentPaidMatch[1] ?? '1'));
+    const installmentPaidLabel = installmentNo === 1 ? 'حالة سداد مقدم الحجز' : `حالة سداد القسط ${installmentNo - 1}`;
     return {
       id: `payment_installment_${installmentNo}_paid`,
-      label: `حالة سداد القسط ${installmentNo}`,
+      label: installmentPaidLabel,
       group: 'workflow',
       order: 222 + (installmentNo * 3)
     };

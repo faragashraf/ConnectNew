@@ -1,4 +1,44 @@
 ﻿<div class="summer-shell">
+  <button
+    type="button"
+    class="video-guide-trigger"
+    (click)="openGuideVideoDialog()"
+    title="عرض فيديو شرح خطوات التسجيل"
+    aria-label="عرض فيديو شرح خطوات التسجيل">
+    <i class="pi pi-video"></i>
+  </button>
+
+  <p-dialog
+    [(visible)]="showGuideVideoDialog"
+    [modal]="true"
+    [dismissableMask]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [closeOnEscape]="true"
+    appendTo="body"
+    [style]="{ width: 'min(980px, 96vw)' }"
+    [styleClass]="'summer-guide-video-dialog'"
+    header="دليل خطوات التسجيل"
+    (onHide)="onGuideVideoDialogHide()">
+    <section class="summer-guide-video-shell">
+      <video
+        #summerGuideVideoPlayer
+        class="summer-guide-video-player"
+        controls
+        autoplay
+        muted
+        playsinline
+        preload="metadata">
+        <source [src]="summerGuideVideoPath" type="video/quicktime" />
+        <source [src]="summerGuideVideoPath" />
+        متصفحك لا يدعم تشغيل الفيديو. يمكنك فتحه في تبويب جديد.
+      </video>
+      <div class="summer-guide-video-actions">
+        <a [href]="summerGuideVideoPath" target="_blank" rel="noopener">فتح الفيديو في تبويب جديد</a>
+      </div>
+    </section>
+  </p-dialog>
+
   <section class="hero">
     <div>
       <h1>إدارة طلبات المصايف - موسم {{ seasonYear }}</h1>
@@ -205,7 +245,7 @@
           </section>
         </p-tabPanel>
 
-        <p-tabPanel header="السداد / التحويل / الاعتذار">
+        <p-tabPanel [header]="paymentWorkflowTabHeader">
           <ng-container *ngIf="selectedRequest as request; else emptyRequestState">
             <div class="selected-request">
               <h3>الطلب المحدد: #{{ request.messageId }} - {{ request.requestRef }}</h3>
@@ -215,7 +255,7 @@
               </p>
             </div>
 
-            <div class="workflow-grid">
+            <div class="workflow-grid" [class.payment-only]="isPaymentOnlyWorkflowMode">
               <form [formGroup]="paymentForm" class="workflow-card" (ngSubmit)="submitPayment()">
                 <h4>تسجيل السداد</h4>
                 <div class="payment-snapshot" *ngIf="paymentSnapshot as snapshot">
@@ -275,7 +315,7 @@
                 </button>
               </form>
 
-              <form [formGroup]="transferForm" class="workflow-card" (ngSubmit)="submitTransfer()">
+              <form *ngIf="showTransferWorkflowCard" [formGroup]="transferForm" class="workflow-card" (ngSubmit)="submitTransfer()">
                 <h4>التحويل (مرة واحدة)</h4>
                 <small *ngIf="transferCapacityLoading">جاري تحديث السعة...</small>
                 <div class="mini-capacity-grid" *ngIf="transferCapacitySummary.length > 0">
@@ -336,7 +376,7 @@
                 </button>
               </form>
 
-                            <form [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
+              <form *ngIf="showCancelWorkflowCard" [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
                 <h4>الاعتذار عن الحجز</h4>
                 <p class="warn" *ngIf="!isCancelActionClosed(request)">{{ getCancelWindowNote() }}</p>
                 <p class="warn" *ngIf="getCancelDeductionMessage(request) as cancelDeductionMessage">
@@ -373,7 +413,9 @@
           <ng-template #emptyRequestState>
             <div class="empty-state">
               <h3>اختر طلباً من تبويب "طلباتي" أولاً</h3>
-              <p>بعد اختيار الطلب ستظهر لك كل إجراءات الاعتذار والسداد والتحويل.</p>
+              <p>{{ isPaymentOnlyWorkflowMode
+                ? 'بعد اختيار الطلب ستظهر لك إجراءات السداد فقط.'
+                : 'بعد اختيار الطلب ستظهر لك كل إجراءات الاعتذار والسداد والتحويل.' }}</p>
             </div>
           </ng-template>
         </p-tabPanel>

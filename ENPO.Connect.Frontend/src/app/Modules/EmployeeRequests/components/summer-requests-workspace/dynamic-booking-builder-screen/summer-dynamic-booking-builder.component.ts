@@ -60,8 +60,9 @@ type SummerInstallmentPlanItem = {
 const SUMMER_PAYMENT_MODE_CASH: SummerPaymentMode = 'CASH';
 const SUMMER_PAYMENT_MODE_INSTALLMENT: SummerPaymentMode = 'INSTALLMENT';
 const SUMMER_INSTALLMENTS_MIN_COUNT = 2;
-const SUMMER_INSTALLMENTS_MAX_COUNT = 6;
-const SUMMER_INSTALLMENTS_DEFAULT_COUNT = 6;
+const SUMMER_INSTALLMENTS_MAX_COUNT = 7;
+const SUMMER_INSTALLMENTS_DEFAULT_COUNT = 7;
+const SUMMER_INSTALLMENT_TAIL_COUNT = 6;
 const SUMMER_PAYMENT_MODE_FIELD_KEYS = ['Summer_PaymentMode', 'SUM2026_PaymentMode', 'PaymentMode'] as const;
 const SUMMER_INSTALLMENT_COUNT_FIELD_KEYS = ['Summer_PaymentInstallmentCount', 'SUM2026_PaymentInstallmentCount'] as const;
 const SUMMER_INSTALLMENTS_TOTAL_FIELD_KEYS = ['Summer_PaymentInstallmentsTotal', 'SUM2026_PaymentInstallmentsTotal'] as const;
@@ -146,10 +147,6 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     { label: 'كاش', value: SUMMER_PAYMENT_MODE_CASH },
     { label: 'تقسيط', value: SUMMER_PAYMENT_MODE_INSTALLMENT }
   ];
-  readonly installmentCountOptions = Array.from(
-    { length: SUMMER_INSTALLMENTS_MAX_COUNT - SUMMER_INSTALLMENTS_MIN_COUNT + 1 },
-    (_item, index) => SUMMER_INSTALLMENTS_MIN_COUNT + index
-  );
 
   private readonly subscriptions = new Subscription();
   private baseFormConfig: ComponentConfig;
@@ -316,7 +313,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.installmentPlanError = '';
 
     if (this.paymentModeValue === SUMMER_PAYMENT_MODE_INSTALLMENT) {
-      this.installmentCountValue = this.normalizeInstallmentCount(this.installmentCountValue);
+      this.installmentCountValue = SUMMER_INSTALLMENTS_DEFAULT_COUNT;
       this.installmentPlan = this.createInstallmentPlanWithEqualDistribution(
         this.getPricingGrandTotal(),
         this.installmentCountValue
@@ -1854,6 +1851,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private buildEqualInstallmentAmounts(totalAmount: number, installmentsCount: number): number[] {
     const normalizedCount = this.normalizeInstallmentCount(installmentsCount);
     const normalizedTotal = this.roundToTwoDecimals(Math.max(0, Number(totalAmount ?? 0) || 0));
+    if (normalizedCount === SUMMER_INSTALLMENTS_DEFAULT_COUNT && normalizedTotal > 0) {
+      return this.buildSevenPartInstallments(normalizedTotal);
+    }
+
     const totalCents = Math.round(normalizedTotal * 100);
     const baseCents = Math.floor(totalCents / normalizedCount);
     const remainder = totalCents % normalizedCount;
@@ -1862,6 +1863,47 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       const cents = baseCents + (index < remainder ? 1 : 0);
       return cents / 100;
     });
+  }
+
+  private buildSevenPartInstallments(normalizedTotal: number): number[] {
+    const targetDownPercent = 20;
+    const steps = [50, 100];
+    let bestPlan: { installment: number; downPayment: number; score: number; step: number } | null = null;
+
+    for (const step of steps) {
+      const targetDownPayment = normalizedTotal * (targetDownPercent / 100);
+      const roundedTargetDownPayment = this.roundToNearestInstallmentBase(targetDownPayment, step);
+      const installment = this.roundToNearestInstallmentBase(
+        (normalizedTotal - roundedTargetDownPayment) / SUMMER_INSTALLMENT_TAIL_COUNT,
+        step
+      );
+      const downPayment = this.roundToTwoDecimals(normalizedTotal - (installment * SUMMER_INSTALLMENT_TAIL_COUNT));
+
+      if (downPayment <= 0) {
+        continue;
+      }
+
+      const downPaymentPercent = (downPayment / normalizedTotal) * 100;
+      const score = Math.abs(downPaymentPercent - targetDownPercent);
+      if (!bestPlan || score < bestPlan.score || (score === bestPlan.score && step < bestPlan.step)) {
+        bestPlan = {
+          installment,
+          downPayment,
+          score,
+          step
+        };
+      }
+    }
+
+    if (!bestPlan) {
+      const fallback = this.buildEqualInstallmentAmounts(normalizedTotal, SUMMER_INSTALLMENTS_DEFAULT_COUNT - 1);
+      const fallbackInstallment = this.roundToTwoDecimals(fallback[0] ?? 0);
+      const downPayment = this.roundToTwoDecimals(normalizedTotal - (fallbackInstallment * SUMMER_INSTALLMENT_TAIL_COUNT));
+      return [downPayment, ...Array.from({ length: SUMMER_INSTALLMENT_TAIL_COUNT }, () => fallbackInstallment)];
+    }
+
+    const selectedPlan = bestPlan;
+    return [selectedPlan.downPayment, ...Array.from({ length: SUMMER_INSTALLMENT_TAIL_COUNT }, () => selectedPlan.installment)];
   }
 
   private syncInstallmentPlanWithPricingQuote(forceAutoGenerate = false): void {
@@ -2032,6 +2074,24 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return 0;
     }
     return Math.round(parsed * 100) / 100;
+  }
+
+  private roundToNearestInstallmentBase(value: number, base: number): number {
+    const normalizedValue = this.roundToTwoDecimals(value);
+    if (!Number.isFinite(normalizedValue) || !Number.isFinite(base) || base <= 0) {
+      return this.roundToTwoDecimals(normalizedValue);
+    }
+
+    return this.roundToTwoDecimals(Math.round(normalizedValue / base) * base);
+  }
+
+  resolveInstallmentTitle(installmentNo: number): string {
+    const normalizedNo = Math.max(1, Math.floor(Number(installmentNo) || 1));
+    return normalizedNo === 1 ? 'مقدم الحجز' : `القسط ${normalizedNo - 1}`;
+  }
+
+  resolveInstallmentAmountLabel(installmentNo: number): string {
+    return installmentNo === 1 ? 'قيمة مقدم الحجز' : 'قيمة القسط';
   }
 
   private formatInstallmentAmountForStorage(value: number): string {
@@ -2220,7 +2280,12 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   }
 
   private extractPricingDisplayText(fields: TkmendField[] | undefined): string {
-    const pricingFieldKeys = ['Summer_PricingDisplayText', 'SUM2026_PricingDisplayText'];
+    const pricingFieldKeys = [
+      'Summer_PricingDisplayText',
+      'SUM2026_PricingDisplayText',
+      'Summer_PricingSmsText',
+      'SUM2026_PricingSmsText'
+    ];
     const messageFields = Array.isArray(fields) ? fields : [];
 
     for (const key of pricingFieldKeys) {
