@@ -317,6 +317,20 @@ SELECT [CatId]
   FROM [CDCategory]
  WHERE [CatId] IN (147, 148, 149);
 
+DECLARE @CdCategoryMandMendSqlIsIdentity BIT = CASE
+    WHEN COALESCE(
+        COLUMNPROPERTY(OBJECT_ID(N'[dbo].[CdCategoryMand]'), N'MendSQL', N'IsIdentity'),
+        COLUMNPROPERTY(OBJECT_ID(N'[CdCategoryMand]'), N'MendSQL', N'IsIdentity'),
+        0
+    ) = 1 THEN 1
+    ELSE 0
+END;
+
+IF @CdCategoryMandMendSqlIsIdentity = 1
+BEGIN
+    SET IDENTITY_INSERT [CdCategoryMand] ON;
+END
+
 UPDATE existing
    SET existing.[MendGroup] = source.[GroupId],
        existing.[MendStat] = 0
@@ -392,6 +406,11 @@ SELECT seed.[BaseSql] + missing.[RowNum],
        9201
   FROM MissingSummerCamp AS missing
  CROSS JOIN (SELECT ISNULL(MAX([MendSQL]), 0) AS [BaseSql] FROM [CdCategoryMand]) AS seed;
+
+IF @CdCategoryMandMendSqlIsIdentity = 1
+BEGIN
+    SET IDENTITY_INSERT [CdCategoryMand] OFF;
+END
 ");
         }
 

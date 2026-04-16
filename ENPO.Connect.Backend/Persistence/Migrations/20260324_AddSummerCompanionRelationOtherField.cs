@@ -120,6 +120,20 @@ BEGIN
     THROW 50001, N'Unable to resolve a valid MendGroup for summer companion relation metadata.', 1;
 END
 
+DECLARE @CdCategoryMandMendSqlIsIdentity BIT = CASE
+    WHEN COALESCE(
+        COLUMNPROPERTY(OBJECT_ID(N'[dbo].[CdCategoryMand]'), N'MendSQL', N'IsIdentity'),
+        COLUMNPROPERTY(OBJECT_ID(N'[CdCategoryMand]'), N'MendSQL', N'IsIdentity'),
+        0
+    ) = 1 THEN 1
+    ELSE 0
+END;
+
+IF @CdCategoryMandMendSqlIsIdentity = 1
+BEGIN
+    SET IDENTITY_INSERT [CdCategoryMand] ON;
+END
+
 UPDATE existing
    SET existing.[MendGroup] = @TargetMendGroup,
        existing.[MendStat] = 0
@@ -149,6 +163,11 @@ SELECT seed.[BaseSql] + missing.[RowNum],
        @TargetMendGroup
   FROM MissingMap AS missing
  CROSS JOIN (SELECT ISNULL(MAX([MendSQL]), 0) AS [BaseSql] FROM [CdCategoryMand]) AS seed;
+
+IF @CdCategoryMandMendSqlIsIdentity = 1
+BEGIN
+    SET IDENTITY_INSERT [CdCategoryMand] OFF;
+END
 ");
         }
 
