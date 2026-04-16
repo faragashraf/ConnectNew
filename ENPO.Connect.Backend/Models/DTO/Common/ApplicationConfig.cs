@@ -74,7 +74,7 @@ namespace Models.DTO.Common
             "السيد/ة {FirstName}، نحيطكم علماً بأنه تم إلغاء طلب المصيف رقم {RequestRef} تلقائياً لعدم السداد قبل الموعد النهائي {PaymentDueAtUtc}. يمكنكم تقديم طلب جديد وفق الإتاحة الحالية.";
 
         public string PaymentUnderReviewSmsTemplate { get; set; } =
-            "السيد/ة {FirstName}، تم استلام سداد طلب المصيف رقم {RequestRef} بنجاح، وحالة الطلب الآن قيد المراجعة. سيتم إفادتكم بعد مراجعة الطلب.";
+            "السيد/ة {FirstName}، تم استلام سداد طلب المصيف رقم {RequestRef} بنجاح، وحالة الطلب الآن قيد المراجعة. سيتم إفادتكم بعد مراجعة الطلب (لتأكيد حجز الوحدة المصيفية).";
 
         public string AdminActionSignalRTemplate { get; set; } =
             "تم تنفيذ إجراء إداري ({ActionLabel}) على طلب المصيف رقم {RequestRef}. {AdminCommentLine}";

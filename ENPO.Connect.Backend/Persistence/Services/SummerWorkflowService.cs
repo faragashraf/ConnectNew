@@ -3697,7 +3697,7 @@ namespace Persistence.Services
             var placeholders = BuildNotificationPlaceholders(summary, "قيد المراجعة", string.Empty, summary.PaymentDueAtUtc);
 
             var smsTemplate = string.IsNullOrWhiteSpace(templates.PaymentUnderReviewSmsTemplate)
-                ? "السيد/ة {FirstName}، تم استلام سداد طلب المصيف رقم {RequestRef} بنجاح، وحالة الطلب الآن قيد المراجعة. سيتم إفادتكم بعد مراجعة الطلب."
+                ? "السيد/ة {FirstName}، تم استلام سداد طلب المصيف رقم {RequestRef} بنجاح، وحالة الطلب الآن قيد المراجعة. سيتم إفادتكم بعد مراجعة الطلب (لتأكيد حجز الوحدة المصيفية)."
                 : templates.PaymentUnderReviewSmsTemplate;
             var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
 

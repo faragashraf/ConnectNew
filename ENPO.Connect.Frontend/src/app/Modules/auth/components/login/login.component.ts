@@ -17,7 +17,10 @@ import { environment } from 'src/environments/environment';
 
 type LoginQueryParams = {
   username: string | null;
+  otp: string | null;
+  returnUrl: string | null;
   hasUsernameParam: boolean;
+  hasOtpParam: boolean;
   hasReturnUrlParam: boolean;
   hasExactLoginParams: boolean;
 };
@@ -69,6 +72,7 @@ export class LoginComponent implements OnInit, AfterViewInit {
   isUsernameReadOnlyFromUrl = false;
 
   private readonly autoLoginUsernameParam = 'username';
+  private readonly autoLoginOtpParam = 'otp';
   private readonly autoLoginReturnUrlParam = 'returnUrl';
   private hasAttemptedAutoLogin = false;
   private autoLoginProbeAttempts = 0;
@@ -420,26 +424,35 @@ export class LoginComponent implements OnInit, AfterViewInit {
     }
 
     const rawParams = this.readLoginQueryParams();
-    const username = this.validateAutoLoginUsername(rawParams);
-    if (!username) {
+    const autoLoginCredentials = this.validateAutoLoginCredentials(rawParams);
+    if (!autoLoginCredentials) {
       return;
     }
 
     this.hasAttemptedAutoLogin = true;
     this.stopAutoLoginProbe();
-    this.stripLoginUsernameFromUrl();
+    this.stripLoginCredentialsFromUrl();
+
+    const { username, otp, returnUrl } = autoLoginCredentials;
+    const normalizedReturnUrl = this.normalizeReturnUrl(returnUrl ?? '');
 
     this.mode = 'credentials';
     this.isUsernameReadOnlyFromUrl = true;
     this.loginForm.patchValue(
       {
         username,
-        password: ''
+        password: otp ?? ''
       },
       { emitEvent: false }
     );
     this.loginForm.get('password')?.markAsPristine();
     this.loginForm.get('password')?.markAsUntouched();
+
+    if (otp) {
+      this.executePasswordLogin(username, otp, true, normalizedReturnUrl);
+      return;
+    }
+
     this.msg.msgInfo('يرجى ادخال كلمة المرور الخاصه بمنصة تواصل', 'تنبيه');
     this.focusPasswordInput();
   }
@@ -458,14 +471,23 @@ export class LoginComponent implements OnInit, AfterViewInit {
     return this.readLoginQueryParamsFromRawHref();
   }
 
-  private validateAutoLoginUsername(rawParams: LoginQueryParams): string | null {
+  private validateAutoLoginCredentials(rawParams: LoginQueryParams): { username: string; otp: string | null; returnUrl: string | null } | null {
     const username = String(rawParams.username ?? '').trim();
+    const otp = String(rawParams.otp ?? '').trim();
 
     if (!rawParams.hasExactLoginParams || !username) {
       return null;
     }
 
-    return username;
+    if (rawParams.hasOtpParam && !otp) {
+      return null;
+    }
+
+    return {
+      username,
+      otp: rawParams.hasOtpParam ? otp : null,
+      returnUrl: rawParams.returnUrl
+    };
   }
 
   private readLoginQueryParamsFromRoute(): LoginQueryParams {
@@ -522,17 +544,32 @@ export class LoginComponent implements OnInit, AfterViewInit {
     const keys: string[] = [];
     params.forEach((_, key) => keys.push(key));
     const hasUsernameParam = params.has(this.autoLoginUsernameParam);
+    const hasOtpParam = params.has(this.autoLoginOtpParam);
     const hasReturnUrlParam = params.has(this.autoLoginReturnUrlParam);
-    const hasExactLoginParams =
+    const hasLegacyExactLoginParams =
       hasUsernameParam
       && hasReturnUrlParam
+      && !hasOtpParam
       && keys.length === 2
       && keys[0] === this.autoLoginUsernameParam
       && keys[1] === this.autoLoginReturnUrlParam;
+    const hasOtpExactLoginParams =
+      hasUsernameParam
+      && hasOtpParam
+      && hasReturnUrlParam
+      && keys.length === 3
+      && keys[0] === this.autoLoginUsernameParam
+      && keys[1] === this.autoLoginOtpParam
+      && keys[2] === this.autoLoginReturnUrlParam;
+    const hasExactLoginParams =
+      hasLegacyExactLoginParams || hasOtpExactLoginParams;
 
     return {
       username: params.get(this.autoLoginUsernameParam),
+      otp: params.get(this.autoLoginOtpParam),
+      returnUrl: params.get(this.autoLoginReturnUrlParam),
       hasUsernameParam,
+      hasOtpParam,
       hasReturnUrlParam,
       hasExactLoginParams
     };
@@ -541,7 +578,10 @@ export class LoginComponent implements OnInit, AfterViewInit {
   private emptyLoginQueryParams(): LoginQueryParams {
     return {
       username: null,
+      otp: null,
+      returnUrl: null,
       hasUsernameParam: false,
+      hasOtpParam: false,
       hasReturnUrlParam: false,
       hasExactLoginParams: false
     };
@@ -604,13 +644,17 @@ export class LoginComponent implements OnInit, AfterViewInit {
     this.autoLoginProbeTimer = null;
   }
 
-  private stripLoginUsernameFromUrl(): void {
+  private stripLoginCredentialsFromUrl(): void {
     try {
       const currentUrl = new URL(window.location.href);
       let changed = false;
 
       if (currentUrl.searchParams.has(this.autoLoginUsernameParam)) {
         currentUrl.searchParams.delete(this.autoLoginUsernameParam);
+        changed = true;
+      }
+      if (currentUrl.searchParams.has(this.autoLoginOtpParam)) {
+        currentUrl.searchParams.delete(this.autoLoginOtpParam);
         changed = true;
       }
 
@@ -624,12 +668,19 @@ export class LoginComponent implements OnInit, AfterViewInit {
         const hashQuery = normalizedHash.substring(queryStartIndex + 1);
         const hashParams = new URLSearchParams(hashQuery);
         const hadHashUsername = hashParams.has(this.autoLoginUsernameParam);
+        const hadHashOtp = hashParams.has(this.autoLoginOtpParam);
 
         if (hadHashUsername) {
           hashParams.delete(this.autoLoginUsernameParam);
+          changed = true;
+        }
+        if (hadHashOtp) {
+          hashParams.delete(this.autoLoginOtpParam);
+          changed = true;
+        }
+        if (hadHashUsername || hadHashOtp) {
           const cleanedHashQuery = hashParams.toString();
           currentUrl.hash = cleanedHashQuery ? `${hashPath}?${cleanedHashQuery}` : hashPath;
-          changed = true;
         }
       }
 
