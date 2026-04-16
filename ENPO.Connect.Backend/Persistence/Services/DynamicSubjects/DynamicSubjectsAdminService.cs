@@ -5,6 +5,7 @@ using Models.DTO.Common;
 using Models.DTO.DynamicSubjects;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
@@ -3994,6 +3995,7 @@ public sealed partial class DynamicSubjectsService
         var legacyByMendSql = legacyLinks
             .GroupBy(item => item.MendSql)
             .ToDictionary(group => group.Key, group => group.First());
+        var legacyMendSqlIsIdentity = await IsLegacyCategoryFieldBindingIdentityColumnAsync(cancellationToken);
 
         var hasChanges = false;
         foreach (var canonicalLink in safeLinks)
@@ -4008,7 +4010,7 @@ public sealed partial class DynamicSubjectsService
                     MendGroup = canonicalLink.GroupId,
                     MendStat = canonicalLink.MendStat
                 };
-                await _connectContext.CdCategoryMands.AddAsync(legacyLink, cancellationToken);
+                await InsertLegacyCategoryFieldBindingAsync(legacyLink, legacyMendSqlIsIdentity, cancellationToken);
                 legacyLinks.Add(legacyLink);
                 legacyByMendSql[legacyLink.MendSql] = legacyLink;
                 hasChanges = true;
@@ -4049,6 +4051,107 @@ public sealed partial class DynamicSubjectsService
         if (hasChanges)
         {
             await _connectContext.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private async Task<bool> IsLegacyCategoryFieldBindingIdentityColumnAsync(CancellationToken cancellationToken)
+    {
+        if (!_connectContext.Database.IsSqlServer())
+        {
+            return false;
+        }
+
+        var openedConnection = _connectContext.Database.GetDbConnection().State != ConnectionState.Open;
+        if (openedConnection)
+        {
+            await _connectContext.Database.OpenConnectionAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var command = _connectContext.Database.GetDbConnection().CreateCommand();
+            command.CommandText = @"
+SELECT CAST(COALESCE(
+    COLUMNPROPERTY(OBJECT_ID(N'[dbo].[CdCategoryMand]'), N'MendSQL', 'IsIdentity'),
+    COLUMNPROPERTY(OBJECT_ID(N'[CdCategoryMand]'), N'MendSQL', 'IsIdentity'),
+    0) AS int);";
+
+            var scalar = await command.ExecuteScalarAsync(cancellationToken);
+            if (scalar == null || scalar == DBNull.Value)
+            {
+                return false;
+            }
+
+            return Convert.ToInt32(scalar, CultureInfo.InvariantCulture) == 1;
+        }
+        finally
+        {
+            if (openedConnection)
+            {
+                await _connectContext.Database.CloseConnectionAsync();
+            }
+        }
+    }
+
+    private async Task InsertLegacyCategoryFieldBindingAsync(
+        CdCategoryMand legacyLink,
+        bool useIdentityInsert,
+        CancellationToken cancellationToken)
+    {
+        if (!useIdentityInsert)
+        {
+            await _connectContext.CdCategoryMands.AddAsync(legacyLink, cancellationToken);
+            return;
+        }
+
+        var openedConnection = _connectContext.Database.GetDbConnection().State != ConnectionState.Open;
+        if (openedConnection)
+        {
+            await _connectContext.Database.OpenConnectionAsync(cancellationToken);
+        }
+
+        var identityInsertEnabled = false;
+        try
+        {
+            await _connectContext.Database.ExecuteSqlRawAsync(
+                "SET IDENTITY_INSERT [CdCategoryMand] ON;",
+                cancellationToken);
+            identityInsertEnabled = true;
+
+            await _connectContext.Database.ExecuteSqlInterpolatedAsync($@"
+INSERT INTO [CdCategoryMand] ([MendSQL], [MendCategory], [MendField], [MendStat], [MendGroup])
+VALUES ({legacyLink.MendSql}, {legacyLink.MendCategory}, {legacyLink.MendField}, {legacyLink.MendStat}, {legacyLink.MendGroup});",
+                cancellationToken);
+
+            await _connectContext.Database.ExecuteSqlRawAsync(
+                "SET IDENTITY_INSERT [CdCategoryMand] OFF;",
+                cancellationToken);
+            identityInsertEnabled = false;
+        }
+        catch
+        {
+            if (identityInsertEnabled)
+            {
+                try
+                {
+                    await _connectContext.Database.ExecuteSqlRawAsync(
+                        "SET IDENTITY_INSERT [CdCategoryMand] OFF;",
+                        cancellationToken);
+                }
+                catch
+                {
+                    // Best effort cleanup of session identity_insert state.
+                }
+            }
+
+            throw;
+        }
+        finally
+        {
+            if (openedConnection)
+            {
+                await _connectContext.Database.CloseConnectionAsync();
+            }
         }
     }
 
