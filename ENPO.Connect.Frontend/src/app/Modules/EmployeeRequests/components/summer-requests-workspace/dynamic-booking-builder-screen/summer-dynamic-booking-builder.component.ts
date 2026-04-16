@@ -548,7 +548,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     if (this.matchesAlias(baseName, this.engine.aliases.stayMode)) {
-      this.loadPricingQuote();
+      this.loadPricingQuote(true);
       return;
     }
 
@@ -1162,7 +1162,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     });
   }
 
-  private loadPricingQuote(): void {
+  private loadPricingQuote(forceRegenerateInstallmentPlan = false): void {
     const destination = this.selectedDestination;
     if (!destination || !this.ticketForm) {
       this.clearPricingQuote(true);
@@ -1227,7 +1227,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
           this.pricingQuote = response.data;
           this.pricingQuoteError = '';
           this.applyPricingQuoteToStayModeControl(response.data, stayModeControl);
-          this.syncInstallmentPlanWithPricingQuote();
+          this.syncInstallmentPlanWithPricingQuote(forceRegenerateInstallmentPlan);
           return;
         }
 
@@ -1237,12 +1237,12 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
           .join(' ');
         this.pricingQuote = null;
         this.pricingQuoteError = errors || 'تعذر حساب التسعير لهذا الاختيار.';
-        this.syncInstallmentPlanWithPricingQuote();
+        this.syncInstallmentPlanWithPricingQuote(forceRegenerateInstallmentPlan);
       },
       error: () => {
         this.pricingQuote = null;
         this.pricingQuoteError = 'تعذر حساب التسعير حاليًا. حاول مرة أخرى.';
-        this.syncInstallmentPlanWithPricingQuote();
+        this.syncInstallmentPlanWithPricingQuote(forceRegenerateInstallmentPlan);
       },
       complete: () => {
         this.pricingQuoteLoading = false;

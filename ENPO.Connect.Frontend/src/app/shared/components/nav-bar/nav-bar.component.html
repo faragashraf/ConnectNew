@@ -49,6 +49,21 @@
                         <i class="pi pi-question-circle" style="font-size: 1.5rem; color: #555;"></i>
                     </div>
 
+                    <!-- Click Sound Mute/Unmute -->
+                    <div class="notification-wrapper sound-toggle-wrapper" style="margin-left: 1rem;">
+                        <button
+                            type="button"
+                            class="sound-toggle-btn"
+                            [class.is-muted]="!isClickSoundEnabled"
+                            [attr.aria-label]="clickSoundTooltipText"
+                            [attr.title]="clickSoundTooltipText"
+                            [pTooltip]="clickSoundTooltipText"
+                            tooltipPosition="bottom"
+                            (click)="toggleClickSound($event)">
+                            <i [class]="clickSoundIconClass"></i>
+                        </button>
+                    </div>
+
                     <!-- Notification Bell -->
                     <div id="tour-notification-bell" class="notification-wrapper"
                         (mouseenter)="showNotifications = true" (mouseleave)="showNotifications = false">

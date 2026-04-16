@@ -12,6 +12,8 @@ namespace Persistence.Services.Summer
 
         public const string TransferReviewRequiredCode = "TRANSFER_REVIEW_REQUIRED";
         public const string TransferReviewResolvedCode = "TRANSFER_REVIEW_RESOLVED";
+        public const string PendingReviewRequiredCode = "PENDING_REVIEW_REQUIRED";
+        public const string PendingReviewResolvedCode = "PENDING_REVIEW_RESOLVED";
         public const string DestinationAccessDeniedMessage = "غير مسموح لك بالتسجيل على هذا المصيف";
         public const string RequestCreatedAtUtcFieldKind = "Summer_RequestCreatedAtUtc";
         public const string PaymentDueAtUtcFieldKind = "Summer_PaymentDueAtUtc";
@@ -139,12 +141,14 @@ namespace Persistence.Services.Summer
         {
             public const string SummerAdmin = "SummerAdminFunc";
             public const string SummerPricing = "SummerGeneralManagerFunc";
+            public const string ConnectSuperAdmin = "ConnectSupperAdminFunc";
         }
 
         public static class AuthorizationRoles
         {
             public const string SummerAdmin = "2020";
             public const string SummerGeneralManager = "2021";
+            public const string ConnectSuperAdmin = "2003";
         }
     }
 }

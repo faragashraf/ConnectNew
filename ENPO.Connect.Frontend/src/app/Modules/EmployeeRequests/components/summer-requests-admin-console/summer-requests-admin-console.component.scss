@@ -83,6 +83,16 @@
   box-shadow: 0 2px 12px rgba(12, 50, 80, 0.04);
 }
 
+.pricing-access-panel {
+  border-color: #f5d3d3;
+  background: linear-gradient(135deg, #fff8f8, #fff2f2);
+}
+
+.pricing-access-error {
+  color: #9b1c1c;
+  font-weight: 700;
+}
+
 .pricing-panel {
   margin-top: 14px;
   border: 1px solid #d0e2f0;

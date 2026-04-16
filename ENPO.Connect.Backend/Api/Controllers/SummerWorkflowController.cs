@@ -96,16 +96,20 @@ namespace Api.Controllers
         public Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalog(int seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
-            return _summerWorkflowService.GetPricingCatalogAsync(seasonYear, userId, hasSummerGeneralManagerRole);
+            var hasSummerPricingPermission =
+                HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.ConnectSuperAdmin)
+                || HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.ConnectSuperAdmin);
+            return _summerWorkflowService.GetPricingCatalogAsync(seasonYear, userId, hasSummerPricingPermission);
         }
 
         [HttpPost(nameof(SavePricingCatalog))]
         public Task<CommonResponse<SummerPricingCatalogDto>> SavePricingCatalog([FromBody] SummerPricingCatalogUpsertRequest request)
         {
             var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
-            var hasSummerGeneralManagerRole = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
-            return _summerWorkflowService.SavePricingCatalogAsync(request, userId, hasSummerGeneralManagerRole);
+            var hasSummerPricingPermission =
+                HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.ConnectSuperAdmin)
+                || HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.ConnectSuperAdmin);
+            return _summerWorkflowService.SavePricingCatalogAsync(request, userId, hasSummerPricingPermission);
         }
 
         [HttpGet(nameof(GetAdminRequests))]

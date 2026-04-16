@@ -217,10 +217,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   readonly statusOptions = [
     { value: '', label: 'الكل' },
     { value: 'جديد', label: 'جديد' },
-    { value: 'جاري التنفيذ', label: 'جاري التنفيذ' },
+    { value: 'PENDING_REVIEW_REQUIRED', label: 'قيد المراجعة' },
     { value: 'رد إداري', label: 'رد إداري' },
     { value: 'اعتماد نهائي', label: 'اعتماد نهائي' },
-    { value: 'TRANSFER_REVIEW_REQUIRED', label: 'يتطلب مراجعة بعد التحويل' },
     { value: 'تم الرد', label: 'تم الرد (عام)' },
     { value: 'مرفوض', label: 'مرفوض/ملغي' }
   ];
@@ -235,6 +234,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   readonly actionOptions: Array<{ value: SummerAdminActionCode; label: string }> = [
     { value: SUMMER_ADMIN_ACTION.COMMENT, label: 'تعليق / رد إداري' },
     { value: SUMMER_ADMIN_ACTION.FINAL_APPROVE, label: 'اعتماد نهائي' },
+    { value: SUMMER_ADMIN_ACTION.REJECT_REQUEST, label: 'رفض الطلب' },
     { value: SUMMER_ADMIN_ACTION.MANUAL_CANCEL, label: 'إلغاء يدوي' },
     { value: SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION, label: 'إجراء إداري داخلي' }
   ];
@@ -267,6 +267,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   readonly pageSizeOptions = [5, 10, 25, 50];
   private readonly allowedAdminActionCodes = new Set<SummerAdminActionCode>([
     SUMMER_ADMIN_ACTION.FINAL_APPROVE,
+    SUMMER_ADMIN_ACTION.REJECT_REQUEST,
     SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
     SUMMER_ADMIN_ACTION.COMMENT,
     SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION
@@ -307,6 +308,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   pricingCatalogLoading = false;
   pricingCatalogSaving = false;
   pricingCatalogError = '';
+  readonly pricingAccessErrorMessage = 'عرض إعدادات التسعير متاح فقط لمدير النظام بالكامل.';
   pricingSeasonYear = this.seasonYear;
   pricingRecords: SummerPricingCatalogRecordDto[] = [];
   canManageSummerPricing = false;
@@ -2396,12 +2398,24 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   getRequestStatusLabel(item: SummerRequestSummaryDto): string {
+    const workflowStateCode = String(item?.workflowStateCode ?? '').trim().toUpperCase();
+    if (workflowStateCode === 'PENDING_REVIEW_REQUIRED' || workflowStateCode === 'TRANSFER_REVIEW_REQUIRED') {
+      return 'قيد المراجعة';
+    }
+
     const statusLabel = String(item?.statusLabel ?? '').trim();
+    if (this.normalizeSearchToken(statusLabel) === this.normalizeSearchToken('جاري التنفيذ')) {
+      return 'قيد المراجعة';
+    }
+
     if (statusLabel.length > 0) {
       return statusLabel;
     }
 
-    return resolveSummerStatusLabel(String(item?.status ?? '').trim());
+    const fallbackStatusLabel = resolveSummerStatusLabel(String(item?.status ?? '').trim());
+    return this.normalizeSearchToken(fallbackStatusLabel) === this.normalizeSearchToken('جاري التنفيذ')
+      ? 'قيد المراجعة'
+      : fallbackStatusLabel;
   }
 
   getDashboardStatusCount(...statusTokens: string[]): number {

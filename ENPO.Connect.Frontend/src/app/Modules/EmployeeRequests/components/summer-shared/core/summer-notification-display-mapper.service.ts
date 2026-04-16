@@ -168,6 +168,15 @@ export class SummerNotificationDisplayMapperService {
       };
     }
 
+    if (action === 'REJECT_REQUEST') {
+      return {
+        title: this.summerTitle,
+        message: 'تم رفض الطلب.',
+        type: 'Warn',
+        isSummerEvent: true
+      };
+    }
+
     if (action === 'MANUAL_CANCEL' || action === 'CANCEL' || action === 'AUTO_CANCEL' || action === 'ADMIN_CANCEL') {
       return {
         title: this.summerTitle,

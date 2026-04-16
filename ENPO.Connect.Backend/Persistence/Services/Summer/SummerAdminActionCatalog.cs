@@ -6,6 +6,7 @@ namespace Persistence.Services.Summer
         {
             public const string FinalApprove = "FINAL_APPROVE";
             public const string ManualCancel = "MANUAL_CANCEL";
+            public const string RejectRequest = "REJECT_REQUEST";
             public const string Comment = "COMMENT";
             public const string InternalAdminAction = "INTERNAL_ADMIN_ACTION";
             public const string ApproveTransfer = "APPROVE_TRANSFER";
@@ -17,6 +18,7 @@ namespace Persistence.Services.Summer
             {
                 Codes.FinalApprove => "اعتماد نهائي",
                 Codes.ManualCancel => "إلغاء إداري",
+                Codes.RejectRequest => "رفض الطلب",
                 Codes.Comment => "تعليق إداري",
                 Codes.InternalAdminAction => "إجراء إداري داخلي",
                 Codes.ApproveTransfer => "اعتماد التحويل",
@@ -30,7 +32,8 @@ namespace Persistence.Services.Summer
             return token switch
             {
                 "finalapprove" or "approve" or "اعتمادنهائي" or "اعتماد" or "final_approve" => Codes.FinalApprove,
-                "manual_cancel" or "manualcancel" or "cancel" or "reject" or "rejection" or "الغاءيدوي" or "الغاء" or "رفض" => Codes.ManualCancel,
+                "manual_cancel" or "manualcancel" or "cancel" or "الغاءيدوي" or "الغاء" => Codes.ManualCancel,
+                "reject" or "rejection" or "رفض" => Codes.RejectRequest,
                 "comment" or "reply" or "note" or "admin_note" or "administrative_note" or "تعليق" or "رد" or "ملاحظة" or "ملاحظه" or "ملاحظةادارية" => Codes.Comment,
                 "internal_admin_action" or "internaladminaction" or "internalaction" or "internal_action" or "اجراءاداريداخلي" or "اجراءاداريداخلى" or "اجراءداخلي" => Codes.InternalAdminAction,
                 "approvetransfer" or "approve_transfer" or "transferapprove" or "اعتمادالتحويل" => Codes.ApproveTransfer,

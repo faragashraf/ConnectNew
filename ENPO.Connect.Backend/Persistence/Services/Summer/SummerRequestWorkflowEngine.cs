@@ -25,7 +25,8 @@ namespace Persistence.Services.Summer
         private static readonly HashSet<string> StateActions = new(StringComparer.OrdinalIgnoreCase)
         {
             SummerAdminActionCatalog.Codes.FinalApprove,
-            SummerAdminActionCatalog.Codes.ManualCancel
+            SummerAdminActionCatalog.Codes.ManualCancel,
+            SummerAdminActionCatalog.Codes.RejectRequest
         };
 
         private static readonly IReadOnlyDictionary<MessageStatus, HashSet<string>> AllowedActionsByState =
@@ -38,6 +39,7 @@ namespace Persistence.Services.Summer
                 {
                     SummerAdminActionCatalog.Codes.FinalApprove,
                     SummerAdminActionCatalog.Codes.ManualCancel,
+                    SummerAdminActionCatalog.Codes.RejectRequest,
                     SummerAdminActionCatalog.Codes.Comment,
                     SummerAdminActionCatalog.Codes.InternalAdminAction
                 },
@@ -111,6 +113,7 @@ namespace Persistence.Services.Summer
             {
                 SummerAdminActionCatalog.Codes.FinalApprove => MessageStatus.Replied,
                 SummerAdminActionCatalog.Codes.ManualCancel => MessageStatus.Rejected,
+                SummerAdminActionCatalog.Codes.RejectRequest => MessageStatus.Rejected,
                 _ => null
             };
         }
@@ -126,6 +129,7 @@ namespace Persistence.Services.Summer
             {
                 SummerAdminActionCatalog.Codes.FinalApprove,
                 SummerAdminActionCatalog.Codes.ManualCancel,
+                SummerAdminActionCatalog.Codes.RejectRequest,
                 SummerAdminActionCatalog.Codes.Comment,
                 SummerAdminActionCatalog.Codes.InternalAdminAction
             };

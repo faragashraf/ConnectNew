@@ -43,6 +43,8 @@ namespace Persistence.Services
         private const string SummerDestinationCatalogMend = SummerWorkflowDomainConstants.DestinationCatalogMend;
         private const string TransferReviewRequiredCode = SummerWorkflowDomainConstants.TransferReviewRequiredCode;
         private const string TransferReviewResolvedCode = SummerWorkflowDomainConstants.TransferReviewResolvedCode;
+        private const string PendingReviewRequiredCode = SummerWorkflowDomainConstants.PendingReviewRequiredCode;
+        private const string PendingReviewResolvedCode = SummerWorkflowDomainConstants.PendingReviewResolvedCode;
         private const string RequestCreatedAtUtcFieldKind = SummerWorkflowDomainConstants.RequestCreatedAtUtcFieldKind;
         private const string PaymentDueAtUtcFieldKind = SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind;
         private const string PaidAtUtcFieldKind = SummerWorkflowDomainConstants.PaidAtUtcFieldKind;
@@ -250,7 +252,7 @@ namespace Persistence.Services
                         EmployeePhone = GetFirstFieldValue(messageFields, EmployeePhoneFieldKinds),
                         EmployeeExtraPhone = GetFirstFieldValue(messageFields, EmployeeExtraPhoneFieldKinds),
                         Status = message.Status.ToString(),
-                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
+                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, IsWorkflowStateLabelPreferred(workflowStateCode), workflowStateLabel),
                         WorkflowStateCode = workflowStateCode,
                         WorkflowStateLabel = workflowStateLabel,
                         NeedsTransferReview = needsTransferReview,
@@ -657,7 +659,7 @@ namespace Persistence.Services
                         EmployeePhone = GetFirstFieldValue(messageFields, EmployeePhoneFieldKinds),
                         EmployeeExtraPhone = GetFirstFieldValue(messageFields, EmployeeExtraPhoneFieldKinds),
                         Status = message.Status.ToString(),
-                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
+                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, IsWorkflowStateLabelPreferred(workflowStateCode), workflowStateLabel),
                         WorkflowStateCode = workflowStateCode,
                         WorkflowStateLabel = workflowStateLabel,
                         NeedsTransferReview = needsTransferReview,
@@ -1548,6 +1550,13 @@ namespace Persistence.Services
                             UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
                         }
 
+                        if (IsPendingReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote}"
                             : $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote} تعليق الإدارة: {comment}";
@@ -1566,9 +1575,42 @@ namespace Persistence.Services
                             UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
                         }
 
+                        if (IsPendingReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? "تم إلغاء الطلب يدويًا من إدارة المصايف."
                             : $"تم إلغاء الطلب يدويًا من إدارة المصايف. السبب: {comment}";
+                    }
+                    else if (actionCode == SummerAdminActionCatalog.Codes.RejectRequest)
+                    {
+                        message.Status = workflowResolution.TargetState ?? MessageStatus.Rejected;
+                        UpsertField(fields, message.MessageId, ActionTypeFieldKind, "ADMIN_REJECT");
+                        UpsertField(fields, message.MessageId, "Summer_RejectionReason", string.IsNullOrWhiteSpace(comment) ? "تم رفض الطلب من إدارة المصايف." : comment);
+                        UpsertField(fields, message.MessageId, "Summer_RejectedAtUtc", DateTime.UtcNow.ToString("o"));
+                        UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "REJECTED_ADMIN");
+                        await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, userId);
+                        if (IsTransferReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(TransferReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
+                        if (IsPendingReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
+                        replyMessage = string.IsNullOrWhiteSpace(comment)
+                            ? "تم رفض الطلب من إدارة المصايف."
+                            : $"تم رفض الطلب من إدارة المصايف. السبب: {comment}";
                     }
                     else if (actionCode == SummerAdminActionCatalog.Codes.Comment)
                     {
@@ -1621,9 +1663,14 @@ namespace Persistence.Services
                     await NotifyEmployeeOnAdminActionAsync(response.Data, actionCode, comment, includeSignalR: false);
                 }
 
-                if (actionCode == SummerAdminActionCatalog.Codes.ManualCancel && response.Data != null)
+                if ((actionCode == SummerAdminActionCatalog.Codes.ManualCancel
+                        || actionCode == SummerAdminActionCatalog.Codes.RejectRequest)
+                    && response.Data != null)
                 {
-                    await PublishCapacityUpdateAsync(response.Data.CategoryId, response.Data.WaveCode, "ADMIN_CANCEL");
+                    await PublishCapacityUpdateAsync(
+                        response.Data.CategoryId,
+                        response.Data.WaveCode,
+                        actionCode == SummerAdminActionCatalog.Codes.RejectRequest ? "ADMIN_REJECT" : "ADMIN_CANCEL");
                 }
 
                 await PublishRequestUpdateAsync(
@@ -2022,7 +2069,7 @@ namespace Persistence.Services
                         workflowStateCode,
                         TransferReviewRequiredCode,
                         StringComparison.OrdinalIgnoreCase);
-                    var statusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel);
+                    var statusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, IsWorkflowStateLabelPreferred(workflowStateCode), workflowStateLabel);
 
                     var bookingTypeLabel = ResolveBookingTypeLabel(
                         GetFirstFieldValue(messageFields, SummerWorkflowDomainConstants.StayModeFieldKinds),
@@ -2695,7 +2742,7 @@ namespace Persistence.Services
                     response.Errors.Add(new Error
                     {
                         Code = "403",
-                        Message = "غير مصرح لك بعرض إعدادات تسعير المصايف. يتطلب دور المدير العام (RoleId 2021)."
+                        Message = "غير مصرح لك بعرض إعدادات تسعير المصايف. يتطلب دور مدير النظام بالكامل (RoleId 2003)."
                     });
                     return response;
                 }
@@ -2734,7 +2781,7 @@ namespace Persistence.Services
                     response.Errors.Add(new Error
                     {
                         Code = "403",
-                        Message = "غير مصرح لك بتعديل إعدادات تسعير المصايف. يتطلب دور المدير العام (RoleId 2021)."
+                        Message = "غير مصرح لك بتعديل إعدادات تسعير المصايف. يتطلب دور مدير النظام بالكامل (RoleId 2003)."
                     });
                     return response;
                 }
@@ -3013,7 +3060,18 @@ namespace Persistence.Services
                     UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, dueAtUtc.ToString("o"));
                     if (isPaidStatus)
                     {
+                        message.Status = MessageStatus.InProgress;
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewRequiredCode);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewRequiredCode));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateReason", "تم استلام السداد والطلب قيد المراجعة.");
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
+                    }
+                    else if (IsPendingReviewRequired(fields))
+                    {
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewResolvedCode);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewResolvedCode));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
                     }
                     UpsertFieldRange(
                         fields,
@@ -3062,6 +3120,10 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(message.MessageId);
+                if (isPaidStatus && response.Data != null)
+                {
+                    await NotifyEmployeeOnPaymentUnderReviewAsync(response.Data, includeSignalR: false);
+                }
                 await PublishRequestUpdateAsync(message.MessageId, "PAY", source: "OWNER_PAY");
             }
             catch (Exception ex)
@@ -3620,6 +3682,31 @@ namespace Persistence.Services
                 : templates.AutoCancelSignalRTitle;
 
             await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
+        }
+
+        private async Task NotifyEmployeeOnPaymentUnderReviewAsync(
+            SummerRequestSummaryDto summary,
+            bool includeSignalR = false)
+        {
+            if (summary == null)
+            {
+                return;
+            }
+
+            var templates = _applicationConfig.NotificationChannels?.Summer ?? new SummerNotificationTemplates();
+            var placeholders = BuildNotificationPlaceholders(summary, "قيد المراجعة", string.Empty, summary.PaymentDueAtUtc);
+
+            var smsTemplate = string.IsNullOrWhiteSpace(templates.PaymentUnderReviewSmsTemplate)
+                ? "السيد/ة {FirstName}، تم استلام سداد طلب المصيف رقم {RequestRef} بنجاح، وحالة الطلب الآن قيد المراجعة. سيتم إفادتكم بعد مراجعة الطلب."
+                : templates.PaymentUnderReviewSmsTemplate;
+            var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+
+            await DispatchSummerNotificationsAsync(
+                summary,
+                smsMessage,
+                signalRMessage: string.Empty,
+                signalRTitle: string.Empty,
+                includeSignalR: includeSignalR);
         }
 
         private async Task DispatchSummerNotificationsAsync(
@@ -4432,7 +4519,7 @@ SELECT @result;
                 EmployeePhone = GetFirstFieldValue(fields, EmployeePhoneFieldKinds),
                 EmployeeExtraPhone = GetFirstFieldValue(fields, EmployeeExtraPhoneFieldKinds),
                 Status = message.Status.ToString(),
-                StatusLabel = ResolveSummaryStatusLabel(message.Status, fields, needsTransferReview, workflowStateLabel),
+                StatusLabel = ResolveSummaryStatusLabel(message.Status, fields, IsWorkflowStateLabelPreferred(workflowStateCode), workflowStateLabel),
                 WorkflowStateCode = workflowStateCode,
                 WorkflowStateLabel = workflowStateLabel,
                 NeedsTransferReview = needsTransferReview,
@@ -4806,7 +4893,20 @@ SELECT @result;
 
         private static string? GetFieldValue(IEnumerable<TkmendField> fields, string kind)
         {
-            return fields.FirstOrDefault(f => string.Equals(f.FildKind, kind, StringComparison.OrdinalIgnoreCase))?.FildTxt?.Trim();
+            var matches = fields
+                .Where(f => string.Equals(f.FildKind, kind, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (matches.Count == 0)
+            {
+                return null;
+            }
+
+            // Prefer persisted latest row when duplicates exist; fallback to last in-memory match.
+            var persistedLatest = matches
+                .Where(item => item.FildSql > 0)
+                .OrderByDescending(item => item.FildSql)
+                .FirstOrDefault();
+            return (persistedLatest ?? matches[matches.Count - 1]).FildTxt?.Trim();
         }
 
         private static string GetFirstFieldValue(IEnumerable<TkmendField> fields, params string[] kinds)
@@ -4846,6 +4946,19 @@ SELECT @result;
             return string.Equals(workflowState, TransferReviewRequiredCode, StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsPendingReviewRequired(IEnumerable<TkmendField> fields)
+        {
+            var workflowState = GetFieldValue(fields, "Summer_WorkflowState") ?? string.Empty;
+            return string.Equals(workflowState, PendingReviewRequiredCode, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsWorkflowStateLabelPreferred(string? workflowStateCode)
+        {
+            var normalized = (workflowStateCode ?? string.Empty).Trim().ToUpperInvariant();
+            return normalized == TransferReviewRequiredCode
+                || normalized == PendingReviewRequiredCode;
+        }
+
         private static string ResolveWorkflowStateLabel(string? workflowStateCode)
         {
             var normalized = (workflowStateCode ?? string.Empty).Trim().ToUpperInvariant();
@@ -4853,6 +4966,8 @@ SELECT @result;
             {
                 TransferReviewRequiredCode => "يتطلب مراجعة بعد التحويل",
                 TransferReviewResolvedCode => "تمت مراجعة التحويل",
+                PendingReviewRequiredCode => "قيد المراجعة",
+                PendingReviewResolvedCode => "تمت مراجعة الطلب",
                 _ => string.Empty
             };
         }
@@ -4880,10 +4995,10 @@ SELECT @result;
         private static string ResolveSummaryStatusLabel(
             MessageStatus messageStatus,
             IEnumerable<TkmendField> fields,
-            bool needsTransferReview,
+            bool preferWorkflowStateLabel,
             string workflowStateLabel)
         {
-            if (needsTransferReview && !string.IsNullOrWhiteSpace(workflowStateLabel))
+            if (preferWorkflowStateLabel && !string.IsNullOrWhiteSpace(workflowStateLabel))
             {
                 return workflowStateLabel;
             }
@@ -4895,6 +5010,7 @@ SELECT @result;
                 SummerAdminActionCatalog.Codes.Comment => "رد إداري",
                 SummerAdminActionCatalog.Codes.InternalAdminAction => "إجراء إداري داخلي",
                 SummerAdminActionCatalog.Codes.ManualCancel => "إلغاء يدوي",
+                SummerAdminActionCatalog.Codes.RejectRequest => "رفض الطلب",
                 SummerAdminActionCatalog.Codes.ApproveTransfer => "اعتماد تحويل",
                 _ => messageStatus.GetDescription()
             };
@@ -4954,9 +5070,12 @@ SELECT @result;
                 "internaladminaction" or "internal_admin_action" or "اجراءاداريداخلي" => SummerAdminActionCatalog.Codes.InternalAdminAction,
                 "approvetransfer" or "approve_transfer" or "اعتمادتحويل" => SummerAdminActionCatalog.Codes.ApproveTransfer,
                 "manualcancel" or "manual_cancel" or "الغاءيدوي" or "إلغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
+                "rejectrequest" or "reject_request" or "reject" or "rejection" or "رفض" => SummerAdminActionCatalog.Codes.RejectRequest,
                 "rejected" or "مرفوض" or "ملغي" or "مرفوض/ملغي" => "REJECTED",
                 "يتطلبمراجعةبعدالتحويل" or "transferreviewrequired" or "transfer_review_required" => TransferReviewRequiredCode,
                 "تمتمراجعةالتحويل" or "transferreviewresolved" or "transfer_review_resolved" => TransferReviewResolvedCode,
+                "قيدالمراجعة" or "pendingreviewrequired" or "pending_review_required" => PendingReviewRequiredCode,
+                "تمتمراجعةالطلب" or "pendingreviewresolved" or "pending_review_resolved" => PendingReviewResolvedCode,
                 _ => token.ToUpperInvariant()
             };
         }

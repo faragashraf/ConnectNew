@@ -60,6 +60,18 @@ export class NavBarComponent implements OnInit, AfterViewInit {
   ];
   selectedVisualTheme: string = 'light';
 
+  get isClickSoundEnabled(): boolean {
+    return this.soundService.isSoundEnabled;
+  }
+
+  get clickSoundIconClass(): string {
+    return 'pi pi-volume-up';
+  }
+
+  get clickSoundTooltipText(): string {
+    return this.isClickSoundEnabled ? 'كتم أصوات النقر' : 'تشغيل أصوات النقر';
+  }
+
   constructor(public authService: AuthObjectsService, public signalRService: SignalRService,
     public router: Router, public broadcastService: BroadcastService,
     public msgsService: MsgsService,
@@ -125,6 +137,11 @@ export class NavBarComponent implements OnInit, AfterViewInit {
 
   ngAfterViewInit() {
 
+  }
+
+  toggleClickSound(event: MouseEvent): void {
+    event.stopPropagation();
+    this.soundService.setSoundStrategy(!this.soundService.isSoundEnabled);
   }
 
   private checkAndStartTour() {

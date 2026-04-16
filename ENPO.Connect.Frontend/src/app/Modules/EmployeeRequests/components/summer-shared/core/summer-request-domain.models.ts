@@ -3,6 +3,8 @@ export type SummerRequestStatusCode =
   | 'IN_PROGRESS'
   | 'REPLIED'
   | 'REJECTED'
+  | 'PENDING_REVIEW_REQUIRED'
+  | 'PENDING_REVIEW_RESOLVED'
   | 'TRANSFER_REVIEW_REQUIRED'
   | 'TRANSFER_REVIEW_RESOLVED'
   | 'UNKNOWN';
@@ -20,6 +22,7 @@ export type SummerPaymentStatusCode =
 
 export type SummerAdminActionCode =
   | 'FINAL_APPROVE'
+  | 'REJECT_REQUEST'
   | 'MANUAL_CANCEL'
   | 'COMMENT'
   | 'INTERNAL_ADMIN_ACTION'

@@ -97,6 +97,9 @@ function resolveDeterministicTargetState(actionCode: SummerAdminActionCode): Can
   if (actionCode === SUMMER_ADMIN_ACTION.MANUAL_CANCEL) {
     return 'REJECTED';
   }
+  if (actionCode === SUMMER_ADMIN_ACTION.REJECT_REQUEST) {
+    return 'REJECTED';
+  }
   return null;
 }
 

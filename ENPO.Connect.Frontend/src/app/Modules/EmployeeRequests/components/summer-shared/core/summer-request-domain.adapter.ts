@@ -19,6 +19,8 @@ function normalizeRequestStatusCode(raw: string): SummerRequestStatusCode {
     'IN_PROGRESS',
     'REPLIED',
     'REJECTED',
+    'PENDING_REVIEW_REQUIRED',
+    'PENDING_REVIEW_RESOLVED',
     'TRANSFER_REVIEW_REQUIRED',
     'TRANSFER_REVIEW_RESOLVED',
     'UNKNOWN'

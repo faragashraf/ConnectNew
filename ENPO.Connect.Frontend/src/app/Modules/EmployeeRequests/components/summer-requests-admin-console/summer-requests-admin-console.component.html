@@ -39,6 +39,12 @@
     </div>
   </section>
 
+  <section class="scope-panel pricing-access-panel" *ngIf="!canManageSummerPricing">
+    <div class="scope-row">
+      <small class="pricing-access-error">{{ pricingAccessErrorMessage }}</small>
+    </div>
+  </section>
+
   <section class="pricing-panel" *ngIf="canManageSummerPricing">
     <header class="pricing-header">
       <div>
@@ -232,9 +238,9 @@
       <strong>{{ stats.newCount }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('جاري التنفيذ')" (click)="applyStatusQuickFilter('جاري التنفيذ')">
-      <span>جاري التنفيذ</span>
-      <strong>{{ stats.inProgressCount }}</strong>
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('PENDING_REVIEW_REQUIRED')" (click)="applyStatusQuickFilter('PENDING_REVIEW_REQUIRED')">
+      <span>قيد المراجعة</span>
+      <strong>{{ getDashboardStatusCount('PENDING_REVIEW_REQUIRED', 'قيد المراجعة', 'جاري التنفيذ', 'INPROGRESS', 'TRANSFER_REVIEW_REQUIRED') }}</strong>
     </article>
 
     <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('رد إداري')" (click)="applyStatusQuickFilter('رد إداري')">
