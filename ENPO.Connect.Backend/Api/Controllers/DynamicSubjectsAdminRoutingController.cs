@@ -228,6 +228,31 @@ public class DynamicSubjectsAdminRoutingController : ControllerBase
         return _routingService.GetOracleUnitTypesAsync(GetCurrentUserId(), cancellationToken);
     }
 
+    [HttpPost("Oracle/UnitTypes")]
+    public Task<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>> CreateOracleUnitType(
+        [FromBody] SubjectRoutingOrgUnitTypeUpsertRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.CreateOracleUnitTypeAsync(request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpPut("Oracle/UnitTypes/{unitTypeId:decimal}")]
+    public Task<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>> UpdateOracleUnitType(
+        decimal unitTypeId,
+        [FromBody] SubjectRoutingOrgUnitTypeUpsertRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.UpdateOracleUnitTypeAsync(unitTypeId, request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpDelete("Oracle/UnitTypes/{unitTypeId:decimal}")]
+    public Task<CommonResponse<bool>> DeleteOracleUnitType(
+        decimal unitTypeId,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.DeleteOracleUnitTypeAsync(unitTypeId, GetCurrentUserId(), cancellationToken);
+    }
+
     [HttpGet("Oracle/Units")]
     public Task<CommonResponse<IEnumerable<SubjectRoutingOrgUnitLookupDto>>> GetOracleUnits(
         decimal? unitTypeId,
@@ -245,6 +270,31 @@ public class DynamicSubjectsAdminRoutingController : ControllerBase
             cancellationToken);
     }
 
+    [HttpPost("Oracle/Units")]
+    public Task<CommonResponse<SubjectRoutingOrgUnitLookupDto>> CreateOracleUnit(
+        [FromBody] SubjectRoutingOrgUnitUpsertRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.CreateOracleUnitAsync(request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpPut("Oracle/Units/{unitId:decimal}")]
+    public Task<CommonResponse<SubjectRoutingOrgUnitLookupDto>> UpdateOracleUnit(
+        decimal unitId,
+        [FromBody] SubjectRoutingOrgUnitUpsertRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.UpdateOracleUnitAsync(unitId, request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpDelete("Oracle/Units/{unitId:decimal}")]
+    public Task<CommonResponse<bool>> DeleteOracleUnit(
+        decimal unitId,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.DeleteOracleUnitAsync(unitId, GetCurrentUserId(), cancellationToken);
+    }
+
     [HttpGet("Oracle/Positions")]
     public Task<CommonResponse<IEnumerable<SubjectRoutingOrgPositionLookupDto>>> GetOraclePositions(
         string? targetUserId,
@@ -258,6 +308,31 @@ public class DynamicSubjectsAdminRoutingController : ControllerBase
             unitId,
             activeOnly,
             cancellationToken);
+    }
+
+    [HttpPost("Oracle/Positions")]
+    public Task<CommonResponse<SubjectRoutingOrgPositionLookupDto>> CreateOraclePosition(
+        [FromBody] SubjectRoutingOrgPositionUpsertRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.CreateOraclePositionAsync(request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpPut("Oracle/Positions/{positionId:decimal}")]
+    public Task<CommonResponse<SubjectRoutingOrgPositionLookupDto>> UpdateOraclePosition(
+        decimal positionId,
+        [FromBody] SubjectRoutingOrgPositionUpsertRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.UpdateOraclePositionAsync(positionId, request, GetCurrentUserId(), cancellationToken);
+    }
+
+    [HttpDelete("Oracle/Positions/{positionId:decimal}")]
+    public Task<CommonResponse<bool>> DeleteOraclePosition(
+        decimal positionId,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.DeleteOraclePositionAsync(positionId, GetCurrentUserId(), cancellationToken);
     }
 
     [HttpGet("Oracle/Users")]
@@ -287,6 +362,14 @@ public class DynamicSubjectsAdminRoutingController : ControllerBase
             activeOnly,
             includeUsers,
             cancellationToken);
+    }
+
+    [HttpGet("Oracle/UnitsWithCountTree")]
+    public Task<CommonResponse<IEnumerable<SubjectRoutingOrgUnitWithCountTreeNodeDto>>> GetOracleUnitsWithCountTree(
+        bool activeOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        return _routingService.GetOracleUnitsWithCountTreeAsync(GetCurrentUserId(), activeOnly, cancellationToken);
     }
 
     private string GetCurrentUserId()

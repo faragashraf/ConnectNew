@@ -127,6 +127,22 @@ public interface IDynamicSubjectsAdminRoutingService
         string userId,
         CancellationToken cancellationToken = default);
 
+    Task<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>> CreateOracleUnitTypeAsync(
+        SubjectRoutingOrgUnitTypeUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>> UpdateOracleUnitTypeAsync(
+        decimal unitTypeId,
+        SubjectRoutingOrgUnitTypeUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<bool>> DeleteOracleUnitTypeAsync(
+        decimal unitTypeId,
+        string userId,
+        CancellationToken cancellationToken = default);
+
     Task<CommonResponse<IEnumerable<SubjectRoutingOrgUnitLookupDto>>> GetOracleUnitsAsync(
         string userId,
         decimal? unitTypeId,
@@ -135,11 +151,43 @@ public interface IDynamicSubjectsAdminRoutingService
         bool activeOnly,
         CancellationToken cancellationToken = default);
 
+    Task<CommonResponse<SubjectRoutingOrgUnitLookupDto>> CreateOracleUnitAsync(
+        SubjectRoutingOrgUnitUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<SubjectRoutingOrgUnitLookupDto>> UpdateOracleUnitAsync(
+        decimal unitId,
+        SubjectRoutingOrgUnitUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<bool>> DeleteOracleUnitAsync(
+        decimal unitId,
+        string userId,
+        CancellationToken cancellationToken = default);
+
     Task<CommonResponse<IEnumerable<SubjectRoutingOrgPositionLookupDto>>> GetOraclePositionsAsync(
         string userId,
         string? targetUserId,
         decimal? unitId,
         bool activeOnly,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<SubjectRoutingOrgPositionLookupDto>> CreateOraclePositionAsync(
+        SubjectRoutingOrgPositionUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<SubjectRoutingOrgPositionLookupDto>> UpdateOraclePositionAsync(
+        decimal positionId,
+        SubjectRoutingOrgPositionUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<bool>> DeleteOraclePositionAsync(
+        decimal positionId,
+        string userId,
         CancellationToken cancellationToken = default);
 
     Task<CommonResponse<IEnumerable<SubjectRoutingOrgUserLookupDto>>> GetOracleUsersAsync(
@@ -155,5 +203,10 @@ public interface IDynamicSubjectsAdminRoutingService
         string? search,
         bool activeOnly,
         bool includeUsers,
+        CancellationToken cancellationToken = default);
+
+    Task<CommonResponse<IEnumerable<SubjectRoutingOrgUnitWithCountTreeNodeDto>>> GetOracleUnitsWithCountTreeAsync(
+        string userId,
+        bool activeOnly,
         CancellationToken cancellationToken = default);
 }

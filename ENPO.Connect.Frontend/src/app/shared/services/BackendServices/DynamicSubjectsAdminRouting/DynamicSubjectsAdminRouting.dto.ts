@@ -240,11 +240,25 @@ export interface SubjectRoutingOrgUnitTypeLookupDto {
   isActive: boolean;
 }
 
+export interface SubjectRoutingOrgUnitTypeUpsertRequestDto {
+  typeName: string;
+  leaderTitle?: string;
+  isSingleOccupancy: boolean;
+  isActive: boolean;
+}
+
 export interface SubjectRoutingOrgUnitLookupDto {
   unitId: number;
   unitName: string;
   unitTypeId: number;
   unitTypeName: string;
+  parentId?: number;
+  isActive: boolean;
+}
+
+export interface SubjectRoutingOrgUnitUpsertRequestDto {
+  unitName: string;
+  unitTypeId: number;
   parentId?: number;
   isActive: boolean;
 }
@@ -256,6 +270,15 @@ export interface SubjectRoutingOrgPositionLookupDto {
   userDisplayNameEn?: string;
   unitId: number;
   unitName: string;
+  isManager: boolean;
+  isActive: boolean;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface SubjectRoutingOrgPositionUpsertRequestDto {
+  userId: string;
+  unitId: number;
   isManager: boolean;
   isActive: boolean;
   startDate?: string;
@@ -281,6 +304,12 @@ export interface SubjectRoutingOrgTreeNodeDto {
   isSelectable: boolean;
   hasChildren: boolean;
   isActive: boolean;
+}
+
+export interface SubjectRoutingOrgUnitWithCountTreeNodeDto {
+  unitId: number;
+  unitName: string;
+  parentId?: number;
 }
 
 export interface SubjectTypeRequestAvailabilityDto {

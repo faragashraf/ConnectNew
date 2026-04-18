@@ -373,6 +373,17 @@ public sealed class SubjectRoutingOrgUnitTypeLookupDto
     public bool IsActive { get; set; }
 }
 
+public sealed class SubjectRoutingOrgUnitTypeUpsertRequestDto
+{
+    public string TypeName { get; set; } = string.Empty;
+
+    public string? LeaderTitle { get; set; }
+
+    public bool IsSingleOccupancy { get; set; }
+
+    public bool IsActive { get; set; } = true;
+}
+
 public sealed class SubjectRoutingOrgUnitLookupDto
 {
     public decimal UnitId { get; set; }
@@ -386,6 +397,17 @@ public sealed class SubjectRoutingOrgUnitLookupDto
     public decimal? ParentId { get; set; }
 
     public bool IsActive { get; set; }
+}
+
+public sealed class SubjectRoutingOrgUnitUpsertRequestDto
+{
+    public string UnitName { get; set; } = string.Empty;
+
+    public decimal UnitTypeId { get; set; }
+
+    public decimal? ParentId { get; set; }
+
+    public bool IsActive { get; set; } = true;
 }
 
 public sealed class SubjectRoutingOrgPositionLookupDto
@@ -405,6 +427,21 @@ public sealed class SubjectRoutingOrgPositionLookupDto
     public bool IsManager { get; set; }
 
     public bool IsActive { get; set; }
+
+    public DateTime? StartDate { get; set; }
+
+    public DateTime? EndDate { get; set; }
+}
+
+public sealed class SubjectRoutingOrgPositionUpsertRequestDto
+{
+    public string UserId { get; set; } = string.Empty;
+
+    public decimal UnitId { get; set; }
+
+    public bool IsManager { get; set; }
+
+    public bool IsActive { get; set; } = true;
 
     public DateTime? StartDate { get; set; }
 
@@ -445,6 +482,15 @@ public sealed class SubjectRoutingOrgTreeNodeDto
     public bool HasChildren { get; set; }
 
     public bool IsActive { get; set; }
+}
+
+public sealed class SubjectRoutingOrgUnitWithCountTreeNodeDto
+{
+    public decimal UnitId { get; set; }
+
+    public string UnitName { get; set; } = string.Empty;
+
+    public decimal? ParentId { get; set; }
 }
 
 public sealed class SubjectTypeRequestAvailabilityDto

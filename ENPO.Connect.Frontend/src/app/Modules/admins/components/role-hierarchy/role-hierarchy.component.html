@@ -57,9 +57,175 @@
                     [showTableContextMenu]="false"></generic-table>
             </div>
         </p-tabPanel>
+        <p-tabPanel header="360° المستخدم">
+            <div class="panel-card lookup-panel user360-panel">
+                <div class="panel-title">الرؤية الشاملة للمستخدم</div>
+                <div class="lookup-row">
+                    <label for="userIdLookup360">رقم المستخدم</label>
+                    <input id="userIdLookup360" class="form-control" type="text" [(ngModel)]="userIdSearch"
+                        placeholder="مثال: 84621" />
+                </div>
+                <div class="lookup-row">
+                    <label for="selectedAppId360">رقم التطبيق (من الشجرة)</label>
+                    <input id="selectedAppId360" class="form-control" type="text" [value]="getSelectedApplicationId()"
+                        placeholder="اختر عقدة من الشجرة أولاً" readonly />
+                    <button type="button" pButton pRipple label="تحميل 360" class="btn btn-primary"
+                        (click)="loadUser360View()"></button>
+                </div>
+
+                <div class="summary-meta" *ngIf="user360LastLoadedAt">
+                    آخر تحديث: {{ user360LastLoadedAt }}
+                </div>
+
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <div class="summary-label">رقم المستخدم</div>
+                        <div class="summary-value">{{ user360Summary.userId || '-' }}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">الاسم</div>
+                        <div class="summary-value">{{ user360Summary.userName || '-' }}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">الإدارة</div>
+                        <div class="summary-value">{{ user360Summary.department || '-' }}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">الوحدة التنظيمية</div>
+                        <div class="summary-value">{{ user360Summary.orgUnit || '-' }}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">نوع الوحدة</div>
+                        <div class="summary-value">{{ user360Summary.orgUnitType || '-' }}</div>
+                    </div>
+                    <div class="summary-card kpi-card">
+                        <div class="summary-label">عدد الرولات</div>
+                        <div class="summary-value">{{ user360Summary.rolesCount }}</div>
+                    </div>
+                    <div class="summary-card kpi-card">
+                        <div class="summary-label">عدد الوظائف</div>
+                        <div class="summary-value">{{ user360Summary.functionsCount }}</div>
+                    </div>
+                    <div class="summary-card kpi-card">
+                        <div class="summary-label">عدد التطبيقات</div>
+                        <div class="summary-value">{{ user360Summary.applicationsCount }}</div>
+                    </div>
+                </div>
+
+                <div class="chips-grid">
+                    <div class="chip-block">
+                        <div class="chip-title">الرولات الفعالة</div>
+                        <div class="chip-list">
+                            <span class="chip-item" *ngFor="let role of user360RoleNames">{{ role }}</span>
+                        </div>
+                    </div>
+                    <div class="chip-block">
+                        <div class="chip-title">الوظائف الفعالة</div>
+                        <div class="chip-list">
+                            <span class="chip-item" *ngFor="let fn of user360FunctionNames">{{ fn }}</span>
+                        </div>
+                    </div>
+                    <div class="chip-block">
+                        <div class="chip-title">التطبيقات</div>
+                        <div class="chip-list">
+                            <span class="chip-item" *ngFor="let app of user360ApplicationIds">{{ app }}</span>
+                        </div>
+                    </div>
+                    <div class="chip-block">
+                        <div class="chip-title">المسار التنظيمي</div>
+                        <div class="chip-list">
+                            <span class="chip-item" *ngFor="let org of user360OrgTrail">{{ org }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-title nested-title">تحليل حساسية الرولات</div>
+                <div class="chip-list role-insights-list" *ngIf="user360RoleInsights.length > 0">
+                    <span class="chip-item role-insight" *ngFor="let insight of user360RoleInsights"
+                        [ngClass]="{
+                            'severity-critical': insight.severity === 'critical',
+                            'severity-high': insight.severity === 'high',
+                            'severity-normal': insight.severity === 'normal'
+                        }">
+                        {{ insight.roleName }} - {{ insight.severityLabel }}
+                    </span>
+                </div>
+                <div class="summary-meta" *ngIf="user360RoleInsights.length === 0">
+                    لا توجد رولات لعرض التحليل.
+                </div>
+
+                <div class="panel-title nested-title">مصفوفة الصلاحيات (Role × Function)</div>
+                <div class="matrix-wrapper" *ngIf="user360MatrixRows.length > 0 && user360MatrixColumns.length > 0">
+                    <table class="matrix-table">
+                        <thead>
+                            <tr>
+                                <th>الرول</th>
+                                <th *ngFor="let col of user360MatrixColumns">{{ col.functionName }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let row of user360MatrixRows">
+                                <td class="role-col">{{ row.roleName }}</td>
+                                <td *ngFor="let col of user360MatrixColumns">
+                                    <span class="matrix-flag"
+                                        [ngClass]="row['fn_' + col.functionId] === 1 ? 'flag-on' : 'flag-off'">
+                                        {{ row['fn_' + col.functionId] === 1 ? '✔' : '—' }}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="summary-meta" *ngIf="user360MatrixRows.length === 0 || user360MatrixColumns.length === 0">
+                    لا توجد بيانات كافية لبناء المصفوفة.
+                </div>
+
+                <div class="panel-title nested-title">البيانات التفصيلية</div>
+                <generic-table tableId="user360Table" [tableGenericData]="user360Data" [_columns]="user360Columns"
+                    [showExportButton]="true" [showRemoveColumn]="false" [showDeleteButton]="true" [rowsPerPage]="10"
+                    [dataKey]="'ROLE_ID'" [showEditButton]="false" (rowDelete)="deleteRow($event,'userRoles')"
+                    [showTableContextMenu]="false"></generic-table>
+            </div>
+        </p-tabPanel>
+        <p-tabPanel header="الشجرة الإدارية">
+            <div class="panel-card lookup-panel">
+                <div class="panel-title">إدارة الهيكل الإداري (ORG)</div>
+                <div class="lookup-row">
+                    <label>تحديث البيانات</label>
+                    <button type="button" pButton pRipple label="إعادة تحميل الشجرة" class="btn btn-primary"
+                        (click)="loadOrgAdminTree()"></button>
+                </div>
+                <p-tree [value]="orgTreeData" selectionMode="single" [(selection)]="selectedOrgNode" [filter]="true"
+                    [loading]="orgTreeLoading" [contextMenu]="orgCm" (onNodeContextMenuSelect)="onOrgContextMenuSelect($event)"
+                    filterPlaceholder="بحث في الهيكل الإداري">
+                    <ng-template let-node pTemplate="default">
+                        <b>{{ node.label }}</b>
+                    </ng-template>
+                </p-tree>
+            </div>
+        </p-tabPanel>
+        <p-tabPanel header="شجرة الهيكل التنظيمي">
+            <div class="panel-card lookup-panel">
+                <div class="panel-title">شجرة الهيكل التنظيمي (Parent / Child)</div>
+                <div class="lookup-row">
+                    <label>تحديث البيانات</label>
+                    <button type="button" pButton pRipple label="تحميل الشجرة" class="btn btn-primary"
+                        (click)="loadVwOrgUnitsTree()"></button>
+                </div>
+                <p-tree [value]="vwOrgUnitsTreeData" selectionMode="single" [(selection)]="selectedVwOrgNode"
+                    [filter]="true" [loading]="vwOrgUnitsTreeLoading" [contextMenu]="orgCm"
+                    (onNodeContextMenuSelect)="onVwOrgContextMenuSelect($event)"
+                    filterPlaceholder="بحث بالاسم أو الرقم">
+                    <ng-template let-node pTemplate="default">
+                        <b>{{ node.label }}</b>
+                    </ng-template>
+                </p-tree>
+            </div>
+        </p-tabPanel>
     </p-tabView>
 </div>
 <p-contextMenu [style]="{'width':'22.5rem','direction':'ltr'}" #cm [model]="items"></p-contextMenu>
+<p-contextMenu [style]="{'width':'18rem','direction':'rtl'}" #orgCm [model]="orgItems"></p-contextMenu>
 
 <p-dialog [header]="header" [resizable]="false" [modal]="true" [maximizable]="true" appendTo="body"
     [(visible)]="dialogVisible" [style]="{width: '35vw', direction: 'rtl'}" [contentStyle]="{ 'min-height': '20vh' }">
@@ -88,6 +254,57 @@
     <ng-template pTemplate="footer">
         <button type="button" pButton pRipple icon="pi pi-times" (click)="dialogVisible=false" label="إغلاق"
             class="p-button-text"></button>
+    </ng-template>
+</p-dialog>
+
+<p-dialog [header]="orgCrudHeader" [resizable]="false" [modal]="true" appendTo="body"
+    [(visible)]="orgCrudDialogVisible" [style]="{width: '40vw', direction: 'rtl'}">
+    <div class="dialog-content">
+        <ng-container [ngSwitch]="orgCrudTargetType">
+            <div *ngSwitchCase="'OrgUnitType'" class="form-group-grid">
+                <label>اسم النوع</label>
+                <input pInputText class="form-control" [(ngModel)]="orgUnitTypeForm.typeName" />
+                <label>المسمى القيادي</label>
+                <input pInputText class="form-control" [(ngModel)]="orgUnitTypeForm.leaderTitle" />
+                <label>إشغال فردي</label>
+                <p-inputSwitch [(ngModel)]="orgUnitTypeForm.isSingleOccupancy"></p-inputSwitch>
+                <label>نشط</label>
+                <p-inputSwitch [(ngModel)]="orgUnitTypeForm.isActive"></p-inputSwitch>
+            </div>
+
+            <div *ngSwitchCase="'OrgUnit'" class="form-group-grid">
+                <label>اسم الوحدة</label>
+                <input pInputText class="form-control" [(ngModel)]="orgUnitForm.unitName" />
+                <label>نوع الوحدة</label>
+                <p-dropdown [options]="unitTypesLookup" optionLabel="typeName" optionValue="unitTypeId"
+                    appendTo="body" [(ngModel)]="orgUnitForm.unitTypeId"></p-dropdown>
+                <label>Parent Unit Id</label>
+                <input pInputText class="form-control" [(ngModel)]="orgUnitForm.parentId" />
+                <label>نشط</label>
+                <p-inputSwitch [(ngModel)]="orgUnitForm.isActive"></p-inputSwitch>
+            </div>
+
+            <div *ngSwitchDefault class="form-group-grid">
+                <label>رقم المستخدم</label>
+                <input pInputText class="form-control" [(ngModel)]="orgPositionForm.userId" />
+                <label>رقم الوحدة</label>
+                <input pInputText class="form-control" [(ngModel)]="orgPositionForm.unitId" />
+                <label>مدير</label>
+                <p-inputSwitch [(ngModel)]="orgPositionForm.isManager"></p-inputSwitch>
+                <label>نشط</label>
+                <p-inputSwitch [(ngModel)]="orgPositionForm.isActive"></p-inputSwitch>
+                <label>تاريخ البداية</label>
+                <input type="date" class="form-control" [(ngModel)]="orgPositionForm.startDate" />
+                <label>تاريخ النهاية</label>
+                <input type="date" class="form-control" [(ngModel)]="orgPositionForm.endDate" />
+            </div>
+        </ng-container>
+    </div>
+    <ng-template pTemplate="footer">
+        <button type="button" pButton pRipple icon="pi pi-times" (click)="orgCrudDialogVisible=false" label="إغلاق"
+            class="p-button-text"></button>
+        <button type="button" pButton pRipple icon="pi pi-check" (click)="saveOrgDialog()" label="حفظ"
+            class="btn btn-primary"></button>
     </ng-template>
 </p-dialog>
 <p-dialog header="إضافة صلاحية للمستخدم" [resizable]="false" [modal]="true" [maximizable]="true" appendTo="body"

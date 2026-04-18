@@ -1,6 +1,7 @@
 using Models.Correspondance;
 using Models.GPA;
 using Models.GPA.OrgStructure;
+using Models.Models;
 
 namespace Persistence.Services.DynamicSubjects.AdminRouting;
 
@@ -84,6 +85,15 @@ public interface IDynamicSubjectsAdminRoutingRepository
 
     Task<IReadOnlyList<OrgUnitType>> ListOracleUnitTypesAsync(CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<VwOrgUnitsWithCount>> ListOracleUnitsWithCountTreeAsync(
+        bool activeOnly,
+        CancellationToken cancellationToken = default);
+
+    Task<OrgUnitType?> FindOracleUnitTypeAsync(
+        decimal unitTypeId,
+        bool activeOnly,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<OrgUnit>> ListOracleUnitsAsync(
         decimal? unitTypeId,
         decimal? parentId,
@@ -111,6 +121,30 @@ public interface IDynamicSubjectsAdminRoutingRepository
         string userId,
         bool activeOnly,
         CancellationToken cancellationToken = default);
+
+    Task<bool> HasOracleUnitsByTypeAsync(decimal unitTypeId, CancellationToken cancellationToken = default);
+
+    Task<bool> HasOracleChildUnitsAsync(decimal unitId, CancellationToken cancellationToken = default);
+
+    Task<bool> HasOraclePositionsByUnitAsync(decimal unitId, CancellationToken cancellationToken = default);
+
+    Task<decimal> GetNextOracleUnitTypeIdAsync(CancellationToken cancellationToken = default);
+
+    Task<decimal> GetNextOracleUnitIdAsync(CancellationToken cancellationToken = default);
+
+    Task<decimal> GetNextOraclePositionIdAsync(CancellationToken cancellationToken = default);
+
+    Task AddOracleUnitTypeAsync(OrgUnitType unitType, CancellationToken cancellationToken = default);
+
+    Task AddOracleUnitAsync(OrgUnit unit, CancellationToken cancellationToken = default);
+
+    Task AddOraclePositionAsync(UserPosition position, CancellationToken cancellationToken = default);
+
+    void RemoveOracleUnitType(OrgUnitType unitType);
+
+    void RemoveOracleUnit(OrgUnit unit);
+
+    void RemoveOraclePosition(UserPosition position);
 
     Task<IReadOnlyList<PosUser>> ListOracleUsersByIdsAsync(
         IEnumerable<string> userIds,

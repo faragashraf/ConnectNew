@@ -27,6 +27,10 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
     private const int SelectionPathMaxLength = 1000;
     private const int AudienceResolutionModeMaxLength = 40;
     private const int WorkDistributionModeMaxLength = 40;
+    private const int OracleTypeNameMaxLength = 200;
+    private const int OracleLeaderTitleMaxLength = 200;
+    private const int OracleUnitNameMaxLength = 300;
+    private const int OracleUserIdMaxLength = 20;
 
     private static readonly IReadOnlyDictionary<string, string> SupportedDirectionModes =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -144,9 +148,9 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
             var profiles = await _repository.ListProfilesBySubjectTypeAsync(subjectTypeId, cancellationToken);
             response.Data = profiles.Select(MapProfile).ToList();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء إضافة نوع الوحدة: {ex.Message}" });
         }
 
         return response;
@@ -220,9 +224,9 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
                 cancellationToken)
                 ?? new SubjectRoutingProfileWorkspaceDto();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء تعديل نوع الوحدة: {ex.Message}" });
         }
 
         return response;
@@ -258,9 +262,9 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
 
             response.Data = workspace;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء حذف نوع الوحدة: {ex.Message}" });
         }
 
         return response;
@@ -312,9 +316,9 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
 
             response.Data = MapProfile(profile);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء إضافة الوحدة: {ex.Message}" });
         }
 
         return response;
@@ -397,9 +401,9 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
             await _repository.SaveChangesAsync(cancellationToken);
             response.Data = MapProfile(profile);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء تعديل الوحدة: {ex.Message}" });
         }
 
         return response;
@@ -466,9 +470,9 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
 
             response.Data = MapStep(step);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء حذف الوحدة: {ex.Message}" });
         }
 
         return response;
@@ -546,9 +550,9 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
             await _repository.SaveChangesAsync(cancellationToken);
             response.Data = MapStep(step);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء إضافة المنصب: {ex.Message}" });
         }
 
         return response;
@@ -598,9 +602,9 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
             await _repository.SaveChangesAsync(cancellationToken);
             response.Data = true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء تعديل المنصب: {ex.Message}" });
         }
 
         return response;
@@ -659,9 +663,9 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
 
             response.Data = MapTarget(target);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            AddUnhandledError(response);
+            response.Errors.Add(new Error { Code = "500", Message = $"حدث خطأ غير متوقع أثناء حذف المنصب: {ex.Message}" });
         }
 
         return response;
@@ -1581,6 +1585,149 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
         return response;
     }
 
+    public async Task<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>> CreateOracleUnitTypeAsync(
+        SubjectRoutingOrgUnitTypeUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            if (!TryNormalizeOracleUnitTypeRequest(request, response, out var normalized))
+            {
+                return response;
+            }
+
+            var entity = new OrgUnitType
+            {
+                UnitTypeId = await _repository.GetNextOracleUnitTypeIdAsync(cancellationToken),
+                TypeName = normalized.TypeName,
+                LeaderTitle = normalized.LeaderTitle,
+                IsSingleOccupancy = normalized.IsSingleOccupancy,
+                Status = normalized.IsActive,
+                CreatedBy = normalizedUser,
+                CreatedDate = DateTime.Now
+            };
+
+            await _repository.AddOracleUnitTypeAsync(entity, cancellationToken);
+            await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
+
+            response.Data = MapOracleUnitType(entity);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>> UpdateOracleUnitTypeAsync(
+        decimal unitTypeId,
+        SubjectRoutingOrgUnitTypeUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            if (unitTypeId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف نوع الوحدة مطلوب." });
+                return response;
+            }
+
+            if (!TryNormalizeOracleUnitTypeRequest(request, response, out var normalized))
+            {
+                return response;
+            }
+
+            var entity = await _repository.FindOracleUnitTypeAsync(unitTypeId, activeOnly: false, cancellationToken);
+            if (entity == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "نوع الوحدة غير موجود." });
+                return response;
+            }
+
+            entity.TypeName = normalized.TypeName;
+            entity.LeaderTitle = normalized.LeaderTitle;
+            entity.IsSingleOccupancy = normalized.IsSingleOccupancy;
+            entity.Status = normalized.IsActive;
+
+            await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
+            response.Data = MapOracleUnitType(entity);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<bool>> DeleteOracleUnitTypeAsync(
+        decimal unitTypeId,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<bool>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            if (unitTypeId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف نوع الوحدة مطلوب." });
+                return response;
+            }
+
+            var entity = await _repository.FindOracleUnitTypeAsync(unitTypeId, activeOnly: false, cancellationToken);
+            if (entity == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "نوع الوحدة غير موجود." });
+                return response;
+            }
+
+            if (await _repository.HasOracleUnitsByTypeAsync(unitTypeId, cancellationToken))
+            {
+                response.Errors.Add(new Error { Code = "409", Message = "لا يمكن حذف نوع الوحدة لوجود وحدات مرتبطة به." });
+                return response;
+            }
+
+            _repository.RemoveOracleUnitType(entity);
+            await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
+            response.Data = true;
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
     public async Task<CommonResponse<IEnumerable<SubjectRoutingOrgUnitLookupDto>>> GetOracleUnitsAsync(
         string userId,
         decimal? unitTypeId,
@@ -1609,6 +1756,162 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
                 ParentId = item.ParentId,
                 IsActive = item.Status != false
             }).ToList();
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<SubjectRoutingOrgUnitLookupDto>> CreateOracleUnitAsync(
+        SubjectRoutingOrgUnitUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<SubjectRoutingOrgUnitLookupDto>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            var normalized = await TryNormalizeOracleUnitRequest(request, response, cancellationToken);
+            if (normalized == null)
+            {
+                return response;
+            }
+
+            var entity = new OrgUnit
+            {
+                UnitId = await _repository.GetNextOracleUnitIdAsync(cancellationToken),
+                UnitName = normalized.UnitName,
+                UnitTypeId = normalized.UnitTypeId,
+                ParentId = normalized.ParentId,
+                Status = normalized.IsActive,
+                CreatedBy = normalizedUser,
+                CreatedDate = DateTime.Now
+            };
+
+            await _repository.AddOracleUnitAsync(entity, cancellationToken);
+            await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
+            response.Data = await MapOracleUnitAsync(entity, cancellationToken);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<SubjectRoutingOrgUnitLookupDto>> UpdateOracleUnitAsync(
+        decimal unitId,
+        SubjectRoutingOrgUnitUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<SubjectRoutingOrgUnitLookupDto>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            if (unitId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف الوحدة مطلوب." });
+                return response;
+            }
+
+            var entity = await _repository.FindOracleUnitAsync(unitId, activeOnly: false, cancellationToken);
+            if (entity == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "الوحدة غير موجودة." });
+                return response;
+            }
+
+            var normalized = await TryNormalizeOracleUnitRequest(request, response, cancellationToken);
+            if (normalized == null)
+            {
+                return response;
+            }
+
+            if (normalized.ParentId.HasValue && normalized.ParentId.Value == unitId)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "لا يمكن أن تكون الوحدة أبًا لنفسها." });
+                return response;
+            }
+
+            entity.UnitName = normalized.UnitName;
+            entity.UnitTypeId = normalized.UnitTypeId;
+            entity.ParentId = normalized.ParentId;
+            entity.Status = normalized.IsActive;
+
+            await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
+            response.Data = await MapOracleUnitAsync(entity, cancellationToken);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<bool>> DeleteOracleUnitAsync(
+        decimal unitId,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<bool>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            if (unitId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف الوحدة مطلوب." });
+                return response;
+            }
+
+            var entity = await _repository.FindOracleUnitAsync(unitId, activeOnly: false, cancellationToken);
+            if (entity == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "الوحدة غير موجودة." });
+                return response;
+            }
+
+            if (await _repository.HasOracleChildUnitsAsync(unitId, cancellationToken))
+            {
+                response.Errors.Add(new Error { Code = "409", Message = "لا يمكن حذف الوحدة لوجود وحدات فرعية مرتبطة بها." });
+                return response;
+            }
+
+            if (await _repository.HasOraclePositionsByUnitAsync(unitId, cancellationToken))
+            {
+                response.Errors.Add(new Error { Code = "409", Message = "لا يمكن حذف الوحدة لوجود مناصب مرتبطة بها." });
+                return response;
+            }
+
+            _repository.RemoveOracleUnit(entity);
+            await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
+            response.Data = true;
         }
         catch (Exception)
         {
@@ -1657,6 +1960,146 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
                     EndDate = item.EndDate
                 };
             }).ToList();
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<SubjectRoutingOrgPositionLookupDto>> CreateOraclePositionAsync(
+        SubjectRoutingOrgPositionUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<SubjectRoutingOrgPositionLookupDto>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            var normalized = await TryNormalizeOraclePositionRequest(request, response, cancellationToken);
+            if (normalized == null)
+            {
+                return response;
+            }
+
+            var entity = new UserPosition
+            {
+                PositionId = await _repository.GetNextOraclePositionIdAsync(cancellationToken),
+                UserId = normalized.UserId,
+                UnitId = normalized.UnitId,
+                IsManager = normalized.IsManager,
+                IsActive = normalized.IsActive,
+                StartDate = normalized.StartDate,
+                EndDate = normalized.EndDate
+            };
+
+            await _repository.AddOraclePositionAsync(entity, cancellationToken);
+            await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
+            response.Data = await MapOraclePositionAsync(entity, cancellationToken);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<SubjectRoutingOrgPositionLookupDto>> UpdateOraclePositionAsync(
+        decimal positionId,
+        SubjectRoutingOrgPositionUpsertRequestDto request,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<SubjectRoutingOrgPositionLookupDto>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            if (positionId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف المنصب مطلوب." });
+                return response;
+            }
+
+            var entity = await _repository.FindOraclePositionAsync(positionId, activeOnly: false, cancellationToken);
+            if (entity == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "المنصب غير موجود." });
+                return response;
+            }
+
+            var normalized = await TryNormalizeOraclePositionRequest(request, response, cancellationToken);
+            if (normalized == null)
+            {
+                return response;
+            }
+
+            entity.UserId = normalized.UserId;
+            entity.UnitId = normalized.UnitId;
+            entity.IsManager = normalized.IsManager;
+            entity.IsActive = normalized.IsActive;
+            entity.StartDate = normalized.StartDate;
+            entity.EndDate = normalized.EndDate;
+
+            await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
+            response.Data = await MapOraclePositionAsync(entity, cancellationToken);
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<bool>> DeleteOraclePositionAsync(
+        decimal positionId,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<bool>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            if (positionId <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "معرف المنصب مطلوب." });
+                return response;
+            }
+
+            var entity = await _repository.FindOraclePositionAsync(positionId, activeOnly: false, cancellationToken);
+            if (entity == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "المنصب غير موجود." });
+                return response;
+            }
+
+            _repository.RemoveOraclePosition(entity);
+            await _repository.SaveChangesAsync(cancellationToken);
+            await _requestPreviewCache.InvalidateAllAsync(cancellationToken);
+            response.Data = true;
         }
         catch (Exception)
         {
@@ -1887,6 +2330,37 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
             }
 
             response.Data = Array.Empty<SubjectRoutingOrgTreeNodeDto>();
+        }
+        catch (Exception)
+        {
+            AddUnhandledError(response);
+        }
+
+        return response;
+    }
+
+    public async Task<CommonResponse<IEnumerable<SubjectRoutingOrgUnitWithCountTreeNodeDto>>> GetOracleUnitsWithCountTreeAsync(
+        string userId,
+        bool activeOnly,
+        CancellationToken cancellationToken = default)
+    {
+        var response = new CommonResponse<IEnumerable<SubjectRoutingOrgUnitWithCountTreeNodeDto>>();
+        try
+        {
+            var normalizedUser = NormalizeUser(userId);
+            if (normalizedUser.Length == 0)
+            {
+                AddUnauthorized(response);
+                return response;
+            }
+
+            var units = await _repository.ListOracleUnitsWithCountTreeAsync(activeOnly, cancellationToken);
+            response.Data = units.Select(item => new SubjectRoutingOrgUnitWithCountTreeNodeDto
+            {
+                UnitId = item.UnitId,
+                UnitName = item.UnitName ?? string.Empty,
+                ParentId = item.ParentId
+            }).ToList();
         }
         catch (Exception)
         {
@@ -4125,6 +4599,213 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
         return $"يبدأ المسار من '{startName}' ويتجه أولًا إلى: {firstTarget}. الإجراءات المتاحة من البداية: {actionsSummary}. ينتهي المسار عند: {endSummary}. مسارات الرفض: {rejectSummary}. مسارات الإعادة: {returnSummary}.";
     }
 
+    private static SubjectRoutingOrgUnitTypeLookupDto MapOracleUnitType(OrgUnitType entity)
+    {
+        return new SubjectRoutingOrgUnitTypeLookupDto
+        {
+            UnitTypeId = entity.UnitTypeId,
+            TypeName = entity.TypeName ?? string.Empty,
+            LeaderTitle = entity.LeaderTitle,
+            IsActive = entity.Status != false
+        };
+    }
+
+    private async Task<SubjectRoutingOrgUnitLookupDto> MapOracleUnitAsync(
+        OrgUnit entity,
+        CancellationToken cancellationToken)
+    {
+        var unitType = await _repository.FindOracleUnitTypeAsync(entity.UnitTypeId, activeOnly: false, cancellationToken);
+        return new SubjectRoutingOrgUnitLookupDto
+        {
+            UnitId = entity.UnitId,
+            UnitName = entity.UnitName ?? string.Empty,
+            UnitTypeId = entity.UnitTypeId,
+            UnitTypeName = unitType?.TypeName ?? string.Empty,
+            ParentId = entity.ParentId,
+            IsActive = entity.Status != false
+        };
+    }
+
+    private async Task<SubjectRoutingOrgPositionLookupDto> MapOraclePositionAsync(
+        UserPosition entity,
+        CancellationToken cancellationToken)
+    {
+        var unit = await _repository.FindOracleUnitAsync(entity.UnitId, activeOnly: false, cancellationToken);
+        PosUser? userRecord = null;
+        if (!string.IsNullOrWhiteSpace(entity.UserId))
+        {
+            userRecord = await _repository.FindOracleUserAsync(entity.UserId, activeOnly: false, cancellationToken);
+        }
+
+        return new SubjectRoutingOrgPositionLookupDto
+        {
+            PositionId = entity.PositionId,
+            UserId = entity.UserId ?? string.Empty,
+            UserDisplayNameAr = BuildUserDisplayNameAr(userRecord),
+            UserDisplayNameEn = BuildUserDisplayNameEn(userRecord),
+            UnitId = entity.UnitId,
+            UnitName = unit?.UnitName ?? string.Empty,
+            IsManager = entity.IsManager == true,
+            IsActive = entity.IsActive != false,
+            StartDate = entity.StartDate,
+            EndDate = entity.EndDate
+        };
+    }
+
+    private bool TryNormalizeOracleUnitTypeRequest<T>(
+        SubjectRoutingOrgUnitTypeUpsertRequestDto? request,
+        CommonResponse<T> response,
+        out OracleUnitTypeRequestValidationResult normalized)
+    {
+        normalized = new OracleUnitTypeRequestValidationResult();
+        if (request == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "بيانات نوع الوحدة مطلوبة." });
+            return false;
+        }
+
+        var typeName = NormalizeNullable(request.TypeName);
+        if (typeName == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "اسم نوع الوحدة مطلوب." });
+            return false;
+        }
+
+        if (typeName.Length > OracleTypeNameMaxLength)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"اسم نوع الوحدة يجب ألا يتجاوز {OracleTypeNameMaxLength} حرفًا." });
+            return false;
+        }
+
+        var leaderTitle = NormalizeNullable(request.LeaderTitle);
+        if (leaderTitle != null && leaderTitle.Length > OracleLeaderTitleMaxLength)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"المسمى القيادي يجب ألا يتجاوز {OracleLeaderTitleMaxLength} حرفًا." });
+            return false;
+        }
+
+        normalized.TypeName = typeName;
+        normalized.LeaderTitle = leaderTitle;
+        normalized.IsSingleOccupancy = request.IsSingleOccupancy;
+        normalized.IsActive = request.IsActive;
+        return true;
+    }
+
+    private async Task<OracleUnitRequestValidationResult?> TryNormalizeOracleUnitRequest<T>(
+        SubjectRoutingOrgUnitUpsertRequestDto? request,
+        CommonResponse<T> response,
+        CancellationToken cancellationToken)
+    {
+        var normalized = new OracleUnitRequestValidationResult();
+        if (request == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "بيانات الوحدة مطلوبة." });
+            return null;
+        }
+
+        var unitName = NormalizeNullable(request.UnitName);
+        if (unitName == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "اسم الوحدة مطلوب." });
+            return null;
+        }
+
+        if (unitName.Length > OracleUnitNameMaxLength)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"اسم الوحدة يجب ألا يتجاوز {OracleUnitNameMaxLength} حرفًا." });
+            return null;
+        }
+
+        if (request.UnitTypeId <= 0)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "نوع الوحدة مطلوب." });
+            return null;
+        }
+
+        var unitType = await _repository.FindOracleUnitTypeAsync(request.UnitTypeId, activeOnly: false, cancellationToken);
+        if (unitType == null)
+        {
+            response.Errors.Add(new Error { Code = "404", Message = "نوع الوحدة غير موجود." });
+            return null;
+        }
+
+        if (request.ParentId.HasValue && request.ParentId.Value > 0)
+        {
+            var parent = await _repository.FindOracleUnitAsync(request.ParentId.Value, activeOnly: false, cancellationToken);
+            if (parent == null)
+            {
+                response.Errors.Add(new Error { Code = "404", Message = "الوحدة الأب غير موجودة." });
+                return null;
+            }
+        }
+
+        normalized.UnitName = unitName;
+        normalized.UnitTypeId = request.UnitTypeId;
+        normalized.ParentId = request.ParentId > 0 ? request.ParentId : null;
+        normalized.IsActive = request.IsActive;
+        return normalized;
+    }
+
+    private async Task<OraclePositionRequestValidationResult?> TryNormalizeOraclePositionRequest<T>(
+        SubjectRoutingOrgPositionUpsertRequestDto? request,
+        CommonResponse<T> response,
+        CancellationToken cancellationToken)
+    {
+        var normalized = new OraclePositionRequestValidationResult();
+        if (request == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "بيانات المنصب مطلوبة." });
+            return null;
+        }
+
+        var userId = NormalizeNullable(request.UserId);
+        if (userId == null)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "رقم المستخدم مطلوب." });
+            return null;
+        }
+
+        if (userId.Length > OracleUserIdMaxLength)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = $"رقم المستخدم يجب ألا يتجاوز {OracleUserIdMaxLength} حرفًا." });
+            return null;
+        }
+
+        if (request.UnitId <= 0)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "معرف الوحدة مطلوب." });
+            return null;
+        }
+
+        var unit = await _repository.FindOracleUnitAsync(request.UnitId, activeOnly: false, cancellationToken);
+        if (unit == null)
+        {
+            response.Errors.Add(new Error { Code = "404", Message = "الوحدة غير موجودة." });
+            return null;
+        }
+
+        var user = await _repository.FindOracleUserAsync(userId, activeOnly: false, cancellationToken);
+        if (user == null)
+        {
+            response.Errors.Add(new Error { Code = "404", Message = "المستخدم غير موجود." });
+            return null;
+        }
+
+        if (request.StartDate.HasValue && request.EndDate.HasValue && request.EndDate.Value.Date < request.StartDate.Value.Date)
+        {
+            response.Errors.Add(new Error { Code = "400", Message = "تاريخ النهاية لا يمكن أن يسبق تاريخ البداية." });
+            return null;
+        }
+
+        normalized.UserId = userId;
+        normalized.UnitId = request.UnitId;
+        normalized.IsManager = request.IsManager;
+        normalized.IsActive = request.IsActive;
+        normalized.StartDate = request.StartDate;
+        normalized.EndDate = request.EndDate;
+        return normalized;
+    }
+
     private static void AddUnauthorized<T>(CommonResponse<T> response)
     {
         response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح له." });
@@ -4159,6 +4840,43 @@ public sealed class DynamicSubjectsAdminRoutingService : IDynamicSubjectsAdminRo
         public string DirectionMode { get; set; } = "Both";
 
         public int VersionNo { get; set; }
+    }
+
+    private sealed class OracleUnitTypeRequestValidationResult
+    {
+        public string TypeName { get; set; } = string.Empty;
+
+        public string? LeaderTitle { get; set; }
+
+        public bool IsSingleOccupancy { get; set; }
+
+        public bool IsActive { get; set; }
+    }
+
+    private sealed class OracleUnitRequestValidationResult
+    {
+        public string UnitName { get; set; } = string.Empty;
+
+        public decimal UnitTypeId { get; set; }
+
+        public decimal? ParentId { get; set; }
+
+        public bool IsActive { get; set; }
+    }
+
+    private sealed class OraclePositionRequestValidationResult
+    {
+        public string UserId { get; set; } = string.Empty;
+
+        public decimal UnitId { get; set; }
+
+        public bool IsManager { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public DateTime? StartDate { get; set; }
+
+        public DateTime? EndDate { get; set; }
     }
 
     private sealed class StepRequestValidationResult

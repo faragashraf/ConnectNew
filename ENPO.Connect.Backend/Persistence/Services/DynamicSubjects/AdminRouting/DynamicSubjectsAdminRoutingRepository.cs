@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Models.Correspondance;
 using Models.GPA;
 using Models.GPA.OrgStructure;
+using Models.Models;
 using Persistence.Data;
 
 namespace Persistence.Services.DynamicSubjects.AdminRouting;
@@ -372,6 +373,48 @@ public sealed class DynamicSubjectsAdminRoutingRepository : IDynamicSubjectsAdmi
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<VwOrgUnitsWithCount>> ListOracleUnitsWithCountTreeAsync(
+        bool activeOnly,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<VwOrgUnitsWithCount> query = _gpaContext.VwOrgUnitsWithCounts
+            .AsNoTracking();
+
+        if (activeOnly)
+        {
+            query = query.Where(item => item.Status != false);
+        }
+
+        query = query.Where(item => !string.IsNullOrWhiteSpace(item.UnitName));
+
+        return await query
+            .OrderBy(item => item.ParentId)
+            .ThenBy(item => item.UnitName)
+            .ThenBy(item => item.UnitId)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<OrgUnitType?> FindOracleUnitTypeAsync(
+        decimal unitTypeId,
+        bool activeOnly,
+        CancellationToken cancellationToken = default)
+    {
+        if (unitTypeId <= 0)
+        {
+            return null;
+        }
+
+        IQueryable<OrgUnitType> query = _gpaContext.OrgUnitTypes
+            .Where(item => item.UnitTypeId == unitTypeId);
+
+        if (activeOnly)
+        {
+            query = query.Where(item => item.Status != false);
+        }
+
+        return await query.FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<OrgUnit>> ListOracleUnitsAsync(
         decimal? unitTypeId,
         decimal? parentId,
@@ -527,6 +570,96 @@ public sealed class DynamicSubjectsAdminRoutingRepository : IDynamicSubjectsAdmi
         return await query.FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<bool> HasOracleUnitsByTypeAsync(decimal unitTypeId, CancellationToken cancellationToken = default)
+    {
+        if (unitTypeId <= 0)
+        {
+            return false;
+        }
+
+        return await _gpaContext.OrgUnits
+            .AsNoTracking()
+            .AnyAsync(item => item.UnitTypeId == unitTypeId, cancellationToken);
+    }
+
+    public async Task<bool> HasOracleChildUnitsAsync(decimal unitId, CancellationToken cancellationToken = default)
+    {
+        if (unitId <= 0)
+        {
+            return false;
+        }
+
+        return await _gpaContext.OrgUnits
+            .AsNoTracking()
+            .AnyAsync(item => item.ParentId == unitId, cancellationToken);
+    }
+
+    public async Task<bool> HasOraclePositionsByUnitAsync(decimal unitId, CancellationToken cancellationToken = default)
+    {
+        if (unitId <= 0)
+        {
+            return false;
+        }
+
+        return await _gpaContext.UserPositions
+            .AsNoTracking()
+            .AnyAsync(item => item.UnitId == unitId, cancellationToken);
+    }
+
+    public async Task<decimal> GetNextOracleUnitTypeIdAsync(CancellationToken cancellationToken = default)
+    {
+        var current = await _gpaContext.OrgUnitTypes
+            .AsNoTracking()
+            .MaxAsync(item => (decimal?)item.UnitTypeId, cancellationToken);
+        return (current ?? 0) + 1;
+    }
+
+    public async Task<decimal> GetNextOracleUnitIdAsync(CancellationToken cancellationToken = default)
+    {
+        var current = await _gpaContext.OrgUnits
+            .AsNoTracking()
+            .MaxAsync(item => (decimal?)item.UnitId, cancellationToken);
+        return (current ?? 0) + 1;
+    }
+
+    public async Task<decimal> GetNextOraclePositionIdAsync(CancellationToken cancellationToken = default)
+    {
+        var current = await _gpaContext.UserPositions
+            .AsNoTracking()
+            .MaxAsync(item => (decimal?)item.PositionId, cancellationToken);
+        return (current ?? 0) + 1;
+    }
+
+    public Task AddOracleUnitTypeAsync(OrgUnitType unitType, CancellationToken cancellationToken = default)
+    {
+        return _gpaContext.OrgUnitTypes.AddAsync(unitType, cancellationToken).AsTask();
+    }
+
+    public Task AddOracleUnitAsync(OrgUnit unit, CancellationToken cancellationToken = default)
+    {
+        return _gpaContext.OrgUnits.AddAsync(unit, cancellationToken).AsTask();
+    }
+
+    public Task AddOraclePositionAsync(UserPosition position, CancellationToken cancellationToken = default)
+    {
+        return _gpaContext.UserPositions.AddAsync(position, cancellationToken).AsTask();
+    }
+
+    public void RemoveOracleUnitType(OrgUnitType unitType)
+    {
+        _gpaContext.OrgUnitTypes.Remove(unitType);
+    }
+
+    public void RemoveOracleUnit(OrgUnit unit)
+    {
+        _gpaContext.OrgUnits.Remove(unit);
+    }
+
+    public void RemoveOraclePosition(UserPosition position)
+    {
+        _gpaContext.UserPositions.Remove(position);
+    }
+
     public async Task<IReadOnlyList<PosUser>> ListOracleUsersByIdsAsync(
         IEnumerable<string> userIds,
         CancellationToken cancellationToken = default)
@@ -551,7 +684,24 @@ public sealed class DynamicSubjectsAdminRoutingRepository : IDynamicSubjectsAdmi
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        return _connectContext.SaveChangesAsync(cancellationToken);
+        return SaveChangesAcrossContextsAsync(cancellationToken);
+    }
+
+    private async Task<int> SaveChangesAcrossContextsAsync(CancellationToken cancellationToken)
+    {
+        var affectedRows = 0;
+
+        if (_connectContext.ChangeTracker.HasChanges())
+        {
+            affectedRows += await _connectContext.SaveChangesAsync(cancellationToken);
+        }
+
+        if (_gpaContext.ChangeTracker.HasChanges())
+        {
+            affectedRows += await _gpaContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return affectedRows;
     }
 
     private static string? NormalizeNullable(string? value)

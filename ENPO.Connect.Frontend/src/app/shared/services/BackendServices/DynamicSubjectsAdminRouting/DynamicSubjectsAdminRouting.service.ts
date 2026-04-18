@@ -8,8 +8,12 @@ import {
   SubjectAvailabilityNodeValidationResultDto,
   SubjectRoutingOrgTreeNodeDto,
   SubjectRoutingOrgPositionLookupDto,
+  SubjectRoutingOrgPositionUpsertRequestDto,
   SubjectRoutingOrgUnitLookupDto,
+  SubjectRoutingOrgUnitWithCountTreeNodeDto,
+  SubjectRoutingOrgUnitUpsertRequestDto,
   SubjectRoutingOrgUnitTypeLookupDto,
+  SubjectRoutingOrgUnitTypeUpsertRequestDto,
   SubjectRoutingOrgUserLookupDto,
   SubjectRoutingPreviewDto,
   SubjectRoutingProfileDto,
@@ -200,6 +204,26 @@ export class DynamicSubjectsAdminRoutingController {
     return this.http.get<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto[]>>(`${this.baseUrl}/Oracle/UnitTypes`);
   }
 
+  createOracleUnitType(
+    request: SubjectRoutingOrgUnitTypeUpsertRequestDto
+  ): Observable<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>> {
+    return this.http.post<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>>(`${this.baseUrl}/Oracle/UnitTypes`, request);
+  }
+
+  updateOracleUnitType(
+    unitTypeId: number,
+    request: SubjectRoutingOrgUnitTypeUpsertRequestDto
+  ): Observable<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>> {
+    return this.http.put<CommonResponse<SubjectRoutingOrgUnitTypeLookupDto>>(
+      `${this.baseUrl}/Oracle/UnitTypes/${unitTypeId}`,
+      request
+    );
+  }
+
+  deleteOracleUnitType(unitTypeId: number): Observable<CommonResponse<boolean>> {
+    return this.http.delete<CommonResponse<boolean>>(`${this.baseUrl}/Oracle/UnitTypes/${unitTypeId}`);
+  }
+
   getOracleUnits(
     options?: { unitTypeId?: number; parentId?: number; search?: string; activeOnly?: boolean }
   ): Observable<CommonResponse<SubjectRoutingOrgUnitLookupDto[]>> {
@@ -221,6 +245,23 @@ export class DynamicSubjectsAdminRoutingController {
     return this.http.get<CommonResponse<SubjectRoutingOrgUnitLookupDto[]>>(`${this.baseUrl}/Oracle/Units`, { params });
   }
 
+  createOracleUnit(
+    request: SubjectRoutingOrgUnitUpsertRequestDto
+  ): Observable<CommonResponse<SubjectRoutingOrgUnitLookupDto>> {
+    return this.http.post<CommonResponse<SubjectRoutingOrgUnitLookupDto>>(`${this.baseUrl}/Oracle/Units`, request);
+  }
+
+  updateOracleUnit(
+    unitId: number,
+    request: SubjectRoutingOrgUnitUpsertRequestDto
+  ): Observable<CommonResponse<SubjectRoutingOrgUnitLookupDto>> {
+    return this.http.put<CommonResponse<SubjectRoutingOrgUnitLookupDto>>(`${this.baseUrl}/Oracle/Units/${unitId}`, request);
+  }
+
+  deleteOracleUnit(unitId: number): Observable<CommonResponse<boolean>> {
+    return this.http.delete<CommonResponse<boolean>>(`${this.baseUrl}/Oracle/Units/${unitId}`);
+  }
+
   getOraclePositions(
     options?: { targetUserId?: string; unitId?: number; activeOnly?: boolean }
   ): Observable<CommonResponse<SubjectRoutingOrgPositionLookupDto[]>> {
@@ -236,6 +277,26 @@ export class DynamicSubjectsAdminRoutingController {
 
     params = params.set('activeOnly', String(options?.activeOnly !== false));
     return this.http.get<CommonResponse<SubjectRoutingOrgPositionLookupDto[]>>(`${this.baseUrl}/Oracle/Positions`, { params });
+  }
+
+  createOraclePosition(
+    request: SubjectRoutingOrgPositionUpsertRequestDto
+  ): Observable<CommonResponse<SubjectRoutingOrgPositionLookupDto>> {
+    return this.http.post<CommonResponse<SubjectRoutingOrgPositionLookupDto>>(`${this.baseUrl}/Oracle/Positions`, request);
+  }
+
+  updateOraclePosition(
+    positionId: number,
+    request: SubjectRoutingOrgPositionUpsertRequestDto
+  ): Observable<CommonResponse<SubjectRoutingOrgPositionLookupDto>> {
+    return this.http.put<CommonResponse<SubjectRoutingOrgPositionLookupDto>>(
+      `${this.baseUrl}/Oracle/Positions/${positionId}`,
+      request
+    );
+  }
+
+  deleteOraclePosition(positionId: number): Observable<CommonResponse<boolean>> {
+    return this.http.delete<CommonResponse<boolean>>(`${this.baseUrl}/Oracle/Positions/${positionId}`);
   }
 
   getOracleUsers(activeOnly = true): Observable<CommonResponse<SubjectRoutingOrgUserLookupDto[]>> {
@@ -276,5 +337,13 @@ export class DynamicSubjectsAdminRoutingController {
     params = params.set('includeUsers', String(options?.includeUsers !== false));
 
     return this.http.get<CommonResponse<SubjectRoutingOrgTreeNodeDto[]>>(`${this.baseUrl}/Oracle/TreeNodes`, { params });
+  }
+
+  getOracleUnitsWithCountTree(activeOnly = true): Observable<CommonResponse<SubjectRoutingOrgUnitWithCountTreeNodeDto[]>> {
+    const params = new HttpParams().set('activeOnly', String(activeOnly));
+    return this.http.get<CommonResponse<SubjectRoutingOrgUnitWithCountTreeNodeDto[]>>(
+      `${this.baseUrl}/Oracle/UnitsWithCountTree`,
+      { params }
+    );
   }
 }
