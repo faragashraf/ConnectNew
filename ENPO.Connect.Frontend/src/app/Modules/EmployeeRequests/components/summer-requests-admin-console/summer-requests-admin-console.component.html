@@ -39,12 +39,6 @@
     </div>
   </section>
 
-  <section class="scope-panel pricing-access-panel" *ngIf="!canManageSummerPricing">
-    <div class="scope-row">
-      <small class="pricing-access-error">{{ pricingAccessErrorMessage }}</small>
-    </div>
-  </section>
-
   <section class="pricing-panel" *ngIf="canManageSummerPricing">
     <header class="pricing-header">
       <div>

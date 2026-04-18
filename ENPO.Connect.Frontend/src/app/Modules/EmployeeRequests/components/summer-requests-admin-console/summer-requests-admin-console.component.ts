@@ -308,7 +308,6 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   pricingCatalogLoading = false;
   pricingCatalogSaving = false;
   pricingCatalogError = '';
-  readonly pricingAccessErrorMessage = 'عرض إعدادات التسعير متاح فقط لمدير النظام بالكامل.';
   pricingSeasonYear = this.seasonYear;
   pricingRecords: SummerPricingCatalogRecordDto[] = [];
   canManageSummerPricing = false;

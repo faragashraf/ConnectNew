@@ -34,6 +34,7 @@ interface TreeNode {
   providers: [TreeDragDropService]
 })
 export class RoleHierarchyComponent {
+  private readonly userRolesByUserIdStatementId = 68;
   treeData: TreeNode[] = []
   selectedNode: TreeNode = {} as TreeNode
   items: MenuItem[] = [];
@@ -46,6 +47,7 @@ export class RoleHierarchyComponent {
 
   userName: string = '';
   showValidateButton: boolean = false;
+  private readonly refreshActionIds = new Set([4, 5, 6, 7, 8, 25]);
   constructor(private spinner: SpinnerService, private msg: MsgsService, private autorization: AuthorizationController,
     public generateQueryService: GenerateQueryService, private clipboard: Clipboard, private fb: FormBuilder, private powerBiController: PowerBiController) {
     this.generateQueryService.duration = 0;
@@ -93,7 +95,11 @@ export class RoleHierarchyComponent {
   }
   itemData: any[] = [];
   item_columns: string[] = [];
+  userIdSearch = '';
+  userRolesData: any[] = [];
+  userRolesColumns: string[] = [];
   nodeSelection(event: any) {
+    this.selectedNode = event.node;
     this.itemData = [];
     this.item_columns = [];
     if (event.node.type == "Role") {
@@ -136,6 +142,52 @@ export class RoleHierarchyComponent {
   onselectItemEvent(event: any) {
     console.log(event)
   }
+  searchUserRolesByUserId() {
+    const userId = this.userIdSearch?.trim();
+    const applicationId = this.getSelectedApplicationId();
+    this.userRolesData = [];
+    this.userRolesColumns = [];
+
+    if (!userId) {
+      this.msg.msgError('برجاء إدخال رقم المستخدم', 'تنبيه');
+      return;
+    }
+    if (!applicationId) {
+      this.msg.msgError('برجاء اختيار عقدة من الشجرة لتحديد رقم التطبيق', 'تنبيه');
+      return;
+    }
+
+    this.spinner.show('جاري تحميل البيانات ...');
+    const startTime = Date.now();
+    this.powerBiController.getGenericDataById(this.userRolesByUserIdStatementId, `${userId}|${applicationId}`)
+      .subscribe({
+        next: (resp) => {
+          if (resp.isSuccess) {
+            const rows = (resp.data as any[]) || [];
+            this.userRolesData = rows.map(row => ({
+              ...row,
+              ROLE_NAME_EN: row?.ROLE_NAME_EN || row?.ROLE_NAME_AR || ''
+            }));
+            if (this.userRolesData.length > 0) {
+              this.userRolesColumns = Object.keys(this.userRolesData[0]);
+            }
+            this.generateQueryService.duration = (Date.now() - startTime) / 1000;
+          }
+          else {
+            let errr = '';
+            resp.errors?.forEach(e => errr += e.message + "<br>");
+            this.msg.msgError(errr, "هناك خطا ما", true);
+          }
+        },
+        error: (error) => {
+          console.log(error.message);
+          this.msg.msgError(error, "هناك خطا ما", true);
+        },
+        complete: () => {
+          console.log(' Complete');
+        }
+      });
+  }
   transformToTree(data: RoleHierarchy[]): TreeNode[] {
     const treeMap = new Map<string, TreeNode>();
 
@@ -168,6 +220,7 @@ export class RoleHierarchyComponent {
         roleNode = {
           label: `${item.roleId} / ${item.roleNameAr}`,
           data: {
+            applicationId: appId,
             roleId: roleId,
             roleNameEn: item.roleNameEn,
             roleNameAr: item.roleNameAr
@@ -186,6 +239,7 @@ export class RoleHierarchyComponent {
         const functionNode: TreeNode = {
           label: `${item.functionName} / ${item.functionIntId}`,
           data: {
+            applicationId: appId,
             functionIntId: item.functionIntId,
             functionName: item.functionName
           },
@@ -286,6 +340,7 @@ export class RoleHierarchyComponent {
   }
 
   private prepareRole(applicationId: string, action: string) {
+    this.resetDialogState();
     this.currentAction = action;
     this.currentParentId = applicationId;
     this.header = "برجاء ادخال اسم الصلاحية";
@@ -295,6 +350,7 @@ export class RoleHierarchyComponent {
   }
 
   private prepareFunction(roleId: any, action: string) {
+    this.resetDialogState();
     this.currentAction = action;
     this.currentParentId = roleId;
     this.header = "برجاء ادخال اسم الوظيفة";
@@ -303,6 +359,7 @@ export class RoleHierarchyComponent {
     this.dialogVisible = true;
   }
   private prepareAssignRole(applicationId: string, action: string) {
+    this.resetDialogState();
     this.currentAction = action;
     this.currentParentId = applicationId;
     this.header = "إضافة صلاحية باسم " + this.selectedNode.label;
@@ -310,6 +367,11 @@ export class RoleHierarchyComponent {
     this.userName = '';
     this.showValidateButton = true;
     this.dialogVisible = true;
+  }
+  private resetDialogState() {
+    this.frm?.reset();
+    this.userName = '';
+    this.isValidated = false;
   }
   // Form submission handler
   async submit() {
@@ -325,16 +387,16 @@ export class RoleHierarchyComponent {
       else if (this.currentAction === 'insertFunction' && this.currentParentId) {
         await this.insertFunctionNewToRole(this.currentParentId, name);
       } else if (this.currentAction === 'UpdateRole' && this.currentParentId) {
-        await this.excuteGenericStatmentById(6, `${this.frm.get('NameAr')?.value}|${this.frm.get('NameEn')?.value}|${localStorage.getItem('UserId')}|${this.currentParentId}`);
+        const roleNameEn = this.selectedNode.data?.roleNameEn || this.frm.get('NameAr')?.value;
+        await this.excuteGenericStatmentById(6, `${this.frm.get('NameAr')?.value}|${roleNameEn}|${localStorage.getItem('UserId')}|${this.currentParentId}`);
       } else if (this.currentAction === 'UpdateFunction' && this.currentParentId) {
         await this.excuteGenericStatmentById(7, `${this.frm.get('NameAr')?.value}|${localStorage.getItem('UserId')}|${this.currentParentId}`);
       } else if (this.currentAction === 'Validate' && this.currentParentId) {
         await this.excuteGenericStatmentById(25, `${this.frm.get('NameAr')?.value}|${this.selectedNode.data?.roleId}|${localStorage.getItem('UserId')}|${localStorage.getItem('UserId')}`);
       }
       this.dialogVisible = false;
-      this.refreshTreeData(); // Implement your data refresh logic
     } catch (error) {
-      this.handleError(error); // Implement error handling
+      this.handleError(error);
     } finally {
       this.isSubmitting = false;
     }
@@ -381,10 +443,11 @@ export class RoleHierarchyComponent {
       );
   }
   refreshTreeData() {
-    throw new Error('Method not implemented.');
+    this.GetEnpoStructure();
   }
   handleError(error: unknown) {
-    throw new Error('Method not implemented.');
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    this.msg.msgError(message, "هناك خطا ما", true);
   }
 
   roleMasterAddDto: RoleMasterAddDto = {} as RoleMasterAddDto
@@ -404,6 +467,7 @@ export class RoleHierarchyComponent {
               next: (resp) => {
                 if (resp.isSuccess) {
                   this.msg.msgSuccess(resp.data as string)
+                  this.refreshTreeData();
                 }
                 else {
                   
@@ -440,6 +504,7 @@ export class RoleHierarchyComponent {
               next: (resp) => {
                 if (resp.isSuccess) {
                   this.msg.msgSuccess(resp.data as string)
+                  this.refreshTreeData();
                 }
                 else {
                   
@@ -480,7 +545,7 @@ export class RoleHierarchyComponent {
   }
   private validateDrop(dragNode: TreeNode, dropNode: TreeNode): boolean {
     const sameParent = this.findRootParent(dragNode) === this.findRootParent(dropNode);
-    const validTypes = dragNode.type !== dropNode.type;
+    const validTypes = dragNode.type === 'Function' && dropNode.type === 'Role';
 
     return sameParent && validTypes;
   }
@@ -503,6 +568,14 @@ export class RoleHierarchyComponent {
     }
     return ''; // Node not found
   }
+  getSelectedApplicationId(): string {
+    if (!this.selectedNode) return '';
+    if (this.selectedNode.data?.applicationId) {
+      return this.selectedNode.data.applicationId;
+    }
+    const rootParent = this.findRootParent(this.selectedNode);
+    return rootParent?.data?.applicationId || '';
+  }
 
 
   excuteGenericStatmentById(number: number, parameters?: string) {
@@ -511,11 +584,15 @@ export class RoleHierarchyComponent {
       .subscribe({
         next: (resp) => {
           if (resp.isSuccess) {
-            if (number != 25)
+            if (number === 6 || number === 7) {
               this.selectedNode.label = this.frm.get('NameAr')?.value
+            }
             this.msg.msgSuccess(resp.data as string)
             this.frm.reset();
             this.isValidated = false;
+            if (this.refreshActionIds.has(number)) {
+              this.refreshTreeData();
+            }
           }
           else {
             
@@ -536,14 +613,19 @@ export class RoleHierarchyComponent {
       }
       );
   }
-  deleteRow(event: any) { 
+  deleteRow(event: any, targetList: 'roleUsers' | 'userRoles' = 'roleUsers') {
     this.powerBiController.excuteGenericStatmentById(24, `${event.USER_ID}|${event.ROLE_ID}`)
       .subscribe({
         next: (resp) => {
           if (resp.isSuccess) {
             console.log('resp', resp)
-            const _index = this.itemData.findIndex(e => e.ROLE_ID == event.ROLE_ID && e.USER_ID == event.USER_ID)
-            this.itemData.splice(_index, 1);
+            if (targetList === 'userRoles') {
+              const _index = this.userRolesData.findIndex(e => e.ROLE_ID == event.ROLE_ID && e.USER_ID == event.USER_ID)
+              if (_index > -1) this.userRolesData.splice(_index, 1);
+            } else {
+              const _index = this.itemData.findIndex(e => e.ROLE_ID == event.ROLE_ID && e.USER_ID == event.USER_ID)
+              if (_index > -1) this.itemData.splice(_index, 1);
+            }
             this.msg.msgSuccess('تم الحذف بنجاح');
 
           }

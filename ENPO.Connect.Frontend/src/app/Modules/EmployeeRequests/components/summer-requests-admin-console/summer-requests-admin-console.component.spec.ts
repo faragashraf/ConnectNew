@@ -70,7 +70,6 @@ describe('SummerRequestsAdminConsoleComponent - ConnectSupperAdminFunc', () => {
     expect(checkAuthFunSpy).toHaveBeenCalledWith('ConnectSupperAdminFunc');
     expect(checkAuthRoleSpy).toHaveBeenCalledWith('2003');
     expect(component.canManageSummerPricing).toBeFalse();
-    expect(component.pricingAccessErrorMessage).toContain('مدير النظام');
     expect(getPricingCatalogSpy).not.toHaveBeenCalled();
     expect(savePricingCatalogSpy).not.toHaveBeenCalled();
     expect(component.pricingRecords.length).toBe(0);

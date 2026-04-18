@@ -1,17 +1,82 @@
-// Dialog
-label{
-  font-size: large;
+:host {
+  --page-bg: linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+  --card-bg: #ffffff;
+  --card-border: #dce4ef;
+  --title-color: #0f172a;
+  --muted-color: #5b6472;
+  --accent-color: #0a66c2;
+}
+
+.role-hierarchy-page {
+  background: var(--page-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.page-head {
+  margin-bottom: 0.75rem;
+}
+
+.page-title {
+  color: var(--title-color);
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.page-subtitle {
+  color: var(--muted-color);
+  margin: 0;
+}
+
+.content-grid {
+  row-gap: 1rem;
+}
+
+.lookup-panel {
+  margin-top: 0.75rem;
+}
+
+.lookup-row {
+  display: grid;
+  grid-template-columns: 140px minmax(220px, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.panel-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+  padding: 0.9rem;
+}
+
+.panel-title {
+  color: var(--accent-color);
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+label {
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .input-group {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .form-control {
   flex: 1;
-  min-width: 250px;
+  min-width: 230px;
+  border-radius: 8px;
 }
 
 .dialog-content {
@@ -23,17 +88,22 @@ label{
   font-size: 0.875em;
 }
 
-/* Start tree Style */
-.children{
-  color: aqua;
-}
-.parents{
-  color: rgb(255, 255, 255);
-  font-family: 'Times New Roman', Times, serif;
-  font-size: x-large;
-}
 .filter-highlight {
-  background-color: yellow;
-  font-weight: bold;
-  color: #b41d1d;
+  background-color: #fff2bf;
+  font-weight: 700;
+  color: #8a2500;
+}
+
+@media (max-width: 991px) {
+  .role-hierarchy-page {
+    padding: 0.75rem;
+  }
+
+  .lookup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .page-title {
+    font-size: 1.15rem;
+  }
 }

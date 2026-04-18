@@ -1,44 +1,63 @@
-<div class="container-main">
-    <div class="row">
-        <div class="col-md-4">
-            <h3>شجرة الصلاحيات </h3>
-
-        </div>
-        <div class="col-md-2"></div>
-        <div class="col-md-6">
-
+<div class="container-main role-hierarchy-page">
+    <div class="row page-head">
+        <div class="col-12">
+            <h3 class="page-title">شجرة الصلاحيات</h3>
+            <p class="page-subtitle">اختر صلاحية من الشجرة لإدارة المستخدمين أو استخدم القائمة اليمنى للإضافة والتعديل والحذف</p>
         </div>
     </div>
-    <!-- {{messageDtos|json}} -->
-    <div class="row">
-        <div class="col-md-4">
-            <div class="widget">
-                <p-tree [value]="treeData" selectionMode="single" [(selection)]="selectedNode" [filter]="true"
-                    [contextMenu]="cm" (onNodeContextMenuSelect)="ContextMenuSelect($event)" filterPlaceholder="بحث"
-                    scrollHeight="600px" (onNodeSelect)="nodeSelection($event)"
-                    (onNodeUnselect)="nodeUnselection($event)" [validateDrop]="true" [draggableNodes]="true"
-                    [droppableNodes]="true" draggableScope="self" droppableScope="self"
-                    (onNodeDrop)="onNodeDrop($event)">
-                    <ng-template let-node pTemplate="default">
-                        <b>
-                            {{node.label }}
-                        </b>
-                    </ng-template>
-                </p-tree>
+    <p-tabView styleClass="role-tabs">
+        <p-tabPanel header="إدارة الشجرة">
+            <div class="row content-grid">
+                <div class="col-md-5">
+                    <div class="widget panel-card tree-panel">
+                        <div class="panel-title">الهيكل الوظيفي</div>
+                        <p-tree [value]="treeData" selectionMode="single" [(selection)]="selectedNode" [filter]="true"
+                            [contextMenu]="cm" (onNodeContextMenuSelect)="ContextMenuSelect($event)" filterPlaceholder="بحث"
+                            scrollHeight="600px" (onNodeSelect)="nodeSelection($event)"
+                            (onNodeUnselect)="nodeUnselection($event)" [validateDrop]="true" [draggableNodes]="true"
+                            [droppableNodes]="true" draggableScope="self" droppableScope="self"
+                            (onNodeDrop)="onNodeDrop($event)">
+                            <ng-template let-node pTemplate="default">
+                                <b>
+                                    {{node.label }}
+                                </b>
+                            </ng-template>
+                        </p-tree>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div class="widget panel-card table-panel">
+                        <div class="panel-title">المستخدمون المرتبطون بالدور</div>
+                        <generic-table tableId="itemTable" [tableGenericData]="itemData" [_columns]="item_columns"
+                            [showExportButton]="true" [showRemoveColumn]="false" [showDeleteButton]="true" [rowsPerPage]="10"
+                            [dataKey]="'USER_ID'" (rowSelect)="onselectItemEvent($event)" [showEditButton]="false"
+                            (rowDelete)="deleteRow($event)" [showTableContextMenu]="false"></generic-table>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div class="col-md-7">
-            <div class="widget">
-                <!-- <generic-table [showExportButton]="true" [showRemoveColumn]="true" [showDeleteButton]="true" [showEditButton]="false"
-                    (rowDelete)="deleteRow($event)"></generic-table> -->
-
-                       <generic-table tableId="itemTable" [tableGenericData]="itemData" [_columns]="item_columns" 
-                       [showExportButton]="true" [showRemoveColumn]="false" [showDeleteButton]="true" [rowsPerPage]="10"
-                    [dataKey]="'USER_ID'" (rowSelect)="onselectItemEvent($event)" [showEditButton]="false"
-                    (rowDelete)="deleteRow($event)" [showTableContextMenu]="false" ></generic-table>
+        </p-tabPanel>
+        <p-tabPanel header="بحث حسب رقم المستخدم">
+            <div class="panel-card lookup-panel">
+                <div class="panel-title">استرجاع صلاحيات المستخدم</div>
+                <div class="lookup-row">
+                    <label for="userIdLookup">رقم المستخدم</label>
+                    <input id="userIdLookup" class="form-control" type="text" [(ngModel)]="userIdSearch"
+                        placeholder="مثال: 84621" />
+                </div>
+                <div class="lookup-row">
+                    <label for="selectedAppId">رقم التطبيق (من الشجرة)</label>
+                    <input id="selectedAppId" class="form-control" type="text" [value]="getSelectedApplicationId()"
+                        placeholder="اختر عقدة من الشجرة أولاً" readonly />
+                    <button type="button" pButton pRipple label="استرجاع الصلاحيات" class="btn btn-primary"
+                        (click)="searchUserRolesByUserId()"></button>
+                </div>
+                <generic-table tableId="userRolesTable" [tableGenericData]="userRolesData" [_columns]="userRolesColumns"
+                    [showExportButton]="true" [showRemoveColumn]="false" [showDeleteButton]="true" [rowsPerPage]="10"
+                    [dataKey]="'ROLE_ID'" [showEditButton]="false" (rowDelete)="deleteRow($event,'userRoles')"
+                    [showTableContextMenu]="false"></generic-table>
             </div>
-        </div>
-    </div>
+        </p-tabPanel>
+    </p-tabView>
 </div>
 <p-contextMenu [style]="{'width':'22.5rem','direction':'ltr'}" #cm [model]="items"></p-contextMenu>
 
