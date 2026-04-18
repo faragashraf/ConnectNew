@@ -109,6 +109,11 @@ const PAYMENT_MODE_LABELS: Record<string, string> = {
   INSTALLMENT: 'تقسيط'
 };
 
+const MEMBERSHIP_TYPE_LABELS: Record<string, string> = {
+  WORKER_MEMBER: 'عضو عامل',
+  NON_WORKER_MEMBER: 'عضو غير عامل'
+};
+
 const WORKFLOW_STATE_LABELS: Record<string, string> = {
   TRANSFER_REVIEW_REQUIRED: 'يتطلب مراجعة بعد التحويل',
   TRANSFER_REVIEW_RESOLVED: 'تمت مراجعة التحويل'
@@ -328,6 +333,10 @@ export function formatRequestFieldValue(fieldKey: string, rawValue: string): str
     return translateValue(value, PAYMENT_MODE_LABELS);
   }
 
+  if (normalizedKey.includes('membershiptype')) {
+    return translateValue(value, MEMBERSHIP_TYPE_LABELS);
+  }
+
   if (normalizedKey.includes('paymentinstallmentstotal')
     || (normalizedKey.includes('paymentinstallment') && normalizedKey.includes('amount'))) {
     return formatMoneyWithCurrency(value);
@@ -385,6 +394,11 @@ export function formatRequestFieldValue(fieldKey: string, rawValue: string): str
       return value;
     }
     return flag ? 'نعم' : 'لا';
+  }
+
+  const genericBoolean = parseBooleanLike(value);
+  if (genericBoolean !== null) {
+    return genericBoolean ? 'نعم' : 'لا';
   }
 
   return value;
@@ -571,6 +585,12 @@ function resolveFriendlyLabel(key: string, labelMap: Record<string, string>): st
   if (normalized.includes('relation')) {
     return 'درجة القرابة';
   }
+  if (normalized.includes('membership') || normalized.includes('membertype')) {
+    return 'نوع العضوية';
+  }
+  if (normalized.includes('transportationmandatory')) {
+    return 'الانتقالات إلزامية';
+  }
   if (normalized.includes('phone') || normalized.includes('mobile') || normalized.includes('tel')) {
     return 'رقم الهاتف';
   }
@@ -671,6 +691,15 @@ function resolveCanonicalFieldMeta(
   }
   if (normalized.includes('pricingtransportationmandatory')) {
     return { id: 'pricing_transport_mandatory', label: 'الانتقالات إلزامية', group: 'booking', order: 53 };
+  }
+  if (normalized.includes('transportationmandatory')) {
+    return { id: 'transport_mandatory', label: 'الانتقالات إلزامية', group: 'booking', order: 53 };
+  }
+  if (normalized.includes('pricingmembershiptype')) {
+    return { id: 'pricing_membership_type', label: 'نوع العضوية المحسوب', group: 'booking', order: 62 };
+  }
+  if (normalized.includes('membershiptype')) {
+    return { id: 'membership_type', label: 'نوع العضوية', group: 'owner', order: 55 };
   }
   if (normalized.includes('pricingpersonscount')) {
     return { id: 'pricing_persons_count', label: 'عدد الأفراد المحسوب', group: 'booking', order: 54 };
@@ -857,6 +886,11 @@ function upsertCanonicalRow(
     existing.value = next.value;
     existing.label = next.label;
   }
+}
+
+function shouldExcludeDetailField(fieldKey: string): boolean {
+  const normalized = normalizeFieldToken(fieldKey);
+  return normalized.includes('whatsapp');
 }
 
 function addSummaryRows(
@@ -1054,7 +1088,7 @@ export function buildSummerRequestDetailFields(input: BuildSummerRequestDetailFi
   (input.fields ?? []).forEach(field => {
     const fieldKey = String(field.fildKind ?? '').trim();
     const rawValue = String(field.fildTxt ?? '').trim();
-    if (!fieldKey || !rawValue || isCompanionFieldKey(fieldKey)) {
+    if (!fieldKey || !rawValue || isCompanionFieldKey(fieldKey) || shouldExcludeDetailField(fieldKey)) {
       return;
     }
 
