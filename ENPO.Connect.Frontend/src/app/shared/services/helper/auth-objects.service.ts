@@ -445,9 +445,7 @@ export class AuthObjectsService {
     // 3. Build MegaMenu with IDs
     return parents.map(parent => {
       const parentMenus = menusByParentId.get(parent.sbId) || [];
-      const midIndex = Math.ceil(parentMenus.length / 2);
-      const column1Menus = parentMenus.slice(0, midIndex);
-      const column2Menus = parentMenus.slice(midIndex);
+      const menuColumns = this.distributeMenusAcrossColumns(parentMenus, 4, 3);
 
       const mapMenuToColumn = (menuGroup: SwbPrivilege[]) => {
         return menuGroup.map(menu => {
@@ -480,13 +478,38 @@ export class AuthObjectsService {
         id: `parent-${parent.sbId}`,
         icon: parentIconMeta.icon,
         iconStyle: parentIconMeta.iconStyle,
-        items: [
-          mapMenuToColumn(column1Menus),
-          mapMenuToColumn(column2Menus),
-        ].filter(column => column.length > 0),
+        items: menuColumns
+          .map(columnMenus => mapMenuToColumn(columnMenus))
+          .filter(column => column.length > 0),
         routerLinkActiveOptions: { exact: true }
       };
     });
+  }
+
+  private distributeMenusAcrossColumns(
+    parentMenus: SwbPrivilege[],
+    maxColumns: number,
+    maxRowsPerColumn: number
+  ): SwbPrivilege[][] {
+    if (!parentMenus.length) {
+      return [];
+    }
+
+    const normalizedMaxColumns = Math.max(1, maxColumns);
+    const normalizedMaxRows = Math.max(1, maxRowsPerColumn);
+    const columns: SwbPrivilege[][] = [[]];
+    let columnIndex = 0;
+
+    for (const menu of parentMenus) {
+      if (columns[columnIndex].length >= normalizedMaxRows && columnIndex < normalizedMaxColumns - 1) {
+        columns.push([]);
+        columnIndex += 1;
+      }
+
+      columns[columnIndex].push(menu);
+    }
+
+    return columns.filter(column => column.length > 0);
   }
 
   /**

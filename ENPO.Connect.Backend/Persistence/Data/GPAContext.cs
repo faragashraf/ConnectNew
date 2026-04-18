@@ -44,6 +44,8 @@ public partial class GPAContext : DbContext
 
     public virtual DbSet<VwOrgUnitsWithCount> VwOrgUnitsWithCounts { get; set; }
 
+    public virtual DbSet<PredefinedSqlStatement> PredefinedSqlStatements { get; set; }
+
 
 
     [DbFunction("REGEXP_SUBSTR", IsBuiltIn = true)]
@@ -975,6 +977,46 @@ public partial class GPAContext : DbContext
                 .HasMaxLength(503)
                 .IsUnicode(false)
                 .HasColumnName("UNIT_NAME");
+        });
+
+        modelBuilder.Entity<PredefinedSqlStatement>(entity =>
+        {
+            entity.HasKey(e => e.StatementId);
+
+            entity.ToTable("PREDEFINED_SQL_STATEMENTS");
+
+            entity.Property(e => e.StatementId)
+                .HasColumnType("NUMBER")
+                .HasColumnName("STATEMENT_ID");
+            entity.Property(e => e.ApplicationId)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("APPLICATION_ID");
+            entity.Property(e => e.SchemaName)
+                .HasMaxLength(128)
+                .IsUnicode(false)
+                .HasColumnName("SCHEMA_NAME");
+            entity.Property(e => e.SqlType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("SQL_TYPE");
+            entity.Property(e => e.SqlStatement)
+                .HasColumnType("CLOB")
+                .HasColumnName("SQL_STATEMENT");
+            entity.Property(e => e.Parameters)
+                .HasColumnType("CLOB")
+                .HasColumnName("PARAMETERS");
+            entity.Property(e => e.Description)
+                .HasMaxLength(1000)
+                .HasColumnName("DESCRIPTION");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("SYSDATE")
+                .HasColumnType("DATE")
+                .HasColumnName("CREATED_AT");
+            entity.Property(e => e.DatabaseName)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("DATABASE");
         });
 
         OnModelCreatingPartial(modelBuilder);

@@ -1,0 +1,422 @@
+.power-bi-admin-page {
+  direction: rtl;
+  display: grid;
+  gap: 1rem;
+}
+
+.main-card,
+.preview-card {
+  overflow: hidden;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.add-btn {
+  white-space: nowrap;
+}
+
+.toolbar-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin-bottom: 0.85rem;
+}
+
+.caption-row {
+  display: flex;
+  justify-content: flex-start;
+  direction: ltr;
+}
+
+.global-search {
+  width: min(100%, 22rem);
+}
+
+.sql-type-dashboard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+  direction: ltr;
+}
+
+.dashboard-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+  direction: ltr;
+}
+
+.dashboard-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 12rem;
+  flex: 1 1 12rem;
+}
+
+.dashboard-filter-field label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.dashboard-filter-actions {
+  display: flex;
+  align-items: center;
+}
+
+.sql-type-card {
+  border: 1px solid #cfd8dc;
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+  min-width: 6.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.sql-type-card:hover {
+  border-color: #90a4ae;
+}
+
+.sql-type-card.active {
+  border-color: #1976d2;
+  background: #e3f2fd;
+  box-shadow: 0 0 0 2px #dbeafe inset;
+}
+
+.sql-type-label {
+  font-weight: 600;
+}
+
+.sql-type-count {
+  min-width: 1.6rem;
+  text-align: center;
+  font-weight: 700;
+  color: #0d47a1;
+}
+
+.table-shell,
+.preview-table-shell {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid #e6eaf0;
+  border-radius: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.group-hint {
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid #e6eaf0;
+  font-size: 0.9rem;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+:host ::ng-deep .statements-table,
+:host ::ng-deep .preview-table {
+  direction: ltr;
+}
+
+:host ::ng-deep .caption-row .p-input-icon-left,
+:host ::ng-deep .caption-row .p-input-icon-left input {
+  width: 100%;
+}
+
+:host ::ng-deep .dashboard-filters .p-dropdown,
+:host ::ng-deep .dashboard-filters .p-button {
+  width: 100%;
+}
+
+:host ::ng-deep .dashboard-filters .p-dropdown .p-dropdown-trigger {
+  width: 2.75rem;
+}
+
+:host ::ng-deep .dashboard-filters .p-dropdown .p-dropdown-trigger .p-dropdown-trigger-icon {
+  width: auto;
+  height: auto;
+  font-size: 0.95rem;
+  line-height: 1;
+  background: none;
+}
+
+:host ::ng-deep .dashboard-filters .p-dropdown .p-dropdown-clear-icon {
+  right: 2.75rem;
+}
+
+:host ::ng-deep .dashboard-filters .p-dropdown.p-dropdown-clearable .p-dropdown-label {
+  padding-right: 4.75rem;
+}
+
+:host ::ng-deep .statements-table .p-datatable-wrapper,
+:host ::ng-deep .preview-table .p-datatable-wrapper {
+  overflow: auto;
+}
+
+:host ::ng-deep .statements-table .p-datatable-table {
+  min-width: 74rem;
+}
+
+:host ::ng-deep .statements-table .p-datatable-thead > tr > th,
+:host ::ng-deep .statements-table .p-datatable-tbody > tr > td,
+:host ::ng-deep .preview-table .p-datatable-thead > tr > th,
+:host ::ng-deep .preview-table .p-datatable-tbody > tr > td {
+  text-align: left;
+  white-space: nowrap;
+}
+
+:host ::ng-deep .preview-table .p-datatable-scrollable-header,
+:host ::ng-deep .preview-table .p-datatable-scrollable-body {
+  direction: ltr;
+}
+
+:host ::ng-deep .preview-table .p-datatable-scrollable-header-box {
+  padding-right: 0 !important;
+}
+
+:host ::ng-deep .preview-table .p-datatable-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+:host ::ng-deep .application-group-row > td {
+  background: #eef4ff !important;
+  border-bottom: 1px solid #dce7fb !important;
+  padding: 0.55rem 0.75rem !important;
+}
+
+.application-group-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  direction: ltr;
+}
+
+.application-group-main {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+:host ::ng-deep .group-toggle-btn {
+  width: 1.85rem !important;
+  height: 1.85rem !important;
+  color: #1d4ed8 !important;
+}
+
+.application-group-title {
+  font-weight: 600;
+  color: #1e3a8a;
+}
+
+.application-group-count {
+  min-width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+  padding: 0 0.45rem;
+}
+
+:host ::ng-deep .application-group-row .group-toggle-btn:focus {
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.2) !important;
+}
+
+.actions-col {
+  width: 11.25rem;
+}
+
+:host ::ng-deep .statements-table .description-col {
+  width: 21rem;
+}
+
+:host ::ng-deep .statements-table .description-cell {
+  max-width: 21rem;
+  min-width: 12rem;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+.actions-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  min-width: 10.25rem;
+}
+
+.preview-card {
+  margin-top: 0;
+}
+
+.preview-header {
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.preview-header h4 {
+  margin: 0;
+}
+
+.preview-subtitle {
+  color: #64748b;
+  font-size: 0.85rem;
+  direction: ltr;
+}
+
+.empty-preview {
+  padding: 0.85rem;
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  color: #6b7280;
+  background: #f8fafc;
+}
+
+.statement-form .row {
+  margin-bottom: 0.5rem;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form-field label {
+  font-weight: 600;
+}
+
+.field-help {
+  color: #6b7280;
+}
+
+:host ::ng-deep .statement-form .p-dropdown,
+:host ::ng-deep .statement-form .p-inputnumber,
+:host ::ng-deep .statement-form .p-inputtextarea,
+:host ::ng-deep .statement-form .p-inputtext {
+  width: 100%;
+}
+
+:host ::ng-deep .statement-form .p-inputnumber input {
+  width: 100%;
+}
+
+.sql-editor {
+  direction: ltr;
+  font-family: 'Courier New', Courier, monospace;
+  line-height: 1.4;
+}
+
+.preview-params-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.preview-param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.preview-param-field label {
+  font-weight: 600;
+}
+
+:host ::ng-deep .preview-params-container .p-inputtext {
+  width: 100%;
+}
+
+.required-mark {
+  color: #d14343;
+}
+
+@media (max-width: 900px) {
+  .page-title {
+    font-size: 1rem;
+  }
+
+  .toolbar-row {
+    justify-content: flex-start;
+  }
+
+  .add-btn {
+    width: 100%;
+  }
+
+  .sql-type-dashboard {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+  }
+
+  .dashboard-filters {
+    gap: 0.5rem;
+  }
+
+  .sql-type-card {
+    flex: 0 0 auto;
+    min-width: 5.6rem;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .dashboard-filter-field {
+    min-width: 100%;
+    flex-basis: 100%;
+  }
+
+  .dashboard-filter-actions {
+    width: 100%;
+  }
+
+  .application-group-content {
+    flex-wrap: wrap;
+  }
+
+  .application-group-count {
+    margin-inline-start: 2.1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  :host ::ng-deep .statements-table .p-datatable-thead > tr > th,
+  :host ::ng-deep .statements-table .p-datatable-tbody > tr > td {
+    padding: 0.6rem 0.5rem;
+    font-size: 0.9rem;
+  }
+
+  .application-group-title {
+    font-size: 1rem;
+  }
+}

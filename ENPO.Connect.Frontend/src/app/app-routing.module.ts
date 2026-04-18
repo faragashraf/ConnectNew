@@ -46,6 +46,14 @@ const routes: Routes = [
   { path: 'AdminCer', loadChildren: () => import('./Modules/AdminCertificates/AdminCer.module').then(m => m.AdminCerModule) },
   { path: 'LandTransport', loadChildren: () => import('./Modules/land-transport/land-transport.module').then(m => m.LandTransportModule) },
   { path: 'ENPOPowerBi', loadChildren: () => import('./Modules/enpopower-bi/enpopower-bi.module').then(m => m.ENPOPowerBiModule) },
+  {
+    path: 'PowerBiAdmin',
+    loadChildren: () => import('./Modules/power-bi-admin/power-bi-admin.module').then(m => m.PowerBiAdminModule),
+    canActivate: [AuthNewGuardService],
+    data: {
+      func: 'ConnectSupperAdminFunc'
+    }
+  },
   { path: 'Publications', loadChildren: () => import('./Modules/Publications/publications.module').then(m => m.PublicationsModule) },
   { path: 'TopManagement', loadChildren: () => import('./Modules/top-maganement/top-maganement.module').then(m => m.TopMaganementModule) },
   { path: 'EmployeeRequests', loadChildren: () => import('./Modules/EmployeeRequests/EmployeeRequests.module').then(m => m.EmployeeRequestsModule) },

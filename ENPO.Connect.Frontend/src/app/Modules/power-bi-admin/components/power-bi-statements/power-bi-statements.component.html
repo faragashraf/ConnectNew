@@ -1,0 +1,421 @@
+<div class="power-bi-admin-page">
+  <div class="widget card main-card">
+    <div class="toolbar-row">
+      <h3 class="page-title">إدارة PREDEFINED_SQL_STATEMENTS</h3>
+      <button
+        pButton
+        type="button"
+        icon="pi pi-plus"
+        label="إضافة استعلام"
+        class="add-btn"
+        (click)="openCreateDialog()">
+      </button>
+    </div>
+    <div class="toolbar-divider"></div>
+
+    <div class="sql-type-dashboard">
+      <button
+        type="button"
+        class="sql-type-card"
+        [class.active]="isSqlTypeFilterActive(null)"
+        (click)="onSelectSqlTypeFilter(null)">
+        <span class="sql-type-label">ALL</span>
+        <span class="sql-type-count">{{ totalStatementsCount }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="sql-type-card"
+        *ngFor="let card of sqlTypeDashboard"
+        [class.active]="isSqlTypeFilterActive(card.sqlType)"
+        (click)="onSelectSqlTypeFilter(card.sqlType)">
+        <span class="sql-type-label">{{ card.sqlType }}</span>
+        <span class="sql-type-count">{{ card.count }}</span>
+      </button>
+    </div>
+
+    <div class="dashboard-filters">
+      <div class="dashboard-filter-field">
+        <label>APPLICATION_ID</label>
+        <p-dropdown
+          [options]="dashboardApplicationOptions"
+          optionLabel="label"
+          optionValue="value"
+          [filter]="true"
+          [showClear]="true"
+          appendTo="body"
+          [(ngModel)]="selectedApplicationFilter"
+          [ngModelOptions]="{ standalone: true }"
+          placeholder="All Applications"
+          (onChange)="onDashboardFilterChanged()">
+        </p-dropdown>
+      </div>
+
+      <div class="dashboard-filter-field">
+        <label>DATABASE</label>
+        <p-dropdown
+          [options]="dashboardDatabaseOptions"
+          optionLabel="label"
+          optionValue="value"
+          [filter]="true"
+          [showClear]="true"
+          appendTo="body"
+          [(ngModel)]="selectedDatabaseFilter"
+          [ngModelOptions]="{ standalone: true }"
+          placeholder="All Databases"
+          (onChange)="onDashboardFilterChanged()">
+        </p-dropdown>
+      </div>
+
+      <div class="dashboard-filter-actions">
+        <button
+          pButton
+          type="button"
+          label="Reset"
+          class="p-button-text p-button-sm"
+          [disabled]="!hasDashboardFilters()"
+          (click)="clearDashboardFilters()">
+        </button>
+      </div>
+    </div>
+
+    <div class="table-shell">
+      <div class="group-hint" *ngIf="!hasExpandedApplicationGroup()">
+        اضغط على السهم بجوار المجموعة لعرض التفاصيل.
+      </div>
+      <p-table
+        #statementsTable
+        styleClass="statements-table"
+        [value]="filteredStatements"
+        dataKey="statementId"
+        [rows]="10"
+        [paginator]="true"
+        [rowsPerPageOptions]="[10, 25, 50]"
+        [globalFilterFields]="['statementId','applicationId','schemaName','sqlType','database','description']"
+        [tableStyle]="{ 'min-width': '74rem' }"
+        [sortField]="'applicationId'"
+        [sortOrder]="1"
+        rowGroupMode="subheader"
+        groupRowsBy="applicationId"
+        responsiveLayout="scroll"
+        sortMode="single">
+        <ng-template pTemplate="caption">
+          <div class="caption-row">
+            <span class="p-input-icon-left global-search">
+              <i class="pi pi-search"></i>
+              <input pInputText type="text" (input)="onGlobalFilter(statementsTable, $event)" placeholder="بحث سريع..." />
+            </span>
+          </div>
+        </ng-template>
+
+        <ng-template pTemplate="groupheader" let-rowData>
+          <tr pRowGroupHeader class="application-group-row">
+            <td colspan="8">
+              <div class="application-group-content">
+                <div class="application-group-main">
+                  <button
+                    type="button"
+                    pButton
+                    pRipple
+                    class="p-button-rounded p-button-text p-button-plain group-toggle-btn"
+                    [icon]="isApplicationGroupExpanded(rowData.applicationId) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
+                    (click)="onToggleApplicationGroup(rowData.applicationId)">
+                  </button>
+                  <span class="application-group-title">
+                    APPLICATION_ID:
+                    <strong>{{ getApplicationGroupLabel(rowData.applicationId) }}</strong>
+                  </span>
+                </div>
+                <span class="application-group-count">
+                  {{ getApplicationGroupCount(rowData.applicationId, statementsTable) }}
+                </span>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="header">
+          <tr>
+            <th pSortableColumn="statementId">STATEMENT_ID <p-sortIcon field="statementId"></p-sortIcon></th>
+            <th pSortableColumn="applicationId">APPLICATION_ID <p-sortIcon field="applicationId"></p-sortIcon></th>
+            <th pSortableColumn="schemaName">SCHEMA_NAME <p-sortIcon field="schemaName"></p-sortIcon></th>
+            <th pSortableColumn="sqlType">SQL_TYPE <p-sortIcon field="sqlType"></p-sortIcon></th>
+            <th pSortableColumn="database">DATABASE <p-sortIcon field="database"></p-sortIcon></th>
+            <th pSortableColumn="createdAt">CREATED_AT <p-sortIcon field="createdAt"></p-sortIcon></th>
+            <th pSortableColumn="description" class="description-col">
+              DESCRIPTION <p-sortIcon field="description"></p-sortIcon>
+            </th>
+            <th class="actions-col">العمليات</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-statement>
+          <tr *ngIf="isApplicationGroupExpanded(statement.applicationId)">
+            <td>{{ statement.statementId }}</td>
+            <td>{{ statement.applicationId }}</td>
+            <td>{{ statement.schemaName }}</td>
+            <td>{{ statement.sqlType }}</td>
+            <td>{{ statement.database }}</td>
+            <td>{{ statement.createdAt | date : 'yyyy-MM-dd HH:mm:ss' }}</td>
+            <td class="description-cell">{{ statement.description }}</td>
+            <td class="actions-cell">
+              <button
+                pButton
+                type="button"
+                icon="pi pi-pencil"
+                class="p-button-rounded p-button-text p-button-warning"
+                (click)="openEditDialog(statement)">
+              </button>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-copy"
+                class="p-button-rounded p-button-text p-button-info"
+                (click)="openDuplicateDialog(statement)">
+              </button>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-trash"
+                class="p-button-rounded p-button-text p-button-danger"
+                (click)="onDeleteStatement(statement)">
+              </button>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-play"
+                class="p-button-rounded p-button-text p-button-success"
+                [disabled]="!canExecute(statement)"
+                (click)="onRunStatement(statement)">
+              </button>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+  </div>
+
+  <div class="widget card preview-card" *ngIf="previewStatementId !== null">
+    <div class="preview-header">
+      <h4>نتيجة الاستعلام رقم {{ previewStatementId }}</h4>
+      <span class="preview-subtitle" *ngIf="previewColumns.length > 0">
+        Rows: {{ previewRows.length }} | Columns: {{ previewColumns.length }}
+      </span>
+    </div>
+
+    <div class="preview-table-shell" *ngIf="previewColumns.length > 0">
+      <p-table
+        styleClass="preview-table"
+        [value]="previewRows"
+        [scrollable]="true"
+        [scrollDirection]="'both'"
+        scrollHeight="420px"
+        [tableStyle]="{ 'min-width': 'max-content' }">
+        <ng-template pTemplate="header">
+          <tr>
+            <th *ngFor="let column of previewColumns">{{ column }}</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-row>
+          <tr>
+            <td *ngFor="let column of previewColumns">{{ row[column] }}</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <div class="empty-preview" *ngIf="previewColumns.length === 0">
+      لا توجد بيانات معروضة لهذا الاستعلام.
+    </div>
+  </div>
+</div>
+
+<p-dialog
+  [header]="isEditMode ? 'تعديل الاستعلام' : 'إضافة استعلام جديد'"
+  [(visible)]="dialogVisible"
+  [modal]="true"
+  appendTo="body"
+  [style]="{ width: '72vw' }"
+  [contentStyle]="{ direction: 'ltr' }"
+  (onHide)="onDialogHide()">
+  <form [formGroup]="statementForm" class="statement-form">
+    <div class="row">
+      <div class="col-md-3 form-field">
+        <label for="statementId">STATEMENT_ID</label>
+        <p-inputNumber
+          inputId="statementId"
+          formControlName="statementId"
+          [useGrouping]="false"
+          [showButtons]="false"
+          placeholder="Auto">
+        </p-inputNumber>
+        <small class="field-help">يمكن تركه فارغًا للتوليد التلقائي.</small>
+      </div>
+
+      <div class="col-md-3 form-field">
+        <label for="applicationId">APPLICATION_ID</label>
+        <p-dropdown
+          inputId="applicationId"
+          formControlName="applicationId"
+          [options]="applicationOptions"
+          optionLabel="label"
+          optionValue="value"
+          [filter]="true"
+          appendTo="body"
+          placeholder="اختر التطبيق">
+        </p-dropdown>
+      </div>
+
+      <div class="col-md-3 form-field">
+        <label for="schemaName">SCHEMA_NAME</label>
+        <p-dropdown
+          inputId="schemaName"
+          formControlName="schemaName"
+          [options]="schemaOptions"
+          optionLabel="label"
+          optionValue="value"
+          [filter]="true"
+          appendTo="body"
+          placeholder="اختر الـ Schema">
+        </p-dropdown>
+      </div>
+
+      <div class="col-md-3 form-field">
+        <label for="sqlType">SQL_TYPE</label>
+        <p-dropdown
+          inputId="sqlType"
+          formControlName="sqlType"
+          [options]="sqlTypeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [filter]="true"
+          appendTo="body"
+          placeholder="اختر نوع SQL">
+        </p-dropdown>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-4 form-field">
+        <label for="database">DATABASE</label>
+        <p-dropdown
+          inputId="database"
+          formControlName="database"
+          [options]="databaseOptions"
+          optionLabel="label"
+          optionValue="value"
+          [filter]="true"
+          appendTo="body"
+          placeholder="اختر قاعدة البيانات">
+        </p-dropdown>
+      </div>
+
+      <div class="col-md-4 form-field">
+        <label for="createdAt">CREATED_AT</label>
+        <input id="createdAt" pInputText formControlName="createdAt" [readonly]="true" />
+        <small class="field-help">لا يتم تعديله يدويًا.</small>
+      </div>
+
+      <div class="col-md-4 form-field">
+        <label for="description">DESCRIPTION</label>
+        <input id="description" pInputText formControlName="description" maxlength="1000" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-12 form-field">
+        <label for="parameters">PARAMETERS</label>
+        <textarea
+          id="parameters"
+          pInputTextarea
+          formControlName="parameters"
+          rows="2"
+          placeholder='مثال: {"UserId":"123"}'>
+        </textarea>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-12 form-field">
+        <label for="sqlStatement">SQL_STATEMENT</label>
+        <textarea
+          id="sqlStatement"
+          pInputTextarea
+          formControlName="sqlStatement"
+          rows="14"
+          class="sql-editor"
+          placeholder="اكتب SQL / PL-SQL هنا">
+        </textarea>
+      </div>
+    </div>
+  </form>
+
+  <ng-template pTemplate="footer">
+    <button
+      pButton
+      type="button"
+      label="إلغاء"
+      class="p-button-text"
+      [disabled]="isSaving"
+      (click)="dialogVisible = false">
+    </button>
+    <button
+      pButton
+      type="button"
+      label="حفظ"
+      [loading]="isSaving"
+      [disabled]="isSaving"
+      (click)="onSave()">
+    </button>
+    <button
+      pButton
+      type="button"
+      label="حفظ وتحميل البيانات"
+      class="p-button-success"
+      [loading]="isSaving"
+      [disabled]="isSaving || !isSelectType(statementForm.get('sqlType')?.value)"
+      (click)="onSave(true)">
+    </button>
+  </ng-template>
+</p-dialog>
+
+<p-dialog
+  header="Required Parameters"
+  [(visible)]="previewPromptVisible"
+  [modal]="true"
+  appendTo="body"
+  [style]="{ width: '36vw' }"
+  [contentStyle]="{ direction: 'ltr' }"
+  (onHide)="onPreviewPromptHide()">
+  <div class="preview-params-container" *ngIf="previewPromptInputs.length > 0">
+    <div class="preview-param-field" *ngFor="let item of previewPromptInputs; let i = index">
+      <label [for]="'preview-param-' + i">
+        {{ item.label }}
+        <span class="required-mark" *ngIf="item.required">*</span>
+      </label>
+      <input
+        pInputText
+        [id]="'preview-param-' + i"
+        [(ngModel)]="previewPromptInputs[i].value"
+        [ngModelOptions]="{ standalone: true }"
+        [placeholder]="item.label" />
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <button
+      pButton
+      type="button"
+      label="Cancel"
+      class="p-button-text"
+      (click)="previewPromptVisible = false">
+    </button>
+    <button
+      pButton
+      type="button"
+      label="Load Data"
+      class="p-button-success"
+      (click)="submitPreviewPrompt()">
+    </button>
+  </ng-template>
+</p-dialog>
