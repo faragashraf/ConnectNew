@@ -550,6 +550,34 @@ export class RequestTableComponent implements OnInit, OnDestroy {
     }
   }
 
+  getStatusLabel(status: any): string {
+    const numericStatus = Number(status);
+    const configured = Array.isArray((this.config as any)?.statusChangeOptions)
+      ? (this.config as any).statusChangeOptions
+      : [];
+
+    const byValue = configured.find((opt: any) =>
+      Number(opt?.value) === numericStatus && String(opt?.label ?? '').trim().length > 0
+    );
+    if (byValue) {
+      return String(byValue.label);
+    }
+
+    const byIndex = configured[numericStatus];
+    if (byIndex && String(byIndex?.label ?? '').trim().length > 0) {
+      return String(byIndex.label);
+    }
+
+    const fallback = this.requestStatusService.AdminCerStatusOptions.find((opt: any) =>
+      Number(opt?.key) === numericStatus || (Number(opt?.key) <= 3 && Number(opt?.key) === numericStatus + 1)
+    );
+    if (fallback && String(fallback?.label ?? '').trim().length > 0) {
+      return String(fallback.label);
+    }
+
+    return String(status ?? '');
+  }
+
   prepareCategoryTree() {
     if (this.genericFormService?.cdcategoryDtos && this.genericFormService.cdcategoryDtos.length > 0) {
       if (this.categoryTree.length === 0) {

@@ -235,9 +235,9 @@
                                     <td *ngIf="col.visible !== false" style="text-align: center;">
                                         <ng-container *ngIf="col.renderAsStatus || col.field === 'status'">
                                             <span class="p-tag" v
-                                                [ngClass]="'p-tag-' + getSeverity(config.statusChangeOptions[message.status].label.toString())"
+                                                [ngClass]="'p-tag-' + getSeverity(getStatusLabel(message.status))"
                                                 style="font-size: 1rem;">
-                                                {{ config.statusChangeOptions[message.status].label }}
+                                                {{ getStatusLabel(message.status) }}
                                             </span>
                                         </ng-container>
                                         <ng-container *ngIf="!(col.renderAsStatus || col.field === 'status')">

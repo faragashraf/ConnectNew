@@ -968,7 +968,28 @@
     },
     "allowStatusChange": false,
     "allowDefaultNextResponsibleSectorID": false,
-    "statusChangeOptions": [],
+    "statusChangeOptions": [
+      {
+        "label": "جديد",
+        "value": 0
+      },
+      {
+        "label": "جاري التنفيذ",
+        "value": 1
+      },
+      {
+        "label": "تم الرد",
+        "value": 2
+      },
+      {
+        "label": "مرفوض",
+        "value": 3
+      },
+      {
+        "label": "تمت الطباعة",
+        "value": 4
+      }
+    ],
     "pageSizes": [
       5,
       10,
