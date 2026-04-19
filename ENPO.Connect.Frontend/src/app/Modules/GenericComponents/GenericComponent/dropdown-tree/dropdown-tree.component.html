@@ -3,9 +3,8 @@
     
     <!-- Wrapper for the dropdown to allow it to flex-grow properly -->
     <div style="flex: 1; min-width: 0; position: relative;">
-        <p-dropdown [options]="genericFormService.implementControlSelection(controlFullName)"
+        <p-dropdown [options]="dropdownOptions"
             [style]="{'width':'100%'}"
-            [disabled]="isDivDisabled || tree.length>0 || (genericFormService.GetPropertyValue(controlFullName,'isDisabledInit')=='true' && !isCurrentUser)"
             emptyMessage [filter]="true" filterBy="name" optionValue="key" optionLabel="name"
             [showClear]="isDivDisabled?false:true"
             [panelStyle]="{ 'direction': 'rtl', 'text-align': 'right','width':'100%'}"
@@ -25,7 +24,6 @@
         (click)="op.toggle($event)" 
         *ngIf="showTreeButton || tree.length > 0" 
         [disabled]="isDivDisabled || tree.length === 0"
-        [class.open]="op.overlayVisible" 
         title="فتح الشجرة" 
         aria-label="Open tree">
     </button>

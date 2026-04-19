@@ -91,7 +91,7 @@ export class ReplyComponent {
   }
   onSubmit(): void {
     if (this.replyForm.valid) {
-      let formData: DynamicFormCreateRequestFormRequest = this.replyForm.value
+      let formData: DynamicFormCreateRequestFormRequest = this.replyForm.getRawValue()
       formData.files = this.fileParameters
       this.formSubmit.emit(formData);
       // this.FilesSubmit.emit(this.fileParameters);
