@@ -77,7 +77,7 @@ describe('SummerDynamicBookingBuilderComponent - Frozen Units Permission', () =>
     return { component, checkAuthFunSpy, checkAuthRoleSpy };
   }
 
-  it('enables admin booking features when SummerGeneralManagerFunc is granted', () => {
+  it('does not enable admin booking features when only SummerGeneralManagerFunc is granted', () => {
     const { component, checkAuthFunSpy, checkAuthRoleSpy } = createComponent({
       hasSummerAdminPermission: false,
       hasSummerGeneralManagerPermission: true
@@ -87,11 +87,11 @@ describe('SummerDynamicBookingBuilderComponent - Frozen Units Permission', () =>
 
     expect(checkAuthFunSpy).toHaveBeenCalledWith('SummerAdminFunc');
     expect(checkAuthFunSpy).toHaveBeenCalledWith('SummerGeneralManagerFunc');
-    expect(checkAuthRoleSpy).toHaveBeenCalledWith('2021');
     expect(checkAuthRoleSpy).toHaveBeenCalledWith('2020');
-    expect(component.canUseProxyRegistration).toBeTrue();
-    expect(component.canSelectMembershipType).toBeTrue();
-    expect(component.canUseFrozenUnitsInCurrentFlow).toBeTrue();
+    expect(checkAuthRoleSpy).not.toHaveBeenCalledWith('2021');
+    expect(component.canUseProxyRegistration).toBeFalse();
+    expect(component.canSelectMembershipType).toBeFalse();
+    expect(component.canUseFrozenUnitsInCurrentFlow).toBeFalse();
   });
 
   it('keeps admin booking features enabled for SummerAdminFunc users', () => {
@@ -122,7 +122,7 @@ describe('SummerDynamicBookingBuilderComponent - Frozen Units Permission', () =>
     expect(resolved).toBe('NON_WORKER_MEMBER');
   });
 
-  it('allows non-worker membership for general-manager submission', () => {
+  it('forces worker membership for general-manager submission', () => {
     const { component } = createComponent({
       hasSummerAdminPermission: false,
       hasSummerGeneralManagerPermission: true
@@ -132,7 +132,7 @@ describe('SummerDynamicBookingBuilderComponent - Frozen Units Permission', () =>
 
     const resolved = (component as any).resolveMembershipTypeForSubmission();
 
-    expect(resolved).toBe('NON_WORKER_MEMBER');
+    expect(resolved).toBe('WORKER_MEMBER');
   });
 
   it('hides membership field and proxy field for non-admin metadata rendering', () => {

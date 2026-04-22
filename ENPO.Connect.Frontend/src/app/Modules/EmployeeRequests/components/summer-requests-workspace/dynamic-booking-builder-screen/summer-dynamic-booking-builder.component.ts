@@ -2355,8 +2355,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         || this.authObjectsService.checkAuthRole('2021');
       const hasSummerAdminPermission =
         this.authObjectsService.checkAuthFun('SummerAdminFunc')
-        || this.authObjectsService.checkAuthRole('2020')
-        || hasSummerGeneralManagerPermission;
+        || this.authObjectsService.checkAuthRole('2020');
 
       this.hasSummerGeneralManagerPermission = hasSummerGeneralManagerPermission;
       this.canUseProxyRegistration = hasSummerAdminPermission;

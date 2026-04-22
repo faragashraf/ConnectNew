@@ -67,8 +67,12 @@ namespace Api.Controllers
             string userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
             string UserEmail = HttpContext.User.Claims.First(f => f.Type == "UserEmail").Value;
             var ipv4 = HttpContext.Connection.RemoteIpAddress!.MapToIPv4().ToString();
-            var hasSummerAdminPermission = HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerAdmin);
-            var hasSummerGeneralManagerPermission = HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager);
+            var hasSummerAdminPermission =
+                HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerAdmin)
+                || HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerAdmin);
+            var hasSummerGeneralManagerPermission =
+                HasRequiredRole(SummerWorkflowDomainConstants.AuthorizationRoles.SummerGeneralManager)
+                || HasRequiredFunction(SummerWorkflowDomainConstants.AuthorizationFunctions.SummerPricing);
             var result = await _unitOfWork.dynamicFormRepository.CreateRequest(
                 messageRequest,
                 userId,
