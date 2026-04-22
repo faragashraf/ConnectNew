@@ -3788,8 +3788,20 @@ namespace Persistence.Services
                 ["WaveCode"] = summary.WaveCode,
                 ["ActionLabel"] = actionLabel,
                 ["AdminCommentLine"] = adminCommentLine,
-                ["PaymentDueAtUtc"] = paymentDueAtUtc.HasValue ? $"{paymentDueAtUtc.Value:yyyy-MM-dd HH:mm} UTC" : string.Empty
+                ["PaymentDueAtUtc"] = FormatPaymentDueAtText(paymentDueAtUtc)
             };
+        }
+
+        private static string FormatPaymentDueAtText(DateTime? paymentDueAtUtc)
+        {
+            if (!paymentDueAtUtc.HasValue)
+            {
+                return string.Empty;
+            }
+
+            var dueAtUtc = NormalizeToUtc(paymentDueAtUtc.Value);
+            var dueAtBusiness = TimeZoneInfo.ConvertTimeFromUtc(dueAtUtc, SummerBusinessTimeZone);
+            return $"{dueAtBusiness:dd/MM/yyyy HH:mm} بتوقيت القاهرة ({dueAtUtc:dd/MM/yyyy HH:mm} UTC)";
         }
 
         private static string ResolveAdminActionLabel(string actionCode)

@@ -44,6 +44,7 @@ namespace Persistence.Services
         private readonly SummerUnitFreezeService _summerUnitFreezeService;
         private const int CapacityLockTimeoutMs = 15000;
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
+        private static readonly TimeZoneInfo SummerBusinessTimeZone = ResolveSummerBusinessTimeZone();
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"
@@ -617,7 +618,21 @@ namespace Persistence.Services
 
                         messageRequest.MessageId = messageId;
                         messageRequest.RequestRef = requestRef;
-                        messageRequest.AssignedSectorId = parentCategory.Stockholder.ToString();
+                        var resolvedRoutingSectorId = ResolveSummerRoutingSectorId(categoryInfo, existingMessage.AssignedSectorId);
+                        if (string.IsNullOrWhiteSpace(resolvedRoutingSectorId))
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "400",
+                                Message = "تعذر تحديد جهة الإدارة المختصة بالمصيف. برجاء مراجعة إعدادات Stockholder للتصنيف."
+                            });
+                            return;
+                        }
+                        messageRequest.AssignedSectorId = resolvedRoutingSectorId;
+                        if (string.IsNullOrWhiteSpace(messageRequest.CurrentResponsibleSectorId))
+                        {
+                            messageRequest.CurrentResponsibleSectorId = resolvedRoutingSectorId;
+                        }
                         UpsertRequestField(messageRequest.Fields, "RequestRef", requestRef);
                         ApplyPricingMessageIdentity(pricingQuote, messageId, requestRef);
                         ApplyPricingSnapshotFields(messageRequest.Fields, pricingQuote);
@@ -636,6 +651,10 @@ namespace Persistence.Services
                         if (!string.IsNullOrWhiteSpace(messageRequest.CurrentResponsibleSectorId))
                         {
                             existingMessage.CurrentResponsibleSectorId = messageRequest.CurrentResponsibleSectorId;
+                        }
+                        else if (string.IsNullOrWhiteSpace(existingMessage.CurrentResponsibleSectorId))
+                        {
+                            existingMessage.CurrentResponsibleSectorId = resolvedRoutingSectorId;
                         }
                         existingMessage.LastModifiedDate = DateTime.Now;
 
@@ -659,7 +678,21 @@ namespace Persistence.Services
 
                         messageRequest.MessageId = messageId;
                         messageRequest.RequestRef = requestReference;
-                        messageRequest.AssignedSectorId = parentCategory.Stockholder.ToString();
+                        var resolvedRoutingSectorId = ResolveSummerRoutingSectorId(categoryInfo, null);
+                        if (string.IsNullOrWhiteSpace(resolvedRoutingSectorId))
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "400",
+                                Message = "تعذر تحديد جهة الإدارة المختصة بالمصيف. برجاء مراجعة إعدادات Stockholder للتصنيف."
+                            });
+                            return;
+                        }
+                        messageRequest.AssignedSectorId = resolvedRoutingSectorId;
+                        if (string.IsNullOrWhiteSpace(messageRequest.CurrentResponsibleSectorId))
+                        {
+                            messageRequest.CurrentResponsibleSectorId = resolvedRoutingSectorId;
+                        }
                         var requestRefField = messageRequest.Fields.FirstOrDefault(x => x.FildKind == "RequestRef");
                         if (requestRefField != null)
                         {
@@ -915,6 +948,23 @@ namespace Persistence.Services
                 .Where(sector => sector.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        private static string ResolveSummerRoutingSectorId(CategoryWithParent categoryInfo, string? existingAssignedSectorId)
+        {
+            var parentStockholder = categoryInfo?.ParentCategory?.Stockholder;
+            if (parentStockholder.HasValue && parentStockholder.Value > 0)
+            {
+                return parentStockholder.Value.ToString();
+            }
+
+            var categoryStockholder = categoryInfo?.Category?.Stockholder;
+            if (categoryStockholder.HasValue && categoryStockholder.Value > 0)
+            {
+                return categoryStockholder.Value.ToString();
+            }
+
+            return (existingAssignedSectorId ?? string.Empty).Trim();
         }
 
         private static bool IsUniqueConstraintViolation(string message)
@@ -1420,13 +1470,13 @@ SELECT @result;
                     DateTimeStyles.RoundtripKind,
                     out var waveDateUtc))
             {
-                return waveDateUtc.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+                return FormatBusinessDate(waveDateUtc);
             }
 
             var waveLabel = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.WaveLabelFieldKinds);
             if (SummerCalendarRules.TryParseWaveLabelDateUtc(waveLabel, out var waveStartUtc))
             {
-                return waveStartUtc.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+                return FormatBusinessDate(waveStartUtc);
             }
 
             return "-";
@@ -1444,7 +1494,7 @@ SELECT @result;
                 return string.Empty;
             }
 
-            return paymentDueUtc.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            return FormatBusinessDateTimeForSms(paymentDueUtc);
         }
 
         private static void ApplyPricingSnapshotFields(List<TkmendField>? fields, SummerPricingQuoteDto quote)
@@ -3494,6 +3544,55 @@ SELECT @result;
 
             var ticks = utc.Ticks - (utc.Ticks % TimeSpan.TicksPerSecond);
             return new DateTime(ticks, DateTimeKind.Utc);
+        }
+
+        private static string FormatBusinessDate(DateTime valueUtc)
+        {
+            var utc = NormalizeToUtc(valueUtc);
+            var businessDateTime = TimeZoneInfo.ConvertTimeFromUtc(utc, SummerBusinessTimeZone);
+            return businessDateTime.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatBusinessDateTimeForSms(DateTime valueUtc)
+        {
+            var utc = NormalizeToUtc(valueUtc);
+            var businessDateTime = TimeZoneInfo.ConvertTimeFromUtc(utc, SummerBusinessTimeZone);
+            return $"{businessDateTime:dd/MM/yyyy HH:mm} بتوقيت القاهرة ({utc:dd/MM/yyyy HH:mm} UTC)";
+        }
+
+        private static DateTime NormalizeToUtc(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Utc)
+            {
+                return value;
+            }
+
+            if (value.Kind == DateTimeKind.Local)
+            {
+                return value.ToUniversalTime();
+            }
+
+            var unspecified = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+            return TimeZoneInfo.ConvertTimeToUtc(unspecified, SummerBusinessTimeZone);
+        }
+
+        private static TimeZoneInfo ResolveSummerBusinessTimeZone()
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo");
+            }
+            catch
+            {
+                try
+                {
+                    return TimeZoneInfo.FindSystemTimeZoneById("Egypt Standard Time");
+                }
+                catch
+                {
+                    return TimeZoneInfo.Utc;
+                }
+            }
         }
 
         private static bool ValidateAllowedAttachmentExtensions<T>(List<IFormFile>? files, CommonResponse<T> response)
