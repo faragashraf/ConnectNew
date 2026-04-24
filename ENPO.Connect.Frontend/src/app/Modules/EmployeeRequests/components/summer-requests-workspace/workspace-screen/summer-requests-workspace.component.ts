@@ -2,6 +2,7 @@
 import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ElementRef, ViewChild } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { ListRequestModel, MessageDto, RequestedData, SearchKind, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
@@ -737,6 +738,21 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const currentRequest = this.selectedRequest;
+    if (currentRequest && this.isPaymentOverdue(currentRequest)) {
+      const dueAtText = this.formatUtcDate(currentRequest.paymentDueAtUtc);
+      const overdueMessage = dueAtText
+        ? `انتهت مهلة السداد لهذا الطلب. آخر موعد كان ${dueAtText}.`
+        : 'انتهت مهلة السداد لهذا الطلب.';
+      this.msg.msgError('خطأ', `<h5>${overdueMessage}</h5>`, true);
+      return;
+    }
+
+    if (currentRequest && isRejectedStatus(String(currentRequest.statusLabel ?? currentRequest.status ?? ''))) {
+      this.msg.msgError('خطأ', '<h5>لا يمكن تسجيل السداد لطلب تم إلغاؤه أو الاعتذار عنه.</h5>', true);
+      return;
+    }
+
     if (this.paymentAttachments.length === 0) {
       this.msg.msgError('خطأ', '<h5>يجب إرفاق ملف واحد على الأقل قبل تسجيل السداد.</h5>', true);
       return;
@@ -790,8 +806,9 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
         this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
       },
-      error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تسجيل السداد حاليًا.</h5>', true);
+      error: (error: unknown) => {
+        const errorMessage = this.collectHttpErrors(error, 'تعذر تسجيل السداد حاليًا.');
+        this.msg.msgError('خطأ', `<h5>${errorMessage}</h5>`, true);
       },
       complete: () => {
         this.submittingPayment = false;
@@ -2049,6 +2066,74 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       .filter(message => message.length > 0);
 
     return errors.length ? errors.join('<br/>') : 'لا توجد رسائل خطأ.';
+  }
+
+  private collectHttpErrors(error: unknown, fallbackMessage: string): string {
+    const messages: string[] = [];
+    const appendMessage = (value: unknown): void => {
+      const text = String(value ?? '').trim();
+      if (!text || messages.includes(text)) {
+        return;
+      }
+      messages.push(text);
+    };
+
+    const collectFromPayload = (payload: unknown): void => {
+      if (!payload) {
+        return;
+      }
+
+      if (typeof payload === 'string') {
+        const trimmed = payload.trim();
+        if (!trimmed) {
+          return;
+        }
+
+        try {
+          collectFromPayload(JSON.parse(trimmed));
+        } catch {
+          appendMessage(trimmed);
+        }
+        return;
+      }
+
+      if (typeof payload !== 'object') {
+        return;
+      }
+
+      const record = payload as Record<string, unknown>;
+      const responseErrors = Array.isArray(record['errors']) ? record['errors'] : [];
+      responseErrors.forEach(item => {
+        if (item && typeof item === 'object') {
+          appendMessage((item as Record<string, unknown>)['message']);
+        }
+      });
+
+      const validationErrors = record['errors'];
+      if (validationErrors && !Array.isArray(validationErrors) && typeof validationErrors === 'object') {
+        Object.values(validationErrors as Record<string, unknown>).forEach(group => {
+          if (Array.isArray(group)) {
+            group.forEach(entry => appendMessage(entry));
+          }
+        });
+      }
+
+      appendMessage(record['message']);
+      appendMessage(record['detail']);
+      appendMessage(record['title']);
+    };
+
+    if (error instanceof HttpErrorResponse) {
+      collectFromPayload(error.error);
+      appendMessage(error.message);
+    } else {
+      const record = (error ?? {}) as Record<string, unknown>;
+      collectFromPayload(record['error']);
+      collectFromPayload(record['response']);
+      appendMessage(record['message']);
+    }
+
+    return messages.length > 0 ? messages.join('<br/>') : fallbackMessage;
   }
 
   private getNumberValue(control: AbstractControl | null): number {
