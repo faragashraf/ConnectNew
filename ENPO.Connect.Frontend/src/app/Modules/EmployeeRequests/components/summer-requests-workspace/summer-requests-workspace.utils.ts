@@ -91,6 +91,7 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   AUTO_CANCEL_PAYMENT_TIMEOUT: 'إلغاء آلي لانتهاء مهلة السداد',
   MANUAL_CANCEL: 'إلغاء يدوي من الإدارة',
   FINAL_APPROVE: 'اعتماد نهائي',
+  MARK_UNPAID: 'تحويل إلى غير مسدد',
   COMMENT: 'تعليق إداري'
 };
 

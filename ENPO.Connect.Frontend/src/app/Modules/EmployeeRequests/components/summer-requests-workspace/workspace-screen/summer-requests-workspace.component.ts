@@ -1458,7 +1458,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
 
-    paymentStatusControl.setValue(this.paymentSnapshot?.statusCode ?? 'PAID', { emitEvent: false });
+    const paymentStatus = this.hasSummerAdminPermission
+      ? (this.paymentSnapshot?.statusCode ?? 'PAID')
+      : 'PAID';
+    paymentStatusControl.setValue(paymentStatus, { emitEvent: false });
     paidAtControl.setValue(this.paymentSnapshot?.paidAtLocal ?? '', { emitEvent: false });
     this.paymentForm.get('notes')?.setValue(notesValue, { emitEvent: false });
 
@@ -1724,11 +1727,19 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }
 
     for (const alias of normalizedAliases) {
-      const matched = fields.find(field =>
-        String(field?.fildKind ?? '')
-          .trim()
-          .toLowerCase() === alias);
-      const text = String(matched?.fildTxt ?? '').trim();
+      const matches = fields.filter(field =>
+        String(field?.fildKind ?? '').trim().toLowerCase() === alias);
+      if (matches.length === 0) {
+        continue;
+      }
+
+      const persistedMatches = matches.filter(field => Number(field?.fildSql ?? 0) > 0);
+      const latestField = (persistedMatches.length > 0 ? persistedMatches : matches)
+        .reduce((latest, current) =>
+          Number(current?.fildSql ?? 0) >= Number(latest?.fildSql ?? 0) ? current : latest
+        );
+
+      const text = String(latestField?.fildTxt ?? '').trim();
       if (text.length > 0) {
         return text;
       }

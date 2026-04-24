@@ -26,6 +26,7 @@ export type SummerAdminActionCode =
   | 'MANUAL_CANCEL'
   | 'COMMENT'
   | 'INTERNAL_ADMIN_ACTION'
+  | 'MARK_UNPAID'
   | 'APPROVE_TRANSFER';
 
 export interface SummerApplicant {

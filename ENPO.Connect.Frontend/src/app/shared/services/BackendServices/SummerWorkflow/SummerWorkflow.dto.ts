@@ -203,6 +203,7 @@ export interface SummerPricingQuoteDto {
   proxyInsuranceAmount?: number | null;
   appliedInsuranceAmount: number;
   grandTotal: number;
+  fixedInstallmentAmounts: number[];
   displayText: string;
   smsText: string;
   whatsAppText: string;

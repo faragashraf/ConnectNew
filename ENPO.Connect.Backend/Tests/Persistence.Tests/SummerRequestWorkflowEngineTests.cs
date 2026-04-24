@@ -73,6 +73,33 @@ public class SummerRequestWorkflowEngineTests
     [InlineData(MessageStatus.New)]
     [InlineData(MessageStatus.InProgress)]
     [InlineData(MessageStatus.Replied)]
+    public void Resolve_Allows_MarkUnpaid_For_Open_States(MessageStatus currentState)
+    {
+        var result = _engine.Resolve(currentState, SummerAdminActionCatalog.Codes.MarkUnpaid);
+
+        Assert.True(result.IsAllowed);
+        Assert.False(result.ChangesState);
+        Assert.Null(result.TargetState);
+        Assert.False(result.IsBypassAction);
+    }
+
+    [Theory]
+    [InlineData(MessageStatus.Rejected)]
+    [InlineData(MessageStatus.Printed)]
+    [InlineData(MessageStatus.All)]
+    public void Resolve_Blocks_MarkUnpaid_For_NonOpen_States(MessageStatus currentState)
+    {
+        var result = _engine.Resolve(currentState, SummerAdminActionCatalog.Codes.MarkUnpaid);
+
+        Assert.False(result.IsAllowed);
+        Assert.Equal(SummerRequestWorkflowEngine.InvalidTransitionMessage, result.ErrorMessage);
+        Assert.False(result.ChangesState);
+    }
+
+    [Theory]
+    [InlineData(MessageStatus.New)]
+    [InlineData(MessageStatus.InProgress)]
+    [InlineData(MessageStatus.Replied)]
     [InlineData(MessageStatus.Rejected)]
     [InlineData(MessageStatus.Printed)]
     [InlineData(MessageStatus.All)]

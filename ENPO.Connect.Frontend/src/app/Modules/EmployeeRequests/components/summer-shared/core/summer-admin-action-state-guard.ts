@@ -87,6 +87,10 @@ function isActionAllowedByState(actionCode: SummerAdminActionCode, currentState:
       || actionCode === SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION;
   }
 
+  if (currentState === 'REJECTED') {
+    return actionCode !== SUMMER_ADMIN_ACTION.MARK_UNPAID;
+  }
+
   return true;
 }
 

@@ -26,7 +26,8 @@ namespace Persistence.Services.Summer
         {
             SummerAdminActionCatalog.Codes.FinalApprove,
             SummerAdminActionCatalog.Codes.ManualCancel,
-            SummerAdminActionCatalog.Codes.RejectRequest
+            SummerAdminActionCatalog.Codes.RejectRequest,
+            SummerAdminActionCatalog.Codes.MarkUnpaid
         };
 
         private static readonly IReadOnlyDictionary<MessageStatus, HashSet<string>> AllowedActionsByState =
@@ -130,6 +131,7 @@ namespace Persistence.Services.Summer
                 SummerAdminActionCatalog.Codes.FinalApprove,
                 SummerAdminActionCatalog.Codes.ManualCancel,
                 SummerAdminActionCatalog.Codes.RejectRequest,
+                SummerAdminActionCatalog.Codes.MarkUnpaid,
                 SummerAdminActionCatalog.Codes.Comment,
                 SummerAdminActionCatalog.Codes.InternalAdminAction
             };

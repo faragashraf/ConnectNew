@@ -49,6 +49,8 @@ public partial class ConnectContext : DbContext
 
     public virtual DbSet<SummerUnitFreezeDetail> SummerUnitFreezeDetails { get; set; }
 
+    public virtual DbSet<SummerFixedPricingPlan> SummerFixedPricingPlans { get; set; }
+
     public virtual DbSet<SubjectEnvelope> SubjectEnvelopes { get; set; }
 
     public virtual DbSet<SubjectEnvelopeLink> SubjectEnvelopeLinks { get; set; }
@@ -642,6 +644,88 @@ public partial class ConnectContext : DbContext
                 .HasForeignKey(detail => detail.FreezeId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_SummerUnitFreezeDetails_Batches");
+        });
+
+        modelBuilder.Entity<SummerFixedPricingPlan>(entity =>
+        {
+            entity.HasKey(e => e.PlanId).HasName("PK_SummerFixedPricingPlans");
+
+            entity.ToTable("SummerFixedPricingPlans");
+
+            entity.HasIndex(
+                    e => new
+                    {
+                        e.SeasonYear,
+                        e.CategoryId,
+                        e.PeriodKey,
+                        e.PersonsCount,
+                        e.StayMode,
+                        e.IsActive
+                    },
+                    "IX_SummerFixedPricingPlans_Lookup");
+
+            entity.HasIndex(
+                    e => new
+                    {
+                        e.SeasonYear,
+                        e.CategoryId,
+                        e.PeriodKey,
+                        e.PersonsCount,
+                        e.StayMode
+                    },
+                    "UX_SummerFixedPricingPlans_UniqueRule")
+                .IsUnique();
+
+            entity.Property(e => e.PlanId).HasColumnName("PlanID");
+            entity.Property(e => e.CategoryId).HasColumnName("CategoryID");
+            entity.Property(e => e.PeriodKey)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.PersonsCount).HasColumnName("PersonsCount");
+            entity.Property(e => e.StayMode)
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(e => e.CashAmount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.InsuranceAmount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.EmployeeTotalAmount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.DownPaymentAmount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.Installment2Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.Installment3Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.Installment4Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.Installment5Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.Installment6Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.Installment7Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+            entity.Property(e => e.SourcePeriodLabel)
+                .HasMaxLength(400);
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+            entity.Property(e => e.CreatedAtUtc)
+                .HasColumnType("datetime2")
+                .HasDefaultValueSql("GETUTCDATE()")
+                .IsRequired();
+            entity.Property(e => e.LastModifiedAtUtc)
+                .HasColumnType("datetime2");
         });
 
         modelBuilder.Entity<SubjectEnvelope>(entity =>

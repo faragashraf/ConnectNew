@@ -236,6 +236,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: SUMMER_ADMIN_ACTION.FINAL_APPROVE, label: 'اعتماد نهائي' },
     { value: SUMMER_ADMIN_ACTION.REJECT_REQUEST, label: 'رفض الطلب' },
     { value: SUMMER_ADMIN_ACTION.MANUAL_CANCEL, label: 'إلغاء يدوي' },
+    { value: SUMMER_ADMIN_ACTION.MARK_UNPAID, label: 'تحويل إلى غير مسدد' },
     { value: SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION, label: 'إجراء إداري داخلي' }
   ];
 
@@ -269,10 +270,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     SUMMER_ADMIN_ACTION.FINAL_APPROVE,
     SUMMER_ADMIN_ACTION.REJECT_REQUEST,
     SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
+    SUMMER_ADMIN_ACTION.MARK_UNPAID,
     SUMMER_ADMIN_ACTION.COMMENT,
     SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION
   ]);
-  private readonly adminActionCommentPattern = /^[A-Za-z\u0600-\u06FF\s]+$/;
   private readonly adminActionCommentMaxLength = 300;
   private readonly internalAdminActionCommentMaxLength = 2000;
 
@@ -2126,17 +2127,14 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     const paymentFormValue = this.paymentForm.getRawValue();
-    const paymentStatus = this.normalizePaymentStatusSelection(paymentFormValue.paymentStatus);
-    const isPaidStatus = paymentStatus === 'PAID';
-    const paidAtLocal = isPaidStatus
-      ? String(paymentFormValue.paidAtLocal ?? '').trim()
-      : '';
+    const paymentStatus: SummerAdminPaymentStatusCode = 'PAID';
+    const paidAtLocal = String(paymentFormValue.paidAtLocal ?? '').trim();
     const paidAtParsed = this.parseDateTimeLocalInput(paidAtLocal);
-    if (isPaidStatus && !paidAtParsed) {
+    if (!paidAtParsed) {
       this.msg.msgError('خطأ', '<h5>يرجى تحديد تاريخ ووقت سداد صالح.</h5>', true);
       return;
     }
-    const paidAtUtcIso = isPaidStatus && paidAtParsed ? paidAtParsed.toISOString() : '';
+    const paidAtUtcIso = paidAtParsed.toISOString();
 
     this.submittingPayment = true;
     this.spinner.show('جاري تسجيل السداد...');
@@ -2868,10 +2866,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return;
     }
 
-    commentControl.setValidators([
-      Validators.maxLength(this.adminActionCommentMaxLength),
-      Validators.pattern(this.adminActionCommentPattern)
-    ]);
+    commentControl.setValidators([Validators.maxLength(this.adminActionCommentMaxLength)]);
     commentControl.updateValueAndValidity({ emitEvent: false });
   }
 
@@ -2910,7 +2905,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return;
     }
 
-    paymentStatusControl.setValue(this.paymentSnapshot?.statusCode ?? 'PAID', { emitEvent: false });
+    // "تسجيل السداد" should default to a paid submission intent.
+    paymentStatusControl.setValue('PAID', { emitEvent: false });
     paidAtControl.setValue(this.paymentSnapshot?.paidAtLocal ?? '', { emitEvent: false });
     this.paymentForm.get('notes')?.setValue(notesValue, { emitEvent: false });
     this.updatePaymentDateValidators();
@@ -3044,11 +3040,19 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     for (const alias of normalizedAliases) {
-      const matched = fields.find(field =>
-        String(field?.fildKind ?? '')
-          .trim()
-          .toLowerCase() === alias);
-      const text = String(matched?.fildTxt ?? '').trim();
+      const matches = fields.filter(field =>
+        String(field?.fildKind ?? '').trim().toLowerCase() === alias);
+      if (matches.length === 0) {
+        continue;
+      }
+
+      const persistedMatches = matches.filter(field => Number(field?.fildSql ?? 0) > 0);
+      const latestField = (persistedMatches.length > 0 ? persistedMatches : matches)
+        .reduce((latest, current) =>
+          Number(current?.fildSql ?? 0) >= Number(latest?.fildSql ?? 0) ? current : latest
+        );
+
+      const text = String(latestField?.fildTxt ?? '').trim();
       if (text.length > 0) {
         return text;
       }
@@ -3155,7 +3159,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   /**
    * Mirrors backend NormalizeActionCode:
-   * FINAL_APPROVE | MANUAL_CANCEL | COMMENT | INTERNAL_ADMIN_ACTION
+   * FINAL_APPROVE | MANUAL_CANCEL | REJECT_REQUEST | COMMENT | INTERNAL_ADMIN_ACTION | MARK_UNPAID
    */
   private normalizeActionCode(actionCode: unknown): SummerAdminActionCode | '' {
     const normalized = normalizeSummerAdminActionCode(actionCode);

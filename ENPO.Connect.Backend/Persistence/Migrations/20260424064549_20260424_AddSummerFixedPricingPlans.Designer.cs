@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Persistence.Data;
 
@@ -11,9 +12,11 @@ using Persistence.Data;
 namespace Persistence.Migrations
 {
     [DbContext(typeof(ConnectContext))]
-    partial class ConnectContextModelSnapshot : ModelSnapshot
+    [Migration("20260424064549_20260424_AddSummerFixedPricingPlans")]
+    partial class _20260424_AddSummerFixedPricingPlans
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -885,6 +888,10 @@ namespace Persistence.Migrations
 
                     b.HasIndex(new[] { "Status" }, "IX_Messages_Status");
 
+                    b.HasIndex(new[] { "RequestRef" }, "UX_Messages_RequestRef")
+                        .IsUnique()
+                        .HasFilter("([RequestRef] IS NOT NULL AND LTRIM(RTRIM([RequestRef]))<>N'')");
+
                     b.ToTable("Messages");
                 });
 
@@ -1087,6 +1094,60 @@ namespace Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("NotificationRules", (string)null);
+                });
+
+            modelBuilder.Entity("Models.Correspondance.ReferenceSequence", b =>
+                {
+                    b.Property<int>("SequenceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("SequenceID");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SequenceId"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<long>("CurrentValue")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.Property<DateTime>("LastModifiedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<DateTime?>("LastResetAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ResetPolicy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("none");
+
+                    b.Property<string>("SequenceKey")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<int>("SubjectId")
+                        .HasColumnType("int")
+                        .HasColumnName("SubjectID");
+
+                    b.HasKey("SequenceId")
+                        .HasName("PK_ReferenceSequences");
+
+                    b.HasIndex(new[] { "LastModifiedAtUtc" }, "IX_ReferenceSequences_LastModifiedAtUtc");
+
+                    b.HasIndex(new[] { "SubjectId", "SequenceKey" }, "UX_ReferenceSequences_Subject_SequenceKey")
+                        .IsUnique();
+
+                    b.ToTable("ReferenceSequences", (string)null);
                 });
 
             modelBuilder.Entity("Models.Correspondance.Reply", b =>
@@ -1370,6 +1431,9 @@ namespace Persistence.Migrations
                         .HasColumnType("int")
                         .HasColumnName("CategoryID");
 
+                    b.Property<string>("ComponentsJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
@@ -1397,6 +1461,13 @@ namespace Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("default");
+
                     b.Property<string>("Prefix")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -1416,7 +1487,7 @@ namespace Persistence.Migrations
                     b.Property<int>("SequencePaddingLength")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
-                        .HasDefaultValue(0);
+                        .HasDefaultValue(6);
 
                     b.Property<string>("SequenceResetScope")
                         .IsRequired()
@@ -1428,6 +1499,11 @@ namespace Persistence.Migrations
                     b.Property<string>("SourceFieldKeys")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<long>("StartingValue")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L);
 
                     b.Property<bool>("UseSequence")
                         .ValueGeneratedOnAdd()
@@ -1997,11 +2073,6 @@ namespace Persistence.Migrations
                         .HasColumnType("int")
                         .HasColumnName("CategoryID");
 
-                    b.Property<int>("DisplayOrder")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
-
                     b.Property<bool>("AllowRequesterOverride")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -2013,6 +2084,11 @@ namespace Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)")
                         .HasDefaultValue("standard");
+
+                    b.Property<int>("DisplayOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<DateTime>("LastModifiedAtUtc")
                         .ValueGeneratedOnAdd()

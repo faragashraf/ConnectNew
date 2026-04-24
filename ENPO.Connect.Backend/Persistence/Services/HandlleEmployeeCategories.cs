@@ -465,6 +465,7 @@ namespace Persistence.Services
             }
             if (!ApplySummerPaymentPlanFields(
                     messageRequest.Fields,
+                    pricingQuote,
                     pricingQuote.GrandTotal,
                     runtime.HasSummerGeneralManagerPermission,
                     isEditOperation,
@@ -1700,6 +1701,7 @@ SELECT @result;
 
         private static bool ApplySummerPaymentPlanFields(
             List<TkmendField>? fields,
+            SummerPricingQuoteDto? pricingQuote,
             decimal grandTotal,
             bool hasSummerGeneralManagerPermission,
             bool isEditOperation,
@@ -1722,6 +1724,9 @@ SELECT @result;
             }
 
             var normalizedGrandTotal = NormalizeMoney(grandTotal);
+            var quoteFixedInstallments = ResolveQuoteFixedInstallments(pricingQuote, normalizedGrandTotal);
+            var hasQuoteFixedInstallments = quoteFixedInstallments.Length > 0;
+            var quoteFixedInstallmentCount = quoteFixedInstallments.Length;
             var incomingPaymentModeRaw = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.PaymentModeFieldKinds);
             var incomingPaymentMode = NormalizePaymentModeToken(incomingPaymentModeRaw);
             var hasExistingSnapshot = existingSnapshot != null && existingSnapshot.Count > 0;
@@ -1801,6 +1806,13 @@ SELECT @result;
                 resolvedInstallmentCount = incomingInstallmentCount;
             }
 
+            if (hasQuoteFixedInstallments
+                && !hasSummerGeneralManagerPermission
+                && !(isEditOperation && hasExistingSnapshot))
+            {
+                resolvedInstallmentCount = quoteFixedInstallmentCount;
+            }
+
             if (resolvedInstallmentCount < minInstallmentCount || resolvedInstallmentCount > maxInstallmentCount)
             {
                 response.Errors.Add(new Error
@@ -1811,7 +1823,9 @@ SELECT @result;
                 return false;
             }
 
-            var defaultInstallments = BuildEqualInstallments(normalizedGrandTotal, resolvedInstallmentCount);
+            var defaultInstallments = hasQuoteFixedInstallments && resolvedInstallmentCount == quoteFixedInstallmentCount
+                ? quoteFixedInstallments
+                : BuildEqualInstallments(normalizedGrandTotal, resolvedInstallmentCount);
             var resolvedInstallments = new decimal[resolvedInstallmentCount];
             var resolvedPaid = new bool[resolvedInstallmentCount];
             var resolvedPaidAt = new string[resolvedInstallmentCount];
@@ -1864,7 +1878,9 @@ SELECT @result;
             {
                 if (!hasSummerGeneralManagerPermission)
                 {
-                    var normalizedDefaults = BuildEqualInstallments(normalizedGrandTotal, resolvedInstallmentCount);
+                    var normalizedDefaults = hasQuoteFixedInstallments && resolvedInstallmentCount == quoteFixedInstallmentCount
+                        ? quoteFixedInstallments
+                        : BuildEqualInstallments(normalizedGrandTotal, resolvedInstallmentCount);
                     for (var index = 0; index < resolvedInstallmentCount; index++)
                     {
                         resolvedInstallments[index] = normalizedDefaults[index];
@@ -1967,6 +1983,55 @@ SELECT @result;
 
             installmentCount = parsed;
             return true;
+        }
+
+        private static decimal[] ResolveQuoteFixedInstallments(
+            SummerPricingQuoteDto? pricingQuote,
+            decimal normalizedGrandTotal)
+        {
+            if (pricingQuote?.FixedInstallmentAmounts == null || pricingQuote.FixedInstallmentAmounts.Count == 0)
+            {
+                return Array.Empty<decimal>();
+            }
+
+            var minCount = SummerWorkflowDomainConstants.PaymentModes.MinInstallmentCount;
+            var maxCount = SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount;
+            var normalized = pricingQuote.FixedInstallmentAmounts
+                .Select(NormalizeMoney)
+                .ToArray();
+            if (normalized.Length < minCount || normalized.Length > maxCount)
+            {
+                return Array.Empty<decimal>();
+            }
+
+            if (normalized.Any(item => item < 0m))
+            {
+                return Array.Empty<decimal>();
+            }
+
+            var total = NormalizeMoney(normalized.Sum());
+            if (total <= 0m)
+            {
+                return Array.Empty<decimal>();
+            }
+
+            if (normalizedGrandTotal > 0m)
+            {
+                var delta = NormalizeMoney(normalizedGrandTotal - total);
+                if (delta != 0m)
+                {
+                    normalized[0] = NormalizeMoney(Math.Max(0m, normalized[0] + delta));
+                    total = NormalizeMoney(normalized.Sum());
+                }
+
+                if (total > normalizedGrandTotal)
+                {
+                    var overflow = NormalizeMoney(total - normalizedGrandTotal);
+                    normalized[0] = NormalizeMoney(Math.Max(0m, normalized[0] - overflow));
+                }
+            }
+
+            return normalized;
         }
 
         private static decimal NormalizeMoney(decimal value)

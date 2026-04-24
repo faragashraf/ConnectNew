@@ -1,4 +1,8 @@
-import { isAdminActionAllowedForCurrentStatus, resolveBlockedActionForCurrentStatus } from './summer-admin-action-state-guard';
+import {
+  isAdminActionAllowedForCurrentStatus,
+  resolveAdminActionDecisionForCurrentStatus,
+  resolveBlockedActionForCurrentStatus
+} from './summer-admin-action-state-guard';
 
 describe('summer-admin-action-state-guard', () => {
   it('blocks manual cancel when status is already rejected/cancelled', () => {
@@ -22,6 +26,21 @@ describe('summer-admin-action-state-guard', () => {
   it('always allows internal admin action regardless of current state', () => {
     expect(isAdminActionAllowedForCurrentStatus('INTERNAL_ADMIN_ACTION', 'Rejected')).toBeTrue();
     expect(isAdminActionAllowedForCurrentStatus('INTERNAL_ADMIN_ACTION', 'مرفوض')).toBeTrue();
+  });
+
+  it('allows mark-unpaid only for open request states', () => {
+    expect(isAdminActionAllowedForCurrentStatus('MARK_UNPAID', 'New')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('MARK_UNPAID', 'InProgress')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('MARK_UNPAID', 'Replied')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('MARK_UNPAID', 'Rejected')).toBeFalse();
+    expect(isAdminActionAllowedForCurrentStatus('MARK_UNPAID', 'Printed')).toBeFalse();
+  });
+
+  it('treats mark-unpaid as allowed non-state-changing action in open states', () => {
+    const decision = resolveAdminActionDecisionForCurrentStatus('MARK_UNPAID', 'InProgress');
+    expect(decision.isAllowed).toBeTrue();
+    expect(decision.changesState).toBeFalse();
+    expect(decision.targetState).toBeNull();
   });
 
   it('matches the state-flow rule: pending -> approved -> rejected -> approved, then approving again is blocked', () => {

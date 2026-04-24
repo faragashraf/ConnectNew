@@ -88,6 +88,91 @@ public class SummerWorkflowServiceLifecycleTests
         Assert.Contains(response.Errors, error => error.Message.Contains("انتهت مهلة السداد", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task PayAsync_WhenInstallmentPaidFieldHasDuplicates_UpdatesLatestPersistedRow()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var attachContext = CreateAttachContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedSummerCatalog(connectContext);
+        SeedCategories(connectContext);
+        var messageId = SeedMessage(connectContext, isPaid: false, paymentDueAtUtc: DateTime.UtcNow.AddHours(6));
+        AddField(connectContext, 50001, messageId, "Summer_PaymentInstallment1Paid", "false");
+        AddField(connectContext, 50002, messageId, "Summer_PaymentInstallment1Paid", "false");
+        await connectContext.SaveChangesAsync();
+
+        var service = CreateService(connectContext, attachContext, gpaContext);
+
+        var response = await service.PayAsync(new SummerPayRequest
+        {
+            MessageId = messageId,
+            PaidAtUtc = DateTimeOffset.UtcNow,
+            Notes = "سداد اختبار مع تكرار الحقول",
+            files = new List<IFormFile> { BuildInMemoryFile("receipt.pdf") }
+        }, userId: "emp-1", ip: "127.0.0.1");
+
+        Assert.True(response.IsSuccess);
+        Assert.NotNull(response.Data);
+        Assert.Equal("PAID", response.Data!.PaymentStateCode);
+
+        var messageFields = await connectContext.TkmendFields
+            .Where(field => field.FildRelted == messageId)
+            .ToListAsync();
+
+        Assert.Equal("true", GetLatestFieldValueBySql(messageFields, "Summer_PaymentInstallment1Paid"));
+    }
+
+    [Fact]
+    public async Task AutoCancelExpiredUnpaidRequestsAsync_WhenFirstInstallmentIsMarkedPaid_DoesNotCancelRequest()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var attachContext = CreateAttachContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedSummerCatalog(connectContext);
+        SeedCategories(connectContext);
+        var messageId = SeedMessage(connectContext, isPaid: false, paymentDueAtUtc: DateTime.UtcNow.AddHours(-2));
+        AddField(connectContext, 50001, messageId, "Summer_PaymentInstallment1Paid", "false");
+        AddField(connectContext, 50002, messageId, "Summer_PaymentInstallment1Paid", "true");
+        await connectContext.SaveChangesAsync();
+
+        var service = CreateService(connectContext, attachContext, gpaContext);
+        var cancelledCount = await service.AutoCancelExpiredUnpaidRequestsAsync();
+
+        Assert.Equal(0, cancelledCount);
+
+        var updatedMessage = await connectContext.Messages.FirstAsync(item => item.MessageId == messageId);
+        Assert.NotEqual(MessageStatus.Rejected, updatedMessage.Status);
+
+        var messageFieldsAfter = await connectContext.TkmendFields
+            .Where(field => field.FildRelted == messageId)
+            .ToListAsync();
+        Assert.NotEqual("CANCELLED_AUTO", GetFieldValue(messageFieldsAfter, SummerWorkflowDomainConstants.PaymentStatusFieldKind));
+    }
+
+    [Fact]
+    public async Task AutoCancelExpiredUnpaidRequestsAsync_WhenPaymentStatusIsPaid_DoesNotCancelRequest()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var attachContext = CreateAttachContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedSummerCatalog(connectContext);
+        SeedCategories(connectContext);
+        var messageId = SeedMessage(connectContext, isPaid: false, paymentDueAtUtc: DateTime.UtcNow.AddHours(-2));
+        AddField(connectContext, 50011, messageId, SummerWorkflowDomainConstants.PaymentStatusFieldKind, "PAID");
+        await connectContext.SaveChangesAsync();
+
+        var service = CreateService(connectContext, attachContext, gpaContext);
+        var cancelledCount = await service.AutoCancelExpiredUnpaidRequestsAsync();
+
+        Assert.Equal(0, cancelledCount);
+
+        var updatedMessage = await connectContext.Messages.FirstAsync(item => item.MessageId == messageId);
+        Assert.NotEqual(MessageStatus.Rejected, updatedMessage.Status);
+    }
+
     [Theory]
     [MemberData(nameof(TransferMatrixCases))]
     public async Task TransferAsync_MatrixCoverage_HandlesPaymentAndReviewFlags(
@@ -437,6 +522,15 @@ public class SummerWorkflowServiceLifecycleTests
             .Where(field => string.Equals(field.FildKind, kind, StringComparison.OrdinalIgnoreCase))
             .Select(field => field.FildTxt ?? string.Empty)
             .LastOrDefault() ?? string.Empty;
+    }
+
+    private static string GetLatestFieldValueBySql(IEnumerable<TkmendField> fields, string kind)
+    {
+        return fields
+            .Where(field => string.Equals(field.FildKind, kind, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(field => field.FildSql)
+            .Select(field => field.FildTxt ?? string.Empty)
+            .FirstOrDefault() ?? string.Empty;
     }
 
     private static IFormFile BuildInMemoryFile(string fileName)

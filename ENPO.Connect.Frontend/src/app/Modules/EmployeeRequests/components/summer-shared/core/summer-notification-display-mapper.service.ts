@@ -213,6 +213,15 @@ export class SummerNotificationDisplayMapperService {
       };
     }
 
+    if (action === 'MARK_UNPAID') {
+      return {
+        title: this.summerTitle,
+        message: 'تم تحويل حالة السداد إلى غير مسدد.',
+        type: 'Warn',
+        isSummerEvent: true
+      };
+    }
+
     return {
       title: this.summerTitle,
       message: 'تم تحديث طلب المصيف.',

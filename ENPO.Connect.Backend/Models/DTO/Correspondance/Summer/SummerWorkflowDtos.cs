@@ -190,6 +190,7 @@ public class SummerPricingQuoteDto
     public decimal? ProxyInsuranceAmount { get; set; }
     public decimal AppliedInsuranceAmount { get; set; }
     public decimal GrandTotal { get; set; }
+    public List<decimal> FixedInstallmentAmounts { get; set; } = new();
     public string DisplayText { get; set; } = string.Empty;
     public string SmsText { get; set; } = string.Empty;
     public string WhatsAppText { get; set; } = string.Empty;

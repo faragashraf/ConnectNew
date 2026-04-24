@@ -1337,11 +1337,11 @@
 
           <label>
             <span>حالة السداد</span>
-            <select formControlName="paymentStatus">
-              <option value="PAID">مسدد</option>
-              <option value="UNPAID">غير مسدد</option>
-            </select>
+            <input type="text" value="مسدد" disabled />
           </label>
+          <small class="help-text">
+            يتم تسجيل السداد تلقائيًا كـ "مسدد" عند إدخال التاريخ وإرفاق الإيصال.
+          </small>
 
           <label>
             <span>تاريخ ووقت السداد</span>
@@ -1401,9 +1401,6 @@
           </small>
           <small class="help-text warn" *ngIf="actionForm.get('comment')?.touched && actionForm.get('comment')?.hasError('maxlength')">
             الحد الأقصى لتعليق الإدارة 300 حرف (ويستثنى إجراء إداري داخلي).
-          </small>
-          <small class="help-text warn" *ngIf="actionForm.get('comment')?.touched && actionForm.get('comment')?.hasError('pattern')">
-            تعليق الإدارة يقبل الأحرف فقط (عربي/English) لجميع الإجراءات باستثناء إجراء إداري داخلي.
           </small>
           <small class="help-text admin-note">
             ملاحظة: يتم إرسال رسالة نصية للموظف ببيانات الطلب الأساسية (اسم المصيف، رقم الطلب، موعد الفوج) وتعليق الإدارة في جميع الإجراءات.

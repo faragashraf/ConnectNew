@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.Correspondance.Summer;
 using Persistence.Data;
@@ -60,6 +61,268 @@ namespace Persistence.Services.Summer
                     return response;
                 }
 
+                var normalizedWaveCode = NormalizeCodeToken(request.WaveCode);
+                var waveDate = ResolveWaveDate(request, seasonYear);
+                var requestedPeriodKey = NormalizePeriodKey(request.PeriodKey);
+                var effectivePeriodKey = ResolvePeriodKey(requestedPeriodKey, waveDate);
+                var requestedStayMode = NormalizeStayMode(request.StayMode);
+                if (string.IsNullOrWhiteSpace(requestedStayMode))
+                {
+                    requestedStayMode = SummerWorkflowDomainConstants.StayModes.ResidenceOnly;
+                }
+
+                var fixedPlansForCategorySeason = await LoadFixedPricingPlansAsync(
+                    seasonYear,
+                    request.CategoryId,
+                    cancellationToken);
+                if (fixedPlansForCategorySeason.Count > 0)
+                {
+                    if (effectivePeriodKey.Length == 0)
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "400",
+                            Message = "البيانات غير مكتملة لحساب التسعير: فترة الفوج غير متاحة."
+                        });
+                        return response;
+                    }
+
+                    var periodPlans = fixedPlansForCategorySeason
+                        .Where(item => NormalizePeriodKey(item.PeriodKey) == effectivePeriodKey)
+                        .ToList();
+                    if (periodPlans.Count == 0)
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "404",
+                            Message = "لا توجد خطة أسعار معتمدة للفترة المختارة."
+                        });
+                        return response;
+                    }
+
+                    var personsPlans = periodPlans
+                        .Where(item => item.PersonsCount == personsCount)
+                        .ToList();
+                    if (personsPlans.Count == 0)
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "404",
+                            Message = "لا توجد خطة أسعار معتمدة لعدد الأفراد المختار."
+                        });
+                        return response;
+                    }
+
+                    var hasResidenceOnlyPlan = personsPlans.Any(item =>
+                        string.Equals(
+                            NormalizeStayMode(item.StayMode),
+                            SummerWorkflowDomainConstants.StayModes.ResidenceOnly,
+                            StringComparison.OrdinalIgnoreCase));
+                    var hasResidenceWithTransportPlan = personsPlans.Any(item =>
+                        string.Equals(
+                            NormalizeStayMode(item.StayMode),
+                            SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
+                            StringComparison.OrdinalIgnoreCase));
+
+                    var selectedFixedPlan = personsPlans.FirstOrDefault(item =>
+                        string.Equals(
+                            NormalizeStayMode(item.StayMode),
+                            requestedStayMode,
+                            StringComparison.OrdinalIgnoreCase));
+
+                    var fixedNormalizedStayMode = requestedStayMode;
+                    var fixedStayModeWasNormalized = false;
+                    if (selectedFixedPlan == null)
+                    {
+                        if (string.Equals(
+                                requestedStayMode,
+                                SummerWorkflowDomainConstants.StayModes.ResidenceOnly,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            selectedFixedPlan = personsPlans.FirstOrDefault(item =>
+                                string.Equals(
+                                    NormalizeStayMode(item.StayMode),
+                                    SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
+                                    StringComparison.OrdinalIgnoreCase));
+                            if (selectedFixedPlan != null)
+                            {
+                                fixedNormalizedStayMode = SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport;
+                                fixedStayModeWasNormalized = true;
+                            }
+                        }
+                        else
+                        {
+                            selectedFixedPlan = personsPlans.FirstOrDefault(item =>
+                                string.Equals(
+                                    NormalizeStayMode(item.StayMode),
+                                    SummerWorkflowDomainConstants.StayModes.ResidenceOnly,
+                                    StringComparison.OrdinalIgnoreCase));
+                            if (selectedFixedPlan != null)
+                            {
+                                fixedNormalizedStayMode = SummerWorkflowDomainConstants.StayModes.ResidenceOnly;
+                                fixedStayModeWasNormalized = true;
+                            }
+                        }
+                    }
+
+                    if (selectedFixedPlan == null)
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "404",
+                            Message = "لا توجد خطة أسعار معتمدة لنوع الإقامة المختار."
+                        });
+                        return response;
+                    }
+
+                    var fixedPricingMode = hasResidenceOnlyPlan && hasResidenceWithTransportPlan
+                        ? SummerWorkflowDomainConstants.PricingModes.AccommodationAndTransportationOptional
+                        : hasResidenceWithTransportPlan
+                            ? SummerWorkflowDomainConstants.PricingModes.TransportationMandatoryIncluded
+                            : SummerWorkflowDomainConstants.PricingModes.AccommodationOnlyAllowed;
+
+                    var fixedTransportationMandatory = string.Equals(
+                        fixedPricingMode,
+                        SummerWorkflowDomainConstants.PricingModes.TransportationMandatoryIncluded,
+                        StringComparison.OrdinalIgnoreCase);
+
+                    var fixedResolvedMembershipType = SummerMembershipPolicy.ResolveMembershipType(
+                        request.MembershipType,
+                        allowMembershipOverride);
+                    var fixedResolvedMembershipLabel = SummerMembershipPolicy.ResolveMembershipLabel(fixedResolvedMembershipType);
+                    var fixedAppliedInsuranceAmount = SummerMembershipPolicy.ResolveInsuranceAmount(fixedResolvedMembershipType);
+                    var baseInsuranceAmount = Math.Max(0m, selectedFixedPlan.InsuranceAmount);
+                    var fixedInsuranceAmount = fixedAppliedInsuranceAmount;
+                    decimal? fixedProxyInsuranceAmount = null;
+
+                    var bookingAmount = Math.Max(0m, selectedFixedPlan.CashAmount);
+                    if (bookingAmount <= 0m)
+                    {
+                        bookingAmount = Math.Max(0m, selectedFixedPlan.EmployeeTotalAmount - baseInsuranceAmount);
+                    }
+
+                    var fixedAccommodationTotal = bookingAmount;
+                    var fixedTransportationTotal = 0m;
+                    if (string.Equals(
+                            fixedNormalizedStayMode,
+                            SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
+                            StringComparison.OrdinalIgnoreCase)
+                        && hasResidenceOnlyPlan)
+                    {
+                        var baseResidenceOnlyPlan = personsPlans.FirstOrDefault(item =>
+                            string.Equals(
+                                NormalizeStayMode(item.StayMode),
+                                SummerWorkflowDomainConstants.StayModes.ResidenceOnly,
+                                StringComparison.OrdinalIgnoreCase));
+                        if (baseResidenceOnlyPlan != null)
+                        {
+                            var baseAccommodationTotal = Math.Max(0m, baseResidenceOnlyPlan.CashAmount);
+                            if (baseAccommodationTotal <= bookingAmount)
+                            {
+                                fixedTransportationTotal = Math.Max(0m, bookingAmount - baseAccommodationTotal);
+                                fixedAccommodationTotal = Math.Max(0m, bookingAmount - fixedTransportationTotal);
+                            }
+                        }
+                    }
+
+                    var fixedGrandTotal = bookingAmount + fixedAppliedInsuranceAmount;
+                    var accommodationPricePerPerson = personsCount > 0
+                        ? decimal.Round(fixedAccommodationTotal / personsCount, 2, MidpointRounding.AwayFromZero)
+                        : 0m;
+                    var transportationPricePerPerson = personsCount > 0
+                        ? decimal.Round(fixedTransportationTotal / personsCount, 2, MidpointRounding.AwayFromZero)
+                        : 0m;
+
+                    var fixedInstallmentAmounts = BuildFixedInstallmentAmounts(selectedFixedPlan);
+                    if (fixedInstallmentAmounts.Count > 0)
+                    {
+                        var insuranceDelta = NormalizeMoney(fixedAppliedInsuranceAmount - baseInsuranceAmount);
+                        if (insuranceDelta != 0m)
+                        {
+                            fixedInstallmentAmounts[0] = NormalizeMoney(
+                                Math.Max(0m, fixedInstallmentAmounts[0] + insuranceDelta));
+                        }
+                    }
+
+                    var fixedDestinationName = (request.DestinationName ?? string.Empty).Trim();
+                    if (fixedDestinationName.Length == 0)
+                    {
+                        fixedDestinationName = $"المصيف رقم {request.CategoryId}";
+                    }
+
+                    var fixedWaveLabel = (request.WaveLabel ?? string.Empty).Trim();
+                    var fixedWaveCodeForDisplay = (request.WaveCode ?? string.Empty).Trim();
+                    var fixedWaveDisplay = fixedWaveLabel.Length > 0
+                        ? fixedWaveLabel
+                        : (fixedWaveCodeForDisplay.Length > 0 ? fixedWaveCodeForDisplay : "-");
+                    var fixedNextDayDueDateText = ResolveNextDayDueDateText();
+
+                    var fixedDisplayText = BuildDisplayText(
+                        fixedDestinationName,
+                        fixedWaveDisplay,
+                        personsCount,
+                        accommodationPricePerPerson,
+                        transportationPricePerPerson,
+                        fixedAccommodationTotal,
+                        fixedTransportationTotal,
+                        fixedAppliedInsuranceAmount,
+                        fixedGrandTotal,
+                        fixedNormalizedStayMode,
+                        fixedPricingMode,
+                        fixedTransportationMandatory,
+                        fixedNextDayDueDateText);
+
+                    var fixedSmsText = BuildSmsText(
+                        fixedDestinationName,
+                        fixedWaveDisplay,
+                        personsCount,
+                        accommodationPricePerPerson,
+                        transportationPricePerPerson,
+                        fixedAccommodationTotal,
+                        fixedTransportationTotal,
+                        fixedAppliedInsuranceAmount,
+                        fixedGrandTotal,
+                        fixedNormalizedStayMode,
+                        fixedPricingMode,
+                        fixedTransportationMandatory,
+                        fixedNextDayDueDateText);
+
+                    var fixedWhatsAppText = fixedDisplayText;
+                    var fixedPricingConfigId = $"FIXED-{seasonYear}-CAT{request.CategoryId}-{effectivePeriodKey}-P{personsCount}-{fixedNormalizedStayMode}";
+
+                    response.Data = new SummerPricingQuoteDto
+                    {
+                        PricingConfigId = fixedPricingConfigId,
+                        CategoryId = request.CategoryId,
+                        SeasonYear = seasonYear,
+                        WaveCode = fixedWaveCodeForDisplay,
+                        WaveLabel = fixedWaveLabel,
+                        PeriodKey = effectivePeriodKey,
+                        PricingMode = fixedPricingMode,
+                        TransportationMandatory = fixedTransportationMandatory,
+                        PersonsCount = personsCount,
+                        AccommodationPricePerPerson = accommodationPricePerPerson,
+                        TransportationPricePerPerson = transportationPricePerPerson,
+                        MembershipType = fixedResolvedMembershipType,
+                        MembershipTypeLabel = fixedResolvedMembershipLabel,
+                        SelectedStayMode = requestedStayMode,
+                        NormalizedStayMode = fixedNormalizedStayMode,
+                        StayModeWasNormalized = fixedStayModeWasNormalized,
+                        AccommodationTotal = fixedAccommodationTotal,
+                        TransportationTotal = fixedTransportationTotal,
+                        InsuranceAmount = fixedInsuranceAmount,
+                        ProxyInsuranceAmount = fixedProxyInsuranceAmount,
+                        AppliedInsuranceAmount = fixedAppliedInsuranceAmount,
+                        GrandTotal = fixedGrandTotal,
+                        FixedInstallmentAmounts = fixedInstallmentAmounts,
+                        DisplayText = fixedDisplayText,
+                        SmsText = fixedSmsText,
+                        WhatsAppText = fixedWhatsAppText
+                    };
+
+                    return response;
+                }
+
                 var pricingRules = await LoadPricingRulesAsync(
                     seasonYear,
                     applicationId,
@@ -85,11 +348,6 @@ namespace Persistence.Services.Summer
                     });
                     return response;
                 }
-
-                var normalizedWaveCode = NormalizeCodeToken(request.WaveCode);
-                var waveDate = ResolveWaveDate(request, seasonYear);
-                var requestedPeriodKey = NormalizePeriodKey(request.PeriodKey);
-                var effectivePeriodKey = ResolvePeriodKey(requestedPeriodKey, waveDate);
 
                 var selectedRule = SelectBestRule(
                     pricingRules,
@@ -170,12 +428,6 @@ namespace Persistence.Services.Summer
                         Message = "سعر الانتقالات للفرد غير صالح في إعدادات التسعير."
                     });
                     return response;
-                }
-
-                var requestedStayMode = NormalizeStayMode(request.StayMode);
-                if (string.IsNullOrWhiteSpace(requestedStayMode))
-                {
-                    requestedStayMode = SummerWorkflowDomainConstants.StayModes.ResidenceOnly;
                 }
 
                 var normalizedStayMode = requestedStayMode;
@@ -321,6 +573,7 @@ namespace Persistence.Services.Summer
                     ProxyInsuranceAmount = proxyInsuranceAmount,
                     AppliedInsuranceAmount = appliedInsuranceAmount,
                     GrandTotal = grandTotal,
+                    FixedInstallmentAmounts = BuildLegacyInstallmentPlan(grandTotal),
                     DisplayText = displayText,
                     SmsText = smsText,
                     WhatsAppText = whatsappText
@@ -551,6 +804,159 @@ namespace Persistence.Services.Summer
             }
 
             return request.Records ?? new List<SummerPricingCatalogRecordDto>();
+        }
+
+        private async Task<List<SummerFixedPricingPlan>> LoadFixedPricingPlansAsync(
+            int seasonYear,
+            int categoryId,
+            CancellationToken cancellationToken)
+        {
+            return await _connectContext.SummerFixedPricingPlans
+                .AsNoTracking()
+                .Where(item =>
+                    item.IsActive
+                    && item.SeasonYear == seasonYear
+                    && item.CategoryId == categoryId)
+                .ToListAsync(cancellationToken);
+        }
+
+        private static List<decimal> BuildFixedInstallmentAmounts(SummerFixedPricingPlan plan)
+        {
+            return new List<decimal>
+            {
+                NormalizeMoney(plan.DownPaymentAmount),
+                NormalizeMoney(plan.Installment2Amount),
+                NormalizeMoney(plan.Installment3Amount),
+                NormalizeMoney(plan.Installment4Amount),
+                NormalizeMoney(plan.Installment5Amount),
+                NormalizeMoney(plan.Installment6Amount),
+                NormalizeMoney(plan.Installment7Amount)
+            };
+        }
+
+        private static List<decimal> BuildLegacyInstallmentPlan(decimal totalAmount)
+        {
+            var count = SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount;
+            var normalizedTotal = NormalizeMoney(totalAmount);
+            if (normalizedTotal <= 0m)
+            {
+                return new List<decimal>();
+            }
+
+            var installments = BuildLegacyEqualInstallments(normalizedTotal, count);
+            return installments.ToList();
+        }
+
+        private static decimal[] BuildLegacyEqualInstallments(decimal totalAmount, int installmentCount)
+        {
+            var count = installmentCount > 0 ? installmentCount : 1;
+            var normalizedTotal = NormalizeMoney(totalAmount);
+            if (count == SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount && normalizedTotal > 0m)
+            {
+                return BuildLegacyReservationInstallments(normalizedTotal);
+            }
+
+            return BuildEvenInstallmentsByCents(normalizedTotal, count);
+        }
+
+        private static decimal[] BuildLegacyReservationInstallments(decimal normalizedTotal)
+        {
+            const decimal downPaymentTargetPercent = 20m;
+            var installmentsTailCount = SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount - 1;
+            var bestStep = 0m;
+            var bestInstallmentValue = 0m;
+            var bestDownPayment = 0m;
+            var bestScore = decimal.MaxValue;
+
+            foreach (var step in new[] { 50m, 100m })
+            {
+                if (step <= 0m)
+                {
+                    continue;
+                }
+
+                var targetDownPayment = normalizedTotal * (downPaymentTargetPercent / 100m);
+                var roundedTargetDownPayment = RoundToNearestStep(targetDownPayment, step);
+                var installmentValue = RoundToNearestStep(
+                    (normalizedTotal - roundedTargetDownPayment) / installmentsTailCount,
+                    step);
+
+                if (installmentValue < 0m)
+                {
+                    continue;
+                }
+
+                var downPayment = NormalizeMoney(normalizedTotal - (installmentValue * installmentsTailCount));
+                if (downPayment <= 0m)
+                {
+                    continue;
+                }
+
+                var downPaymentPercent = (downPayment / normalizedTotal) * 100m;
+                var score = Math.Abs(downPaymentPercent - downPaymentTargetPercent);
+                if (score < bestScore
+                    || (score == bestScore && (bestStep <= 0m || step < bestStep)))
+                {
+                    bestScore = score;
+                    bestStep = step;
+                    bestInstallmentValue = NormalizeMoney(installmentValue);
+                    bestDownPayment = downPayment;
+                }
+            }
+
+            if (bestStep <= 0m)
+            {
+                return BuildEvenInstallmentsByCents(
+                    normalizedTotal,
+                    SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount);
+            }
+
+            var result = new decimal[SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount];
+            result[0] = bestDownPayment;
+            for (var index = 1; index < result.Length; index++)
+            {
+                result[index] = bestInstallmentValue;
+            }
+
+            return result;
+        }
+
+        private static decimal[] BuildEvenInstallmentsByCents(decimal normalizedTotal, int count)
+        {
+            var safeCount = count > 0 ? count : 1;
+            var totalCents = decimal.ToInt64(normalizedTotal * 100m);
+            var baseCents = totalCents / safeCount;
+            var remainder = totalCents % safeCount;
+
+            var values = new decimal[safeCount];
+            for (var index = 0; index < safeCount; index++)
+            {
+                var cents = baseCents + (index < remainder ? 1 : 0);
+                values[index] = cents / 100m;
+            }
+
+            return values;
+        }
+
+        private static decimal RoundToNearestStep(decimal value, decimal step)
+        {
+            if (step <= 0m)
+            {
+                return NormalizeMoney(value);
+            }
+
+            var roundedUnits = Math.Round(value / step, 0, MidpointRounding.AwayFromZero);
+            return NormalizeMoney(roundedUnits * step);
+        }
+
+        private static decimal NormalizeMoney(decimal value)
+        {
+            if (value <= 0m)
+            {
+                return 0m;
+            }
+
+            return Math.Round(value, 2, MidpointRounding.AwayFromZero);
         }
 
         private async Task<List<PricingRule>> LoadPricingRulesAsync(

@@ -280,16 +280,22 @@
                     <strong>{{ snapshot.statusLabel }}</strong>
                   </div>
                 </div>
-                <label>
+                <label *ngIf="canEditPaymentStatus; else ownerPaymentStatusInfo">
                   <span class="required-label">حالة السداد</span>
                   <select formControlName="paymentStatus">
                     <option value="PAID">مسدد</option>
                     <option value="UNPAID">غير مسدد</option>
                   </select>
                 </label>
-                <small class="optional-label" *ngIf="!canEditPaymentStatus">
-                  تعديل حالة السداد متاح فقط لمستخدمي إدارة المصايف.
-                </small>
+                <ng-template #ownerPaymentStatusInfo>
+                  <label>
+                    <span class="required-label">حالة السداد</span>
+                    <input type="text" value="مسدد" disabled />
+                  </label>
+                  <small class="optional-label">
+                    يتم إرسال حالة السداد تلقائيًا كـ "مسدد" عند تسجيل السداد.
+                  </small>
+                </ng-template>
                 <label>
                   <span class="required-label">تاريخ ووقت السداد</span>
                   <input type="datetime-local" step="1" formControlName="paidAtLocal" [attr.max]="getPaymentMaxDateTimeLocal()" />
