@@ -778,6 +778,15 @@ textarea:focus {
   font-size: 12px;
 }
 
+.report-options-trigger {
+  margin-top: 0;
+  justify-self: auto;
+  white-space: nowrap;
+  height: 44px;
+  padding: 0 16px;
+  font-size: 12px;
+}
+
 .bookings-print-trigger {
   margin-top: 0;
   justify-self: auto;
@@ -811,6 +820,94 @@ textarea:focus {
   font-size: 12px;
   font-weight: 700;
   color: #1f4d6a;
+}
+
+.all-resorts-report-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #d5e4f2;
+  border-radius: 10px;
+  background: #f7fbff;
+}
+
+.all-resorts-report-filter span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f4d6a;
+  white-space: nowrap;
+}
+
+.all-resorts-report-filter select {
+  min-width: 136px;
+  width: auto;
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.report-options-shell {
+  display: grid;
+  gap: 14px;
+  direction: rtl;
+  text-align: right;
+}
+
+.report-options-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.report-kind-field {
+  grid-column: span 2;
+}
+
+.report-options-toggle {
+  min-height: 42px;
+}
+
+.report-options-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.report-options-summary span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #cfe1ef;
+  background: #f3f9ff;
+  color: #1d4f6d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-options-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #f2d39b;
+  background: #fff7e8;
+  color: #8a5a05;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.report-options-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+::ng-deep .report-options-rtl-dialog .p-dialog-header,
+::ng-deep .report-options-rtl-dialog .p-dialog-content {
+  direction: rtl;
+  text-align: right;
 }
 
 button.primary,
@@ -2201,6 +2298,10 @@ button.ghost:hover:not(:disabled) {
     width: 100%;
   }
 
+  .report-options-trigger {
+    width: 100%;
+  }
+
   .bookings-print-trigger {
     width: 100%;
   }
@@ -2208,6 +2309,28 @@ button.ghost:hover:not(:disabled) {
   .bookings-amount-toggle {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .all-resorts-report-filter {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .all-resorts-report-filter select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .report-options-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-kind-field {
+    grid-column: span 1;
+  }
+
+  .report-options-actions {
+    flex-direction: column;
   }
 
   .wave-bookings-dialog-actions {

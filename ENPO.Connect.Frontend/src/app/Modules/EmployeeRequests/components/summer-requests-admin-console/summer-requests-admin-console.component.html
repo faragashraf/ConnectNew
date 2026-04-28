@@ -337,29 +337,11 @@
           </button>
           <button
             type="button"
-            class="ghost bookings-print-trigger"
-            (click)="openWaveBookingsPrintPreview()"
-            [disabled]="!canOpenWaveCapacityDialog">
-            طباعة كشف الحاجزين
-          </button>
-          <button
-            type="button"
-            class="ghost bookings-print-trigger"
-            (click)="openResortBookingsPrintPreview()"
-            [disabled]="!canOpenResortBookingsPrintDialog">
-            طباعة كشف المصيف (كل الأفواج)
-          </button>
-          <button
-            type="button"
-            class="ghost bookings-print-trigger"
-            (click)="openAllResortsSummaryPrintPreview()"
+            class="primary report-options-trigger"
+            (click)="openReportOptionsDialog()"
             [disabled]="destinations.length === 0">
-            إحصائية جميع المصايف
+            إنشاء تقرير
           </button>
-          <label class="bookings-amount-toggle" title="إظهار بيانات مبالغ الحجز والتأمين داخل التقرير">
-            <input id="includeFinancialsInPrintToggle" type="checkbox" formControlName="includeFinancialsInPrint" />
-            <span>إظهار المبالغ في التقرير</span>
-          </label>
         </div>
       </div>
 
@@ -393,6 +375,66 @@
       </div>
     </form>
   </section>
+
+  <p-dialog
+    header="خيارات التقرير"
+    [(visible)]="reportOptionsDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [appendTo]="'body'"
+    [styleClass]="'report-options-rtl-dialog'"
+    [style]="{ width: '760px', maxWidth: '95vw' }"
+    (onHide)="onReportOptionsDialogHide()">
+    <form [formGroup]="filtersForm" class="report-options-shell" dir="rtl">
+      <div class="report-options-grid">
+        <label class="report-kind-field">
+          <span>نوع التقرير</span>
+          <select formControlName="reportKind">
+            <option *ngFor="let option of reportKindOptions" [ngValue]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+
+        <label class="bookings-amount-toggle report-options-toggle" title="إظهار بيانات مبالغ الحجز والتأمين داخل التقرير">
+          <input id="includeFinancialsInPrintToggle" type="checkbox" formControlName="includeFinancialsInPrint" />
+          <span>إظهار المبالغ في التقرير</span>
+        </label>
+
+        <label class="all-resorts-report-filter" title="تحديد نطاق طريقة السداد لتقرير إحصائية جميع المصايف" *ngIf="showAllResortsReportFilters">
+          <span>طريقة السداد</span>
+          <select formControlName="allResortsSummaryPaymentMode">
+            <option *ngFor="let option of allResortsSummaryPaymentModeOptions" [ngValue]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+
+        <label class="all-resorts-report-filter" title="تحديد حالة التحصيل لتقرير إحصائية جميع المصايف" *ngIf="showAllResortsReportFilters">
+          <span>حالة التحصيل</span>
+          <select formControlName="allResortsSummaryCollectionFilter">
+            <option *ngFor="let option of allResortsSummaryCollectionFilterOptions" [ngValue]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="report-options-summary">
+        <span>التقرير: {{ selectedReportKindLabel }}</span>
+        <span>النطاق: {{ selectedReportScopeLabel }}</span>
+      </div>
+
+      <p class="report-options-warning" *ngIf="!canRunSelectedReport">{{ selectedReportRequirementMessage }}</p>
+
+      <div class="report-options-actions">
+        <button type="button" class="ghost" (click)="closeReportOptionsDialog()">
+          إغلاق
+        </button>
+        <button type="button" class="ghost" (click)="runSelectedReportPreviewFromOptions()" [disabled]="!canRunSelectedReport || isSelectedReportBusy">
+          معاينة
+        </button>
+        <button type="button" class="primary" (click)="runSelectedReportPrintFromOptions()" [disabled]="!canRunSelectedReport || isSelectedReportBusy">
+          طباعة
+        </button>
+      </div>
+    </form>
+  </p-dialog>
 
   <p-dialog
     header="بيان الإتاحة اللحظي"
@@ -863,7 +905,7 @@
     <div class="wave-bookings-dialog-shell" dir="rtl">
       <div class="wave-bookings-dialog-actions no-print">
         <div class="wave-bookings-dialog-title">
-          <h4>إحصائية جميع المصايف {{ showWaveBookingsFinancialColumns ? '(بالمبالغ)' : '(بدون مبالغ)' }}</h4>
+          <h4>إحصائية جميع المصايف - {{ allResortsSummaryPaymentModeLabel }} - {{ allResortsSummaryCollectionFilterLabel }} {{ showWaveBookingsFinancialColumns ? '(بالمبالغ)' : '(بدون مبالغ)' }}</h4>
           <small *ngIf="allResortsSummaryData?.generatedAtUtc">تاريخ الطباعة: {{ formatDate(allResortsSummaryData?.generatedAtUtc || '') }}</small>
         </div>
         <div class="wave-bookings-dialog-buttons">
@@ -900,7 +942,7 @@
           [class.financial-version]="showWaveBookingsFinancialColumns"
           *ngIf="!loadingAllResortsSummaryPrint && allResortsSummaryData as report">
           <header class="wave-bookings-doc-header">
-            <h2>إحصائية جميع المصايف</h2>
+            <h2>إحصائية جميع المصايف - {{ allResortsSummaryPaymentModeLabel }} - {{ allResortsSummaryCollectionFilterLabel }}</h2>
             <div class="wave-bookings-meta-grid">
               <article>
                 <span>عدد المصايف</span>
@@ -925,6 +967,14 @@
               <article>
                 <span>المستخدم</span>
                 <strong>{{ waveBookingsPrintUserName }}</strong>
+              </article>
+              <article>
+                <span>طريقة السداد</span>
+                <strong>{{ allResortsSummaryPaymentModeLabel }}</strong>
+              </article>
+              <article>
+                <span>حالة التحصيل</span>
+                <strong>{{ allResortsSummaryCollectionFilterLabel }}</strong>
               </article>
             </div>
           </header>
