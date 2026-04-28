@@ -17,6 +17,7 @@ namespace Persistence.Services.Summer
         private readonly ILogger<SummerPricingService> _logger;
         private const string SummerDynamicApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId;
         private const string SummerPricingCatalogMend = SummerWorkflowDomainConstants.PricingCatalogMend;
+        private const string NoPricingPolicyForSelectedWaveMessage = "لا توجد سياسة تسعير معتمدة للفوج المختار.";
         private static readonly TimeZoneInfo CairoTimeZone = ResolveCairoTimeZone();
         private static readonly JsonSerializerOptions CatalogJsonSerializerOptions = new()
         {
@@ -95,7 +96,7 @@ namespace Persistence.Services.Summer
                         response.Errors.Add(new Error
                         {
                             Code = "404",
-                            Message = "لا توجد خطة أسعار معتمدة للفترة المختارة."
+                            Message = NoPricingPolicyForSelectedWaveMessage
                         });
                         return response;
                     }
@@ -132,38 +133,6 @@ namespace Persistence.Services.Summer
 
                     var fixedNormalizedStayMode = requestedStayMode;
                     var fixedStayModeWasNormalized = false;
-                    if (selectedFixedPlan == null)
-                    {
-                        if (string.Equals(
-                                requestedStayMode,
-                                SummerWorkflowDomainConstants.StayModes.ResidenceOnly,
-                                StringComparison.OrdinalIgnoreCase))
-                        {
-                            selectedFixedPlan = personsPlans.FirstOrDefault(item =>
-                                string.Equals(
-                                    NormalizeStayMode(item.StayMode),
-                                    SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
-                                    StringComparison.OrdinalIgnoreCase));
-                            if (selectedFixedPlan != null)
-                            {
-                                fixedNormalizedStayMode = SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport;
-                                fixedStayModeWasNormalized = true;
-                            }
-                        }
-                        else
-                        {
-                            selectedFixedPlan = personsPlans.FirstOrDefault(item =>
-                                string.Equals(
-                                    NormalizeStayMode(item.StayMode),
-                                    SummerWorkflowDomainConstants.StayModes.ResidenceOnly,
-                                    StringComparison.OrdinalIgnoreCase));
-                            if (selectedFixedPlan != null)
-                            {
-                                fixedNormalizedStayMode = SummerWorkflowDomainConstants.StayModes.ResidenceOnly;
-                                fixedStayModeWasNormalized = true;
-                            }
-                        }
-                    }
 
                     if (selectedFixedPlan == null)
                     {
@@ -1472,7 +1441,7 @@ namespace Persistence.Services.Summer
                     || string.Equals(rule.WaveCode, waveCode, StringComparison.OrdinalIgnoreCase));
                 if (!hasWaveCompatibleRule)
                 {
-                    return "لا توجد مطابقة مناسبة للفوج المختار ضمن قواعد التسعير.";
+                    return NoPricingPolicyForSelectedWaveMessage;
                 }
             }
 
@@ -1483,7 +1452,7 @@ namespace Persistence.Services.Summer
                     || string.Equals(rule.PeriodKey, periodKey, StringComparison.OrdinalIgnoreCase));
                 if (!hasPeriodCompatibleRule)
                 {
-                    return "لا توجد مطابقة مناسبة لفترة التسعير المختارة.";
+                    return NoPricingPolicyForSelectedWaveMessage;
                 }
             }
 
@@ -1500,7 +1469,7 @@ namespace Persistence.Services.Summer
                     || IsWaveDateWithinRuleDateRange(rule, waveDate.Value));
                 if (!hasDateCompatibleRule)
                 {
-                    return "لا توجد مطابقة مناسبة لتاريخ الفوج ضمن نطاقات التسعير المفعلة.";
+                    return NoPricingPolicyForSelectedWaveMessage;
                 }
             }
 

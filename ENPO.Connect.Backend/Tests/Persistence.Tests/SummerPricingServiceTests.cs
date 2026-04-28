@@ -128,6 +128,100 @@ public class SummerPricingServiceTests
     }
 
     [Fact]
+    public async Task Quote_FixedPlans_WhenSelectedWaveHasNoPricingPolicy_ReturnsWavePolicyError()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+
+        context.SummerFixedPricingPlans.Add(new SummerFixedPricingPlan
+        {
+            SeasonYear = 2026,
+            CategoryId = 148,
+            PeriodKey = "JUN_SEP",
+            PersonsCount = 2,
+            StayMode = SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
+            TransportationIncluded = true,
+            CashAmount = 2600m,
+            InsuranceAmount = 500m,
+            EmployeeTotalAmount = 3100m,
+            DownPaymentAmount = 550m,
+            Installment2Amount = 425m,
+            Installment3Amount = 425m,
+            Installment4Amount = 425m,
+            Installment5Amount = 425m,
+            Installment6Amount = 425m,
+            Installment7Amount = 425m,
+            IsActive = true,
+            SourcePeriodLabel = "يونية وسبتمبر",
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        await context.SaveChangesAsync();
+        var service = new SummerPricingService(context);
+
+        var response = await service.GetQuoteAsync(new SummerPricingQuoteRequest
+        {
+            CategoryId = 148,
+            SeasonYear = 2026,
+            WaveCode = "W10",
+            WaveLabel = "W10 - 09/08/2026",
+            PersonsCount = 2,
+            StayMode = SummerWorkflowDomainConstants.StayModes.ResidenceOnly,
+            DestinationName = "رأس البر"
+        });
+
+        Assert.False(response.IsSuccess);
+        Assert.Contains(response.Errors, error => error.Message == "لا توجد سياسة تسعير معتمدة للفوج المختار.");
+    }
+
+    [Fact]
+    public async Task Quote_FixedPlans_WhenRequestedStayModeHasNoMatchingPlan_ReturnsStayModeError()
+    {
+        await using var context = CreateContext();
+        SeedDefaultCatalog(context);
+
+        context.SummerFixedPricingPlans.Add(new SummerFixedPricingPlan
+        {
+            SeasonYear = 2026,
+            CategoryId = 148,
+            PeriodKey = "JUN_SEP",
+            PersonsCount = 2,
+            StayMode = SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport,
+            TransportationIncluded = true,
+            CashAmount = 2600m,
+            InsuranceAmount = 500m,
+            EmployeeTotalAmount = 3100m,
+            DownPaymentAmount = 550m,
+            Installment2Amount = 425m,
+            Installment3Amount = 425m,
+            Installment4Amount = 425m,
+            Installment5Amount = 425m,
+            Installment6Amount = 425m,
+            Installment7Amount = 425m,
+            IsActive = true,
+            SourcePeriodLabel = "يونية وسبتمبر",
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        await context.SaveChangesAsync();
+        var service = new SummerPricingService(context);
+
+        var response = await service.GetQuoteAsync(new SummerPricingQuoteRequest
+        {
+            CategoryId = 148,
+            SeasonYear = 2026,
+            WaveCode = "W14",
+            WaveLabel = "W14 - 06/09/2026",
+            PersonsCount = 2,
+            StayMode = SummerWorkflowDomainConstants.StayModes.ResidenceOnly,
+            DestinationName = "رأس البر"
+        });
+
+        Assert.False(response.IsSuccess);
+        Assert.Contains(response.Errors, error => error.Message == "لا توجد خطة أسعار معتمدة لنوع الإقامة المختار.");
+    }
+
+    [Fact]
     public async Task Quote_WhenConfigMissing_ReturnsValidationError()
     {
         await using var context = CreateContext();
