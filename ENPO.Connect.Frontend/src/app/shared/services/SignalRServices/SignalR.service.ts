@@ -5,14 +5,14 @@ import { MessageService } from 'primeng/api';
 import { JwtHelperService } from '@auth0/angular-jwt';
 import { Router } from '@angular/router';
 import { MsgsService } from '../helper/msgs.service';
-import { BehaviorSubject, interval, Subject, Subscription } from 'rxjs';
+import { BehaviorSubject, firstValueFrom, interval, Subject, Subscription, take, timeout } from 'rxjs';
 import { ChatModel } from '../../models/ChatModel';
 import { Message } from '../../models/Message';
 import { WindowsNotificationService } from '../helper/windowsNotification.service';
 import { SpinnerService } from '../helper/spinner.service';
 import { AuthObjectsService } from '../helper/auth-objects.service';
 import { ConditionalDate } from '../../Pipe/Conditional-date.pipe';
-import { SummerNotificationDisplayMapperService } from 'src/app/Modules/EmployeeRequests/components/summer-shared/core/summer-notification-display-mapper.service';
+import { NotificationDisplayMapperService } from '../notifications/notification-display-mapper.service';
 
 export enum NotificationType {
   info = 'Info',
@@ -79,7 +79,7 @@ export class SignalRService {
     private msgsService: MsgsService, public primMsg: MessageService,
     private router: Router, private conditionalDate: ConditionalDate,
     private spinnerService: SpinnerService,
-    private summerNotificationDisplayMapper: SummerNotificationDisplayMapperService) { }
+    private notificationDisplayMapper: NotificationDisplayMapperService) { }
 
 
   fixNotificationOnRecieve$ = new Subject<boolean>(); //Subscribe from app.component, and next from HubSync.component
@@ -97,6 +97,7 @@ export class SignalRService {
   notificationList$ = new Subject<any[]>();
   primMsgList: any[] = [];
   primMsgCount: number = 0
+  private refreshTokenResponse$ = new Subject<string>();
   private readonly notificationDedupeWindowMs = 2500;
   private readonly recentNotificationSignatures = new Map<string, number>();
 
@@ -349,6 +350,7 @@ export class SignalRService {
       localStorage.setItem('ConnectToken', _token)
       const exp = 1800; // 30 minutes in seconds
       this.startSessionTimer(exp);
+      this.refreshTokenResponse$.next(_token);
     });
 
     this.hubConnection.on('LogOut', () => {
@@ -397,22 +399,24 @@ export class SignalRService {
       this.Notification = [];
       this.primMsgCount = 0;
 
-      notifications.forEach((notification: NotificationDto) => {
-        const displayNotification = this.summerNotificationDisplayMapper.toDisplayNotification(notification) as NotificationDto;
-        // let sev = notification.type == info ? 'info' : notification.type == '2' ? 'success' : 'warn'
-        this.Notification.push(displayNotification)
+      const normalizedNotifications = (Array.isArray(notifications) ? notifications : [])
+        .map(notification => this.notificationDisplayMapper.toDisplayNotification(notification) as unknown as NotificationDto)
+        .sort((a, b) => this.toEpochMs(b?.time) - this.toEpochMs(a?.time));
+
+      normalizedNotifications.forEach(displayNotification => {
+        this.Notification.push(displayNotification);
         let _notification = {
           severity: displayNotification.type,
-          summary: `${displayNotification.sender} - ${displayNotification.title}`,
-          detail: ` ${this.conditionalDate.transform(displayNotification?.time ?? null, "full")} :  ${displayNotification.notification}`,
+          summary: this.notificationDisplayMapper.buildToastSummary(displayNotification),
+          detail: `${this.conditionalDate.transform(displayNotification?.time ?? null, "full")}`,
           sticky: false,
           life: 5000 // notificat
-        }
-        this.primMsgList.push(_notification)
+        };
+        this.primMsgList.push(_notification);
 
-        this.primMsgCount++
-      })
-      this.notificationList$.next(notifications)
+        this.primMsgCount++;
+      });
+      this.notificationList$.next(normalizedNotifications as any[]);
     });
     this.hubConnection.on('RecieveTypingState', (NewMessage: Message) => {
       if (NewMessage.to == this.userAuth) {
@@ -437,6 +441,26 @@ export class SignalRService {
   async RefreshToken(token: string) {
     return this.hubConnection.invoke('RefreshToken', token)
       .catch(error => console.log(error));
+  }
+
+  async requestTokenRefresh(token: string, timeoutMs: number = 5000): Promise<string> {
+    if (!token || !token.trim()) {
+      throw new Error('Token is required to refresh session');
+    }
+
+    if (!this.hubConnection || this.hubConnection.state !== signalR.HubConnectionState.Connected) {
+      throw new Error('SignalR connection is not available for token refresh');
+    }
+
+    const waitForRefreshToken = firstValueFrom(
+      this.refreshTokenResponse$.pipe(
+        take(1),
+        timeout({ first: timeoutMs })
+      )
+    );
+
+    await this.RefreshToken(token);
+    return await waitForRefreshToken;
   }
   async SendMessage(_content: string) {
     const message: Message = {
@@ -547,6 +571,11 @@ export class SignalRService {
     const previous = this.recentNotificationSignatures.get(signature);
     this.recentNotificationSignatures.set(signature, now);
     return !(previous && (now - previous) <= this.notificationDedupeWindowMs);
+  }
+
+  private toEpochMs(value: unknown): number {
+    const epoch = new Date(value as any).getTime();
+    return Number.isFinite(epoch) ? epoch : 0;
   }
 
 

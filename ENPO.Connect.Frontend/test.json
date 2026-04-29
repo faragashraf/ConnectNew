@@ -1,78 +1,167 @@
-[
+{
+  "seasonYear": 2026,
+  "pricingRecords": [
     {
-        "keyProp": "RESORT_CODE",
-        "nameProp": "Summer_Destination",
-        "items": [
-            {
-                "key": "بورفؤاد",
-                "name": "بورفؤاد"
-            },
-            {
-                "key": "راس البر",
-                "name": "راس البر"
-            },
-            {
-                "key": "مرسى مطروح",
-                "name": "مرسى مطروح"
-            }
-        ]
+      "pricingConfigId": "SUM2026-MATROUH-JUN-SEP",
+      "categoryId": 147,
+      "seasonYear": 2026,
+      "waveCode": "",
+      "periodKey": "JUN_SEP",
+      "dateFrom": "2026-06-01",
+      "dateTo": "2026-06-30",
+      "accommodationPricePerPerson": 500,
+      "transportationPricePerPerson": 600,
+      "insuranceAmount": 500,
+      "proxyInsuranceAmount": 1000,
+      "pricingMode": "AccommodationAndTransportationOptional",
+      "transportationMandatory": false,
+      "isActive": true,
+      "displayLabel": "مرسى مطروح يونيو/سبتمبر",
+      "notes": "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
     },
     {
-        "keyProp": "VALUE",
-        "nameProp": "FamilyCount",
-        "items": [
-            {
-                "key": "4",
-                "name": "4"
-            },
-            {
-                "key": "6",
-                "name": "6"
-            },
-            {
-                "key": "7",
-                "name": "7"
-            }
-        ]
+      "pricingConfigId": "SUM2026-MATROUH-JUN-SEP-COPY-MNFZ8FD6",
+      "categoryId": 147,
+      "seasonYear": 2026,
+      "waveCode": "",
+      "periodKey": "JUN_SEP",
+      "dateFrom": "2026-09-01",
+      "dateTo": "2026-09-30",
+      "accommodationPricePerPerson": 500,
+      "transportationPricePerPerson": 600,
+      "insuranceAmount": 500,
+      "proxyInsuranceAmount": 1000,
+      "pricingMode": "AccommodationAndTransportationOptional",
+      "transportationMandatory": false,
+      "isActive": true,
+      "displayLabel": "مرسى مطروح يونيو/سبتمبر",
+      "notes": "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
     },
     {
-        "keyProp": "VALUE",
-        "nameProp": "FamilyCount",
-        "items": [
-            {
-                "key": "2",
-                "name": "2"
-            },
-            {
-                "key": "4",
-                "name": "4"
-            },
-            {
-                "key": "6",
-                "name": "6"
-            }
-        ]
+      "pricingConfigId": "SUM2026-MATROUH-JUL-AUG",
+      "categoryId": 147,
+      "seasonYear": 2026,
+      "waveCode": "",
+      "periodKey": "JUL_AUG",
+      "dateFrom": "2026-07-01",
+      "dateTo": "2026-08-31",
+      "accommodationPricePerPerson": 550,
+      "transportationPricePerPerson": 600,
+      "insuranceAmount": 500,
+      "proxyInsuranceAmount": 1000,
+      "pricingMode": "AccommodationAndTransportationOptional",
+      "transportationMandatory": false,
+      "isActive": true,
+      "displayLabel": "مرسى مطروح يوليو/أغسطس",
+      "notes": "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
     },
     {
-        "keyProp": "VALUE",
-        "nameProp": "FamilyCount",
-        "items": [
-            {
-                "key": "5",
-                "name": "5"
-            },
-            {
-                "key": "6",
-                "name": "6"
-            },
-            {
-                "key": "8",
-                "name": "8"
-            },
-            {
-                "key": "9",
-                "name": "9"
-            }
-        ]
+      "pricingConfigId": "SUM2026-PORTFOUAD-JUN-SEP",
+      "categoryId": 149,
+      "seasonYear": 2026,
+      "waveCode": "",
+      "periodKey": "JUN_SEP",
+      "dateFrom": "2026-06-01",
+      "dateTo": "2026-06-30",
+      "accommodationPricePerPerson": 350,
+      "transportationPricePerPerson": 350,
+      "insuranceAmount": 500,
+      "proxyInsuranceAmount": 1000,
+      "pricingMode": "AccommodationAndTransportationOptional",
+      "transportationMandatory": false,
+      "isActive": true,
+      "displayLabel": "بور فؤاد يونيو/سبتمبر",
+      "notes": "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
+    },
+    {
+      "pricingConfigId": "SUM2026-PORTFOUAD-JUL-AUG",
+      "categoryId": 149,
+      "seasonYear": 2026,
+      "waveCode": "",
+      "periodKey": "JUN_SEP",
+      "dateFrom": "2026-09-01",
+      "dateTo": "2026-09-30",
+      "accommodationPricePerPerson": 400,
+      "transportationPricePerPerson": 350,
+      "insuranceAmount": 500,
+      "proxyInsuranceAmount": 1000,
+      "pricingMode": "AccommodationAndTransportationOptional",
+      "transportationMandatory": false,
+      "isActive": true,
+      "displayLabel": "بور فؤاد يونيو/سبتمبر",
+      "notes": "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
+    },
+    {
+      "pricingConfigId": "SUM2026-PORTFOUAD-JUL-AUG-COPY-MNFZDHAR",
+      "categoryId": 149,
+      "seasonYear": 2026,
+      "waveCode": "",
+      "periodKey": "JUL_AUG",
+      "dateFrom": "2026-07-01",
+      "dateTo": "2026-08-31",
+      "accommodationPricePerPerson": 450,
+      "transportationPricePerPerson": 350,
+      "insuranceAmount": 500,
+      "proxyInsuranceAmount": 1000,
+      "pricingMode": "AccommodationAndTransportationOptional",
+      "transportationMandatory": false,
+      "isActive": true,
+      "displayLabel": "بور فؤاد يوليو/أغسطس",
+      "notes": "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
+    },
+    {
+      "pricingConfigId": "SUM2026-RASELBAR-JUN-SEP",
+      "categoryId": 148,
+      "seasonYear": 2026,
+      "waveCode": "",
+      "periodKey": "JUN_SEP",
+      "dateFrom": "2026-06-01",
+      "dateTo": "2026-06-30",
+      "accommodationPricePerPerson": 800,
+      "transportationPricePerPerson": 0,
+      "insuranceAmount": 500,
+      "proxyInsuranceAmount": 1000,
+      "pricingMode": "TransportationMandatoryIncluded",
+      "transportationMandatory": true,
+      "isActive": true,
+      "displayLabel": "رأس البر يونيو/سبتمبر (الانتقالات مضمنة)",
+      "notes": "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
+    },
+    {
+      "pricingConfigId": "SUM2026-RASELBAR-JUL-AUG",
+      "categoryId": 148,
+      "seasonYear": 2026,
+      "waveCode": "",
+      "periodKey": "JUN_SEP",
+      "dateFrom": "2026-09-01",
+      "dateTo": "2026-09-30",
+      "accommodationPricePerPerson": 800,
+      "transportationPricePerPerson": 0,
+      "insuranceAmount": 500,
+      "proxyInsuranceAmount": 1000,
+      "pricingMode": "TransportationMandatoryIncluded",
+      "transportationMandatory": true,
+      "isActive": true,
+      "displayLabel": "رأس البر يونيو/سبتمبر (الانتقالات مضمنة)",
+      "notes": "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
+    },
+    {
+      "pricingConfigId": "SUM2026-RASELBAR-JUL-AUG-COPY-MNFZCNWP",
+      "categoryId": 148,
+      "seasonYear": 2026,
+      "waveCode": "",
+      "periodKey": "JUL_AUG",
+      "dateFrom": "2026-07-01",
+      "dateTo": "2026-08-31",
+      "accommodationPricePerPerson": 850,
+      "transportationPricePerPerson": 0,
+      "insuranceAmount": 500,
+      "proxyInsuranceAmount": 1000,
+      "pricingMode": "TransportationMandatoryIncluded",
+      "transportationMandatory": true,
+      "isActive": true,
+      "displayLabel": "رأس البر يوليو/أغسطس (الانتقالات مضمنة)",
+      "notes": "سعر استرشادي قابل للتعديل بعد اعتماد اللجنة"
     }
-]   
+  ]
+}

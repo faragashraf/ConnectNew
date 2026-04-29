@@ -24,7 +24,7 @@ export class EmployeesAnnouncementsComponent implements OnInit, AfterViewInit, O
   // Countdown
   daysRemaining = 0;
   private timer: any;
-  launchDate = new Date('2026-04-01T00:00:00'); // Cairo time assumption handled via client local time relative to date
+  launchDate = new Date('2026-04-22T00:00:00'); // Cairo time assumption handled via client local time relative to date
 
   // Marquee
   marqueeDuration = '45s';

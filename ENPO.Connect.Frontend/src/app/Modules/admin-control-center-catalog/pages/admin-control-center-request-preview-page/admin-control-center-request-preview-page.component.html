@@ -1,0 +1,339 @@
+<section class="request-preview-page" dir="rtl">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">لوحة الكتالوج - معاينة تشغيلية للطلب</p>
+      <h2>المعاينة التشغيلية الفعالة للطلب</h2>
+      <p>
+        ترجمة تشغيلية مباشرة للإعدادات الحالية لإظهار الحالة الفعلية لنوع الطلب والحقول أثناء التشغيل.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        label="العودة للكتالوج"
+        routerLink="/Admin/ControlCenterCatalog">
+      </button>
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        label="مكتبة الحقول"
+        routerLink="/Admin/ControlCenterCatalog/field-library">
+      </button>
+    </div>
+  </header>
+
+  <div class="message" *ngIf="message.length > 0" [ngClass]="messageSeverity">
+    {{ message }}
+  </div>
+
+  <section class="card selector-card">
+    <div class="selector-row">
+      <div class="field">
+        <label for="requestTypeSelect">نوع الطلب</label>
+        <p-dropdown
+          inputId="requestTypeSelect"
+          [options]="requestTypeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [(ngModel)]="selectedRequestTypeId"
+          appendTo="body"
+          [filter]="true"
+          [showClear]="true"
+          placeholder="اختر نوع الطلب"
+          (onChange)="onRequestTypeChange($event.value)">
+        </p-dropdown>
+      </div>
+
+      <div class="actions">
+        <button
+          pButton
+          type="button"
+          class="p-button-text"
+          icon="pi pi-refresh"
+          label="تحديث الأنواع"
+          [disabled]="loadingRequestTypes"
+          (click)="onRefreshRequestTypes()">
+        </button>
+        <button
+          pButton
+          type="button"
+          icon="pi pi-sync"
+          label="تحديث المعاينة"
+          [disabled]="!canLoadPreview"
+          [loading]="loadingPreview"
+          (click)="onRefreshPreview()">
+        </button>
+      </div>
+    </div>
+
+    <small *ngIf="selectedRequestType as selectedType">
+      النوع الحالي: {{ selectedType.pathLabel }}
+      <span *ngIf="selectedType.applicationId"> | التطبيق: {{ selectedType.applicationId }}</span>
+      <span> | الحالة: {{ selectedType.isActive ? 'مفعل' : 'غير مفعل' }}</span>
+    </small>
+
+    <div class="selector-row view-mode-row" *ngIf="selectedRequestType as selectedType">
+      <div class="field">
+        <label>وضع العرض الافتراضي</label>
+        <p-tag severity="info" [value]="selectedRequestTypeDefaultViewModeLabel"></p-tag>
+      </div>
+
+      <div class="field">
+        <label>السماح للمستخدم بتغيير الوضع</label>
+        <p-tag
+          [severity]="selectedRequestTypeAllowRequesterOverride ? 'success' : 'warning'"
+          [value]="selectedRequestTypeAllowRequesterOverride ? 'مفعل' : 'غير مفعل'">
+        </p-tag>
+      </div>
+
+      <div class="field" *ngIf="selectedType.allowRequesterOverride">
+        <label for="previewViewMode">وضع العرض النشط في المعاينة</label>
+        <p-dropdown
+          inputId="previewViewMode"
+          [options]="viewModeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [ngModel]="previewSelectedViewMode"
+          [ngModelOptions]="{ standalone: true }"
+          appendTo="body"
+          (onChange)="onPreviewViewModeChange($event.value)">
+        </p-dropdown>
+      </div>
+
+      <div class="field" *ngIf="!selectedType.allowRequesterOverride">
+        <label>وضع العرض النشط في المعاينة</label>
+        <p-tag severity="secondary" [value]="activePreviewViewModeLabel"></p-tag>
+      </div>
+    </div>
+  </section>
+
+  <ng-container *ngIf="preview as data; else noPreview">
+    <section class="card context-card">
+      <header class="card-header">
+        <div>
+          <h3>سياق المستخدم أثناء التشغيل</h3>
+          <small>السياق الذي تم بناء نتيجة المعاينة عليه</small>
+        </div>
+        <p-tag
+          [severity]="data.isUserContextResolved ? 'success' : 'warning'"
+          [value]="data.isUserContextResolved ? 'السياق مكتمل' : 'السياق غير مكتمل'">
+        </p-tag>
+      </header>
+
+      <div class="context-grid">
+        <div>
+          <span>معرّف المستخدم</span>
+          <strong>{{ data.evaluatedForUserId || '-' }}</strong>
+        </div>
+        <div>
+          <span>العضويات الوحدوية</span>
+          <strong>{{ userUnitsLabel }}</strong>
+        </div>
+        <div>
+          <span>العضويات الوظيفية</span>
+          <strong>{{ userPositionsLabel }}</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats-grid">
+      <article class="stat-card">
+        <span>الحقول المرئية</span>
+        <strong>{{ visibleFieldsCount }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>الحقول المخفية</span>
+        <strong>{{ hiddenFieldsCount }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>الحقول الإلزامية</span>
+        <strong>{{ requiredFieldsCount }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>الحقول الاختيارية</span>
+        <strong>{{ optionalFieldsCount }}</strong>
+      </article>
+      <article class="stat-card diagnostics">
+        <span>إجمالي التشخيصات</span>
+        <strong>{{ data.diagnosticsSummary.totalCount }}</strong>
+      </article>
+      <article class="stat-card warning">
+        <span>التحذيرات</span>
+        <strong>{{ data.diagnosticsSummary.warningCount }}</strong>
+      </article>
+      <article class="stat-card conflict">
+        <span>التعارضات</span>
+        <strong>{{ data.diagnosticsSummary.conflictCount }}</strong>
+      </article>
+    </section>
+
+    <section class="card availability-card">
+      <header class="card-header">
+        <div>
+          <h3>الإتاحة أثناء التشغيل</h3>
+          <small>{{ data.requestTypeName }} (#{{ data.requestTypeId }})</small>
+        </div>
+        <p-tag [severity]="data.isAvailable ? 'success' : 'danger'" [value]="data.isAvailable ? 'متاح' : 'غير متاح'"></p-tag>
+      </header>
+
+      <ul class="reason-list" *ngIf="data.availabilityReasons.length > 0">
+        <li *ngFor="let reason of data.availabilityReasons; trackBy: trackByString">{{ reason }}</li>
+      </ul>
+    </section>
+
+    <section class="card diagnostics-card" *ngIf="data.diagnosticsSummary.totalCount > 0">
+      <header class="card-header">
+        <div>
+          <h3>تشخيصات الطلب</h3>
+          <small>تشخيصات على مستوى نوع الطلب والسياق الحالي</small>
+        </div>
+        <p-tag severity="info" [value]="data.diagnosticsSummary.requestLevelCount + ' رسالة طلب'"></p-tag>
+      </header>
+
+      <div class="diagnostic-sections">
+        <article class="diagnostic-block info" *ngIf="requestInfoDiagnostics.length > 0">
+          <h4>معلومات</h4>
+          <ul class="reason-list">
+            <li *ngFor="let item of requestInfoDiagnostics; trackBy: trackByDiagnostic">
+              {{ item.message }}
+              <small *ngIf="item.code">({{ item.code }})</small>
+            </li>
+          </ul>
+        </article>
+
+        <article class="diagnostic-block warning" *ngIf="requestWarningDiagnostics.length > 0">
+          <h4>تحذيرات</h4>
+          <ul class="reason-list warning">
+            <li *ngFor="let item of requestWarningDiagnostics; trackBy: trackByDiagnostic">
+              {{ item.message }}
+              <small *ngIf="item.code">({{ item.code }})</small>
+            </li>
+          </ul>
+        </article>
+
+        <article class="diagnostic-block conflict" *ngIf="requestConflictDiagnostics.length > 0">
+          <h4>تعارضات</h4>
+          <ul class="reason-list conflict">
+            <li *ngFor="let item of requestConflictDiagnostics; trackBy: trackByDiagnostic">
+              {{ item.message }}
+              <small *ngIf="item.code">({{ item.code }})</small>
+            </li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="card warnings-card" *ngIf="requestWarningsCount > 0">
+      <header class="card-header">
+        <div>
+          <h3>تحذيرات</h3>
+          <small>فجوات تم اكتشافها من الترجمة التشغيلية الحالية</small>
+        </div>
+        <p-tag severity="warning" [value]="requestWarningsCount + ' تحذير'"></p-tag>
+      </header>
+
+      <ul class="reason-list warning">
+        <li *ngFor="let warning of data.warnings; trackBy: trackByString">{{ warning }}</li>
+      </ul>
+    </section>
+
+    <section class="card conflicts-card" *ngIf="requestConflictsCount > 0">
+      <header class="card-header">
+        <div>
+          <h3>تعارضات</h3>
+          <small>تعارضات إعدادات تؤثر على تفسير النتيجة الحالية</small>
+        </div>
+        <p-tag severity="danger" [value]="requestConflictsCount + ' تعارض'"></p-tag>
+      </header>
+
+      <ul class="reason-list conflict">
+        <li *ngFor="let conflict of data.conflicts; trackBy: trackByString">{{ conflict }}</li>
+      </ul>
+    </section>
+
+    <section class="card fields-card">
+      <header class="card-header">
+        <div>
+          <h3>حقول التشغيل</h3>
+          <small>مرئي/مخفي + إلزامي/اختياري + الأسباب</small>
+        </div>
+        <p-tag severity="info" [value]="data.fields.length + ' حقل'"></p-tag>
+      </header>
+
+      <p-table
+        [value]="data.fields"
+        [loading]="loadingPreview"
+        [rows]="10"
+        [paginator]="data.fields.length > 10"
+        responsiveLayout="scroll"
+        dataKey="fieldId">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>الحقل</th>
+            <th>الإظهار</th>
+            <th>الإلزام</th>
+            <th>الأسباب</th>
+            <th>التشخيص</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-field>
+          <tr>
+            <td>
+              <strong>{{ field.fieldName }}</strong>
+              <br />
+              <small>#{{ field.fieldId }}</small>
+            </td>
+            <td>
+              <p-tag
+                [severity]="field.isVisible ? 'success' : 'warning'"
+                [value]="field.isVisible ? 'مرئي' : 'مخفي'">
+              </p-tag>
+            </td>
+            <td>
+              <p-tag
+                [severity]="field.isRequired ? 'danger' : 'info'"
+                [value]="field.isRequired ? 'إلزامي' : 'اختياري'">
+              </p-tag>
+            </td>
+            <td>
+              <ul class="reason-list inline" *ngIf="field.reasons.length > 0">
+                <li *ngFor="let reason of field.reasons; trackBy: trackByString">{{ reason }}</li>
+              </ul>
+            </td>
+            <td>
+              <div class="field-diagnostics">
+                <p-tag severity="info" [value]="resolveFieldInfoCount(field) + ' معلومات'"></p-tag>
+                <p-tag severity="warning" [value]="field.warnings.length + ' تحذير'"></p-tag>
+                <p-tag severity="danger" [value]="field.conflicts.length + ' تعارض'"></p-tag>
+
+                <ul class="reason-list warning inline" *ngIf="field.warnings.length > 0">
+                  <li *ngFor="let warning of field.warnings; trackBy: trackByString">{{ warning }}</li>
+                </ul>
+                <ul class="reason-list conflict inline" *ngIf="field.conflicts.length > 0">
+                  <li *ngFor="let conflict of field.conflicts; trackBy: trackByString">{{ conflict }}</li>
+                </ul>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="5" class="empty-row">لا توجد حقول مرتبطة بنوع الطلب الحالي.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </section>
+  </ng-container>
+
+  <ng-template #noPreview>
+    <section class="empty-state card" *ngIf="!loadingPreview">
+      اختر نوع طلب لعرض المعاينة التشغيلية الفعالة.
+    </section>
+  </ng-template>
+</section>

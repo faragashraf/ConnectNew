@@ -50,6 +50,24 @@ function normalizeText(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function normalizeArabicLookup(value: string): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .toLowerCase();
+}
+
+function normalizeLatinLookup(value: string): string {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
 function normalizeNumber(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -58,6 +76,32 @@ function normalizeNumber(value: unknown, fallback = 0): number {
 function distinctNumbers(values: number[]): number[] {
   return [...new Set(values.filter(item => Number.isFinite(item) && item > 0))]
     .sort((a, b) => a - b);
+}
+
+function resolveMaxExtraMembersOverride(
+  categoryId: number,
+  slug: string,
+  name: string,
+  configuredMax: number
+): number {
+  const normalizedSlug = normalizeText(slug).toUpperCase();
+  const normalizedName = normalizeArabicLookup(name);
+  const latinSlug = normalizeLatinLookup(slug);
+  const latinName = normalizeLatinLookup(name);
+
+  // Business correction: Ras El Bar must allow at most 1 extra member.
+  const isRasElBar =
+    categoryId === 148
+    || normalizedSlug === 'RAS_EL_BAR'
+    || latinSlug === 'RASELBAR'
+    || latinName === 'RASELBAR'
+    || normalizedName.includes('راس البر');
+
+  if (isRasElBar) {
+    return 1;
+  }
+
+  return configuredMax;
 }
 
 export function parseSummerDestinationCatalog(
@@ -115,11 +159,19 @@ export function parseSummerDestinationCatalog(
       .filter(wave => wave.code.length > 0)
       .sort((a, b) => normalizeWaveOrder(a.code) - normalizeWaveOrder(b.code));
 
+    const configuredMaxExtra = Math.max(0, normalizeNumber(item?.maxExtraMembers, 0));
+    const maxExtraMembers = resolveMaxExtraMembersOverride(
+      categoryId,
+      normalizeText(item?.slug),
+      normalizeText(item?.name),
+      configuredMaxExtra
+    );
+
     uniqueByCategory.set(categoryId, {
       categoryId,
       slug: normalizeText(item?.slug),
       name: normalizeText(item?.name),
-      maxExtraMembers: Math.max(0, normalizeNumber(item?.maxExtraMembers, 0)),
+      maxExtraMembers,
       stayModes,
       apartments,
       familyOptions,
@@ -129,4 +181,3 @@ export function parseSummerDestinationCatalog(
 
   return [...uniqueByCategory.values()].sort((a, b) => a.categoryId - b.categoryId);
 }
-

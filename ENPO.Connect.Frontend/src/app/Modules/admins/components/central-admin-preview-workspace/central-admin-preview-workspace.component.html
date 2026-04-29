@@ -1,0 +1,411 @@
+<section class="preview-workspace" dir="rtl">
+  <header class="preview-header">
+    <div>
+      <h3>Preview Workspace</h3>
+      <p>معاينة إدارية مبنية على بيانات حقيقية من الباك + تكامل إعدادات الـ Config داخل نفس السياق.</p>
+    </div>
+  </header>
+
+  <section class="empty-context" *ngIf="!hasCategorySelection">
+    <h4>لا يمكن توليد المعاينة</h4>
+    <p>اختر نوع موضوع أولًا من قسم "أنواع الموضوعات" داخل الـ Central Admin Shell.</p>
+  </section>
+
+  <section class="loading-box" *ngIf="hasCategorySelection && loading">
+    <p-progressSpinner></p-progressSpinner>
+  </section>
+
+  <section class="error-box" *ngIf="hasCategorySelection && !loading && loadError">
+    <strong>تعذر تحميل المعاينة</strong>
+    <p>{{ loadError }}</p>
+  </section>
+
+  <ng-container *ngIf="hasCategorySelection && !loading && !loadError && renderModel as model">
+    <section class="direction-toolbar">
+      <header>
+        <h4>Direction Context</h4>
+        <span>سلوك الطلب يُقيّم حسب (Request + Direction) بدون أي duplication للنوع.</span>
+      </header>
+      <div class="direction-actions">
+        <button
+          type="button"
+          pButton
+          *ngFor="let option of directionOptions"
+          [label]="option.label"
+          class="p-button-sm"
+          [class.p-button-outlined]="!isDirectionActive(option.value)"
+          [class.p-button-secondary]="!isDirectionActive(option.value)"
+          (click)="changeDirection(option.value)">
+        </button>
+      </div>
+      <div class="direction-actions">
+        <button
+          type="button"
+          pButton
+          label="تفعيل كل الاتجاهات"
+          class="p-button-sm"
+          [loading]="publishingAll"
+          [disabled]="publishingAll || !model.allDirectionsReady"
+          (click)="publishAllDirections(true)">
+        </button>
+        <button
+          type="button"
+          pButton
+          label="إيقاف كل الاتجاهات"
+          class="p-button-sm p-button-outlined"
+          [loading]="publishingAll"
+          [disabled]="publishingAll"
+          (click)="publishAllDirections(false)">
+        </button>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <article>
+        <span>نوع الموضوع</span>
+        <strong>{{ model.categoryName }}</strong>
+      </article>
+      <article>
+        <span>Category ID</span>
+        <strong>{{ model.categoryId }}</strong>
+      </article>
+      <article>
+        <span>Application ID</span>
+        <strong>{{ model.applicationId || '-' }}</strong>
+      </article>
+      <article>
+        <span>الحالة</span>
+        <strong [class.ok]="model.isReady" [class.bad]="!model.isReady">{{ statusText }}</strong>
+      </article>
+      <article>
+        <span>RouteKey Prefix</span>
+        <strong>{{ contextState.routeKeyPrefix || '-' }}</strong>
+      </article>
+      <article>
+        <span>Config RouteKey</span>
+        <strong>{{ primaryRouteKey }}</strong>
+      </article>
+      <article>
+        <span>Document Direction</span>
+        <strong>{{ contextState.documentDirection || '-' }}</strong>
+      </article>
+      <article>
+        <span>Request Mode</span>
+        <strong>{{ contextState.requestMode || '-' }}</strong>
+      </article>
+      <article>
+        <span>الاتجاه النشط</span>
+        <strong>{{ getDirectionLabel(activeDirection) }}</strong>
+      </article>
+      <article>
+        <span>Canonical Config</span>
+        <strong>{{ model.canonicalRouteKey || '-' }}</strong>
+      </article>
+      <article>
+        <span>إجمالي الحقول المرتبطة</span>
+        <strong>{{ model.summary.linkedFieldsCount }}</strong>
+      </article>
+      <article>
+        <span>حقول قابلة للعرض</span>
+        <strong>{{ model.summary.renderableFieldsCount }}</strong>
+      </article>
+      <article>
+        <span>إعدادات Config مطابقة</span>
+        <strong>{{ model.matchedConfigCount }}</strong>
+      </article>
+      <article>
+        <span>جاهزية كل الاتجاهات</span>
+        <strong [class.ok]="model.allDirectionsReady" [class.bad]="!model.allDirectionsReady">
+          {{ model.allDirectionsReady ? 'جاهز' : 'غير مكتمل' }}
+        </strong>
+      </article>
+    </section>
+
+    <section class="direction-readiness-grid" *ngIf="model.directionalReadiness.length > 0">
+      <article
+        class="direction-card"
+        *ngFor="let item of model.directionalReadiness; trackBy: trackByDirection"
+        [class.active]="isDirectionActive(item.direction)"
+        [class.ready]="item.readiness.isReady"
+        [class.not-ready]="!item.readiness.isReady">
+        <header>
+          <h5>{{ getDirectionLabel(item.direction) }}</h5>
+          <span>{{ item.readiness.isReady ? 'Ready' : 'Needs Attention' }}</span>
+        </header>
+        <div class="direction-kpis">
+          <div>
+            <small>Published</small>
+            <strong>{{ item.isPublished ? 'نعم' : 'لا' }}</strong>
+          </div>
+          <div>
+            <small>Visible Fields</small>
+            <strong>{{ item.readiness.visibleLinkedFieldsCount }}</strong>
+          </div>
+          <div>
+            <small>Issues</small>
+            <strong>{{ item.readiness.issues.length }}</strong>
+          </div>
+          <div>
+            <small>آخر تغيير</small>
+            <strong>{{ item.lastChangedAtUtc ? (item.lastChangedAtUtc | date:'short') : '-' }}</strong>
+          </div>
+        </div>
+        <div class="direction-actions">
+          <button
+            pButton
+            type="button"
+            class="p-button-sm"
+            label="Publish"
+            [loading]="isDirectionPublishing(item.direction)"
+            [disabled]="isDirectionPublishing(item.direction) || !item.readiness.isReady || item.isPublished"
+            (click)="publishDirection(item.direction, true)">
+          </button>
+          <button
+            pButton
+            type="button"
+            class="p-button-sm p-button-outlined"
+            label="Unpublish"
+            [loading]="isDirectionPublishing(item.direction)"
+            [disabled]="isDirectionPublishing(item.direction) || !item.isPublished"
+            (click)="publishDirection(item.direction, false)">
+          </button>
+        </div>
+      </article>
+    </section>
+
+    <section class="readiness-panel" [class.ready]="model.isReady" [class.not-ready]="!model.isReady">
+      <header>
+        <h4>Readiness Checks</h4>
+        <span>
+          {{ getDirectionLabel(activeDirection) }} -
+          {{ model.isReady ? 'Ready' : 'Needs Attention' }}
+        </span>
+      </header>
+
+      <div class="readiness-kpis">
+        <div>
+          <small>حقول نشطة</small>
+          <strong>{{ model.summary.activeLinkedFieldsCount }}</strong>
+        </div>
+        <div>
+          <small>حقول مرئية</small>
+          <strong>{{ model.summary.visibleLinkedFieldsCount }}</strong>
+        </div>
+        <div>
+          <small>حقول بدون Binding</small>
+          <strong>{{ model.summary.missingBindingsCount }}</strong>
+        </div>
+        <div>
+          <small>عدد الجروبات</small>
+          <strong>{{ model.summary.groupsCount }}</strong>
+        </div>
+      </div>
+
+      <div class="issues-list" *ngIf="model.issues.length > 0; else noIssues">
+        <article
+          class="issue-item"
+          *ngFor="let issue of model.issues; trackBy: trackByIssue"
+          [ngClass]="issueSeverityClassMap[issue.severity]">
+          <div class="issue-title">
+            <strong>{{ issue.code }}</strong>
+            <span>{{ issue.severity }}</span>
+          </div>
+          <p>{{ issue.message }}</p>
+          <small *ngIf="issue.fieldKey || issue.groupId">
+            Field: {{ issue.fieldKey || '-' }} | Group: {{ issue.groupId || '-' }}
+          </small>
+        </article>
+      </div>
+      <ng-template #noIssues>
+        <p class="no-issues">لا توجد ملاحظات readiness حالية.</p>
+      </ng-template>
+    </section>
+
+    <section class="config-panel">
+      <header>
+        <h4>Config Summary</h4>
+        <p>الـ route/config المستخدم في المعاينة يعتمد على الـ context الحالي ونتيجة الفلترة الفعلية.</p>
+      </header>
+      <p class="canonical-note">
+        Canonical Route: <strong>{{ model.canonicalRouteKey || primaryRouteKey }}</strong>
+      </p>
+
+      <div class="route-chips" *ngIf="matchedConfigs.length > 0; else noConfigs">
+        <span class="chip" *ngFor="let cfg of matchedConfigs | slice:0:14">{{ cfg.routeKey }}</span>
+      </div>
+      <ng-template #noConfigs>
+        <p class="no-configs">لا توجد Configs مطابقة للسياق الحالي.</p>
+      </ng-template>
+    </section>
+
+    <section class="config-panel">
+      <header>
+        <h4>Request Policy Summary</h4>
+        <p>نتيجة حل Access + Workflow + Presentation داخل نفس سياق المعاينة الحالي.</p>
+      </header>
+      <div class="readiness-kpis">
+        <div>
+          <small>Workflow Mode</small>
+          <strong>{{ model.resolvedWorkflowPolicy.mode }}</strong>
+        </div>
+        <div>
+          <small>Static Targets</small>
+          <strong>{{ model.resolvedWorkflowPolicy.staticTargetUnitIds.length }}</strong>
+        </div>
+        <div>
+          <small>Manual Target Field</small>
+          <strong>{{ model.resolvedWorkflowPolicy.manualTargetFieldKey || '-' }}</strong>
+        </div>
+        <div>
+          <small>Create Units</small>
+          <strong>{{ model.resolvedAccessPolicy.createUnitIds.length }}</strong>
+        </div>
+        <div>
+          <small>Read Units</small>
+          <strong>{{ model.resolvedAccessPolicy.readUnitIds.length }}</strong>
+        </div>
+      </div>
+      <p class="canonical-note" *ngIf="model.resolvedWorkflowPolicy.mode === 'manual'">
+        سيتم إظهار اختيار جهة التوجيه للمستخدم عبر الحقل: <strong>{{ model.resolvedWorkflowPolicy.manualTargetFieldKey || '-' }}</strong>
+      </p>
+      <p class="canonical-note" *ngIf="model.resolvedWorkflowPolicy.mode === 'static'">
+        التوجيه ثابت إلى: <strong>{{ model.resolvedWorkflowPolicy.resolvedTargetUnitId || '-' }}</strong>
+      </p>
+      <p class="canonical-note" *ngIf="model.resolvedWorkflowPolicy.mode === 'hybrid'">
+        التوجيه Hybrid: اختيار يدوي عبر <strong>{{ model.resolvedWorkflowPolicy.manualTargetFieldKey || '-' }}</strong> مع fallback ثابت.
+      </p>
+    </section>
+
+    <section class="groups-panel" *ngIf="model.groups.length > 0; else noGroups">
+      <article class="group-card" *ngFor="let group of model.groups; trackBy: trackByGroup">
+        <header class="group-head">
+          <h5>{{ group.groupName }}</h5>
+          <span>{{ group.fields.length }} حقل</span>
+        </header>
+
+        <div class="form-simulation">
+          <h6>محاكاة النموذج</h6>
+          <div class="form-sim-grid">
+            <article class="sim-field" *ngFor="let field of group.fields; trackBy: trackByField">
+              <label>
+                <strong>{{ field.label }}</strong>
+                <small>{{ field.fieldKey }}</small>
+              </label>
+
+              <ng-container [ngSwitch]="true">
+                <textarea *ngSwitchCase="isTextareaField(field)" rows="2" [placeholder]="field.placeholder || field.label" disabled></textarea>
+                <div *ngSwitchCase="isSelectField(field)" class="sim-select-with-tree">
+                  <select disabled>
+                    <option value="" selected>اختر...</option>
+                    <option *ngFor="let option of toSelectPreviewOptions(field)" [value]="option.value">{{ option.label }}</option>
+                  </select>
+                  <button
+                    *ngIf="hasTreeButton(field)"
+                    type="button"
+                    class="tree-launch-btn"
+                    [disabled]="!hasTreeNodes(field)"
+                    (click)="openTreeDialog(field)">
+                    <i class="pi pi-sitemap"></i>
+                    <span>الشجرة</span>
+                  </button>
+                </div>
+                <input *ngSwitchCase="isBooleanField(field)" type="checkbox" disabled />
+                <input *ngSwitchCase="isDateField(field)" type="date" disabled />
+                <input *ngSwitchCase="isNumberField(field)" type="number" [placeholder]="field.placeholder || field.label" disabled />
+                <input *ngSwitchDefault type="text" [placeholder]="field.placeholder || field.label" disabled />
+              </ng-container>
+
+              <small class="tree-selected-value" *ngIf="getTreeSelectedLabel(field)">
+                الاختيار الحالي: {{ getTreeSelectedLabel(field) }}
+              </small>
+              <small class="tree-selected-value" *ngIf="field.helpText">
+                {{ field.helpText }}
+              </small>
+
+              <div class="sim-tags">
+                <span class="tag">{{ field.typeLabel }}</span>
+                <span class="tag" [class.tag-on]="field.required">Required: {{ field.required ? 'Yes' : 'No' }}</span>
+                <span class="tag" [class.tag-on]="field.readonly">Readonly: {{ field.readonly ? 'Yes' : 'No' }}</span>
+                <span class="tag" [class.tag-on]="field.visible">Visible: {{ field.visible ? 'Yes' : 'No' }}</span>
+                <span class="tag tag-tree" *ngIf="field.treeEnabled">Tree Enabled</span>
+              </div>
+
+              <small class="inline-warning" *ngIf="field.unresolvedOptions">
+                مصدر الخيارات غير محلول حتى الآن لهذا الحقل.
+              </small>
+            </article>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>الترتيب</th>
+                <th>الحقل</th>
+                <th>النوع</th>
+                <th>Required</th>
+                <th>Readonly</th>
+                <th>Visible</th>
+                <th>Options / Binding</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let field of group.fields; trackBy: trackByField">
+                <td>{{ field.displayOrder }}</td>
+                <td>
+                  <div class="field-meta">
+                    <strong>{{ field.label }}</strong>
+                    <small>{{ field.fieldKey }}</small>
+                  </div>
+                </td>
+                <td>{{ field.typeLabel }}</td>
+                <td>{{ field.required ? 'نعم' : 'لا' }}</td>
+                <td>{{ field.readonly ? 'نعم' : 'لا' }}</td>
+                <td>{{ field.visible ? 'نعم' : 'لا' }}</td>
+                <td>
+                  <span *ngIf="field.optionsSource === 'inline'">خيارات مباشرة ({{ field.optionsCount }})</span>
+                  <span *ngIf="field.optionsSource === 'binding'">Binding: {{ field.bindingHint || '-' }}</span>
+                  <span *ngIf="field.optionsSource === 'none'">-</span>
+                  <br *ngIf="field.treeEnabled" />
+                  <small *ngIf="field.treeEnabled">Tree: {{ field.treePath || '-' }}</small>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <ng-template #noGroups>
+      <section class="no-groups">
+        <h4>لا توجد جروبات/حقول قابلة للعرض</h4>
+        <p>راجع روابط الحقول والجروبات وإعدادات إظهار الحقول داخل إدارة الأنواع.</p>
+      </section>
+    </ng-template>
+  </ng-container>
+</section>
+
+<p-dialog
+  [(visible)]="treeDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(860px, 92vw)' }"
+  [contentStyle]="{ 'max-height': '72vh', overflow: 'auto' }"
+  [header]="treeDialogFieldLabel ? ('شجرة الاختيار - ' + treeDialogFieldLabel) : 'شجرة الاختيار'"
+  appendTo="body"
+  styleClass="rtl-dialog">
+  <div dir="rtl" class="tree-dialog-body">
+    <p-tree
+      [value]="treeDialogNodes"
+      selectionMode="single"
+      [(selection)]="treeDialogSelection"
+      [filter]="true"
+      filterPlaceholder="ابحث داخل الشجرة"
+      [propagateSelectionDown]="false"
+      [propagateSelectionUp]="false"
+      (onNodeSelect)="onTreeNodeSelect($event)">
+    </p-tree>
+  </div>
+</p-dialog>

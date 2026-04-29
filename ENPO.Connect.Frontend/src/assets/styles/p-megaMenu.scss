@@ -65,15 +65,21 @@ body .p-megamenu .p-megamenu-root-list>.p-menuitem>.p-menuitem-link:not(.p-disab
 }
 
 body .p-megamenu .p-megamenu-root-list>.p-menuitem.p-menuitem-active>.p-menuitem-link {
-  background: linear-gradient(135deg, #4f46e500 0%, #bbed3a96 100% 100%);
-  color: #ffffff;
+  background: linear-gradient(135deg, #e8f7c6 0%, #cfeea0 100%);
+  color: #1f2937;
   box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35);
   transform: translateY(-1px);
 }
 
 /* Ensure active item's hover has a subtle, consistent background (matches theme rule) */
 body .p-megamenu .p-megamenu-root-list>.p-menuitem.p-menuitem-active>.p-menuitem-link:not(.p-disabled):hover {
-  background: linear-gradient(135deg, var(--app-primary-hover, #38c0d881) 0%, #28d95463 100%) !important;
+  background: linear-gradient(135deg, #dff2b7 0%, #b9e27e 100%) !important;
+}
+
+body .p-megamenu .p-megamenu-root-list>.p-menuitem.p-menuitem-active>.p-menuitem-link .p-menuitem-text,
+body .p-megamenu .p-megamenu-root-list>.p-menuitem.p-menuitem-active>.p-menuitem-link .p-menuitem-icon,
+body .p-megamenu .p-megamenu-root-list>.p-menuitem.p-menuitem-active>.p-menuitem-link .p-submenu-icon {
+  color: #1f2937 !important;
 }
 
 .p-megamenu .p-menuitem-link:not(.p-disabled):hover .p-menuitem-text {
@@ -118,17 +124,19 @@ body .p-megamenu .p-megamenu-panel {
   padding: 1.5rem;
   background: #ffffff;
   margin-top: 1rem;
+  left: auto !important;
+  right: 1rem !important;
 
   /* RTL */
   direction: rtl;
 
   /* sizing */
-  max-width: 80vw !important;
+  max-width: calc(100vw - 2rem) !important;
   width: fit-content !important;
   min-width: unset !important;
 
   /* height + overflow */
-  max-height: 85vh !important;
+  max-height: calc(100vh - var(--main-navbar-height, 74px) - 1rem) !important;
   overflow-x: auto !important;
   /* prefer horizontal scroll over adding rows */
   overflow-y: auto !important;
@@ -142,6 +150,7 @@ body .p-megamenu .p-megamenu-panel {
    ========================================== */
 body .p-megamenu .p-megamenu-grid {
   display: grid !important;
+  direction: rtl !important;
 
   /* max 2 rows */
   //   grid-template-rows: repeat(2, min-content) !important;
@@ -245,17 +254,21 @@ body .p-megamenu .p-menuitem-link:hover {
 }
 
 /* Active State - Clear & Persistent */
-body .p-megamenu .p-menuitem-link.router-link-active,
-body .p-megamenu .p-menuitem-link.router-link-active:hover {
+body .p-megamenu .p-megamenu-panel .p-menuitem>.p-menuitem-link.router-link-active,
+body .p-megamenu .p-megamenu-panel .p-menuitem>.p-menuitem-link.router-link-active:hover,
+body .p-megamenu .p-megamenu-panel .p-menuitem.p-menuitem-active>.p-menuitem-link,
+body .p-megamenu .p-megamenu-panel .p-menuitem>.p-menuitem-link[aria-current='page'] {
   background: var(--app-primary-light, rgba(79, 70, 229, 0.08));
-  color: var(--app-primary, #4f46e5);
+  color: var(--app-primary, #4f46e5) !important;
   font-weight: 700;
   border-color: var(--app-primary-border, rgba(79, 70, 229, 0.18));
   box-shadow: 0 2px 4px rgba(79, 70, 229, 0.05);
 }
 
 /* Active Indicator (RTL right bar) */
-body .p-megamenu .p-menuitem-link.router-link-active::before {
+body .p-megamenu .p-megamenu-panel .p-menuitem>.p-menuitem-link.router-link-active::before,
+body .p-megamenu .p-megamenu-panel .p-menuitem.p-menuitem-active>.p-menuitem-link::before,
+body .p-megamenu .p-megamenu-panel .p-menuitem>.p-menuitem-link[aria-current='page']::before {
   content: '';
   position: absolute;
   right: 0;
@@ -265,6 +278,15 @@ body .p-megamenu .p-menuitem-link.router-link-active::before {
   width: 4px;
   background: var(--app-primary, #4f46e5);
   border-radius: 4px 0 0 4px;
+}
+
+body .p-megamenu .p-megamenu-panel .p-menuitem>.p-menuitem-link.router-link-active .p-menuitem-text,
+body .p-megamenu .p-megamenu-panel .p-menuitem.p-menuitem-active>.p-menuitem-link .p-menuitem-text,
+body .p-megamenu .p-megamenu-panel .p-menuitem>.p-menuitem-link[aria-current='page'] .p-menuitem-text,
+body .p-megamenu .p-megamenu-panel .p-menuitem>.p-menuitem-link.router-link-active .p-menuitem-icon,
+body .p-megamenu .p-megamenu-panel .p-menuitem.p-menuitem-active>.p-menuitem-link .p-menuitem-icon,
+body .p-megamenu .p-megamenu-panel .p-menuitem>.p-menuitem-link[aria-current='page'] .p-menuitem-icon {
+  color: var(--app-primary, #4f46e5) !important;
 }
 
 body .p-megamenu .p-menuitem-link .p-menuitem-text {

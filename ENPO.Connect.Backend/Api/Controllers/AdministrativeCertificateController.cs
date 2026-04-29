@@ -23,15 +23,23 @@ namespace Api.Controllers
         [Route(nameof(CreateRequestToken))]
         public async Task<CommonResponse<string>> CreateRequestToken([FromBody] int messageId)
         {
-            // create a short-lived token that maps to a messageId
-            return await _unitOfWork.administrativeCertificateRepository.CreateRequestTokenAsync(messageId);
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            // create a short-lived token that maps to a messageId and bind it to the current user.
+            return await _unitOfWork.administrativeCertificateRepository.CreateRequestTokenAsync(
+                messageId,
+                createdBy: userId,
+                tokenPurpose: Persistence.Services.Summer.SummerWorkflowDomainConstants.RequestTokenPurposes.Generic,
+                expireHours: 24,
+                isOneTimeUse: false,
+                subjectUserId: userId);
         }
 
         [HttpGet]
         [Route(nameof(GetRequestByToken))]
         public async Task<CommonResponse<MessageDto>> GetRequestByToken(string token)
         {
-            return await _unitOfWork.administrativeCertificateRepository.GetRequestByTokenAsync(token);
+            var userId = HttpContext.User.Claims.First(f => f.Type == "UserId").Value;
+            return await _unitOfWork.administrativeCertificateRepository.GetRequestByTokenAsync(token, userId, consumeOneTime: false);
         }
 
         [HttpPost]

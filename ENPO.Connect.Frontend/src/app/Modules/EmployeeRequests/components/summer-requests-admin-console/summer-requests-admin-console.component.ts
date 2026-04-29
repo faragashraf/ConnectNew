@@ -1,6 +1,7 @@
-﻿import { Component, OnDestroy, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Subscription } from 'rxjs';
+﻿import { HttpErrorResponse } from '@angular/common/http';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Subscription, firstValueFrom } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { MessageDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { AttachmentsController } from 'src/app/shared/services/BackendServices/Attachments/Attachments.service';
@@ -8,9 +9,15 @@ import { FileParameter } from 'src/app/shared/services/BackendServices/dto-share
 import {
   SummerAdminDashboardDto,
   SummerDashboardBucketDto,
+  SummerPricingCatalogDto,
+  SummerPricingCatalogRecordDto,
+  SummerPricingCatalogUpsertRequest,
   SummerRequestsPageChange,
   SummerRequestsPageData,
   SummerRequestSummaryDto,
+  SummerWaveBookingsPrintReportDto,
+  SummerWaveBookingsPrintRowDto,
+  SummerWaveBookingsPrintSectionDto,
   SummerWaveCapacityDto
 } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.dto';
 import { SummerWorkflowController } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.service';
@@ -18,6 +25,7 @@ import { AttchedObjectService } from 'src/app/shared/services/helper/attched-obj
 import { DynamicMetadataService } from 'src/app/shared/services/helper/dynamic-metadata.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
+import { AuthObjectsService } from 'src/app/shared/services/helper/auth-objects.service';
 import {
   SUMMER_DESTINATION_CATALOG_KEY,
   SUMMER_DYNAMIC_APPLICATION_ID
@@ -27,6 +35,9 @@ import {
   SUMMER_ADMIN_ACTION,
   SummerAdminActionCode
 } from '../summer-shared/core/summer-action-codes';
+import {
+  resolveAdminActionDecisionForCurrentStatus
+} from '../summer-shared/core/summer-admin-action-state-guard';
 import { SUMMER_UI_TEXTS_AR } from '../summer-shared/core/summer-ui-texts.ar';
 import { SummerRequestsRealtimeService } from '../summer-shared/core/summer-requests-realtime.service';
 import {
@@ -48,14 +59,158 @@ import {
   SummerRequestFieldGridRow
 } from '../summer-requests-workspace/summer-requests-workspace.utils';
 
+type SummerPricingGroupEntry = {
+  index: number;
+  record: SummerPricingCatalogRecordDto;
+};
+
+type SummerPricingRecordGroup = {
+  key: string;
+  categoryId: number;
+  destinationName: string;
+  rows: SummerPricingGroupEntry[];
+  activeCount: number;
+  inactiveCount: number;
+};
+
+type WaveBookingsPrintFooterMarker = {
+  pageNumber: number;
+  topPx: number;
+};
+
+type SummerResortBookingsWaveGroupVm = {
+  waveCode: string;
+  waveStartAtUtc?: string | null;
+  waveEndAtUtc?: string | null;
+  totalBookings: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
+  sections: SummerWaveBookingsPrintSectionDto[];
+};
+
+type SummerResortBookingsPrintReportVm = {
+  categoryId: number;
+  categoryName: string;
+  generatedAtUtc: string;
+  generatedByUserId: string;
+  includeFinancials: boolean;
+  totalConfiguredWaves: number;
+  totalWavesWithBookings: number;
+  totalBookings: number;
+  totalPersons: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
+  waveGroups: SummerResortBookingsWaveGroupVm[];
+};
+
+type SummerAllResortsSummaryWaveVm = {
+  waveCode: string;
+  totalBookings: number;
+  totalPersons: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
+};
+
+type SummerAllResortsSummaryResortVm = {
+  categoryId: number;
+  categoryName: string;
+  totalConfiguredWaves: number;
+  totalWavesWithBookings: number;
+  totalBookings: number;
+  totalPersons: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
+  waves: SummerAllResortsSummaryWaveVm[];
+};
+
+type SummerAllResortsSummaryPrintReportVm = {
+  generatedAtUtc: string;
+  generatedByUserId: string;
+  includeFinancials: boolean;
+  totalResorts: number;
+  totalConfiguredWaves: number;
+  totalWavesWithBookings: number;
+  totalBookings: number;
+  totalPersons: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
+  resorts: SummerAllResortsSummaryResortVm[];
+};
+
+type RequestPrintPaymentModeKind = 'cash' | 'installment' | 'unknown';
+
+type RequestPrintPaymentPlanRow = {
+  title: string;
+  amount: string;
+  paidState: string;
+  paidAt: string;
+};
+
+type SummerAdminPaymentStatusCode = 'PAID' | 'UNPAID';
+
+type SummerAdminPaymentSnapshot = {
+  paymentModeLabel: string;
+  installmentLabel: string;
+  amountText: string;
+  paidAtDisplay: string;
+  paidAtLocal: string;
+  statusCode: SummerAdminPaymentStatusCode;
+  statusLabel: string;
+};
+
 @Component({
   selector: 'app-summer-requests-admin-console',
   templateUrl: './summer-requests-admin-console.component.html',
   styleUrls: ['./summer-requests-admin-console.component.scss']
 })
 export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
+  @ViewChild('waveBookingsPrintDocument')
+  private waveBookingsPrintDocumentRef?: ElementRef<HTMLElement>;
+  @ViewChild('resortBookingsPrintDocument')
+  private resortBookingsPrintDocumentRef?: ElementRef<HTMLElement>;
+  @ViewChild('allResortsSummaryPrintDocument')
+  private allResortsSummaryPrintDocumentRef?: ElementRef<HTMLElement>;
+  @ViewChild('requestAdminPrintDocument')
+  private requestAdminPrintDocumentRef?: ElementRef<HTMLElement>;
+
   readonly seasonYear = SUMMER_SEASON_YEAR;
   readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
+  readonly dynamicSummerConfigRouteKey = 'admins/summer-requests/dynamic-booking';
   destinations: SummerDestinationConfig[] = [];
   loadingDestinations = false;
   destinationsError = '';
@@ -63,10 +218,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   readonly statusOptions = [
     { value: '', label: 'الكل' },
     { value: 'جديد', label: 'جديد' },
-    { value: 'جاري التنفيذ', label: 'جاري التنفيذ' },
+    { value: 'PENDING_REVIEW_REQUIRED', label: 'قيد المراجعة' },
     { value: 'رد إداري', label: 'رد إداري' },
     { value: 'اعتماد نهائي', label: 'اعتماد نهائي' },
-    { value: 'TRANSFER_REVIEW_REQUIRED', label: 'يتطلب مراجعة بعد التحويل' },
     { value: 'تم الرد', label: 'تم الرد (عام)' },
     { value: 'مرفوض', label: 'مرفوض/ملغي' }
   ];
@@ -75,28 +229,36 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: '', label: 'الكل' },
     { value: 'Paid', label: 'مسدد' },
     { value: 'Unpaid', label: 'غير مسدد' },
-    { value: 'OverdueUnpaid', label: 'متأخر وغير مسدد' }
+    { value: 'PartialPaid', label: 'مسدد عدد {0} من {1}' }
   ];
 
   readonly actionOptions: Array<{ value: SummerAdminActionCode; label: string }> = [
     { value: SUMMER_ADMIN_ACTION.COMMENT, label: 'تعليق / رد إداري' },
     { value: SUMMER_ADMIN_ACTION.FINAL_APPROVE, label: 'اعتماد نهائي' },
+    { value: SUMMER_ADMIN_ACTION.REJECT_REQUEST, label: 'رفض الطلب' },
     { value: SUMMER_ADMIN_ACTION.MANUAL_CANCEL, label: 'إلغاء يدوي' },
-    // { value: 'APPROVE_TRANSFER', label: 'اعتماد تحويل' }
+    { value: SUMMER_ADMIN_ACTION.MARK_UNPAID, label: 'تحويل إلى غير مسدد' },
+    { value: SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN, label: 'تحويل إلى مسدد (سداد إداري)' },
+    { value: SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION, label: 'إجراء إداري داخلي' }
   ];
 
   filtersForm: FormGroup;
   actionForm: FormGroup;
+  paymentForm: FormGroup;
 
   dashboard: SummerAdminDashboardDto | null = null;
   requests: SummerRequestSummaryDto[] = [];
   selectedRequestId: number | null = null;
   selectedRequestDetails: MessageDto | null = null;
+  paymentSnapshot: SummerAdminPaymentSnapshot | null = null;
 
   loadingDashboard = false;
   loadingRequests = false;
   loadingDetails = false;
   submittingAction = false;
+  submittingPayment = false;
+  adminInlineEditDialogVisible = false;
+  adminInlineEditRequestId: number | null = null;
 
   activeDashboardStatus = '';
   activeDashboardPaymentState = '';
@@ -108,10 +270,15 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   readonly pageSizeOptions = [5, 10, 25, 50];
   private readonly allowedAdminActionCodes = new Set<SummerAdminActionCode>([
     SUMMER_ADMIN_ACTION.FINAL_APPROVE,
+    SUMMER_ADMIN_ACTION.REJECT_REQUEST,
     SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
+    SUMMER_ADMIN_ACTION.MARK_UNPAID,
+    SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN,
     SUMMER_ADMIN_ACTION.COMMENT,
-    SUMMER_ADMIN_ACTION.APPROVE_TRANSFER
+    SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION
   ]);
+  private readonly adminActionCommentMaxLength = 300;
+  private readonly internalAdminActionCommentMaxLength = 2000;
 
   capacityDialogVisible = false;
   loadingWaveCapacity = false;
@@ -120,12 +287,83 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   capacityRows: SummerWaveCapacityDto[] = [];
   capacityScopeCategoryId: number | null = null;
   capacityScopeWaveCode = '';
+  bookingsPrintDialogVisible = false;
+  loadingWaveBookingsPrint = false;
+  waveBookingsPrintErrorText = '';
+  waveBookingsPrintData: SummerWaveBookingsPrintReportDto | null = null;
+  resortBookingsPrintDialogVisible = false;
+  loadingResortBookingsPrint = false;
+  resortBookingsPrintErrorText = '';
+  resortBookingsPrintData: SummerResortBookingsPrintReportVm | null = null;
+  allResortsSummaryDialogVisible = false;
+  loadingAllResortsSummaryPrint = false;
+  allResortsSummaryErrorText = '';
+  allResortsSummaryData: SummerAllResortsSummaryPrintReportVm | null = null;
+  requestAdminPrintDialogVisible = false;
+  requestAdminPrintGeneratedAt = '';
+  requestAdminPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
+  requestAdminPrintTotalPages = 0;
+
+  readonly pricingModeOptions: Array<{ value: string; label: string }> = [
+    { value: 'AccommodationOnlyAllowed', label: 'إقامة فقط' },
+    { value: 'AccommodationAndTransportationOptional', label: 'إقامة وانتقالات (اختياري)' },
+    { value: 'TransportationMandatoryIncluded', label: 'انتقالات إلزامية ومضمنة' }
+  ];
+  pricingCatalogLoading = false;
+  pricingCatalogSaving = false;
+  pricingCatalogError = '';
+  pricingSeasonYear = this.seasonYear;
+  pricingRecords: SummerPricingCatalogRecordDto[] = [];
+  canManageSummerPricing = false;
+  canManageSummerPayments = false;
+  defaultPricingGroupsExpanded = false;
+  private pricingGroupExpandedState: Record<string, boolean> = {};
 
   actionAttachments: File[] = [];
+  paymentAttachments: File[] = [];
   private readonly allowedAttachmentExtensions = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
+  private readonly paymentInFutureErrorKey = 'paymentInFuture';
   private readonly subscriptions = new Subscription();
   private requestsLoadVersion = 0;
   private dashboardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly integerNumberFormatter = new Intl.NumberFormat('ar-EG', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  });
+  private readonly paymentDateNotInFutureValidator = (control: AbstractControl) => {
+    const paidAtLocal = String(control?.value ?? '').trim();
+    if (!paidAtLocal) {
+      return null;
+    }
+
+    const paidAt = this.parseDateTimeLocalInput(paidAtLocal);
+    if (!paidAt) {
+      return null;
+    }
+
+    return this.toComparableUnixSecond(paidAt) > this.toComparableUnixSecond(new Date())
+      ? { [this.paymentInFutureErrorKey]: true }
+      : null;
+  };
+  waveBookingsPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
+  waveBookingsPrintTotalPages = 0;
+  resortBookingsPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
+  resortBookingsPrintTotalPages = 0;
+  allResortsSummaryPrintFooterMarkers: WaveBookingsPrintFooterMarker[] = [];
+  allResortsSummaryPrintTotalPages = 0;
+  private readonly waveBookingsPrintPageContentHeightPx = (271 * 96) / 25.4;
+  private readonly waveBookingsPrintFooterInsetPx = (6 * 96) / 25.4;
+  private readonly waveBookingsPrintHeaderInsetPx = (2 * 96) / 25.4;
+  private isWaveBookingsPrintModeEnabled = false;
+  private waveBookingsPrintMediaQueryList: MediaQueryList | null = null;
+  private readonly onWaveBookingsAfterPrint = () => {
+    this.disableWaveBookingsPrintMode();
+  };
+  private readonly onWaveBookingsPrintMediaChange = (event: MediaQueryListEvent): void => {
+    if (!event.matches) {
+      this.disableWaveBookingsPrintMode();
+    }
+  };
 
   constructor(
     private readonly fb: FormBuilder,
@@ -134,6 +372,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     private readonly dynamicMetadataService: DynamicMetadataService,
     private readonly attachmentsController: AttachmentsController,
     private readonly attchedObjectService: AttchedObjectService,
+    private readonly authObjectsService: AuthObjectsService,
     private readonly msg: MsgsService,
     private readonly spinner: SpinnerService,
     private readonly summerRealtimeService: SummerRequestsRealtimeService,
@@ -142,6 +381,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.filtersForm = this.fb.group({
       categoryId: [null],
       waveCode: [''],
+      includeFinancialsInPrint: [false],
       status: [''],
       paymentState: [''],
       employeeId: [''],
@@ -152,23 +392,39 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     this.actionForm = this.fb.group({
       actionCode: [SUMMER_ADMIN_ACTION.COMMENT, Validators.required],
-      comment: ['', Validators.maxLength(2000)],
-      force: [false],
-      toCategoryId: [null],
-      toWaveCode: [''],
-      newFamilyCount: [null],
-      newExtraCount: [0]
+      comment: ['', Validators.maxLength(this.adminActionCommentMaxLength)],
+      force: [false]
     });
+
+    this.paymentForm = this.fb.group({
+      paymentStatus: ['PAID'],
+      paidAtLocal: [''],
+      notes: ['', Validators.maxLength(1000)]
+    });
+    this.updatePaymentDateValidators();
+    this.applyPaymentStatusEditAccess();
   }
 
   ngOnInit(): void {
+    this.defaultPricingGroupsExpanded = this.resolveDefaultPricingGroupExpandState();
+    this.refreshSummerPaymentAccess();
+    this.applyPaymentStatusEditAccess();
+    this.refreshSummerPricingAccess();
     this.bindActionRules();
+    this.bindPaymentRules();
     this.bindFilterDependencies();
     this.bindSignalRefresh();
+    const authSub = this.authObjectsService.authObject$.subscribe(() => {
+      this.refreshSummerPaymentAccess();
+      this.refreshSummerPricingAccess();
+      this.applyPaymentStatusEditAccess();
+    });
+    this.subscriptions.add(authSub);
     this.loadDestinationCatalog();
   }
 
   ngOnDestroy(): void {
+    this.disableWaveBookingsPrintMode();
     if (this.dashboardRefreshTimer) {
       clearTimeout(this.dashboardRefreshTimer);
       this.dashboardRefreshTimer = null;
@@ -184,8 +440,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         if (response?.isSuccess) {
           this.destinations = parseSummerDestinationCatalog(response.data, this.seasonYear);
           if (this.destinations.length > 0) {
-            this.loadDashboard();
-            this.loadRequests();
+            this.initializeAdminConsoleData();
             return;
           }
         }
@@ -195,19 +450,28 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         this.destinationsError = errors.length > 0
           ? errors.join('<br/>')
           : SUMMER_UI_TEXTS_AR.errors.destinationCatalogInvalid;
-        this.loadDashboard();
-        this.loadRequests();
+        this.initializeAdminConsoleData();
       },
-      error: () => {
+      error: (error: unknown) => {
         this.destinations = [];
-        this.destinationsError = SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed;
-        this.loadDashboard();
-        this.loadRequests();
+        this.destinationsError = this.collectHttpErrors(error, SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed);
+        this.initializeAdminConsoleData();
       },
       complete: () => {
         this.loadingDestinations = false;
       }
     });
+  }
+
+  private initializeAdminConsoleData(): void {
+    this.loadDashboard();
+    this.loadRequests();
+    if (this.canManageSummerPricing) {
+      this.loadPricingCatalog();
+      return;
+    }
+
+    this.resetPricingStateForUnauthorizedUser();
   }
 
   get selectedRequest(): SummerRequestSummaryDto | undefined {
@@ -217,17 +481,16 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.requests.find(item => item.messageId === this.selectedRequestId);
   }
 
-  get transferDestination(): SummerDestinationConfig | undefined {
-    const categoryId = Number(this.actionForm.get('toCategoryId')?.value ?? 0);
-    return this.destinations.find(item => item.categoryId === categoryId);
+  get paymentInFutureMessage(): string {
+    return SUMMER_UI_TEXTS_AR.errors.paymentInFuture;
   }
 
-  get transferWaves(): SummerWaveDefinition[] {
-    return this.transferDestination?.waves ?? [];
+  get canShowPaymentCard(): boolean {
+    return this.canManageSummerPayments;
   }
 
-  get transferFamilyOptions(): number[] {
-    return this.transferDestination?.familyOptions ?? [];
+  get canEditPaymentStatus(): boolean {
+    return this.canManageSummerPayments;
   }
 
   get dashboardScopeCategoryId(): number | null {
@@ -316,6 +579,164 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.capacityRows.reduce((sum, row) => sum + (Number(row.availableUnits ?? 0) || 0), 0);
   }
 
+  get capacityFrozenAvailableUnits(): number {
+    return this.capacityRows.reduce((sum, row) => sum + (Number(row.frozenAvailableUnits ?? 0) || 0), 0);
+  }
+
+  get capacityFrozenAssignedUnits(): number {
+    return this.capacityRows.reduce((sum, row) => sum + (Number(row.frozenAssignedUnits ?? 0) || 0), 0);
+  }
+
+  get waveBookingsPrintSections(): SummerWaveBookingsPrintSectionDto[] {
+    return this.waveBookingsPrintData?.sections ?? [];
+  }
+
+  get includeFinancialsInWaveBookingsPrint(): boolean {
+    return Boolean(this.filtersForm.get('includeFinancialsInPrint')?.value);
+  }
+
+  get hasWaveBookingsPrintRows(): boolean {
+    return (this.waveBookingsPrintData?.totalBookings ?? 0) > 0;
+  }
+
+  get showWaveBookingsFinancialColumns(): boolean {
+    return this.includeFinancialsInWaveBookingsPrint;
+  }
+
+  get showWaveBookingsFinancialSummary(): boolean {
+    return this.showWaveBookingsFinancialColumns && this.hasWaveBookingsPrintRows;
+  }
+
+  get waveBookingsDialogWidth(): string {
+    return this.showWaveBookingsFinancialColumns ? '1360px' : '1220px';
+  }
+
+  get waveBookingsPrintTotalBookingAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalBookingAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintTotalInsuranceAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalInsuranceAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintTotalFinalAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalFinalAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintTotalCollectedAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalCollectedAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintTotalUncollectedAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.totalUncollectedAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintCashBookingsCount(): number {
+    const total = Number(this.waveBookingsPrintData?.cashBookingsCount ?? 0);
+    return Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0;
+  }
+
+  get waveBookingsPrintInstallmentBookingsCount(): number {
+    const total = Number(this.waveBookingsPrintData?.installmentBookingsCount ?? 0);
+    return Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0;
+  }
+
+  get waveBookingsPrintCashFinalAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.cashFinalAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get waveBookingsPrintInstallmentFinalAmount(): number {
+    const total = Number(this.waveBookingsPrintData?.installmentFinalAmount ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  get canOpenResortBookingsPrintDialog(): boolean {
+    return this.selectedFilterCategoryId > 0;
+  }
+
+  get hasResortBookingsPrintRows(): boolean {
+    return (this.resortBookingsPrintData?.totalBookings ?? 0) > 0;
+  }
+
+  get resortBookingsWaveGroups(): SummerResortBookingsWaveGroupVm[] {
+    return this.resortBookingsPrintData?.waveGroups ?? [];
+  }
+
+  get resortBookingsPrintSectionsFlat(): SummerWaveBookingsPrintSectionDto[] {
+    return this.resortBookingsWaveGroups.flatMap(group => group.sections ?? []);
+  }
+
+  get showResortBookingsPrintRequestRefColumn(): boolean {
+    return this.hasAnyResortBookingsPrintText(row => row.requestRef);
+  }
+
+  get showResortBookingsPrintUnitNumberColumn(): boolean {
+    return this.hasAnyResortBookingsPrintText(row => row.unitNumber);
+  }
+
+  get showResortBookingsPrintPersonsCountColumn(): boolean {
+    return this.hasAnyResortBookingsPrintNumeric(row => row.personsCount);
+  }
+
+  get showResortBookingsPrintStatusColumn(): boolean {
+    return this.hasAnyResortBookingsPrintText(row => row.statusLabel);
+  }
+
+  get showResortBookingsPrintNotesColumn(): boolean {
+    return this.hasAnyResortBookingsPrintText(row => row.notes);
+  }
+
+  get hasAllResortsSummaryRows(): boolean {
+    return (this.allResortsSummaryData?.resorts?.length ?? 0) > 0;
+  }
+
+  get allResortsSummaryResorts(): SummerAllResortsSummaryResortVm[] {
+    return this.allResortsSummaryData?.resorts ?? [];
+  }
+
+  get waveBookingsPrintUserName(): string {
+    const candidates = [
+      localStorage.getItem('firstName'),
+      localStorage.getItem('UserId'),
+      this.waveBookingsPrintData?.generatedByUserId
+    ];
+
+    for (const candidate of candidates) {
+      const text = String(candidate ?? '').trim();
+      if (text.length > 0) {
+        return text;
+      }
+    }
+
+    return '-';
+  }
+
+  get showWaveBookingsPrintRequestRefColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintText(row => row.requestRef);
+  }
+
+  get showWaveBookingsPrintUnitNumberColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintText(row => row.unitNumber);
+  }
+
+  get showWaveBookingsPrintPersonsCountColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintNumeric(row => row.personsCount);
+  }
+
+  get showWaveBookingsPrintStatusColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintText(row => row.statusLabel);
+  }
+
+  get showWaveBookingsPrintNotesColumn(): boolean {
+    return this.hasAnyWaveBookingsPrintText(row => row.notes);
+  }
+
   get selectedDashboardDestination(): SummerDestinationConfig | undefined {
     if (!this.dashboardScopeCategoryId) {
       return undefined;
@@ -397,21 +818,75 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     });
   }
 
+  get selectedRequestPrintFields(): SummerRequestFieldGridRow[] {
+    return this.selectedRequestFields.filter(row => {
+      if (row?.rowType === 'group-header') {
+        return false;
+      }
+
+      return !this.isInstallmentDetailFieldKey(row?.key);
+    });
+  }
+
+  get selectedRequestPaymentMethodLabel(): string {
+    return this.buildSelectedRequestPaymentPlan().modeLabel;
+  }
+
+  get selectedRequestPaymentPlanRows(): RequestPrintPaymentPlanRow[] {
+    return this.buildSelectedRequestPaymentPlan().rows;
+  }
+
+  get hasSelectedRequestPaymentPlan(): boolean {
+    return this.selectedRequestPaymentPlanRows.length > 0;
+  }
+
   get selectedRequestCompanions(): Array<{ index: number; name: string; relation: string; nationalId: string; age: string }> {
     return buildSummerRequestCompanions(this.selectedRequestDetails?.fields);
   }
 
-  get isTransferActionSelected(): boolean {
+  get isSelectedActionBlockedByCurrentState(): boolean {
     const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
-    return normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER;
+    if (!normalized) {
+      return false;
+    }
+    return this.isActionBlockedByCurrentState(normalized);
   }
 
-  get selectedRequestReplies(): Array<{ id: number; author: string; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
+  get selectedActionBlockedMessage(): string {
+    const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
+    if (!normalized) {
+      return '';
+    }
+
+    const decision = this.resolveActionDecision(normalized);
+    return decision.isAllowed
+      ? ''
+      : (decision.errorMessage || SUMMER_UI_TEXTS_AR.errors.invalidAdminActionForCurrentState);
+  }
+
+  get adminCommentCurrentLength(): number {
+    return String(this.actionForm.get('comment')?.value ?? '').length;
+  }
+
+  get adminCommentMaxLengthDisplay(): number {
+    const normalized = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
+    return normalized === SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION
+      ? this.internalAdminActionCommentMaxLength
+      : this.adminActionCommentMaxLength;
+  }
+
+  isActionBlockedByCurrentState(actionCode: SummerAdminActionCode): boolean {
+    return !this.resolveActionDecision(actionCode).isAllowed;
+  }
+
+  get selectedRequestReplies(): Array<{ id: number; author: string; isAdminAction: boolean; message: string; created?: string; attachments: Array<{ id: number; name: string }> }> {
     const replies = this.selectedRequestDetails?.replies ?? [];
     return replies
       .map(reply => ({
         id: Number(reply.replyId ?? 0) || 0,
         author: String(reply.authorName ?? reply.authorId ?? 'غير محدد').trim() || 'غير محدد',
+        isAdminAction: this.parseReplyAdminFlag((reply as { isAdminAction?: unknown; IsAdminAction?: unknown }).isAdminAction
+          ?? (reply as { isAdminAction?: unknown; IsAdminAction?: unknown }).IsAdminAction),
         message: String(reply.message ?? '').trim(),
         created: reply.createdDate as unknown as string,
         attachments: (reply.attchShipmentDtos ?? []).map(item => ({
@@ -450,6 +925,132 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     };
   }
 
+  formatRequestPrintFieldValue(value: unknown): string {
+    const text = String(value ?? '').trim();
+    if (!text || text === '-') {
+      return '-';
+    }
+
+    const normalized = text.toLowerCase();
+    if (normalized === 'true') {
+      return 'نعم';
+    }
+    if (normalized === 'false') {
+      return 'لا';
+    }
+
+    if (this.looksLikeIsoDate(text)) {
+      return this.formatDate(text);
+    }
+
+    return text;
+  }
+
+  isRequestPrintFieldWide(row: SummerRequestFieldGridRow): boolean {
+    const label = String(row?.label ?? '').trim();
+    const value = String(row?.value ?? '').trim();
+    if (!label && !value) {
+      return false;
+    }
+
+    if (/نص\s*رسالة|ملاحظ|تعليق|description|message/i.test(label)) {
+      return true;
+    }
+
+    return value.length >= 90 || value.includes('\n');
+  }
+
+  private buildSelectedRequestPaymentPlan(): { modeLabel: string; rows: RequestPrintPaymentPlanRow[] } {
+    const fieldRows = (this.selectedRequestFields ?? []).filter(row => row?.rowType !== 'group-header');
+    if (fieldRows.length === 0) {
+      return { modeLabel: '-', rows: [] };
+    }
+
+    const paymentModeValue = this.getSelectedRequestFieldValueByKey(fieldRows, 'payment_mode');
+    const modeKind = this.resolveRequestPaymentModeKind(paymentModeValue, fieldRows);
+    const modeLabel = this.resolveRequestPaymentModeLabel(modeKind, paymentModeValue);
+
+    const installmentCount = this.parseRequestPositiveInt(this.getSelectedRequestFieldValueByKey(fieldRows, 'payment_installment_count'));
+    const installmentMap = new Map<number, { amount: string; paidState: string; paidAt: string }>();
+
+    fieldRows.forEach(row => {
+      const key = this.resolveSelectedRequestFieldKey(row);
+      if (!key) {
+        return;
+      }
+
+      const amountMatch = key.match(/^payment_installment_(\d+)_amount$/);
+      if (amountMatch) {
+        const installmentNo = Math.max(1, Number(amountMatch[1] ?? '1'));
+        const current = installmentMap.get(installmentNo) ?? { amount: '-', paidState: '-', paidAt: '-' };
+        current.amount = this.resolveSelectedRequestFieldValue(row);
+        installmentMap.set(installmentNo, current);
+        return;
+      }
+
+      const paidMatch = key.match(/^payment_installment_(\d+)_paid$/);
+      if (paidMatch) {
+        const installmentNo = Math.max(1, Number(paidMatch[1] ?? '1'));
+        const current = installmentMap.get(installmentNo) ?? { amount: '-', paidState: '-', paidAt: '-' };
+        current.paidState = this.resolveRequestPaidState(this.resolveSelectedRequestFieldValue(row));
+        installmentMap.set(installmentNo, current);
+        return;
+      }
+
+      const paidAtMatch = key.match(/^payment_installment_(\d+)_paid_at$/);
+      if (paidAtMatch) {
+        const installmentNo = Math.max(1, Number(paidAtMatch[1] ?? '1'));
+        const current = installmentMap.get(installmentNo) ?? { amount: '-', paidState: '-', paidAt: '-' };
+        current.paidAt = this.formatRequestPrintFieldValue(this.resolveSelectedRequestFieldValue(row));
+        installmentMap.set(installmentNo, current);
+      }
+    });
+
+    if (modeKind === 'cash') {
+      const paidAt = this.getSelectedRequestFieldValueByKey(fieldRows, 'paid_at');
+      const paymentStatus = this.getSelectedRequestFieldValueByKey(fieldRows, 'payment_status');
+      const amount = this.pickRequestDisplayValue([
+        this.getSelectedRequestFieldValueByKey(fieldRows, 'pricing_grand_total'),
+        this.getSelectedRequestFieldValueByKey(fieldRows, 'payment_installments_total')
+      ]);
+
+      return {
+        modeLabel,
+        rows: [{
+          title: 'دفعة كاش',
+          amount: this.ensureRequestCurrency(amount),
+          paidState: this.resolveRequestCashPaidState(paymentStatus, paidAt),
+          paidAt: this.toRequestDisplayOrDash(this.formatRequestPrintFieldValue(paidAt))
+        }]
+      };
+    }
+
+    const maxInstallmentNo = installmentCount && installmentCount > 0
+      ? installmentCount
+      : Math.max(0, ...Array.from(installmentMap.keys()));
+    if (maxInstallmentNo <= 0) {
+      return { modeLabel, rows: [] };
+    }
+
+    const rows: RequestPrintPaymentPlanRow[] = [];
+    for (let installmentNo = 1; installmentNo <= maxInstallmentNo; installmentNo += 1) {
+      const item = installmentMap.get(installmentNo) ?? { amount: '-', paidState: '-', paidAt: '-' };
+      const paidAt = this.toRequestDisplayOrDash(item.paidAt);
+      const paidState = item.paidState !== '-'
+        ? item.paidState
+        : (paidAt !== '-' ? 'مسدد' : 'غير مسدد');
+
+      rows.push({
+        title: this.resolveInstallmentTitle(installmentNo),
+        amount: this.ensureRequestCurrency(item.amount),
+        paidState,
+        paidAt
+      });
+    }
+
+    return { modeLabel, rows };
+  }
+
   onSearch(): void {
     this.filtersForm.patchValue({ pageNumber: 1 });
     this.syncQuickFiltersFromForm();
@@ -461,6 +1062,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.filtersForm.patchValue({
       categoryId: null,
       waveCode: '',
+      includeFinancialsInPrint: false,
       status: '',
       paymentState: '',
       employeeId: '',
@@ -471,6 +1073,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.activeDashboardStatus = '';
     this.activeDashboardPaymentState = '';
     this.capacityDialogVisible = false;
+    this.bookingsPrintDialogVisible = false;
+    this.resortBookingsPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = false;
+    this.requestAdminPrintDialogVisible = false;
     this.loadRequests();
     this.loadDashboard();
   }
@@ -642,8 +1248,482 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.refreshWaveCapacity();
   }
 
+  openWaveBookingsPrintPreview(): void {
+    if (!this.canOpenWaveCapacityDialog) {
+      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidWaveCapacityScope}</h5>`, true);
+      return;
+    }
+
+    this.resortBookingsPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = false;
+    this.requestAdminPrintDialogVisible = false;
+    this.bookingsPrintDialogVisible = true;
+    this.refreshWaveBookingsPrintReport();
+  }
+
   onCapacityDialogHide(): void {
     this.capacityDialogVisible = false;
+  }
+
+  onWaveBookingsPrintDialogHide(): void {
+    this.bookingsPrintDialogVisible = false;
+    this.waveBookingsPrintFooterMarkers = [];
+    this.waveBookingsPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
+  }
+
+  closeWaveBookingsPrintDialog(): void {
+    this.bookingsPrintDialogVisible = false;
+    this.waveBookingsPrintFooterMarkers = [];
+    this.waveBookingsPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
+  }
+
+  refreshWaveBookingsPrintReport(silent = false): void {
+    if (!this.selectedFilterCategoryId || !this.selectedFilterWaveCode) {
+      return;
+    }
+
+    this.loadingWaveBookingsPrint = true;
+    this.waveBookingsPrintErrorText = '';
+    if (!silent) {
+      this.waveBookingsPrintData = null;
+    }
+
+    this.summerWorkflowController
+      .getWaveBookingsPrintReport(
+        this.selectedFilterCategoryId,
+        this.selectedFilterWaveCode,
+        this.seasonYear,
+        this.includeFinancialsInWaveBookingsPrint
+      )
+      .subscribe({
+        next: response => {
+          if (response?.isSuccess && response.data) {
+            this.waveBookingsPrintData = response.data;
+            this.scheduleWaveBookingsPrintPaginationRefresh();
+            return;
+          }
+
+          this.waveBookingsPrintData = null;
+          this.waveBookingsPrintFooterMarkers = [];
+          this.waveBookingsPrintTotalPages = 0;
+          this.waveBookingsPrintErrorText = this.collectErrors(response);
+          if (!silent) {
+            this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
+          }
+        },
+        error: (error: unknown) => {
+          this.waveBookingsPrintData = null;
+          this.waveBookingsPrintFooterMarkers = [];
+          this.waveBookingsPrintTotalPages = 0;
+          this.waveBookingsPrintErrorText = this.collectHttpErrors(error, 'تعذر تحميل كشف الحاجزين حالياً.');
+          if (!silent) {
+            this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
+          }
+        },
+        complete: () => {
+          this.loadingWaveBookingsPrint = false;
+        }
+      });
+  }
+
+  printWaveBookingsReport(): void {
+    if (this.loadingWaveBookingsPrint || this.waveBookingsPrintErrorText.length > 0 || !this.waveBookingsPrintData) {
+      return;
+    }
+
+    this.enableWaveBookingsPrintMode();
+    this.prepareWaveBookingsPrintPagination();
+    setTimeout(() => {
+      window.print();
+    }, 0);
+  }
+
+  openResortBookingsPrintPreview(): void {
+    if (!this.canOpenResortBookingsPrintDialog) {
+      this.msg.msgError('خطأ', '<h5>يرجى اختيار المصيف أولًا لتشغيل تقرير المصيف.</h5>', true);
+      return;
+    }
+
+    this.bookingsPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = false;
+    this.requestAdminPrintDialogVisible = false;
+    this.resortBookingsPrintDialogVisible = true;
+    this.refreshResortBookingsPrintReport();
+  }
+
+  closeResortBookingsPrintDialog(): void {
+    this.resortBookingsPrintDialogVisible = false;
+    this.resortBookingsPrintFooterMarkers = [];
+    this.resortBookingsPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
+  }
+
+  onResortBookingsPrintDialogHide(): void {
+    this.closeResortBookingsPrintDialog();
+  }
+
+  async refreshResortBookingsPrintReport(silent = false): Promise<void> {
+    if (!this.selectedFilterCategoryId) {
+      return;
+    }
+
+    const destination = this.destinations.find(item => item.categoryId === this.selectedFilterCategoryId);
+    const waves = [...(destination?.waves ?? [])];
+    this.loadingResortBookingsPrint = true;
+    this.resortBookingsPrintErrorText = '';
+    if (!silent) {
+      this.resortBookingsPrintData = null;
+    }
+
+    try {
+      const includeFinancials = this.includeFinancialsInWaveBookingsPrint;
+      const waveGroups: SummerResortBookingsWaveGroupVm[] = [];
+      for (const wave of waves) {
+        const waveCode = String(wave?.code ?? '').trim();
+        if (!waveCode) {
+          continue;
+        }
+
+        const response = await firstValueFrom(this.summerWorkflowController.getWaveBookingsPrintReport(
+          this.selectedFilterCategoryId,
+          waveCode,
+          this.seasonYear,
+          includeFinancials
+        ));
+
+        if (!response?.isSuccess || !response.data) {
+          this.resortBookingsPrintErrorText = this.collectErrors(response);
+          this.resortBookingsPrintData = null;
+          this.resortBookingsPrintFooterMarkers = [];
+          this.resortBookingsPrintTotalPages = 0;
+          if (!silent) {
+            this.msg.msgError('خطأ', `<h5>${this.resortBookingsPrintErrorText}</h5>`, true);
+          }
+          return;
+        }
+
+        const waveData = response.data;
+        if ((waveData.totalBookings ?? 0) <= 0) {
+          continue;
+        }
+
+        waveGroups.push({
+          waveCode,
+          waveStartAtUtc: waveData.waveStartAtUtc,
+          waveEndAtUtc: waveData.waveEndAtUtc,
+          totalBookings: Number(waveData.totalBookings ?? 0) || 0,
+          totalBookingAmount: includeFinancials ? Number(waveData.totalBookingAmount ?? 0) || 0 : 0,
+          totalInsuranceAmount: includeFinancials ? Number(waveData.totalInsuranceAmount ?? 0) || 0 : 0,
+          totalFinalAmount: includeFinancials ? Number(waveData.totalFinalAmount ?? 0) || 0 : 0,
+          totalCollectedAmount: includeFinancials ? Number(waveData.totalCollectedAmount ?? 0) || 0 : 0,
+          totalUncollectedAmount: includeFinancials ? Number(waveData.totalUncollectedAmount ?? 0) || 0 : 0,
+          cashBookingsCount: Number(waveData.cashBookingsCount ?? 0) || 0,
+          installmentBookingsCount: Number(waveData.installmentBookingsCount ?? 0) || 0,
+          cashFinalAmount: includeFinancials ? Number(waveData.cashFinalAmount ?? 0) || 0 : 0,
+          installmentFinalAmount: includeFinancials ? Number(waveData.installmentFinalAmount ?? 0) || 0 : 0,
+          sections: [...(waveData.sections ?? [])]
+        });
+      }
+
+      const totalPersons = waveGroups.reduce((sum, waveGroup) => {
+        return sum + waveGroup.sections.reduce((sectionSum, section) => {
+          return sectionSum + (section.rows ?? []).reduce((rowsSum, row) => rowsSum + Math.max(0, Number(row.personsCount ?? 0) || 0), 0);
+        }, 0);
+      }, 0);
+
+      this.resortBookingsPrintData = {
+        categoryId: this.selectedFilterCategoryId,
+        categoryName: destination?.name ?? this.selectedFilterDestinationName,
+        generatedAtUtc: new Date().toISOString(),
+        generatedByUserId: this.waveBookingsPrintUserName,
+        includeFinancials,
+        totalConfiguredWaves: waves.length,
+        totalWavesWithBookings: waveGroups.length,
+        totalBookings: waveGroups.reduce((sum, group) => sum + group.totalBookings, 0),
+        totalPersons,
+        totalBookingAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalBookingAmount, 0) : 0,
+        totalInsuranceAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalInsuranceAmount, 0) : 0,
+        totalFinalAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalFinalAmount, 0) : 0,
+        totalCollectedAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalCollectedAmount, 0) : 0,
+        totalUncollectedAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.totalUncollectedAmount, 0) : 0,
+        cashBookingsCount: waveGroups.reduce((sum, group) => sum + group.cashBookingsCount, 0),
+        installmentBookingsCount: waveGroups.reduce((sum, group) => sum + group.installmentBookingsCount, 0),
+        cashFinalAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.cashFinalAmount, 0) : 0,
+        installmentFinalAmount: includeFinancials ? waveGroups.reduce((sum, group) => sum + group.installmentFinalAmount, 0) : 0,
+        waveGroups
+      };
+
+      this.scheduleResortBookingsPrintPaginationRefresh();
+    } catch (error) {
+      this.resortBookingsPrintData = null;
+      this.resortBookingsPrintFooterMarkers = [];
+      this.resortBookingsPrintTotalPages = 0;
+      this.resortBookingsPrintErrorText = this.collectHttpErrors(error, 'تعذر تحميل كشف الحاجزين للمصيف حالياً.');
+      if (!silent) {
+        this.msg.msgError('خطأ', `<h5>${this.resortBookingsPrintErrorText}</h5>`, true);
+      }
+    } finally {
+      this.loadingResortBookingsPrint = false;
+    }
+  }
+
+  printResortBookingsReport(): void {
+    if (this.loadingResortBookingsPrint || this.resortBookingsPrintErrorText.length > 0 || !this.resortBookingsPrintData) {
+      return;
+    }
+
+    this.enableWaveBookingsPrintMode();
+    this.prepareResortBookingsPrintPagination();
+    setTimeout(() => {
+      window.print();
+    }, 0);
+  }
+
+  openAllResortsSummaryPrintPreview(): void {
+    if (this.destinations.length === 0) {
+      this.msg.msgError('خطأ', '<h5>لا توجد مصايف متاحة لتوليد التقرير.</h5>', true);
+      return;
+    }
+
+    this.bookingsPrintDialogVisible = false;
+    this.resortBookingsPrintDialogVisible = false;
+    this.requestAdminPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = true;
+    this.refreshAllResortsSummaryPrintReport();
+  }
+
+  closeAllResortsSummaryPrintDialog(): void {
+    this.allResortsSummaryDialogVisible = false;
+    this.allResortsSummaryPrintFooterMarkers = [];
+    this.allResortsSummaryPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
+  }
+
+  onAllResortsSummaryPrintDialogHide(): void {
+    this.closeAllResortsSummaryPrintDialog();
+  }
+
+  async refreshAllResortsSummaryPrintReport(silent = false): Promise<void> {
+    this.loadingAllResortsSummaryPrint = true;
+    this.allResortsSummaryErrorText = '';
+    if (!silent) {
+      this.allResortsSummaryData = null;
+    }
+
+    try {
+      const includeFinancials = this.includeFinancialsInWaveBookingsPrint;
+      const resorts: SummerAllResortsSummaryResortVm[] = [];
+      for (const destination of this.destinations) {
+        const categoryId = Number(destination?.categoryId ?? 0);
+        if (categoryId <= 0) {
+          continue;
+        }
+
+        const waves = [...(destination.waves ?? [])];
+        const waveSummaries: SummerAllResortsSummaryWaveVm[] = [];
+        for (const wave of waves) {
+          const waveCode = String(wave?.code ?? '').trim();
+          if (!waveCode) {
+            continue;
+          }
+
+          const response = await firstValueFrom(this.summerWorkflowController.getWaveBookingsPrintReport(
+            categoryId,
+            waveCode,
+            this.seasonYear,
+            includeFinancials
+          ));
+
+          if (!response?.isSuccess || !response.data) {
+            this.allResortsSummaryErrorText = this.collectErrors(response);
+            this.allResortsSummaryData = null;
+            this.allResortsSummaryPrintFooterMarkers = [];
+            this.allResortsSummaryPrintTotalPages = 0;
+            if (!silent) {
+              this.msg.msgError('خطأ', `<h5>${this.allResortsSummaryErrorText}</h5>`, true);
+            }
+            return;
+          }
+
+          const waveData = response.data;
+          const totalBookings = Number(waveData.totalBookings ?? 0) || 0;
+          if (totalBookings <= 0) {
+            continue;
+          }
+
+          const totalPersons = (waveData.sections ?? []).reduce((sum, section) => {
+            return sum + (section.rows ?? []).reduce((rowsSum, row) => rowsSum + Math.max(0, Number(row.personsCount ?? 0) || 0), 0);
+          }, 0);
+
+          waveSummaries.push({
+            waveCode,
+            totalBookings,
+            totalPersons,
+            totalBookingAmount: includeFinancials ? Number(waveData.totalBookingAmount ?? 0) || 0 : 0,
+            totalInsuranceAmount: includeFinancials ? Number(waveData.totalInsuranceAmount ?? 0) || 0 : 0,
+            totalFinalAmount: includeFinancials ? Number(waveData.totalFinalAmount ?? 0) || 0 : 0,
+            totalCollectedAmount: includeFinancials ? Number(waveData.totalCollectedAmount ?? 0) || 0 : 0,
+            totalUncollectedAmount: includeFinancials ? Number(waveData.totalUncollectedAmount ?? 0) || 0 : 0,
+            cashBookingsCount: Number(waveData.cashBookingsCount ?? 0) || 0,
+            installmentBookingsCount: Number(waveData.installmentBookingsCount ?? 0) || 0,
+            cashFinalAmount: includeFinancials ? Number(waveData.cashFinalAmount ?? 0) || 0 : 0,
+            installmentFinalAmount: includeFinancials ? Number(waveData.installmentFinalAmount ?? 0) || 0 : 0
+          });
+        }
+
+        resorts.push({
+          categoryId,
+          categoryName: destination.name ?? `مصيف ${categoryId}`,
+          totalConfiguredWaves: waves.length,
+          totalWavesWithBookings: waveSummaries.length,
+          totalBookings: waveSummaries.reduce((sum, item) => sum + item.totalBookings, 0),
+          totalPersons: waveSummaries.reduce((sum, item) => sum + item.totalPersons, 0),
+          totalBookingAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalBookingAmount, 0) : 0,
+          totalInsuranceAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalInsuranceAmount, 0) : 0,
+          totalFinalAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalFinalAmount, 0) : 0,
+          totalCollectedAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalCollectedAmount, 0) : 0,
+          totalUncollectedAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.totalUncollectedAmount, 0) : 0,
+          cashBookingsCount: waveSummaries.reduce((sum, item) => sum + item.cashBookingsCount, 0),
+          installmentBookingsCount: waveSummaries.reduce((sum, item) => sum + item.installmentBookingsCount, 0),
+          cashFinalAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.cashFinalAmount, 0) : 0,
+          installmentFinalAmount: includeFinancials ? waveSummaries.reduce((sum, item) => sum + item.installmentFinalAmount, 0) : 0,
+          waves: waveSummaries
+        });
+      }
+
+      this.allResortsSummaryData = {
+        generatedAtUtc: new Date().toISOString(),
+        generatedByUserId: this.waveBookingsPrintUserName,
+        includeFinancials,
+        totalResorts: resorts.length,
+        totalConfiguredWaves: resorts.reduce((sum, resort) => sum + resort.totalConfiguredWaves, 0),
+        totalWavesWithBookings: resorts.reduce((sum, resort) => sum + resort.totalWavesWithBookings, 0),
+        totalBookings: resorts.reduce((sum, resort) => sum + resort.totalBookings, 0),
+        totalPersons: resorts.reduce((sum, resort) => sum + resort.totalPersons, 0),
+        totalBookingAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalBookingAmount, 0) : 0,
+        totalInsuranceAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalInsuranceAmount, 0) : 0,
+        totalFinalAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalFinalAmount, 0) : 0,
+        totalCollectedAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalCollectedAmount, 0) : 0,
+        totalUncollectedAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.totalUncollectedAmount, 0) : 0,
+        cashBookingsCount: resorts.reduce((sum, resort) => sum + resort.cashBookingsCount, 0),
+        installmentBookingsCount: resorts.reduce((sum, resort) => sum + resort.installmentBookingsCount, 0),
+        cashFinalAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.cashFinalAmount, 0) : 0,
+        installmentFinalAmount: includeFinancials ? resorts.reduce((sum, resort) => sum + resort.installmentFinalAmount, 0) : 0,
+        resorts
+      };
+
+      this.scheduleAllResortsSummaryPrintPaginationRefresh();
+    } catch (error) {
+      this.allResortsSummaryData = null;
+      this.allResortsSummaryPrintFooterMarkers = [];
+      this.allResortsSummaryPrintTotalPages = 0;
+      this.allResortsSummaryErrorText = this.collectHttpErrors(error, 'تعذر تحميل تقرير جميع المصايف حالياً.');
+      if (!silent) {
+        this.msg.msgError('خطأ', `<h5>${this.allResortsSummaryErrorText}</h5>`, true);
+      }
+    } finally {
+      this.loadingAllResortsSummaryPrint = false;
+    }
+  }
+
+  printAllResortsSummaryReport(): void {
+    if (this.loadingAllResortsSummaryPrint || this.allResortsSummaryErrorText.length > 0 || !this.allResortsSummaryData) {
+      return;
+    }
+
+    this.enableWaveBookingsPrintMode();
+    this.prepareAllResortsSummaryPrintPagination();
+    setTimeout(() => {
+      window.print();
+    }, 0);
+  }
+
+  openSelectedRequestPrintPreview(): void {
+    if (!this.selectedRequest) {
+      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب أولًا.</h5>', true);
+      return;
+    }
+
+    this.bookingsPrintDialogVisible = false;
+    this.resortBookingsPrintDialogVisible = false;
+    this.allResortsSummaryDialogVisible = false;
+    this.requestAdminPrintDialogVisible = true;
+    this.requestAdminPrintGeneratedAt = new Date().toISOString();
+    if (!this.selectedRequestDetails || Number(this.selectedRequestDetails.messageId ?? 0) !== Number(this.selectedRequest.messageId ?? 0)) {
+      this.loadSelectedRequestDetails(this.selectedRequest.messageId);
+    }
+    this.scheduleRequestAdminPrintPaginationRefresh();
+  }
+
+  closeSelectedRequestPrintDialog(): void {
+    this.requestAdminPrintDialogVisible = false;
+    this.requestAdminPrintGeneratedAt = '';
+    this.requestAdminPrintFooterMarkers = [];
+    this.requestAdminPrintTotalPages = 0;
+    this.disableWaveBookingsPrintMode();
+  }
+
+  onRequestAdminPrintDialogHide(): void {
+    this.closeSelectedRequestPrintDialog();
+  }
+
+  printSelectedRequestReport(): void {
+    if (!this.selectedRequest) {
+      return;
+    }
+
+    this.enableWaveBookingsPrintMode();
+    this.prepareRequestAdminPrintPagination();
+    setTimeout(() => {
+      window.print();
+    }, 0);
+  }
+
+  @HostListener('window:beforeprint')
+  onBeforeWindowPrint(): void {
+    if (this.bookingsPrintDialogVisible && !this.loadingWaveBookingsPrint && this.waveBookingsPrintErrorText.length === 0 && this.waveBookingsPrintData) {
+      this.enableWaveBookingsPrintMode();
+      this.prepareWaveBookingsPrintPagination();
+      return;
+    }
+
+    if (this.resortBookingsPrintDialogVisible && !this.loadingResortBookingsPrint && this.resortBookingsPrintErrorText.length === 0 && this.resortBookingsPrintData) {
+      this.enableWaveBookingsPrintMode();
+      this.prepareResortBookingsPrintPagination();
+      return;
+    }
+
+    if (this.allResortsSummaryDialogVisible && !this.loadingAllResortsSummaryPrint && this.allResortsSummaryErrorText.length === 0 && this.allResortsSummaryData) {
+      this.enableWaveBookingsPrintMode();
+      this.prepareAllResortsSummaryPrintPagination();
+      return;
+    }
+
+    if (this.requestAdminPrintDialogVisible && this.selectedRequest) {
+      this.enableWaveBookingsPrintMode();
+      this.prepareRequestAdminPrintPagination();
+    }
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    if (this.bookingsPrintDialogVisible && !this.loadingWaveBookingsPrint && this.waveBookingsPrintData) {
+      this.scheduleWaveBookingsPrintPaginationRefresh();
+    }
+
+    if (this.resortBookingsPrintDialogVisible && !this.loadingResortBookingsPrint && this.resortBookingsPrintData) {
+      this.scheduleResortBookingsPrintPaginationRefresh();
+    }
+
+    if (this.allResortsSummaryDialogVisible && !this.loadingAllResortsSummaryPrint && this.allResortsSummaryData) {
+      this.scheduleAllResortsSummaryPrintPaginationRefresh();
+    }
+
+    if (this.requestAdminPrintDialogVisible && this.selectedRequest) {
+      this.scheduleRequestAdminPrintPaginationRefresh();
+    }
   }
 
   refreshWaveCapacity(silent = false): void {
@@ -653,7 +1733,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     this.loadingWaveCapacity = true;
     this.capacityErrorText = '';
-    this.summerWorkflowController.getWaveCapacity(this.capacityScopeCategoryId, this.capacityScopeWaveCode).subscribe({
+    this.summerWorkflowController.getWaveCapacity(this.capacityScopeCategoryId, this.capacityScopeWaveCode, true).subscribe({
       next: response => {
         if (response?.isSuccess && Array.isArray(response.data)) {
           this.capacityRows = [...response.data]
@@ -668,15 +1748,172 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.msg.msgError('خطأ', `<h5>${this.capacityErrorText}</h5>`, true);
         }
       },
-      error: () => {
+      error: (error: unknown) => {
         this.capacityRows = [];
-        this.capacityErrorText = 'تعذر تحميل بيان الإتاحة حالياً.';
+        this.capacityErrorText = this.collectHttpErrors(error, 'تعذر تحميل بيان الإتاحة حالياً.');
         if (!silent) {
           this.msg.msgError('خطأ', `<h5>${this.capacityErrorText}</h5>`, true);
         }
       },
       complete: () => {
         this.loadingWaveCapacity = false;
+      }
+    });
+  }
+
+  loadPricingCatalog(silent = true): void {
+    if (!this.canManageSummerPricing) {
+      this.resetPricingStateForUnauthorizedUser();
+      return;
+    }
+
+    this.pricingCatalogLoading = true;
+    if (!silent) {
+      this.pricingCatalogError = '';
+    }
+
+    this.summerWorkflowController.getPricingCatalog(this.seasonYear).subscribe({
+      next: response => {
+        if (response?.isSuccess && response.data) {
+          const catalog = response.data as SummerPricingCatalogDto;
+          this.pricingSeasonYear = Number(catalog.seasonYear ?? this.seasonYear) || this.seasonYear;
+          this.pricingRecords = Array.isArray(catalog.records)
+            ? catalog.records.map(record => this.normalizePricingRecord(record))
+            : [];
+
+          if (this.pricingRecords.length === 0) {
+            this.pricingRecords = [this.createEmptyPricingRecord()];
+          }
+          this.resetPricingGroupExpansionState();
+          this.syncPricingGroupExpansionState();
+          this.pricingCatalogError = '';
+          return;
+        }
+
+        const errorText = this.collectErrors(response) || 'تعذر تحميل إعدادات التسعير.';
+        this.pricingCatalogError = errorText;
+        if (!silent) {
+          this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
+        }
+      },
+      error: (error: unknown) => {
+        this.pricingCatalogError = this.collectHttpErrors(error, 'تعذر تحميل إعدادات التسعير حالياً.');
+        if (!silent) {
+          this.msg.msgError('خطأ', `<h5>${this.pricingCatalogError}</h5>`, true);
+        }
+      },
+      complete: () => {
+        this.pricingCatalogLoading = false;
+      }
+    });
+  }
+
+  addPricingRecord(categoryId?: number): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
+    this.pricingRecords = [...this.pricingRecords, this.createEmptyPricingRecord(categoryId)];
+    this.syncPricingGroupExpansionState();
+  }
+
+  duplicatePricingRecord(index: number): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
+    if (index < 0 || index >= this.pricingRecords.length) {
+      return;
+    }
+
+    const sourceRecord = this.normalizePricingRecord(this.pricingRecords[index]);
+    const duplicatedRecord = this.normalizePricingRecord({
+      ...sourceRecord,
+      pricingConfigId: this.buildDuplicatedPricingConfigId(sourceRecord)
+    });
+
+    this.pricingRecords = [
+      ...this.pricingRecords.slice(0, index + 1),
+      duplicatedRecord,
+      ...this.pricingRecords.slice(index + 1)
+    ];
+    this.syncPricingGroupExpansionState();
+
+    this.msg.msgSuccess('تم نسخ السجل بنجاح، يرجى مراجعة البيانات ثم الحفظ.');
+  }
+
+  removePricingRecord(index: number): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
+    if (index < 0 || index >= this.pricingRecords.length) {
+      return;
+    }
+
+    this.pricingRecords = this.pricingRecords.filter((_, i) => i !== index);
+    if (this.pricingRecords.length === 0) {
+      this.pricingRecords = [this.createEmptyPricingRecord()];
+    }
+    this.syncPricingGroupExpansionState();
+  }
+
+  onPricingModeChanged(record: SummerPricingCatalogRecordDto): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
+    const normalizedMode = String(record?.pricingMode ?? '').trim();
+    if (normalizedMode === 'TransportationMandatoryIncluded') {
+      record.transportationMandatory = true;
+      return;
+    }
+
+    if (normalizedMode === 'AccommodationOnlyAllowed') {
+      record.transportationMandatory = false;
+      record.transportationPricePerPerson = 0;
+    }
+  }
+
+  savePricingCatalog(): void {
+    if (!this.canManageSummerPricing) {
+      return;
+    }
+
+    const payload: SummerPricingCatalogUpsertRequest = {
+      seasonYear: Number(this.pricingSeasonYear) || this.seasonYear,
+      records: this.pricingRecords.map((record, index) => this.normalizePricingRecordForSave(record, index))
+    };
+
+    this.pricingCatalogSaving = true;
+    this.spinner.show('جاري حفظ إعدادات التسعير...');
+    this.summerWorkflowController.savePricingCatalog(payload).subscribe({
+      next: response => {
+        if (response?.isSuccess && response.data) {
+          const catalog = response.data as SummerPricingCatalogDto;
+          this.pricingSeasonYear = Number(catalog.seasonYear ?? payload.seasonYear) || payload.seasonYear;
+          this.pricingRecords = Array.isArray(catalog.records)
+            ? catalog.records.map(record => this.normalizePricingRecord(record))
+            : [];
+          if (this.pricingRecords.length === 0) {
+            this.pricingRecords = [this.createEmptyPricingRecord()];
+          }
+          this.resetPricingGroupExpansionState();
+          this.syncPricingGroupExpansionState();
+          this.pricingCatalogError = '';
+          this.msg.msgSuccess('تم حفظ إعدادات التسعير بنجاح.');
+          return;
+        }
+
+        this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
+      },
+      error: (error: unknown) => {
+        const errorText = this.collectHttpErrors(error, 'تعذر حفظ إعدادات التسعير حالياً.');
+        this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
+      },
+      complete: () => {
+        this.pricingCatalogSaving = false;
+        this.spinner.hide();
       }
     });
   }
@@ -748,6 +1985,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         if (this.selectedRequestId && !this.requests.some(item => item.messageId === this.selectedRequestId)) {
           this.selectedRequestId = null;
           this.selectedRequestDetails = null;
+          this.refreshPaymentSnapshot();
         }
       },
       error: () => {
@@ -773,8 +2011,38 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   selectRequest(messageId: number): void {
     this.selectedRequestId = messageId;
     this.selectedRequestDetails = null;
+    this.resetPaymentFormForCurrentSelection();
     this.patchActionDefaultsForSelectedRequest();
     this.loadSelectedRequestDetails(messageId);
+  }
+
+  openSelectedRequestEdit(): void {
+    const request = this.selectedRequest;
+    const messageId = Number(request?.messageId ?? 0);
+    if (!Number.isFinite(messageId) || messageId <= 0) {
+      return;
+    }
+
+    this.adminInlineEditRequestId = Math.floor(messageId);
+    this.adminInlineEditDialogVisible = true;
+  }
+
+  closeInlineEditDialog(): void {
+    this.adminInlineEditDialogVisible = false;
+    this.adminInlineEditRequestId = null;
+  }
+
+  onInlineEditSaved(savedMessageId: number): void {
+    const messageId = Number(savedMessageId ?? this.adminInlineEditRequestId ?? 0);
+    if (Number.isFinite(messageId) && messageId > 0) {
+      const normalizedMessageId = Math.floor(messageId);
+      this.selectedRequestId = normalizedMessageId;
+      this.loadSelectedRequestDetails(normalizedMessageId);
+      this.applyRealtimeRequestUpdate(this.createLocalRequestUpdateEvent(normalizedMessageId, 'UPDATE'));
+    }
+
+    this.loadRequests();
+    this.scheduleDashboardRefresh();
   }
 
   submitAdminAction(): void {
@@ -797,8 +2065,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (actionCode === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER && (!raw.toCategoryId || !String(raw.toWaveCode ?? '').trim())) {
-      this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidTransferData}</h5>`, true);
+    const actionDecision = this.resolveActionDecision(actionCode);
+    if (!actionDecision.isAllowed) {
+      const blockedMessage = actionDecision.errorMessage || SUMMER_UI_TEXTS_AR.errors.invalidAdminActionForCurrentState;
+      this.msg.msgError('خطأ', `<h5>${blockedMessage}</h5>`, true);
       return;
     }
 
@@ -809,10 +2079,6 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       actionCode,
       comment: String(raw.comment ?? '').trim(),
       force: Boolean(raw.force),
-      toCategoryId: raw.toCategoryId,
-      toWaveCode: String(raw.toWaveCode ?? '').trim(),
-      newFamilyCount: raw.newFamilyCount,
-      newExtraCount: raw.newExtraCount,
       files: this.toFileParameters(this.actionAttachments)
     }).subscribe({
       next: response => {
@@ -823,18 +2089,139 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           if (this.selectedRequestId) {
             this.applyRealtimeRequestUpdate(this.createLocalRequestUpdateEvent(this.selectedRequestId, 'UPDATE'));
           }
+          this.scheduleDashboardRefresh();
         } else {
           this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
         }
       },
-      error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تنفيذ الإجراء الإداري حالياً.</h5>', true);
+      error: (error: unknown) => {
+        const errorText = this.collectHttpErrors(error, 'تعذر تنفيذ الإجراء الإداري حالياً.');
+        this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
       },
       complete: () => {
         this.submittingAction = false;
         this.spinner.hide();
       }
     });
+  }
+
+  submitPayment(): void {
+    if (!this.canManageSummerPayments) {
+      this.msg.msgError('خطأ', '<h5>تسجيل السداد متاح فقط لصلاحية إدارة المصايف.</h5>', true);
+      return;
+    }
+
+    this.paymentForm.markAllAsTouched();
+    if (this.paymentForm.invalid) {
+      if (this.hasPaymentInFutureError()) {
+        this.msg.msgError('خطأ', `<h5>${this.paymentInFutureMessage}</h5>`, true);
+      } else {
+        this.msg.msgError('خطأ', '<h5>يرجى إدخال بيانات السداد بشكل صحيح.</h5>', true);
+      }
+      return;
+    }
+
+    if (!this.selectedRequestId) {
+      this.msg.msgError('خطأ', '<h5>يرجى اختيار طلب أولًا.</h5>', true);
+      return;
+    }
+
+    if (this.paymentAttachments.length === 0) {
+      this.msg.msgError('خطأ', '<h5>يجب إرفاق ملف واحد على الأقل قبل تسجيل السداد.</h5>', true);
+      return;
+    }
+
+    const paymentFormValue = this.paymentForm.getRawValue();
+    const paymentStatus: SummerAdminPaymentStatusCode = 'PAID';
+    const paidAtLocal = String(paymentFormValue.paidAtLocal ?? '').trim();
+    const paidAtParsed = this.parseDateTimeLocalInput(paidAtLocal);
+    if (!paidAtParsed) {
+      this.msg.msgError('خطأ', '<h5>يرجى تحديد تاريخ ووقت سداد صالح.</h5>', true);
+      return;
+    }
+    const paidAtUtcIso = paidAtParsed.toISOString();
+
+    this.submittingPayment = true;
+    this.spinner.show('جاري تسجيل السداد...');
+    this.summerWorkflowController.pay({
+      messageId: this.selectedRequestId,
+      paidAtUtc: paidAtUtcIso,
+      paymentStatus,
+      forceOverride: false,
+      notes: String(this.paymentForm.get('notes')?.value ?? '').trim(),
+      files: this.toFileParameters(this.paymentAttachments)
+    }).subscribe({
+      next: response => {
+        if (response?.isSuccess) {
+          this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.payCompleted);
+          this.paymentAttachments = [];
+          this.paymentForm.patchValue({
+            paymentStatus: 'PAID',
+            paidAtLocal: '',
+            notes: ''
+          }, { emitEvent: false });
+          this.updatePaymentDateValidators();
+          this.applyPaymentStatusEditAccess();
+
+          if (this.selectedRequestId) {
+            this.loadSelectedRequestDetails(this.selectedRequestId);
+            this.applyRealtimeRequestUpdate(this.createLocalRequestUpdateEvent(this.selectedRequestId, 'UPDATE'));
+          }
+          this.loadRequests();
+          this.scheduleDashboardRefresh();
+        } else {
+          this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
+        }
+      },
+      error: (error: unknown) => {
+        const errorText = this.collectHttpErrors(error, 'تعذر تسجيل السداد حاليًا.');
+        this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
+      },
+      complete: () => {
+        this.submittingPayment = false;
+        this.spinner.hide();
+      }
+    });
+  }
+
+  addPaymentFiles(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const files = Array.from(input?.files ?? []);
+    if (!files.length) {
+      return;
+    }
+
+    const validFiles = files.filter(file => this.isAllowedAttachmentFile(file));
+    const invalidFiles = files.filter(file => !this.isAllowedAttachmentFile(file));
+
+    if (invalidFiles.length > 0) {
+      this.msg.msgError(
+        'نوع ملف غير مسموح',
+        `<h5>يسمح فقط بملفات PDF والصور. الملفات المرفوضة: ${invalidFiles.map(file => file.name).join(' ، ')}</h5>`,
+        true
+      );
+    }
+
+    this.paymentAttachments = [...this.paymentAttachments, ...validFiles];
+    if (input) {
+      input.value = '';
+    }
+  }
+
+  removePaymentFile(index: number): void {
+    this.paymentAttachments = this.paymentAttachments.filter((_, i) => i !== index);
+  }
+
+  hasPaymentInFutureError(): boolean {
+    const control = this.paymentForm.get('paidAtLocal');
+    return Boolean(
+      control?.hasError(this.paymentInFutureErrorKey)
+      && (control.touched || control.dirty)
+    );
+  }
+
+  getPaymentMaxDateTimeLocal(): string {
+    return this.toDateTimeLocalInputValue(new Date());
   }
 
   addActionFiles(event: Event): void {
@@ -882,8 +2269,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
         this.msg.msgError('خطأ', `<h5>${this.collectErrors(response) || 'تعذر تنزيل المرفق.'}</h5>`, true);
       },
-      error: () => {
-        this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.attachmentDownloadFailed}</h5>`, true);
+      error: (error: unknown) => {
+        const errorText = this.collectHttpErrors(error, SUMMER_UI_TEXTS_AR.errors.attachmentDownloadFailed);
+        this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
       },
       complete: () => {
         this.spinner.hide();
@@ -907,6 +2295,68 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     const hour = String(date.getHours()).padStart(2, '0');
     const minute = String(date.getMinutes()).padStart(2, '0');
     return `${day}/${month}/${year} ${hour}:${minute}`;
+  }
+
+  formatDateOnly(value?: string): string {
+    if (!value) {
+      return '-';
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  formatMoney(value: number | string | null | undefined): string {
+    return this.formatWholeNumber(value);
+  }
+
+  formatWholeNumber(value: number | string | null | undefined): string {
+    return this.integerNumberFormatter.format(this.normalizeDisplayInteger(value));
+  }
+
+  resolveWaveBookingsPrintText(value: string | null | undefined): string {
+    const text = String(value ?? '').trim();
+    return text.length > 0 ? text : '-';
+  }
+
+  resolvePaymentModeLabel(row: SummerWaveBookingsPrintRowDto | null | undefined): string {
+    const explicitLabel = String(row?.paymentModeLabel ?? '').trim();
+    if (explicitLabel.length > 0 && explicitLabel !== '-') {
+      return explicitLabel;
+    }
+
+    const paymentMode = String(row?.paymentMode ?? '').trim().toUpperCase();
+    if (paymentMode === 'INSTALLMENT') {
+      return 'تقسيط';
+    }
+
+    return 'كاش';
+  }
+
+  resolveCollectionStatusLabel(row: SummerWaveBookingsPrintRowDto | null | undefined): string {
+    const explicitLabel = String(row?.collectionStatusLabel ?? '').trim();
+    if (explicitLabel.length > 0 && explicitLabel !== '-') {
+      return explicitLabel;
+    }
+
+    if (row?.isFullyCollected) {
+      return 'مسدد';
+    }
+
+    const collectedAmount = Number(row?.collectedAmount ?? 0) || 0;
+    const uncollectedAmount = Number(row?.uncollectedAmount ?? 0) || 0;
+    if (collectedAmount > 0 && uncollectedAmount > 0) {
+      return 'مسدد عدد من الأقساط';
+    }
+
+    return 'غير مسدد';
   }
 
   isPaymentOverdue(request: SummerRequestSummaryDto): boolean {
@@ -952,12 +2402,24 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   }
 
   getRequestStatusLabel(item: SummerRequestSummaryDto): string {
+    const workflowStateCode = String(item?.workflowStateCode ?? '').trim().toUpperCase();
+    if (workflowStateCode === 'PENDING_REVIEW_REQUIRED' || workflowStateCode === 'TRANSFER_REVIEW_REQUIRED') {
+      return 'قيد المراجعة';
+    }
+
     const statusLabel = String(item?.statusLabel ?? '').trim();
+    if (this.normalizeSearchToken(statusLabel) === this.normalizeSearchToken('جاري التنفيذ')) {
+      return 'قيد المراجعة';
+    }
+
     if (statusLabel.length > 0) {
       return statusLabel;
     }
 
-    return resolveSummerStatusLabel(String(item?.status ?? '').trim());
+    const fallbackStatusLabel = resolveSummerStatusLabel(String(item?.status ?? '').trim());
+    return this.normalizeSearchToken(fallbackStatusLabel) === this.normalizeSearchToken('جاري التنفيذ')
+      ? 'قيد المراجعة'
+      : fallbackStatusLabel;
   }
 
   getDashboardStatusCount(...statusTokens: string[]): number {
@@ -1036,77 +2498,677 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return `key:${String(item?.key ?? '')}`;
   }
 
+  trackByPricingRecord(index: number, record: SummerPricingCatalogRecordDto): string {
+    const configId = String(record?.pricingConfigId ?? '').trim();
+    if (configId.length > 0) {
+      return configId;
+    }
+    return `row:${index}`;
+  }
+
+  getDestinationLabelByCategoryId(categoryId: number): string {
+    const destination = this.destinations.find(item => item.categoryId === Number(categoryId));
+    if (destination) {
+      return destination.name;
+    }
+    return Number(categoryId) > 0 ? `مصيف ${categoryId}` : 'اختر المصيف';
+  }
+
+  get pricingRecordGroups(): SummerPricingRecordGroup[] {
+    const grouped = new Map<string, SummerPricingRecordGroup>();
+    this.pricingRecords.forEach((record, index) => {
+      const categoryId = Number(record?.categoryId ?? 0) || 0;
+      const key = this.buildPricingGroupKey(categoryId);
+      const destinationName = this.getDestinationLabelByCategoryId(categoryId);
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key,
+          categoryId,
+          destinationName,
+          rows: [],
+          activeCount: 0,
+          inactiveCount: 0
+        });
+      }
+
+      const group = grouped.get(key)!;
+      group.rows.push({ index, record });
+      if (record?.isActive !== false) {
+        group.activeCount += 1;
+      } else {
+        group.inactiveCount += 1;
+      }
+    });
+
+    return Array.from(grouped.values()).sort((a, b) => this.comparePricingGroups(a, b));
+  }
+
+  trackByPricingGroup(_index: number, group: SummerPricingRecordGroup): string {
+    return group.key;
+  }
+
+  trackByPricingGroupEntry(_index: number, entry: SummerPricingGroupEntry): string {
+    const configId = String(entry?.record?.pricingConfigId ?? '').trim();
+    if (configId.length > 0) {
+      return configId;
+    }
+    return `row:${entry?.index ?? _index}`;
+  }
+
+  trackByWaveBookingsPrintFooter(_index: number, marker: WaveBookingsPrintFooterMarker): number {
+    return marker.pageNumber;
+  }
+
+  trackByResortBookingsWaveGroup(_index: number, group: SummerResortBookingsWaveGroupVm): string {
+    return String(group.waveCode ?? '');
+  }
+
+  trackByAllResortsSummaryResort(_index: number, resort: SummerAllResortsSummaryResortVm): number {
+    return Number(resort.categoryId ?? 0);
+  }
+
+  trackByAllResortsSummaryWave(_index: number, wave: SummerAllResortsSummaryWaveVm): string {
+    return String(wave.waveCode ?? '');
+  }
+
+  formatReplyAttachmentNames(attachments: Array<{ id: number; name: string }>): string {
+    const names = attachments
+      .map(item => String(item?.name ?? '').trim())
+      .filter(name => name.length > 0 && name !== '-');
+
+    return names.length > 0 ? names.join(' - ') : '-';
+  }
+
+  isPricingGroupExpanded(groupKey: string): boolean {
+    if (Object.prototype.hasOwnProperty.call(this.pricingGroupExpandedState, groupKey)) {
+      return this.pricingGroupExpandedState[groupKey] === true;
+    }
+
+    return this.defaultPricingGroupsExpanded;
+  }
+
+  togglePricingGroup(groupKey: string): void {
+    this.pricingGroupExpandedState[groupKey] = !this.isPricingGroupExpanded(groupKey);
+  }
+
+  expandAllPricingGroups(): void {
+    this.pricingRecordGroups.forEach(group => {
+      this.pricingGroupExpandedState[group.key] = true;
+    });
+  }
+
+  collapseAllPricingGroups(): void {
+    this.pricingRecordGroups.forEach(group => {
+      this.pricingGroupExpandedState[group.key] = false;
+    });
+  }
+
+  onPricingCategoryChanged(): void {
+    this.syncPricingGroupExpansionState();
+  }
+
+  isPricingModeMandatory(record: SummerPricingCatalogRecordDto): boolean {
+    const mode = String(record?.pricingMode ?? '').trim();
+    return mode === 'TransportationMandatoryIncluded';
+  }
+
+  isAccommodationOnlyMode(record: SummerPricingCatalogRecordDto): boolean {
+    const mode = String(record?.pricingMode ?? '').trim();
+    return mode === 'AccommodationOnlyAllowed';
+  }
+
+  private resolveDefaultPricingGroupExpandState(): boolean {
+    return false;
+  }
+
+  private buildPricingGroupKey(categoryId: number): string {
+    return `cat:${Number(categoryId || 0)}`;
+  }
+
+  private comparePricingGroups(a: SummerPricingRecordGroup, b: SummerPricingRecordGroup): number {
+    const aDestinationIndex = this.destinations.findIndex(item => item.categoryId === a.categoryId);
+    const bDestinationIndex = this.destinations.findIndex(item => item.categoryId === b.categoryId);
+    const normalizedAIndex = aDestinationIndex >= 0 ? aDestinationIndex : Number.MAX_SAFE_INTEGER;
+    const normalizedBIndex = bDestinationIndex >= 0 ? bDestinationIndex : Number.MAX_SAFE_INTEGER;
+    if (normalizedAIndex !== normalizedBIndex) {
+      return normalizedAIndex - normalizedBIndex;
+    }
+
+    return String(a.destinationName ?? '').localeCompare(String(b.destinationName ?? ''), 'ar');
+  }
+
+  private syncPricingGroupExpansionState(): void {
+    const validKeys = new Set(this.pricingRecordGroups.map(group => group.key));
+    Object.keys(this.pricingGroupExpandedState).forEach(key => {
+      if (!validKeys.has(key)) {
+        delete this.pricingGroupExpandedState[key];
+      }
+    });
+  }
+
+  private resetPricingGroupExpansionState(): void {
+    this.pricingGroupExpandedState = {};
+  }
+
+  private createEmptyPricingRecord(preferredCategoryId?: number): SummerPricingCatalogRecordDto {
+    const normalizedPreferredCategoryId = Number(preferredCategoryId ?? 0) || 0;
+    return {
+      pricingConfigId: '',
+      categoryId: normalizedPreferredCategoryId > 0
+        ? normalizedPreferredCategoryId
+        : (this.destinations.length > 0 ? this.destinations[0].categoryId : 0),
+      seasonYear: this.pricingSeasonYear || this.seasonYear,
+      waveCode: '',
+      periodKey: '',
+      dateFrom: '',
+      dateTo: '',
+      accommodationPricePerPerson: 0,
+      transportationPricePerPerson: 0,
+      insuranceAmount: 0,
+      proxyInsuranceAmount: null,
+      pricingMode: 'AccommodationAndTransportationOptional',
+      transportationMandatory: false,
+      isActive: true,
+      displayLabel: '',
+      notes: 'سعر استرشادي قابل للتعديل بعد اعتماد اللجنة'
+    };
+  }
+
+  private toNullableNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  private normalizePricingRecord(record: SummerPricingCatalogRecordDto): SummerPricingCatalogRecordDto {
+    const normalized: SummerPricingCatalogRecordDto = {
+      pricingConfigId: String(record?.pricingConfigId ?? '').trim(),
+      categoryId: Number(record?.categoryId ?? 0) || 0,
+      seasonYear: Number(record?.seasonYear ?? this.pricingSeasonYear ?? this.seasonYear) || this.seasonYear,
+      waveCode: String(record?.waveCode ?? '').trim(),
+      periodKey: String(record?.periodKey ?? '').trim(),
+      dateFrom: String(record?.dateFrom ?? '').trim(),
+      dateTo: String(record?.dateTo ?? '').trim(),
+      accommodationPricePerPerson: Number(record?.accommodationPricePerPerson ?? 0) || 0,
+      transportationPricePerPerson: Number(record?.transportationPricePerPerson ?? 0) || 0,
+      insuranceAmount: Number(record?.insuranceAmount ?? 0) || 0,
+      proxyInsuranceAmount: this.toNullableNumber(record?.proxyInsuranceAmount),
+      pricingMode: String(record?.pricingMode ?? 'AccommodationAndTransportationOptional').trim() || 'AccommodationAndTransportationOptional',
+      transportationMandatory: Boolean(record?.transportationMandatory),
+      isActive: record?.isActive !== false,
+      displayLabel: String(record?.displayLabel ?? '').trim(),
+      notes: String(record?.notes ?? '').trim()
+    };
+
+    this.syncPricingPeriodKeyWithDateRange(normalized);
+    this.onPricingModeChanged(normalized);
+    return normalized;
+  }
+
+  private syncPricingPeriodKeyWithDateRange(record: SummerPricingCatalogRecordDto): void {
+    const normalizedWaveCode = String(record?.waveCode ?? '').trim();
+    if (normalizedWaveCode.length > 0) {
+      return;
+    }
+
+    const derivedPeriodKey = this.derivePricingPeriodKeyFromDateRange(record?.dateFrom, record?.dateTo);
+    if (derivedPeriodKey.length > 0) {
+      record.periodKey = derivedPeriodKey;
+    }
+  }
+
+  private derivePricingPeriodKeyFromDateRange(
+    rawDateFrom: string | null | undefined,
+    rawDateTo: string | null | undefined
+  ): string {
+    const fromMonth = this.parsePricingMonth(rawDateFrom);
+    const toMonth = this.parsePricingMonth(rawDateTo);
+
+    if (fromMonth === null && toMonth === null) {
+      return '';
+    }
+
+    if (fromMonth !== null && toMonth !== null) {
+      const months: number[] = [];
+      let cursor = fromMonth;
+      let guard = 0;
+      while (cursor <= toMonth && guard < 24) {
+        months.push(cursor);
+        cursor += 1;
+        guard += 1;
+      }
+
+      if (months.length === 0) {
+        return '';
+      }
+
+      const normalizedMonths = months.map(value => ((value - 1) % 12) + 1);
+      if (normalizedMonths.every(month => month === 6 || month === 9)) {
+        return 'JUN_SEP';
+      }
+
+      if (normalizedMonths.every(month => month === 7 || month === 8)) {
+        return 'JUL_AUG';
+      }
+
+      const uniqueMonths = Array.from(new Set(normalizedMonths));
+      if (uniqueMonths.length === 1) {
+        return `M${String(uniqueMonths[0]).padStart(2, '0')}`;
+      }
+
+      return '';
+    }
+
+    const singleMonth = fromMonth ?? toMonth;
+    if (singleMonth === null) {
+      return '';
+    }
+
+    const normalizedMonth = ((singleMonth - 1) % 12) + 1;
+    if (normalizedMonth === 6 || normalizedMonth === 9) {
+      return 'JUN_SEP';
+    }
+
+    if (normalizedMonth === 7 || normalizedMonth === 8) {
+      return 'JUL_AUG';
+    }
+
+    return `M${String(normalizedMonth).padStart(2, '0')}`;
+  }
+
+  private parsePricingMonth(value: string | null | undefined): number | null {
+    const text = String(value ?? '').trim();
+    if (!text) {
+      return null;
+    }
+
+    const isoMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+    if (isoMatch) {
+      const year = Number(isoMatch[1]);
+      const month = Number(isoMatch[2]);
+      if (Number.isFinite(year) && Number.isFinite(month) && month >= 1 && month <= 12) {
+        return (year * 12) + month;
+      }
+    }
+
+    const slashMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
+    if (slashMatch) {
+      const day = Number(slashMatch[1]);
+      const month = Number(slashMatch[2]);
+      const year = Number(slashMatch[3]);
+      if (Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year) && month >= 1 && month <= 12) {
+        return (year * 12) + month;
+      }
+    }
+
+    return null;
+  }
+
+  private normalizePricingRecordForSave(record: SummerPricingCatalogRecordDto, index: number): SummerPricingCatalogRecordDto {
+    const normalized = this.normalizePricingRecord(record);
+    if (!normalized.pricingConfigId) {
+      const periodOrWave = normalized.periodKey || normalized.waveCode || `ROW${index + 1}`;
+      normalized.pricingConfigId = `SUM${normalized.seasonYear}-CAT${normalized.categoryId}-${periodOrWave}`;
+    }
+    return normalized;
+  }
+
+  private buildDuplicatedPricingConfigId(sourceRecord: SummerPricingCatalogRecordDto): string {
+    const periodOrWave = sourceRecord.periodKey || sourceRecord.waveCode || `ROW${this.pricingRecords.length + 1}`;
+    const fallbackBase = `SUM${sourceRecord.seasonYear}-CAT${sourceRecord.categoryId}-${periodOrWave}`;
+    const rawBase = String(sourceRecord.pricingConfigId ?? '').trim() || fallbackBase;
+    const base = rawBase
+      .replace(/[^A-Za-z0-9_-]/g, '')
+      .toUpperCase() || fallbackBase;
+
+    const existing = new Set(
+      this.pricingRecords
+        .map(item => String(item?.pricingConfigId ?? '').trim().toUpperCase())
+        .filter(item => item.length > 0)
+    );
+
+    const stamp = Date.now().toString(36).toUpperCase();
+    let candidate = `${base}-COPY-${stamp}`;
+    let counter = 1;
+    while (existing.has(candidate.toUpperCase())) {
+      counter += 1;
+      candidate = `${base}-COPY-${stamp}-${counter}`;
+    }
+
+    return candidate;
+  }
+
   private bindActionRules(): void {
     const actionCodeSub = this.actionForm.get('actionCode')?.valueChanges.subscribe(value => {
       const normalized = this.normalizeActionCode(value);
-      const toCategoryControl = this.actionForm.get('toCategoryId');
-      const toWaveControl = this.actionForm.get('toWaveCode');
-      const familyControl = this.actionForm.get('newFamilyCount');
-      const extraControl = this.actionForm.get('newExtraCount');
-
-      if (!toCategoryControl || !toWaveControl || !familyControl || !extraControl) {
-        return;
-      }
+      const commentControl = this.actionForm.get('comment');
 
       const currentValue = String(value ?? '').trim();
       if (normalized && currentValue !== normalized) {
         this.actionForm.patchValue({ actionCode: normalized }, { emitEvent: false });
       }
 
-      if (normalized === SUMMER_ADMIN_ACTION.APPROVE_TRANSFER) {
-        toCategoryControl.setValidators([Validators.required]);
-        toWaveControl.setValidators([Validators.required]);
-        familyControl.setValidators([Validators.required, Validators.min(1)]);
-        extraControl.setValidators([Validators.min(0)]);
-      } else {
-        toCategoryControl.clearValidators();
-        toWaveControl.clearValidators();
-        familyControl.clearValidators();
-        extraControl.clearValidators();
-        this.actionForm.patchValue({
-          toCategoryId: null,
-          toWaveCode: '',
-          newFamilyCount: null,
-          newExtraCount: 0
-        }, { emitEvent: false });
-      }
-
-      toCategoryControl.updateValueAndValidity({ emitEvent: false });
-      toWaveControl.updateValueAndValidity({ emitEvent: false });
-      familyControl.updateValueAndValidity({ emitEvent: false });
-      extraControl.updateValueAndValidity({ emitEvent: false });
+      this.applyAdminCommentValidators(normalized, commentControl);
     });
 
     if (actionCodeSub) {
       this.subscriptions.add(actionCodeSub);
     }
 
-    const transferDestinationSub = this.actionForm.get('toCategoryId')?.valueChanges.subscribe(value => {
-      const destination = this.destinations.find(item => item.categoryId === Number(value));
-      if (!destination) {
-        this.actionForm.patchValue({ toWaveCode: '', newFamilyCount: null }, { emitEvent: false });
-        return;
-      }
+    const initialActionCode = this.normalizeActionCode(this.actionForm.get('actionCode')?.value);
+    this.applyAdminCommentValidators(initialActionCode, this.actionForm.get('comment'));
+  }
 
-      const selectedWave = String(this.actionForm.get('toWaveCode')?.value ?? '').trim();
-      if (!destination.waves.some(wave => wave.code === selectedWave)) {
-        this.actionForm.patchValue({ toWaveCode: '' }, { emitEvent: false });
-      }
+  private applyAdminCommentValidators(actionCode: SummerAdminActionCode | '', commentControl: AbstractControl | null): void {
+    if (!commentControl) {
+      return;
+    }
 
-      const selectedFamily = Number(this.actionForm.get('newFamilyCount')?.value ?? 0);
-      if (!destination.familyOptions.includes(selectedFamily)) {
-        this.actionForm.patchValue({ newFamilyCount: null }, { emitEvent: false });
-      }
+    if (actionCode === SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION) {
+      commentControl.setValidators([Validators.maxLength(this.internalAdminActionCommentMaxLength)]);
+      commentControl.updateValueAndValidity({ emitEvent: false });
+      return;
+    }
+
+    commentControl.setValidators([Validators.maxLength(this.adminActionCommentMaxLength)]);
+    commentControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private bindPaymentRules(): void {
+    const paymentStatusSub = this.paymentForm.get('paymentStatus')?.valueChanges.subscribe(() => {
+      this.updatePaymentDateValidators();
     });
 
-    if (transferDestinationSub) {
-      this.subscriptions.add(transferDestinationSub);
+    if (paymentStatusSub) {
+      this.subscriptions.add(paymentStatusSub);
     }
+  }
+
+  private resetPaymentFormForCurrentSelection(): void {
+    this.paymentAttachments = [];
+    this.paymentSnapshot = null;
+    this.paymentForm.reset(
+      {
+        paymentStatus: 'PAID',
+        paidAtLocal: '',
+        notes: ''
+      },
+      { emitEvent: false }
+    );
+    this.updatePaymentDateValidators();
+    this.applyPaymentStatusEditAccess();
+  }
+
+  private refreshPaymentSnapshot(): void {
+    this.paymentSnapshot = this.buildPaymentSnapshot();
+
+    const notesValue = String(this.paymentForm.get('notes')?.value ?? '').trim();
+    const paymentStatusControl = this.paymentForm.get('paymentStatus');
+    const paidAtControl = this.paymentForm.get('paidAtLocal');
+    if (!paymentStatusControl || !paidAtControl) {
+      return;
+    }
+
+    // "تسجيل السداد" should default to a paid submission intent.
+    paymentStatusControl.setValue('PAID', { emitEvent: false });
+    paidAtControl.setValue(this.paymentSnapshot?.paidAtLocal ?? '', { emitEvent: false });
+    this.paymentForm.get('notes')?.setValue(notesValue, { emitEvent: false });
+    this.updatePaymentDateValidators();
+    this.applyPaymentStatusEditAccess();
+  }
+
+  private buildPaymentSnapshot(): SummerAdminPaymentSnapshot | null {
+    const request = this.selectedRequest;
+    const details = this.selectedRequestDetails;
+    if (!request && !details) {
+      return null;
+    }
+
+    const planRows = this.selectedRequestPaymentPlanRows;
+    const firstRow = planRows.length > 0 ? planRows[0] : null;
+    const paymentModeLabel = String(this.selectedRequestPaymentMethodLabel ?? '').trim() || '-';
+
+    const firstInstallmentPaidRaw = this.resolvePaymentFieldTextByAliases([
+      ...this.resolveInstallmentPaidFieldKeys(1),
+      'Summer_PaymentInstallment1Paid',
+      'SUM2026_PaymentInstallment1Paid'
+    ]);
+    const paymentStatusRaw = this.resolvePaymentFieldTextByAliases([
+      'Summer_PaymentStatus',
+      'SUM2026_PaymentStatus',
+      'PaymentStatus'
+    ]);
+    const parsedInstallmentPaid = this.parsePaymentBooleanLike(firstInstallmentPaidRaw);
+    const statusCode = parsedInstallmentPaid !== null
+      ? (parsedInstallmentPaid ? 'PAID' : 'UNPAID')
+      : this.normalizePaymentStatusSelection(paymentStatusRaw || firstRow?.paidState);
+
+    const paidAtRaw = this.resolvePaymentFieldTextByAliases([
+      ...this.resolveInstallmentPaidAtFieldKeys(1),
+      'Summer_PaymentInstallment1PaidAtUtc',
+      'SUM2026_PaymentInstallment1PaidAtUtc',
+      'Summer_PaidAtUtc',
+      'SUM2026_PaidAtUtc',
+      'PaidAtUtc'
+    ]);
+    const paidAtDisplay = firstRow?.paidAt && String(firstRow.paidAt).trim().length > 0
+      ? String(firstRow.paidAt).trim()
+      : (paidAtRaw.length > 0 ? this.formatDate(paidAtRaw) : '-');
+    const paidAtLocal = statusCode === 'PAID'
+      ? this.toDateTimeLocalInputFromUtc(paidAtRaw)
+      : '';
+
+    return {
+      paymentModeLabel,
+      installmentLabel: String(firstRow?.title ?? '').trim() || (paymentModeLabel === 'كاش' ? 'دفعة كاش' : 'مقدم الحجز'),
+      amountText: String(firstRow?.amount ?? '').trim() || '-',
+      paidAtDisplay: paidAtDisplay.length > 0 ? paidAtDisplay : '-',
+      paidAtLocal,
+      statusCode,
+      statusLabel: statusCode === 'PAID' ? 'مسدد' : 'غير مسدد'
+    };
+  }
+
+  private updatePaymentDateValidators(): void {
+    const paidAtControl = this.paymentForm.get('paidAtLocal');
+    if (!paidAtControl) {
+      return;
+    }
+
+    if (this.isSelectedPaymentStatusPaid()) {
+      paidAtControl.setValidators([Validators.required, this.paymentDateNotInFutureValidator]);
+    } else {
+      paidAtControl.setValidators([this.paymentDateNotInFutureValidator]);
+    }
+
+    paidAtControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private applyPaymentStatusEditAccess(): void {
+    const paymentStatusControl = this.paymentForm.get('paymentStatus');
+    if (!paymentStatusControl) {
+      return;
+    }
+
+    if (this.canManageSummerPayments) {
+      paymentStatusControl.enable({ emitEvent: false });
+    } else {
+      paymentStatusControl.disable({ emitEvent: false });
+    }
+  }
+
+  private isSelectedPaymentStatusPaid(): boolean {
+    if (!this.canManageSummerPayments) {
+      return true;
+    }
+
+    const paymentStatus = this.paymentForm.get('paymentStatus')?.value;
+    return this.normalizePaymentStatusSelection(paymentStatus) === 'PAID';
+  }
+
+  private normalizePaymentStatusSelection(value: unknown): SummerAdminPaymentStatusCode {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return 'PAID';
+    }
+
+    const compact = normalized
+      .replace(/[\s_-]+/g, '')
+      .replace('إ', 'ا')
+      .replace('أ', 'ا')
+      .replace('آ', 'ا');
+
+    if (
+      compact === 'paid'
+      || compact === 'paidadmin'
+      || compact === 'true'
+      || compact === '1'
+      || compact === 'yes'
+      || compact === 'y'
+      || compact === 'مسدد'
+      || compact === 'سداداداري'
+      || compact === 'تمالسداد'
+    ) {
+      return 'PAID';
+    }
+
+    return 'UNPAID';
+  }
+
+  private resolvePaymentFieldTextByAliases(aliases: string[]): string {
+    const fields = this.selectedRequestDetails?.fields ?? [];
+    const normalizedAliases = aliases
+      .map(alias => String(alias ?? '').trim().toLowerCase())
+      .filter(alias => alias.length > 0);
+
+    if (normalizedAliases.length === 0) {
+      return '';
+    }
+
+    for (const alias of normalizedAliases) {
+      const matches = fields.filter(field =>
+        String(field?.fildKind ?? '').trim().toLowerCase() === alias);
+      if (matches.length === 0) {
+        continue;
+      }
+
+      const persistedMatches = matches.filter(field => Number(field?.fildSql ?? 0) > 0);
+      const latestField = (persistedMatches.length > 0 ? persistedMatches : matches)
+        .reduce((latest, current) =>
+          Number(current?.fildSql ?? 0) >= Number(latest?.fildSql ?? 0) ? current : latest
+        );
+
+      const text = String(latestField?.fildTxt ?? '').trim();
+      if (text.length > 0) {
+        return text;
+      }
+    }
+
+    return '';
+  }
+
+  private resolveInstallmentPaidFieldKeys(installmentNo: number): string[] {
+    const normalizedNo = Math.max(1, Math.min(7, Math.floor(Number(installmentNo) || 1)));
+    return [
+      `Summer_PaymentInstallment${normalizedNo}Paid`,
+      `SUM2026_PaymentInstallment${normalizedNo}Paid`
+    ];
+  }
+
+  private resolveInstallmentPaidAtFieldKeys(installmentNo: number): string[] {
+    const normalizedNo = Math.max(1, Math.min(7, Math.floor(Number(installmentNo) || 1)));
+    return [
+      `Summer_PaymentInstallment${normalizedNo}PaidAtUtc`,
+      `SUM2026_PaymentInstallment${normalizedNo}PaidAtUtc`
+    ];
+  }
+
+  private resolveInstallmentTitle(installmentNo: number): string {
+    const normalizedNo = Math.max(1, Math.floor(Number(installmentNo) || 1));
+    return normalizedNo === 1 ? 'مقدم الحجز' : `القسط ${normalizedNo - 1}`;
+  }
+
+  private parsePaymentBooleanLike(value: unknown): boolean | null {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    const compact = normalized
+      .replace(/[\s_-]+/g, '')
+      .replace('إ', 'ا')
+      .replace('أ', 'ا')
+      .replace('آ', 'ا');
+
+    if (compact === 'true' || compact === '1' || compact === 'yes' || compact === 'y' || compact === 'نعم') {
+      return true;
+    }
+
+    if (compact === 'false' || compact === '0' || compact === 'no' || compact === 'n' || compact === 'لا') {
+      return false;
+    }
+
+    return null;
+  }
+
+  private toDateTimeLocalInputFromUtc(value: string): string {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    return this.toDateTimeLocalInputValue(parsed);
+  }
+
+  private toDateTimeLocalInputValue(value: Date): string {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const pad = (part: number): string => String(part).padStart(2, '0');
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hour = pad(date.getHours());
+    const minute = pad(date.getMinutes());
+    const second = pad(date.getSeconds());
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+  }
+
+  private parseDateTimeLocalInput(value: unknown): Date | null {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  private toComparableUnixSecond(value: Date): number {
+    return Math.floor(value.getTime() / 1000);
   }
 
   /**
    * Mirrors backend NormalizeActionCode:
-   * FINAL_APPROVE | MANUAL_CANCEL | COMMENT | APPROVE_TRANSFER
+   * FINAL_APPROVE | MANUAL_CANCEL | REJECT_REQUEST | COMMENT | INTERNAL_ADMIN_ACTION | MARK_UNPAID | MARK_PAID_ADMIN
    */
   private normalizeActionCode(actionCode: unknown): SummerAdminActionCode | '' {
     const normalized = normalizeSummerAdminActionCode(actionCode);
@@ -1120,6 +3182,20 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
 
     return '';
+  }
+
+  private resolveActionDecision(actionCode: SummerAdminActionCode) {
+    const currentRequest = this.selectedRequest;
+    if (!currentRequest) {
+      return {
+        isAllowed: true,
+        errorMessage: ''
+      };
+    }
+
+    const currentState = String(currentRequest.statusLabel ?? currentRequest.status ?? '').trim();
+    const decision = resolveAdminActionDecisionForCurrentStatus(actionCode, currentState);
+    return decision;
   }
 
   private normalizeSearchToken(value: unknown): string {
@@ -1153,6 +3229,22 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.capacityDialogVisible = false;
         }
       }
+
+      if (this.bookingsPrintDialogVisible) {
+        if (selectedCategoryId > 0 && currentWaveCode.length > 0 && allowedCodes.has(currentWaveCode)) {
+          this.refreshWaveBookingsPrintReport(true);
+        } else {
+          this.bookingsPrintDialogVisible = false;
+        }
+      }
+
+      if (this.resortBookingsPrintDialogVisible) {
+        if (selectedCategoryId > 0) {
+          this.refreshResortBookingsPrintReport(true);
+        } else {
+          this.resortBookingsPrintDialogVisible = false;
+        }
+      }
     });
 
     if (categorySub) {
@@ -1161,21 +3253,49 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     const waveSub = this.filtersForm.get('waveCode')?.valueChanges.subscribe(value => {
       const selectedWaveCode = String(value ?? '').trim();
-      if (!this.capacityDialogVisible) {
-        return;
+      if (this.capacityDialogVisible) {
+        if (this.selectedFilterCategoryId > 0 && selectedWaveCode.length > 0) {
+          this.capacityScopeCategoryId = this.selectedFilterCategoryId;
+          this.capacityScopeWaveCode = selectedWaveCode;
+          this.refreshWaveCapacity(true);
+        } else {
+          this.capacityDialogVisible = false;
+        }
       }
 
-      if (this.selectedFilterCategoryId > 0 && selectedWaveCode.length > 0) {
-        this.capacityScopeCategoryId = this.selectedFilterCategoryId;
-        this.capacityScopeWaveCode = selectedWaveCode;
-        this.refreshWaveCapacity(true);
-      } else {
-        this.capacityDialogVisible = false;
+      if (this.bookingsPrintDialogVisible) {
+        if (this.selectedFilterCategoryId > 0 && selectedWaveCode.length > 0) {
+          this.refreshWaveBookingsPrintReport(true);
+        } else {
+          this.bookingsPrintDialogVisible = false;
+        }
+      }
+
+      if (this.resortBookingsPrintDialogVisible && this.selectedFilterCategoryId > 0) {
+        this.refreshResortBookingsPrintReport(true);
       }
     });
 
     if (waveSub) {
       this.subscriptions.add(waveSub);
+    }
+
+    const financialViewSub = this.filtersForm.get('includeFinancialsInPrint')?.valueChanges.subscribe(() => {
+      if (this.bookingsPrintDialogVisible && this.canOpenWaveCapacityDialog) {
+        this.refreshWaveBookingsPrintReport(true);
+      }
+
+      if (this.resortBookingsPrintDialogVisible && this.canOpenResortBookingsPrintDialog) {
+        this.refreshResortBookingsPrintReport(true);
+      }
+
+      if (this.allResortsSummaryDialogVisible) {
+        this.refreshAllResortsSummaryPrintReport(true);
+      }
+    });
+
+    if (financialViewSub) {
+      this.subscriptions.add(financialViewSub);
     }
   }
 
@@ -1233,6 +3353,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       next: patched => {
         this.requests = patched.requests;
         this.requestsTotalCount = patched.totalCount;
+        this.requestsTotalPages = Math.max(1, Math.ceil(this.requestsTotalCount / Math.max(1, this.requestsPageSize)));
+        if (this.requestsPageNumber > this.requestsTotalPages) {
+          this.requestsPageNumber = this.requestsTotalPages;
+          this.filtersForm.patchValue({ pageNumber: this.requestsPageNumber }, { emitEvent: false });
+        }
         this.selectedRequestId = patched.selectedRequestId;
 
         if (patched.selectedWasRemoved) {
@@ -1279,12 +3404,215 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.actionForm.patchValue({
       actionCode: SUMMER_ADMIN_ACTION.COMMENT,
       comment: '',
-      force: false,
-      toCategoryId: request.categoryId,
-      toWaveCode: request.waveCode,
-      newFamilyCount: null,
-      newExtraCount: 0
+      force: false
     }, { emitEvent: false });
+    this.applyAdminCommentValidators(SUMMER_ADMIN_ACTION.COMMENT, this.actionForm.get('comment'));
+  }
+
+  private enableWaveBookingsPrintMode(): void {
+    this.disableWaveBookingsPrintMode();
+    document.body.classList.add('wave-bookings-print-mode');
+    this.isWaveBookingsPrintModeEnabled = true;
+    window.addEventListener('afterprint', this.onWaveBookingsAfterPrint);
+
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQueryList = window.matchMedia('print');
+    this.waveBookingsPrintMediaQueryList = mediaQueryList;
+    if (typeof mediaQueryList.addEventListener === 'function') {
+      mediaQueryList.addEventListener('change', this.onWaveBookingsPrintMediaChange);
+      return;
+    }
+
+    if (typeof mediaQueryList.addListener === 'function') {
+      mediaQueryList.addListener(this.onWaveBookingsPrintMediaChange);
+    }
+  }
+
+  private disableWaveBookingsPrintMode(): void {
+    if (!this.isWaveBookingsPrintModeEnabled && !document.body.classList.contains('wave-bookings-print-mode')) {
+      return;
+    }
+
+    document.body.classList.remove('wave-bookings-print-mode');
+    this.isWaveBookingsPrintModeEnabled = false;
+    window.removeEventListener('afterprint', this.onWaveBookingsAfterPrint);
+
+    if (!this.waveBookingsPrintMediaQueryList) {
+      return;
+    }
+
+    const mediaQueryList = this.waveBookingsPrintMediaQueryList;
+    if (typeof mediaQueryList.removeEventListener === 'function') {
+      mediaQueryList.removeEventListener('change', this.onWaveBookingsPrintMediaChange);
+    } else if (typeof mediaQueryList.removeListener === 'function') {
+      mediaQueryList.removeListener(this.onWaveBookingsPrintMediaChange);
+    }
+
+    this.waveBookingsPrintMediaQueryList = null;
+  }
+
+  private scheduleWaveBookingsPrintPaginationRefresh(): void {
+    setTimeout(() => {
+      this.prepareWaveBookingsPrintPagination();
+    }, 0);
+  }
+
+  private prepareWaveBookingsPrintPagination(): void {
+    if (!this.bookingsPrintDialogVisible || this.loadingWaveBookingsPrint || !this.waveBookingsPrintData) {
+      this.waveBookingsPrintFooterMarkers = [];
+      this.waveBookingsPrintTotalPages = 0;
+      return;
+    }
+
+    const result = this.buildPrintFooterPagination(this.waveBookingsPrintDocumentRef);
+    this.waveBookingsPrintFooterMarkers = result.markers;
+    this.waveBookingsPrintTotalPages = result.totalPages;
+  }
+
+  private scheduleResortBookingsPrintPaginationRefresh(): void {
+    setTimeout(() => {
+      this.prepareResortBookingsPrintPagination();
+    }, 0);
+  }
+
+  private prepareResortBookingsPrintPagination(): void {
+    if (!this.resortBookingsPrintDialogVisible || this.loadingResortBookingsPrint || !this.resortBookingsPrintData) {
+      this.resortBookingsPrintFooterMarkers = [];
+      this.resortBookingsPrintTotalPages = 0;
+      return;
+    }
+
+    const result = this.buildPrintFooterPagination(this.resortBookingsPrintDocumentRef);
+    this.resortBookingsPrintFooterMarkers = result.markers;
+    this.resortBookingsPrintTotalPages = result.totalPages;
+  }
+
+  private scheduleAllResortsSummaryPrintPaginationRefresh(): void {
+    setTimeout(() => {
+      this.prepareAllResortsSummaryPrintPagination();
+    }, 0);
+  }
+
+  private prepareAllResortsSummaryPrintPagination(): void {
+    if (!this.allResortsSummaryDialogVisible || this.loadingAllResortsSummaryPrint || !this.allResortsSummaryData) {
+      this.allResortsSummaryPrintFooterMarkers = [];
+      this.allResortsSummaryPrintTotalPages = 0;
+      return;
+    }
+
+    const result = this.buildPrintFooterPagination(this.allResortsSummaryPrintDocumentRef);
+    this.allResortsSummaryPrintFooterMarkers = result.markers;
+    this.allResortsSummaryPrintTotalPages = result.totalPages;
+  }
+
+  private scheduleRequestAdminPrintPaginationRefresh(): void {
+    setTimeout(() => {
+      this.prepareRequestAdminPrintPagination();
+    }, 0);
+  }
+
+  private prepareRequestAdminPrintPagination(): void {
+    if (!this.requestAdminPrintDialogVisible || !this.selectedRequest) {
+      this.requestAdminPrintFooterMarkers = [];
+      this.requestAdminPrintTotalPages = 0;
+      return;
+    }
+
+    const result = this.buildPrintFooterPagination(this.requestAdminPrintDocumentRef);
+    this.requestAdminPrintFooterMarkers = Array.from({ length: result.totalPages }, (_item, index) => ({
+      pageNumber: index + 1,
+      topPx: Math.max(
+        this.waveBookingsPrintHeaderInsetPx,
+        Math.round((index * this.waveBookingsPrintPageContentHeightPx) + this.waveBookingsPrintHeaderInsetPx)
+      )
+    }));
+    this.requestAdminPrintTotalPages = this.requestAdminPrintFooterMarkers.length;
+  }
+
+  private buildPrintFooterPagination(
+    documentRef?: ElementRef<HTMLElement>
+  ): { markers: WaveBookingsPrintFooterMarker[]; totalPages: number } {
+    const documentElement = documentRef?.nativeElement;
+    if (!documentElement) {
+      return { markers: [], totalPages: 0 };
+    }
+
+    const totalContentHeight = Math.max(documentElement.scrollHeight, documentElement.offsetHeight);
+    const pageContentHeight = Math.max(1, this.waveBookingsPrintPageContentHeightPx);
+    const totalPages = Math.max(1, Math.ceil(totalContentHeight / pageContentHeight));
+    const markers = Array.from({ length: totalPages }, (_item, index) => {
+      const pageNumber = index + 1;
+      const topPx = Math.max(
+        this.waveBookingsPrintFooterInsetPx,
+        Math.round((pageNumber * pageContentHeight) - this.waveBookingsPrintFooterInsetPx)
+      );
+
+      return {
+        pageNumber,
+        topPx
+      };
+    });
+
+    return {
+      markers,
+      totalPages
+    };
+  }
+
+  private normalizeDisplayInteger(value: number | string | null | undefined): number {
+    const numericValue = Number(value ?? 0);
+    if (!Number.isFinite(numericValue)) {
+      return 0;
+    }
+
+    return Math.round(numericValue);
+  }
+
+  private refreshSummerPricingAccess(): void {
+    try {
+      this.canManageSummerPricing =
+        this.authObjectsService.checkAuthFun('ConnectSupperAdminFunc')
+        || this.authObjectsService.checkAuthRole('2003');
+    } catch {
+      this.canManageSummerPricing = false;
+    }
+
+    if (!this.canManageSummerPricing) {
+      this.resetPricingStateForUnauthorizedUser();
+    }
+  }
+
+  private refreshSummerPaymentAccess(): void {
+    try {
+      const hasSummerGeneralManager =
+        this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc')
+        || this.authObjectsService.checkAuthRole('2021');
+      this.canManageSummerPayments =
+        this.authObjectsService.checkAuthFun('SummerAdminFunc')
+        || this.authObjectsService.checkAuthRole('2020')
+        || hasSummerGeneralManager;
+    } catch {
+      this.canManageSummerPayments = false;
+    }
+
+    if (!this.canManageSummerPayments) {
+      this.resetPaymentFormForCurrentSelection();
+      return;
+    }
+
+    this.applyPaymentStatusEditAccess();
+  }
+
+  private resetPricingStateForUnauthorizedUser(): void {
+    this.pricingCatalogLoading = false;
+    this.pricingCatalogSaving = false;
+    this.pricingCatalogError = '';
+    this.pricingSeasonYear = this.seasonYear;
+    this.pricingRecords = [];
+    this.resetPricingGroupExpansionState();
   }
 
   private loadSelectedRequestDetails(messageId: number): void {
@@ -1292,22 +3620,343 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.dynamicFormController.getRequestById(messageId).subscribe({
       next: response => {
         this.selectedRequestDetails = response?.isSuccess ? response.data : null;
+        this.refreshPaymentSnapshot();
       },
       error: () => {
         this.selectedRequestDetails = null;
+        this.refreshPaymentSnapshot();
       },
       complete: () => {
         this.loadingDetails = false;
+        if (this.requestAdminPrintDialogVisible && this.selectedRequest) {
+          this.scheduleRequestAdminPrintPaginationRefresh();
+        }
       }
     });
   }
 
-  private collectErrors(response: { errors?: Array<{ message?: string }> } | null | undefined): string {
-    const errors = (response?.errors ?? [])
-      .map(item => String(item?.message ?? '').trim())
-      .filter(item => item.length > 0);
+  private isInstallmentDetailFieldKey(key: unknown): boolean {
+    const normalizedKey = String(key ?? '').trim().toLowerCase();
+    return /^payment_installment_\d+_(amount|paid|paid_at)$/.test(normalizedKey);
+  }
 
-    return errors.length ? errors.join('<br/>') : SUMMER_UI_TEXTS_AR.errors.generic;
+  private getSelectedRequestFieldValueByKey(rows: SummerRequestFieldGridRow[], key: string): string {
+    const targetKey = String(key ?? '').trim().toLowerCase();
+    if (!targetKey) {
+      return '-';
+    }
+
+    const row = rows.find(item => this.resolveSelectedRequestFieldKey(item) === targetKey);
+    if (!row) {
+      return '-';
+    }
+
+    return this.resolveSelectedRequestFieldValue(row);
+  }
+
+  private resolveSelectedRequestFieldKey(row: SummerRequestFieldGridRow): string {
+    return String(row?.key ?? '').trim().toLowerCase();
+  }
+
+  private resolveSelectedRequestFieldValue(row: SummerRequestFieldGridRow): string {
+    const value = String(row?.value ?? '').trim();
+    return value.length > 0 ? value : '-';
+  }
+
+  private resolveRequestPaymentModeLabel(modeKind: RequestPrintPaymentModeKind, value: string): string {
+    if (modeKind === 'cash') {
+      return 'كاش';
+    }
+    if (modeKind === 'installment') {
+      return 'تقسيط';
+    }
+
+    const text = String(value ?? '').trim();
+    return text.length > 0 ? text : '-';
+  }
+
+  private resolveRequestPaymentModeKind(modeValue: string, fieldRows: SummerRequestFieldGridRow[]): RequestPrintPaymentModeKind {
+    const normalized = this.normalizeRequestPaymentText(modeValue);
+    if (normalized.includes('cash') || normalized.includes('كاش')) {
+      return 'cash';
+    }
+    if (normalized.includes('installment') || normalized.includes('تقسيط')) {
+      return 'installment';
+    }
+
+    const hasInstallments = fieldRows.some(row => /^payment_installment_\d+_amount$/.test(this.resolveSelectedRequestFieldKey(row)));
+    if (hasInstallments) {
+      return 'installment';
+    }
+
+    return 'unknown';
+  }
+
+  private resolveRequestPaidState(value: string): string {
+    const normalized = this.normalizeRequestPaymentText(value);
+    if (!normalized || normalized === '-') {
+      return '-';
+    }
+
+    if (normalized === 'false'
+      || normalized === '0'
+      || normalized.includes('غيرمسدد')
+      || normalized.includes('بانتظار')
+      || normalized.includes('unpaid')
+      || normalized.includes('pending')
+      || normalized.includes('متاخر')) {
+      return 'غير مسدد';
+    }
+
+    if (normalized === 'true'
+      || normalized === '1'
+      || normalized === 'paid'
+      || normalized.includes('تمالسداد')
+      || normalized.includes('مسدد')) {
+      return 'مسدد';
+    }
+
+    return value;
+  }
+
+  private resolveRequestCashPaidState(paymentStatus: string, paidAt: string): string {
+    if (this.toRequestDisplayOrDash(this.formatRequestPrintFieldValue(paidAt)) !== '-') {
+      return 'مسدد';
+    }
+
+    const normalized = this.normalizeRequestPaymentText(paymentStatus);
+    if (!normalized || normalized === '-') {
+      return 'غير مسدد';
+    }
+
+    if (normalized.includes('تمالسداد') || normalized === 'paid' || normalized.includes('مسدد')) {
+      return 'مسدد';
+    }
+
+    return 'غير مسدد';
+  }
+
+  private parseRequestPositiveInt(value: string): number | null {
+    const normalized = this.replaceArabicIndicDigits(String(value ?? '').trim());
+    const matched = normalized.match(/\d+/);
+    if (!matched) {
+      return null;
+    }
+
+    const parsed = Number(matched[0]);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null;
+    }
+
+    return Math.floor(parsed);
+  }
+
+  private pickRequestDisplayValue(values: string[]): string {
+    for (const value of values) {
+      const normalized = this.toRequestDisplayOrDash(value);
+      if (normalized !== '-') {
+        return normalized;
+      }
+    }
+
+    return '-';
+  }
+
+  private toRequestDisplayOrDash(value: string): string {
+    const normalized = String(value ?? '').trim();
+    return normalized.length > 0 ? normalized : '-';
+  }
+
+  private ensureRequestCurrency(value: string): string {
+    const display = this.toRequestDisplayOrDash(value);
+    if (display === '-') {
+      return display;
+    }
+
+    if (display.includes('جنيه')) {
+      return display;
+    }
+
+    const normalized = this.replaceArabicIndicDigits(display).replace(/,/g, '').trim();
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) {
+      return display;
+    }
+
+    const rounded = Math.round(parsed * 100) / 100;
+    const hasFraction = Math.abs(rounded - Math.trunc(rounded)) > 0.0001;
+    const formatted = rounded.toLocaleString('en-US', {
+      minimumFractionDigits: hasFraction ? 2 : 0,
+      maximumFractionDigits: 2
+    });
+
+    return `${formatted} جنيه`;
+  }
+
+  private normalizeRequestPaymentText(value: string): string {
+    return this.replaceArabicIndicDigits(String(value ?? ''))
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_\-]/g, '');
+  }
+
+  private replaceArabicIndicDigits(value: string): string {
+    return String(value ?? '')
+      .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+      .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
+  }
+
+  private hasAnyWaveBookingsPrintText(
+    selector: (row: SummerWaveBookingsPrintRowDto) => string | null | undefined
+  ): boolean {
+    return this.waveBookingsPrintSections.some(section =>
+      section.rows.some(row => {
+        const text = String(selector(row) ?? '').trim();
+        return text.length > 0 && text !== '-';
+      })
+    );
+  }
+
+  private hasAnyWaveBookingsPrintNumeric(
+    selector: (row: SummerWaveBookingsPrintRowDto) => number | null | undefined
+  ): boolean {
+    return this.waveBookingsPrintSections.some(section =>
+      section.rows.some(row => {
+        const value = Number(selector(row) ?? 0);
+        return Number.isFinite(value) && value > 0;
+      })
+    );
+  }
+
+  private hasAnyResortBookingsPrintText(
+    selector: (row: SummerWaveBookingsPrintRowDto) => string | null | undefined
+  ): boolean {
+    return this.resortBookingsPrintSectionsFlat.some(section =>
+      section.rows.some(row => {
+        const text = String(selector(row) ?? '').trim();
+        return text.length > 0 && text !== '-';
+      })
+    );
+  }
+
+  private hasAnyResortBookingsPrintNumeric(
+    selector: (row: SummerWaveBookingsPrintRowDto) => number | null | undefined
+  ): boolean {
+    return this.resortBookingsPrintSectionsFlat.some(section =>
+      section.rows.some(row => {
+        const value = Number(selector(row) ?? 0);
+        return Number.isFinite(value) && value > 0;
+      })
+    );
+  }
+
+  private collectErrors(
+    response: {
+      errors?: Array<{ message?: string } | string>;
+      message?: unknown;
+      detail?: unknown;
+      title?: unknown;
+    } | null | undefined
+  ): string {
+    const messages: string[] = [];
+    const appendMessage = (value: unknown): void => {
+      const text = String(value ?? '').trim();
+      if (!text || messages.includes(text)) {
+        return;
+      }
+      messages.push(text);
+    };
+
+    (response?.errors ?? []).forEach(item => {
+      if (typeof item === 'string') {
+        appendMessage(item);
+        return;
+      }
+
+      appendMessage(item?.message);
+    });
+
+    appendMessage(response?.message);
+    appendMessage(response?.detail);
+    appendMessage(response?.title);
+
+    return messages.length ? messages.join('<br/>') : SUMMER_UI_TEXTS_AR.errors.generic;
+  }
+
+  private collectHttpErrors(error: unknown, fallbackMessage: string): string {
+    const messages: string[] = [];
+    const appendMessage = (value: unknown): void => {
+      const text = String(value ?? '').trim();
+      if (!text || messages.includes(text)) {
+        return;
+      }
+      messages.push(text);
+    };
+
+    const collectFromPayload = (payload: unknown): void => {
+      if (!payload) {
+        return;
+      }
+
+      if (typeof payload === 'string') {
+        const trimmed = payload.trim();
+        if (!trimmed) {
+          return;
+        }
+
+        try {
+          collectFromPayload(JSON.parse(trimmed));
+        } catch {
+          appendMessage(trimmed);
+        }
+        return;
+      }
+
+      if (typeof payload !== 'object') {
+        return;
+      }
+
+      const record = payload as Record<string, unknown>;
+      const responseErrors = record['errors'];
+      if (Array.isArray(responseErrors)) {
+        responseErrors.forEach(item => {
+          if (typeof item === 'string') {
+            appendMessage(item);
+            return;
+          }
+
+          if (item && typeof item === 'object') {
+            appendMessage((item as Record<string, unknown>)['message']);
+          }
+        });
+      } else if (responseErrors && typeof responseErrors === 'object') {
+        Object.values(responseErrors as Record<string, unknown>).forEach(group => {
+          if (Array.isArray(group)) {
+            group.forEach(entry => appendMessage(entry));
+          }
+        });
+      }
+
+      appendMessage(record['message']);
+      appendMessage(record['detail']);
+      appendMessage(record['title']);
+    };
+
+    if (error instanceof HttpErrorResponse) {
+      collectFromPayload(error.error);
+      if (messages.length === 0) {
+        appendMessage(error.message);
+      }
+    } else {
+      const record = (error ?? {}) as Record<string, unknown>;
+      collectFromPayload(record['error']);
+      collectFromPayload(record['response']);
+      if (messages.length === 0) {
+        appendMessage(record['message']);
+      }
+    }
+
+    return messages.length > 0 ? messages.join('<br/>') : fallbackMessage;
   }
 
   private toFileParameters(files: File[]): FileParameter[] {
@@ -1347,6 +3996,25 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     }
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+
+  private parseReplyAdminFlag(value: unknown): boolean {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return normalized === 'true' || normalized === '1';
+  }
+
+  private looksLikeIsoDate(value: string): boolean {
+    const text = String(value ?? '').trim();
+    if (text.length < 10 || !text.includes('T')) {
+      return false;
+    }
+
+    const parsed = Date.parse(text);
+    return Number.isFinite(parsed);
   }
 
   private getWaveOrder(code: string): number {

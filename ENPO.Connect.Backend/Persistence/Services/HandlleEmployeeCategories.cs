@@ -12,6 +12,7 @@ using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.Correspondance;
 using Models.DTO.Correspondance.Enums;
+using Models.DTO.Correspondance.Summer;
 using NPOI.SS.Formula.Functions;
 using Persistence.Data;
 using Persistence.HelperServices;
@@ -20,8 +21,10 @@ using Persistence.Services.Summer;
 using SignalR.Notification;
 using System;
 using System.Data;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Persistence.Services
@@ -35,10 +38,13 @@ namespace Persistence.Services
         private readonly IMapper _mapper;
         private readonly ENPOCreateLogFile _logger;
         private readonly MessageRequestService _messageRequestService;
-        private readonly SignalRConnectionManager _signalRConnectionManager;
         private readonly IConnectNotificationService _notificationService;
+        private readonly SummerPricingService _summerPricingService;
+        private readonly SummerBookingBlacklistService _summerBookingBlacklistService;
+        private readonly SummerUnitFreezeService _summerUnitFreezeService;
         private const int CapacityLockTimeoutMs = 15000;
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
+        private static readonly TimeZoneInfo SummerBusinessTimeZone = ResolveSummerBusinessTimeZone();
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"
@@ -49,12 +55,19 @@ namespace Persistence.Services
             { 148, new Dictionary<int, int> { { 2, 2 }, { 4, 6 }, { 6, 2 } } },
             { 149, new Dictionary<int, int> { { 4, 24 }, { 6, 23 }, { 7, 24 } } }
         };
+        private static readonly Dictionary<int, int> SummerMaxExtraMembersRules = new()
+        {
+            { 147, 2 },
+            { 148, 1 },
+            { 149, 2 }
+        };
         private static readonly HashSet<string> SystemManagedSummerFieldKinds = new(StringComparer.OrdinalIgnoreCase)
         {
-            "Summer_ActionType",
-            "Summer_PaymentDueAtUtc",
-            "Summer_PaymentStatus",
-            "Summer_PaidAtUtc",
+            SummerWorkflowDomainConstants.ActionTypeFieldKind,
+            SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind,
+            SummerWorkflowDomainConstants.PaymentStatusFieldKind,
+            SummerWorkflowDomainConstants.PaidAtUtcFieldKind,
+            SummerWorkflowDomainConstants.RequestCreatedAtUtcFieldKind,
             "Summer_PaymentNotes",
             "Summer_TransferCount",
             "Summer_TransferFromCategory",
@@ -67,10 +80,162 @@ namespace Persistence.Services
             "Summer_CancelledAtUtc",
             "Summer_AdminLastAction",
             "Summer_AdminActionAtUtc",
-            "Summer_AdminComment"
+            "Summer_AdminComment",
+            SummerWorkflowDomainConstants.PricingFieldKinds.ConfigId,
+            SummerWorkflowDomainConstants.PricingFieldKinds.PolicyId,
+            SummerWorkflowDomainConstants.PricingFieldKinds.PricingMode,
+            SummerWorkflowDomainConstants.PricingFieldKinds.MembershipType,
+            SummerWorkflowDomainConstants.PricingFieldKinds.TransportationMandatory,
+            SummerWorkflowDomainConstants.PricingFieldKinds.SelectedStayMode,
+            SummerWorkflowDomainConstants.PricingFieldKinds.PersonsCount,
+            SummerWorkflowDomainConstants.PricingFieldKinds.PeriodKey,
+            SummerWorkflowDomainConstants.PricingFieldKinds.WaveDate,
+            SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationPricePerPerson,
+            SummerWorkflowDomainConstants.PricingFieldKinds.TransportationPricePerPerson,
+            SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationTotal,
+            SummerWorkflowDomainConstants.PricingFieldKinds.TransportationTotal,
+            SummerWorkflowDomainConstants.PricingFieldKinds.InsuranceAmount,
+            SummerWorkflowDomainConstants.PricingFieldKinds.ProxyInsuranceAmount,
+            SummerWorkflowDomainConstants.PricingFieldKinds.AppliedInsuranceAmount,
+            SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal,
+            SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText,
+            SummerWorkflowDomainConstants.PricingFieldKinds.SmsText,
+            SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText,
+            "SummerWaveStartsAtIso",
+            "SUM2026_WaveStartsAtIso",
+            "WaveStartsAtIso",
+            "Summer_PaymentMode",
+            "SUM2026_PaymentMode",
+            "PaymentMode",
+            "Summer_PaymentInstallmentCount",
+            "SUM2026_PaymentInstallmentCount",
+            "Summer_PaymentInstallmentsTotal",
+            "SUM2026_PaymentInstallmentsTotal",
+            "Summer_PaymentInstallment1Amount",
+            "Summer_PaymentInstallment2Amount",
+            "Summer_PaymentInstallment3Amount",
+            "Summer_PaymentInstallment4Amount",
+            "Summer_PaymentInstallment5Amount",
+            "Summer_PaymentInstallment6Amount",
+            "Summer_PaymentInstallment7Amount",
+            "SUM2026_PaymentInstallment1Amount",
+            "SUM2026_PaymentInstallment2Amount",
+            "SUM2026_PaymentInstallment3Amount",
+            "SUM2026_PaymentInstallment4Amount",
+            "SUM2026_PaymentInstallment5Amount",
+            "SUM2026_PaymentInstallment6Amount",
+            "SUM2026_PaymentInstallment7Amount",
+            "Summer_PaymentInstallment1Paid",
+            "Summer_PaymentInstallment2Paid",
+            "Summer_PaymentInstallment3Paid",
+            "Summer_PaymentInstallment4Paid",
+            "Summer_PaymentInstallment5Paid",
+            "Summer_PaymentInstallment6Paid",
+            "Summer_PaymentInstallment7Paid",
+            "SUM2026_PaymentInstallment1Paid",
+            "SUM2026_PaymentInstallment2Paid",
+            "SUM2026_PaymentInstallment3Paid",
+            "SUM2026_PaymentInstallment4Paid",
+            "SUM2026_PaymentInstallment5Paid",
+            "SUM2026_PaymentInstallment6Paid",
+            "SUM2026_PaymentInstallment7Paid",
+            "Summer_PaymentInstallment1PaidAtUtc",
+            "Summer_PaymentInstallment2PaidAtUtc",
+            "Summer_PaymentInstallment3PaidAtUtc",
+            "Summer_PaymentInstallment4PaidAtUtc",
+            "Summer_PaymentInstallment5PaidAtUtc",
+            "Summer_PaymentInstallment6PaidAtUtc",
+            "Summer_PaymentInstallment7PaidAtUtc",
+            "SUM2026_PaymentInstallment1PaidAtUtc",
+            "SUM2026_PaymentInstallment2PaidAtUtc",
+            "SUM2026_PaymentInstallment3PaidAtUtc",
+            "SUM2026_PaymentInstallment4PaidAtUtc",
+            "SUM2026_PaymentInstallment5PaidAtUtc",
+            "SUM2026_PaymentInstallment6PaidAtUtc",
+            "SUM2026_PaymentInstallment7PaidAtUtc"
+        };
+        private static readonly Dictionary<string, string> SummerAuditAliasMap = BuildSummerAuditAliasMap();
+        private static readonly Dictionary<string, string> SummerAuditFallbackFieldLabelByAlias = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["OWNER_NAME"] = "اسم صاحب الطلب",
+            ["OWNER_FILE_NUMBER"] = "رقم ملف صاحب الطلب",
+            ["OWNER_NATIONAL_ID"] = "الرقم القومي",
+            ["OWNER_PHONE"] = "رقم هاتف صاحب الطلب",
+            ["OWNER_EXTRA_PHONE"] = "هاتف إضافي",
+            ["SEASON_YEAR"] = "موسم الحجز",
+            ["DESTINATION_NAME"] = "اسم المصيف",
+            ["DESTINATION_ID"] = "كود المصيف",
+            ["WAVE_CODE"] = "الفوج",
+            ["WAVE_LABEL"] = "بيان الفوج",
+            ["STAY_MODE"] = "نوع الحجز",
+            ["PROXY_MODE"] = "تسجيل بالنيابة",
+            ["USE_FROZEN_UNIT"] = "تضمين الوحدات المجمدة",
+            ["FAMILY_COUNT"] = "عدد الأفراد",
+            ["EXTRA_COUNT"] = "أفراد إضافيون",
+            ["COMPANION_NAME"] = "اسم المرافق",
+            ["COMPANION_AGE"] = "سن (للأطفال)",
+            ["COMPANION_RELATION"] = "صلة القرابة",
+            ["COMPANION_NATIONAL_ID"] = "الرقم القومي للمرافق"
+        };
+        private static readonly Dictionary<string, string> SummerAuditFallbackGroupByAlias = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["OWNER_NAME"] = "بيانات صاحب الطلب",
+            ["OWNER_FILE_NUMBER"] = "بيانات صاحب الطلب",
+            ["OWNER_NATIONAL_ID"] = "بيانات صاحب الطلب",
+            ["OWNER_PHONE"] = "بيانات صاحب الطلب",
+            ["OWNER_EXTRA_PHONE"] = "بيانات صاحب الطلب",
+            ["SEASON_YEAR"] = "بيانات الحجز",
+            ["DESTINATION_NAME"] = "بيانات الحجز",
+            ["DESTINATION_ID"] = "بيانات الحجز",
+            ["WAVE_CODE"] = "بيانات الحجز",
+            ["WAVE_LABEL"] = "بيانات الحجز",
+            ["STAY_MODE"] = "بيانات الحجز",
+            ["PROXY_MODE"] = "بيانات صاحب الطلب",
+            ["USE_FROZEN_UNIT"] = "بيانات الحجز",
+            ["FAMILY_COUNT"] = "بيانات الحجز",
+            ["EXTRA_COUNT"] = "بيانات الحجز",
+            ["COMPANION_NAME"] = "بيانات المرافقين",
+            ["COMPANION_AGE"] = "بيانات المرافقين",
+            ["COMPANION_RELATION"] = "بيانات المرافقين",
+            ["COMPANION_NATIONAL_ID"] = "بيانات المرافقين"
+        };
+        private static readonly Dictionary<string, string> SummerAuditKnownValueLabels = new(StringComparer.OrdinalIgnoreCase)
+        {
+            [SummerWorkflowDomainConstants.StayModes.ResidenceOnly] = "إقامة فقط",
+            [SummerWorkflowDomainConstants.StayModes.ResidenceWithTransport] = "إقامة وانتقالات",
+            [SummerWorkflowDomainConstants.PaymentModes.Cash] = "كاش",
+            [SummerWorkflowDomainConstants.PaymentModes.Installment] = "تقسيط",
+            [SummerWorkflowDomainConstants.PricingModes.AccommodationOnlyAllowed] = "إقامة فقط",
+            [SummerWorkflowDomainConstants.PricingModes.AccommodationAndTransportationOptional] = "إقامة وانتقالات (اختياري)",
+            [SummerWorkflowDomainConstants.PricingModes.TransportationMandatoryIncluded] = "انتقالات إلزامية ومضمنة",
+            [SummerWorkflowDomainConstants.MembershipTypes.Worker] = "عضو عامل",
+            [SummerWorkflowDomainConstants.MembershipTypes.NonWorker] = "عضو غير عامل",
+            ["PENDING_PAYMENT"] = "بانتظار السداد",
+            ["PAID"] = "مسدد",
+            ["PAID_ADMIN"] = "سداد إداري",
+            ["UNPAID"] = "غير مسدد",
+            ["PARTIAL_PAID"] = "مسدد جزئي",
+            ["CANCELLED_ADMIN"] = "ملغي إداريًا",
+            ["CANCELLED_USER"] = "ملغي من صاحب الطلب",
+            ["CANCELLED_AUTO"] = "ملغي تلقائيًا",
+            ["CANCELLED"] = "ملغي",
+            ["OVERDUE"] = "متأخر",
+            ["TRANSFER_REVIEW_REQUIRED"] = "يتطلب مراجعة بعد التحويل",
+            ["TRANSFER_REVIEW_RESOLVED"] = "تمت مراجعة التحويل"
         };
 
-        public HandleEmployeeCategories(ConnectContext connectContext, Attach_HeldContext attach_HeldContext, GPAContext gPAContext, helperService helperService, IMapper mapper, ENPOCreateLogFile logger, MessageRequestService messageRequestService, SignalRConnectionManager signalRConnectionManager, IConnectNotificationService notificationService)
+        public HandleEmployeeCategories(
+            ConnectContext connectContext,
+            Attach_HeldContext attach_HeldContext,
+            GPAContext gPAContext,
+            helperService helperService,
+            IMapper mapper,
+            ENPOCreateLogFile logger,
+            MessageRequestService messageRequestService,
+            IConnectNotificationService notificationService,
+            SummerPricingService summerPricingService,
+            SummerBookingBlacklistService summerBookingBlacklistService,
+            SummerUnitFreezeService summerUnitFreezeService)
         {
             _connectContext = connectContext;
             _attach_HeldContext = attach_HeldContext;
@@ -79,8 +244,10 @@ namespace Persistence.Services
             _mapper = mapper;
             _logger = logger ?? new ENPOCreateLogFile("C:\\Connect_Log", "HandleEmployeeCategories_Log" + DateTime.Today.ToString("dd-MMM-yyyy"), FileExtension.txt);
             _messageRequestService = messageRequestService ?? throw new ArgumentNullException(nameof(messageRequestService));
-            _signalRConnectionManager = signalRConnectionManager ?? throw new ArgumentNullException(nameof(signalRConnectionManager));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _summerPricingService = summerPricingService ?? throw new ArgumentNullException(nameof(summerPricingService));
+            _summerBookingBlacklistService = summerBookingBlacklistService ?? throw new ArgumentNullException(nameof(summerBookingBlacklistService));
+            _summerUnitFreezeService = summerUnitFreezeService ?? throw new ArgumentNullException(nameof(summerUnitFreezeService));
         }
 
         private helperService helper_service_check(helperService svc)
@@ -90,10 +257,16 @@ namespace Persistence.Services
         }
 
         // SummerRequests: creates message + reply and persists with retry and basic unique-requestRef handling to reduce overwrite collisions
-        public async Task SummerRequests(MessageRequest messageRequest, CategoryWithParent categoryInfo, CommonResponse<MessageDto> response)
+        public async Task SummerRequests(
+            MessageRequest messageRequest,
+            CategoryWithParent categoryInfo,
+            CommonResponse<MessageDto> response,
+            string? actingUserId = null,
+            SummerRequestRuntimeOptions? runtimeOptions = null)
         {
             if (messageRequest == null) throw new ArgumentNullException(nameof(messageRequest));
             if (response == null) throw new ArgumentNullException(nameof(response));
+            var runtime = runtimeOptions ?? SummerRequestRuntimeOptions.Default;
 
             if (string.IsNullOrWhiteSpace(messageRequest.CreatedBy))
             {
@@ -107,25 +280,63 @@ namespace Persistence.Services
                 return;
             }
 
-            var employeeId = GetFieldValue(messageRequest.Fields, "Emp_Id");
+            if (!ValidateAndNormalizeCompanionNames(messageRequest.Fields, response))
+            {
+                return;
+            }
+
+            var employeeId = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.EmployeeIdFieldKinds);
             if (string.IsNullOrWhiteSpace(employeeId))
             {
                 response.Errors.Add(new Error { Code = "400", Message = "رقم ملف الموظف مطلوب." });
                 return;
             }
 
-            var summerCamp = GetFieldValue(messageRequest.Fields, "SummerCamp");
+            if (_summerBookingBlacklistService.IsBlocked(employeeId))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "SUMMER_BLACKLIST_BLOCKED",
+                    Message = "تعذر إتمام الحجز: رقم الملف مدرج ضمن قائمة الممنوعين من الحجز."
+                });
+                return;
+            }
+
+            var summerCamp = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.WaveCodeFieldKinds);
             if (string.IsNullOrWhiteSpace(summerCamp))
             {
                 response.Errors.Add(new Error { Code = "400", Message = "الفوج مطلوب." });
                 return;
             }
 
-            var familyCount = ParseInt(GetFieldValue(messageRequest.Fields, "FamilyCount"), 0);
+            var familyCount = ParseInt(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.FamilyCountFieldKinds), 0);
             if (familyCount <= 0)
             {
                 response.Errors.Add(new Error { Code = "400", Message = "عدد الأفراد مطلوب." });
                 return;
+            }
+
+            var extraCount = Math.Max(0, ParseInt(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.ExtraCountFieldKinds), 0));
+            var personsCount = familyCount + extraCount;
+            if (personsCount <= 0)
+            {
+                response.Errors.Add(new Error { Code = "400", Message = "عدد الأفراد مطلوب لحساب التسعير." });
+                return;
+            }
+
+            var seasonYear = ParseInt(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.SeasonYearFieldKinds), DateTime.UtcNow.Year);
+            var waveLabel = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.WaveLabelFieldKinds);
+            var waveStartsAtIso = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.WaveStartsAtIsoFieldKinds);
+            var stayMode = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.StayModeFieldKinds);
+            var isProxyBooking = ParseBoolean(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.ProxyModeFieldKinds));
+            var requestedMembershipType = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.MembershipTypeFieldKinds);
+
+            if (!string.IsNullOrWhiteSpace(waveStartsAtIso))
+            {
+                UpsertRequestFieldRange(
+                    messageRequest.Fields,
+                    SummerWorkflowDomainConstants.WaveStartsAtIsoFieldKinds,
+                    waveStartsAtIso);
             }
 
             if (categoryInfo == null)
@@ -142,9 +353,143 @@ namespace Persistence.Services
                 return;
             }
 
-            messageRequest.Type = (byte)parentCategory.CatId;
+            var isEditOperation = messageRequest.MessageId.GetValueOrDefault() > 0;
             var editMessageId = messageRequest.MessageId.GetValueOrDefault();
-            var isEditOperation = editMessageId > 0;
+            if (!isEditOperation
+                && !CanCreateSummerRequestForDestination(
+                    categoryInfo.Category?.CatId ?? 0,
+                    categoryInfo.Category?.CatName,
+                    runtime.HasSummerAdminPermission))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "403",
+                    Message = SummerWorkflowDomainConstants.DestinationAccessDeniedMessage
+                });
+                return;
+            }
+
+            var normalizedActorUserId = string.IsNullOrWhiteSpace(actingUserId)
+                ? (messageRequest.CreatedBy ?? string.Empty).Trim()
+                : actingUserId.Trim();
+            var canManageSummerCategory = await CanUserManageSummerCategoryAsync(normalizedActorUserId, categoryInfo.Category.CatId);
+            var allowMembershipOverride = runtime.HasSummerAdminPermission || canManageSummerCategory;
+            var resolvedMembershipType = SummerMembershipPolicy.ResolveMembershipType(
+                requestedMembershipType,
+                allowMembershipOverride);
+            UpsertRequestFieldRange(
+                messageRequest.Fields,
+                SummerWorkflowDomainConstants.MembershipTypeFieldKinds,
+                resolvedMembershipType);
+            var useFrozenInventory = ParseBoolean(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.UseFrozenUnitFieldKinds));
+            var allowAdminFrozenBooking = false;
+            if (useFrozenInventory)
+            {
+                allowAdminFrozenBooking = runtime.HasSummerAdminPermission || canManageSummerCategory;
+                if (!allowAdminFrozenBooking)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك باستخدام الوحدات المجمدة في هذا المصيف."
+                    });
+                    return;
+                }
+            }
+
+            var destinationName = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.DestinationNameFieldKinds);
+            if (string.IsNullOrWhiteSpace(destinationName))
+            {
+                destinationName = (categoryInfo.Category?.CatName ?? string.Empty).Trim();
+            }
+
+            var hasAdminEditOverride = isEditOperation && (runtime.HasSummerAdminPermission || canManageSummerCategory);
+            if (!ValidateSummerExtraMembersRules(
+                    categoryInfo.Category?.CatId ?? 0,
+                    destinationName,
+                    familyCount,
+                    extraCount,
+                    runtime.HasSummerAdminPermission,
+                    hasAdminEditOverride,
+                    response))
+            {
+                return;
+            }
+
+            var pricingQuoteResponse = await _summerPricingService.GetQuoteAsync(new SummerPricingQuoteRequest
+            {
+                CategoryId = categoryInfo.Category.CatId,
+                SeasonYear = seasonYear,
+                WaveCode = summerCamp,
+                WaveLabel = waveLabel,
+                WaveStartsAtIso = waveStartsAtIso,
+                FamilyCount = familyCount,
+                ExtraCount = extraCount,
+                PersonsCount = personsCount,
+                StayMode = stayMode,
+                IsProxyBooking = isProxyBooking,
+                MembershipType = resolvedMembershipType,
+                DestinationName = destinationName
+            },
+            allowMembershipOverride: allowMembershipOverride);
+
+            if (!pricingQuoteResponse.IsSuccess || pricingQuoteResponse.Data == null)
+            {
+                if (pricingQuoteResponse.Errors.Any())
+                {
+                    foreach (var error in pricingQuoteResponse.Errors)
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = string.IsNullOrWhiteSpace(error?.Code) ? "400" : error.Code,
+                            Message = string.IsNullOrWhiteSpace(error?.Message)
+                                ? "تعذر حساب التسعير. يرجى مراجعة إعدادات التسعير."
+                                : error.Message
+                        });
+                    }
+                }
+                else
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = "تعذر حساب التسعير. يرجى مراجعة إعدادات التسعير."
+                    });
+                }
+
+                return;
+            }
+
+            var pricingQuote = pricingQuoteResponse.Data;
+            ApplyPricingSnapshotFields(messageRequest.Fields, pricingQuote);
+            UpsertRequestFieldRange(
+                messageRequest.Fields,
+                SummerWorkflowDomainConstants.StayModeFieldKinds,
+                pricingQuote.NormalizedStayMode);
+            UpsertRequestFieldRange(
+                messageRequest.Fields,
+                SummerWorkflowDomainConstants.UseFrozenUnitFieldKinds,
+                allowAdminFrozenBooking ? "true" : "false");
+            Dictionary<string, string>? existingPaymentPlanSnapshot = null;
+            if (isEditOperation
+                && !runtime.HasSummerGeneralManagerPermission
+                && editMessageId > 0)
+            {
+                existingPaymentPlanSnapshot = await LoadExistingSummerPaymentPlanSnapshotAsync(editMessageId);
+            }
+            if (!ApplySummerPaymentPlanFields(
+                    messageRequest.Fields,
+                    pricingQuote,
+                    pricingQuote.GrandTotal,
+                    runtime.HasSummerGeneralManagerPermission,
+                    isEditOperation,
+                    existingPaymentPlanSnapshot,
+                    response))
+            {
+                return;
+            }
+
+            messageRequest.Type = (byte)parentCategory.CatId;
 
 
             var allowed = await IsWithinCategoryIntervalLimitAsync(
@@ -164,6 +509,7 @@ namespace Persistence.Services
                 response,
                 summerCamp,
                 familyCount,
+                allowFrozenReservation: allowAdminFrozenBooking,
                 isEditOperation ? editMessageId : null);
             if (!hasCapacity)
             {
@@ -239,6 +585,7 @@ namespace Persistence.Services
                         response,
                         summerCamp,
                         familyCount,
+                        allowFrozenReservation: allowAdminFrozenBooking,
                         isEditOperation ? editMessageId : null);
                     if (!hasCapacity)
                     {
@@ -261,6 +608,12 @@ namespace Persistence.Services
                             return;
                         }
 
+                        if (!await CanUserEditExistingSummerMessageAsync(normalizedActorUserId, existingMessage))
+                        {
+                            response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بتعديل هذا الطلب." });
+                            return;
+                        }
+
                         previousCategoryId = existingMessage.CategoryCd;
                         previousWaveCode = (await _connectContext.TkmendFields
                             .AsNoTracking()
@@ -272,16 +625,37 @@ namespace Persistence.Services
                         var requestRef = (existingMessage.RequestRef ?? string.Empty).Trim();
                         if (string.IsNullOrWhiteSpace(requestRef))
                         {
-                            var seasonYear = ParseInt(GetFieldValue(messageRequest.Fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
+                            var requestSeasonYear = ParseInt(GetFieldValue(messageRequest.Fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
                             var sequenceName = GetSummerSequenceName(categoryInfo.Category.CatId);
                             var requestRefSeq = _helperService.GetSequenceNextValue(sequenceName);
-                            requestRef = BuildSummerRequestReference(categoryInfo.Category.CatId, seasonYear, requestRefSeq);
+                            requestRef = BuildSummerRequestReference(categoryInfo.Category.CatId, requestSeasonYear, requestRefSeq);
                         }
 
                         messageRequest.MessageId = messageId;
                         messageRequest.RequestRef = requestRef;
-                        messageRequest.AssignedSectorId = parentCategory.Stockholder.ToString();
+                        var resolvedRoutingSectorId = ResolveSummerRoutingSectorId(categoryInfo, existingMessage.AssignedSectorId);
+                        if (string.IsNullOrWhiteSpace(resolvedRoutingSectorId))
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "400",
+                                Message = "تعذر تحديد جهة الإدارة المختصة بالمصيف. برجاء مراجعة إعدادات Stockholder للتصنيف."
+                            });
+                            return;
+                        }
+                        messageRequest.AssignedSectorId = resolvedRoutingSectorId;
+                        if (string.IsNullOrWhiteSpace(messageRequest.CurrentResponsibleSectorId))
+                        {
+                            messageRequest.CurrentResponsibleSectorId = resolvedRoutingSectorId;
+                        }
                         UpsertRequestField(messageRequest.Fields, "RequestRef", requestRef);
+                        ApplyPricingMessageIdentity(pricingQuote, messageId, requestRef);
+                        ApplyPricingSnapshotFields(messageRequest.Fields, pricingQuote);
+                        AlignPricingDisplayAndSmsFieldsForOwnerMessage(
+                            messageRequest.Fields,
+                            messageId,
+                            requestRef,
+                            categoryInfo.Category.CatId);
 
                         existingMessage.Subject = messageRequest.Subject;
                         existingMessage.Description = messageRequest.Description;
@@ -293,47 +667,110 @@ namespace Persistence.Services
                         {
                             existingMessage.CurrentResponsibleSectorId = messageRequest.CurrentResponsibleSectorId;
                         }
+                        else if (string.IsNullOrWhiteSpace(existingMessage.CurrentResponsibleSectorId))
+                        {
+                            existingMessage.CurrentResponsibleSectorId = resolvedRoutingSectorId;
+                        }
                         existingMessage.LastModifiedDate = DateTime.Now;
 
-                        await ReplaceMessageFieldsAsync(messageId, messageRequest.Fields);
+                        var fieldAuditEntries = await ReplaceMessageFieldsAsync(
+                            messageId,
+                            messageRequest.Fields,
+                            categoryInfo.Category.CatId,
+                            normalizedActorUserId);
 
-                        replyText = "تم تعديل طلب المصيف.";
+                        replyText = BuildSummerEditFriendlyReplyText(fieldAuditEntries);
                         capacityAction = "EDIT";
                     }
                     else
                     {
                         // Generate ids using DB-backed sequences (helperService expected to use atomic DB operations)
                         messageId = _helperService.GetSequenceNextValue("Seq_Tickets");
-                        var seasonYear = ParseInt(GetFieldValue(messageRequest.Fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
+                        var requestSeasonYear = ParseInt(GetFieldValue(messageRequest.Fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
                         var sequenceName = GetSummerSequenceName(categoryInfo.Category.CatId);
                         var requestRefSeq = _helperService.GetSequenceNextValue(sequenceName);
-                        var requestReference = BuildSummerRequestReference(categoryInfo.Category.CatId, seasonYear, requestRefSeq);
+                        var requestReference = BuildSummerRequestReference(categoryInfo.Category.CatId, requestSeasonYear, requestRefSeq);
 
                         messageRequest.MessageId = messageId;
                         messageRequest.RequestRef = requestReference;
-                        messageRequest.AssignedSectorId = parentCategory.Stockholder.ToString();
+                        var resolvedRoutingSectorId = ResolveSummerRoutingSectorId(categoryInfo, null);
+                        if (string.IsNullOrWhiteSpace(resolvedRoutingSectorId))
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "400",
+                                Message = "تعذر تحديد جهة الإدارة المختصة بالمصيف. برجاء مراجعة إعدادات Stockholder للتصنيف."
+                            });
+                            return;
+                        }
+                        messageRequest.AssignedSectorId = resolvedRoutingSectorId;
+                        if (string.IsNullOrWhiteSpace(messageRequest.CurrentResponsibleSectorId))
+                        {
+                            messageRequest.CurrentResponsibleSectorId = resolvedRoutingSectorId;
+                        }
                         var requestRefField = messageRequest.Fields.FirstOrDefault(x => x.FildKind == "RequestRef");
                         if (requestRefField != null)
                         {
                             requestRefField.FildTxt = messageRequest.RequestRef;
                         }
+                        ApplyPricingMessageIdentity(pricingQuote, messageId, messageRequest.RequestRef);
+                        ApplyPricingSnapshotFields(messageRequest.Fields, pricingQuote);
 
-                        var paymentDueAtUtc = SummerCalendarRules.CalculatePaymentDueUtc(DateTime.UtcNow);
-                        UpsertRequestField(messageRequest.Fields, "Summer_PaymentDueAtUtc", paymentDueAtUtc.ToString("o"));
-                        UpsertRequestField(messageRequest.Fields, "Summer_PaymentStatus", "PENDING_PAYMENT");
+                        var requestCreatedAtUtc = TruncateToWholeSecondUtc(DateTime.UtcNow);
+                        var paymentDueAtUtc = SummerCalendarRules.CalculatePaymentDueUtc(requestCreatedAtUtc);
+                        UpsertRequestField(messageRequest.Fields, SummerWorkflowDomainConstants.RequestCreatedAtUtcFieldKind, requestCreatedAtUtc.ToString("o"));
+                        UpsertRequestField(messageRequest.Fields, SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind, paymentDueAtUtc.ToString("o"));
+                        UpsertRequestField(messageRequest.Fields, SummerWorkflowDomainConstants.PaymentStatusFieldKind, "PENDING_PAYMENT");
                         UpsertRequestField(messageRequest.Fields, "Summer_TransferCount", "0");
+                        _logger.AppendLine(
+                            $"SummerRequests: anchored request created time for message {messageId} at {requestCreatedAtUtc:o}; payment due at {paymentDueAtUtc:o}.");
 
                         replyText = "تم إنشاء طلب المصيف.";
                         capacityAction = "CREATE";
                     }
 
+                    AlignPricingDisplayAndSmsFieldsForOwnerMessage(
+                        messageRequest.Fields,
+                        messageId,
+                        messageRequest.RequestRef,
+                        categoryInfo.Category.CatId);
+
+                    if (!allowAdminFrozenBooking)
+                    {
+                        await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(messageId, normalizedActorUserId);
+                    }
+                    else
+                    {
+                        var frozenAssigned = await _summerUnitFreezeService.TryAssignFrozenUnitAsync(
+                            categoryInfo.Category.CatId,
+                            summerCamp,
+                            familyCount,
+                            messageId,
+                            normalizedActorUserId);
+                        if (!frozenAssigned)
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "429",
+                                Message = "لا توجد وحدات مجمدة متاحة حالياً للحجز الإداري."
+                            });
+                            return;
+                        }
+                    }
+
                     var assignedSector = messageRequest.AssignedSectorId ?? messageRequest.CreatedBy;
-                    var reply = _helperService.CreateReply(messageId, replyText, messageRequest.CreatedBy, assignedSector, "0.0.0.0");
+                    var replyAuthorId = isEditOperation
+                        ? (string.IsNullOrWhiteSpace(normalizedActorUserId)
+                            ? (messageRequest.CreatedBy ?? string.Empty).Trim()
+                            : normalizedActorUserId)
+                        : (messageRequest.CreatedBy ?? string.Empty).Trim();
+                    var reply = _helperService.CreateReply(messageId, replyText, replyAuthorId, assignedSector, "0.0.0.0");
 
                     if (isEditOperation)
                     {
                         await _connectContext.Replies.AddAsync(reply);
                         await SaveRequestAttachmentsAsync(messageRequest.files, reply.ReplyId);
+                        await RevokeSummerEditTokensAsync(messageId, normalizedActorUserId);
                     }
                     else
                     {
@@ -347,25 +784,63 @@ namespace Persistence.Services
                     _logger.AppendLine($"SummerRequests: {(isEditOperation ? "updated" : "created")} message {messageId} with RequestRef {messageRequest.RequestRef}");
 
                     // Post commit actions (notifications, etc.) and fetch created message
-                    try
+                    if (!runtime.SuppressNotifications)
                     {
-                        await PostCommitActionsAsync(messageRequest, reply, categoryInfo);
-                        await PublishCapacityUpdateAsync(categoryInfo.Category.CatId, summerCamp, capacityAction);
-                        if (isEditOperation
-                            && previousCategoryId > 0
-                            && !string.IsNullOrWhiteSpace(previousWaveCode)
-                            && (previousCategoryId != categoryInfo.Category.CatId
-                                || !string.Equals(previousWaveCode.Trim(), summerCamp.Trim(), StringComparison.OrdinalIgnoreCase)))
+                        try
                         {
-                            await PublishCapacityUpdateAsync(previousCategoryId, previousWaveCode, "EDIT_PREVIOUS");
+                            await PostCommitActionsAsync(messageRequest, reply, categoryInfo);
+                            await PublishCapacityUpdateAsync(categoryInfo.Category.CatId, summerCamp, capacityAction);
+                            if (isEditOperation
+                                && previousCategoryId > 0
+                                && !string.IsNullOrWhiteSpace(previousWaveCode)
+                                && (previousCategoryId != categoryInfo.Category.CatId
+                                    || !string.Equals(previousWaveCode.Trim(), summerCamp.Trim(), StringComparison.OrdinalIgnoreCase)))
+                            {
+                                await PublishCapacityUpdateAsync(previousCategoryId, previousWaveCode, "EDIT_PREVIOUS");
+                            }
+                        }
+                        catch (Exception postEx)
+                        {
+                            _logger.AppendLine($"PostCommitActions failed: {postEx.Message}");
                         }
                     }
-                    catch (Exception postEx)
+
+                    if (runtime.SkipResponseHydration)
                     {
-                        _logger.AppendLine($"PostCommitActions failed: {postEx.Message}");
+                        response.Data = new MessageDto
+                        {
+                            MessageId = messageId,
+                            RequestRef = messageRequest.RequestRef,
+                            CategoryCd = categoryInfo.Category.CatId,
+                            Subject = messageRequest.Subject,
+                            Description = messageRequest.Description,
+                            CreatedBy = messageRequest.CreatedBy,
+                            AssignedSectorId = messageRequest.AssignedSectorId ?? string.Empty,
+                            CurrentResponsibleSectorId = messageRequest.CurrentResponsibleSectorId,
+                            CreatedDate = DateTime.UtcNow,
+                            Status = MessageStatus.New,
+                            Fields = messageRequest.Fields
+                        };
+                    }
+                    else
+                    {
+                        await _helperService.GetMessageRequestById(messageId, response);
                     }
 
-                    await _helperService.GetMessageRequestById(messageId, response);
+                    if (!runtime.SuppressNotifications
+                        && !isEditOperation
+                        && response.IsSuccess
+                        && response.Data != null)
+                    {
+                        try
+                        {
+                            await DispatchOwnerPricingConfirmationAsync(response.Data);
+                        }
+                        catch (Exception notificationEx)
+                        {
+                            _logger.AppendLine($"Owner pricing confirmation notification failed: {notificationEx.Message}");
+                        }
+                    }
 
                     return;
                 }
@@ -418,42 +893,23 @@ namespace Persistence.Services
         private async Task PostCommitActionsAsync(MessageRequest messageRequest, Reply reply, CategoryWithParent categoryInfo)
         {
             var category = categoryInfo?.ParentCategory;
-
-            var userId = messageRequest?.CreatedBy;
-            if (string.IsNullOrEmpty(userId))
-            {
-                _logger.AppendLine("PostCommitActionsAsync: CreatedBy is null or empty; skipping notification.");
-                return;
-            }
-
             var requestRef = messageRequest?.RequestRef ?? string.Empty;
             var catName = category?.CatName ?? string.Empty;
             var isEditOperation = !string.IsNullOrWhiteSpace(reply?.Message)
                 && reply.Message.Contains("تعديل", StringComparison.OrdinalIgnoreCase);
 
-            var notificationText = isEditOperation
-                ? $"تم حفظ تعديل طلب المصيف '{catName}' برقم مرجع {requestRef}."
-                : $"تم إنشاء طلب المصيف '{catName}' برقم مرجع {requestRef} وإرساله للتنفيذ.";
-            var notificationTitle = isEditOperation ? "تم تعديل طلب مصيف" : "تم إنشاء طلب مصيف";
-
-            await _signalRConnectionManager.SendNotificationToUser(userId, new NotificationDto
-            {
-                Notification = notificationText,
-                type = NotificationType.info,
-                Title = notificationTitle,
-                time = DateTime.Now,
-                sender = "Connect",
-                Category = NotificationCategory.Business
-            });
-
-            var targetAdminGroup = ResolveResponsibleAdminGroupName(messageRequest);
+            var targetAdminGroups = ResolveResponsibleAdminGroups(messageRequest);
             var updatedMessageId = reply?.MessageId ?? 0;
             var requestUpdatePayload = BuildSummerRequestUpdatedPayload(updatedMessageId, isEditOperation ? "EDIT" : "CREATE");
-            if (!string.IsNullOrWhiteSpace(targetAdminGroup) && !string.IsNullOrWhiteSpace(requestUpdatePayload))
+
+            _logger.AppendLine(
+                $"PostCommitActionsAsync: summer request update prepared. MessageId={updatedMessageId}, Action={(isEditOperation ? "EDIT" : "CREATE")}, CreatedBy={messageRequest?.CreatedBy}, AdminGroups={(targetAdminGroups.Count > 0 ? string.Join(",", targetAdminGroups) : "NONE")}, RequestRef={requestRef}, Category={catName}.");
+
+            if (targetAdminGroups.Count > 0 && !string.IsNullOrWhiteSpace(requestUpdatePayload))
             {
-                await _notificationService.SendSignalRToGroupAsync(new SignalRGroupDispatchRequest
+                var dispatchResponse = await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
                 {
-                    GroupName = targetAdminGroup,
+                    GroupNames = targetAdminGroups,
                     Notification = requestUpdatePayload,
                     Title = "تحديث طلبات المصايف",
                     Type = NotificationType.info,
@@ -461,6 +917,18 @@ namespace Persistence.Services
                     Sender = "Connect",
                     Time = DateTime.Now
                 });
+
+                if (!dispatchResponse.IsSuccess)
+                {
+                    var errors = string.Join(" | ", dispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.AppendLine(
+                        $"PostCommitActionsAsync: failed to dispatch summer admin update. MessageId={updatedMessageId}, Groups={string.Join(",", targetAdminGroups)}, Errors={errors}.");
+                }
+                else
+                {
+                    _logger.AppendLine(
+                        $"PostCommitActionsAsync: dispatched summer admin update. MessageId={updatedMessageId}, Groups={string.Join(",", targetAdminGroups)}.");
+                }
             }
             else
             {
@@ -483,21 +951,35 @@ namespace Persistence.Services
             return $"SUMMER_REQUEST_UPDATED|{messageId}|{normalizedAction}|{DateTime.UtcNow:o}";
         }
 
-        private static string? ResolveResponsibleAdminGroupName(MessageRequest? messageRequest)
+        private static List<string> ResolveResponsibleAdminGroups(MessageRequest? messageRequest)
         {
             if (messageRequest == null)
             {
-                return null;
+                return new List<string>();
             }
 
-            var responsible = (messageRequest.CurrentResponsibleSectorId ?? string.Empty).Trim();
-            if (!string.IsNullOrWhiteSpace(responsible))
+            return new[] { messageRequest.CurrentResponsibleSectorId, messageRequest.AssignedSectorId }
+                .Select(sector => (sector ?? string.Empty).Trim())
+                .Where(sector => sector.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static string ResolveSummerRoutingSectorId(CategoryWithParent categoryInfo, string? existingAssignedSectorId)
+        {
+            var parentStockholder = categoryInfo?.ParentCategory?.Stockholder;
+            if (parentStockholder.HasValue && parentStockholder.Value > 0)
             {
-                return responsible;
+                return parentStockholder.Value.ToString();
             }
 
-            var assigned = (messageRequest.AssignedSectorId ?? string.Empty).Trim();
-            return string.IsNullOrWhiteSpace(assigned) ? null : assigned;
+            var categoryStockholder = categoryInfo?.Category?.Stockholder;
+            if (categoryStockholder.HasValue && categoryStockholder.Value > 0)
+            {
+                return categoryStockholder.Value.ToString();
+            }
+
+            return (existingAssignedSectorId ?? string.Empty).Trim();
         }
 
         private static bool IsUniqueConstraintViolation(string message)
@@ -571,6 +1053,7 @@ namespace Persistence.Services
             CommonResponse<MessageDto> response,
             string summerCamp,
             int familyCount,
+            bool allowFrozenReservation = false,
             int? excludedMessageId = null)
         {
             if (!SummerCapacityRules.TryGetValue(category.CatId, out var capacityByFamily))
@@ -588,48 +1071,34 @@ namespace Persistence.Services
                 return false;
             }
 
-            var sameCampReservationMessageIds = await _connectContext.TkmendFields
-                .AsNoTracking()
-                .Where(x => x.FildKind == "SummerCamp" && x.FildTxt == summerCamp)
-                .Select(x => x.FildRelted)
-                .Distinct()
-                .ToListAsync();
-
-            if (!sameCampReservationMessageIds.Any())
+            var hasPublicCapacity = await _summerUnitFreezeService.HasPublicCapacityAsync(
+                category.CatId,
+                summerCamp,
+                familyCount,
+                totalUnits,
+                excludedMessageId);
+            if (hasPublicCapacity)
             {
                 return true;
             }
 
-            var sameCategoryQuery = _connectContext.Messages
-                .AsNoTracking()
-                .Where(m => sameCampReservationMessageIds.Contains(m.MessageId)
-                            && m.CategoryCd == category.CatId
-                            && m.Status != MessageStatus.Rejected);
-            if (excludedMessageId.HasValue)
+            if (allowFrozenReservation)
             {
-                sameCategoryQuery = sameCategoryQuery.Where(m => m.MessageId != excludedMessageId.Value);
-            }
-            var sameCategoryMessageIds = await sameCategoryQuery
-                .Select(m => m.MessageId)
-                .ToListAsync();
-
-            if (!sameCategoryMessageIds.Any())
-            {
-                return true;
+                var hasFrozenAvailability = await _summerUnitFreezeService.HasAssignableFrozenUnitAsync(
+                    category.CatId,
+                    summerCamp,
+                    familyCount);
+                if (hasFrozenAvailability)
+                {
+                    return true;
+                }
             }
 
-            var familyCountFields = await _connectContext.TkmendFields
-                .AsNoTracking()
-                .Where(x => sameCategoryMessageIds.Contains(x.FildRelted) && x.FildKind == "FamilyCount")
-                .ToListAsync();
-
-            var usedUnits = familyCountFields
-                .Where(x => ParseInt(x.FildTxt, 0) == familyCount)
-                .Select(x => x.FildRelted)
-                .Distinct()
-                .Count();
-
-            if (usedUnits >= totalUnits)
+            var frozenAvailableUnits = await _summerUnitFreezeService.CountActiveFrozenAvailableUnitsAsync(
+                category.CatId,
+                summerCamp,
+                familyCount);
+            if (frozenAvailableUnits > 0)
             {
                 response.Errors.Add(new Error
                 {
@@ -639,7 +1108,12 @@ namespace Persistence.Services
                 return false;
             }
 
-            return true;
+            response.Errors.Add(new Error
+            {
+                Code = "429",
+                Message = $"لا توجد وحدات متاحة لعدد الأفراد '{familyCount}' في الفوج '{summerCamp}' بمصيف '{category.CatName}'."
+            });
+            return false;
         }
 
         private async Task<bool> AcquireCapacityLockAsync(int categoryId, string waveCode)
@@ -690,13 +1164,32 @@ SELECT @result;
                 return;
             }
 
-            var messageText = $"SUMMER_CAPACITY_UPDATED|{categoryId}|{waveCode.Trim()}|{action}|{DateTime.UtcNow:o}";
+            var normalizedWaveCode = waveCode.Trim();
+            var normalizedAction = string.IsNullOrWhiteSpace(action)
+                ? "UPDATE"
+                : action.Trim().ToUpperInvariant();
+            var emittedAtUtc = DateTime.UtcNow;
+            var destinationName = await ResolveSummerDestinationNameAsync(categoryId);
+            var batchNumber = ResolveSummerBatchNumber(normalizedWaveCode);
+
+            var messageText = JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["event"] = "SUMMER_CAPACITY_UPDATED",
+                ["destinationId"] = categoryId,
+                ["destinationName"] = destinationName,
+                ["waveCode"] = normalizedWaveCode,
+                ["batchNumber"] = batchNumber,
+                ["action"] = normalizedAction,
+                ["emittedAt"] = emittedAtUtc,
+                ["sender"] = "Connect",
+                ["title"] = "إدارة طلبات المصايف"
+            });
             var notification = new NotificationDto
             {
                 Notification = messageText,
                 type = NotificationType.info,
-                Title = "تحديث سعات المصايف",
-                time = DateTime.Now,
+                Title = "إدارة طلبات المصايف",
+                time = emittedAtUtc,
                 sender = "Connect",
                 Category = NotificationCategory.Business
             };
@@ -713,17 +1206,1339 @@ SELECT @result;
             });
         }
 
+        private async Task<string> ResolveSummerDestinationNameAsync(int categoryId)
+        {
+            var destinationName = await _connectContext.Cdcategories
+                .AsNoTracking()
+                .Where(category => category.CatId == categoryId)
+                .Select(category => category.CatName)
+                .FirstOrDefaultAsync();
+
+            destinationName = Convert.ToString(destinationName ?? string.Empty).Trim();
+            return destinationName.Length > 0
+                ? destinationName
+                : $"المصيف رقم {categoryId}";
+        }
+
+        private static string ResolveSummerBatchNumber(string waveCode)
+        {
+            var normalized = Convert.ToString(waveCode ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return "-";
+            }
+
+            var digitsOnly = new string(normalized.Where(char.IsDigit).ToArray());
+            return digitsOnly.Length > 0 ? digitsOnly : normalized;
+        }
+
+        private async Task DispatchOwnerPricingConfirmationAsync(MessageDto message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            var fields = message.Fields ?? new List<TkmendField>();
+            if (fields.Count == 0)
+            {
+                return;
+            }
+
+            var smsText = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.SmsText });
+            var whatsappText = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText });
+            var normalizedSmsText = BuildOwnerPricingSmsText(message, fields, smsText);
+            if (string.IsNullOrWhiteSpace(whatsappText))
+            {
+                whatsappText = smsText;
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedSmsText) && string.IsNullOrWhiteSpace(whatsappText))
+            {
+                return;
+            }
+
+            var mobile = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.EmployeePhoneFieldKinds);
+            if (string.IsNullOrWhiteSpace(mobile))
+            {
+                mobile = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.EmployeeExtraPhoneFieldKinds);
+            }
+
+            if (string.IsNullOrWhiteSpace(mobile))
+            {
+                _logger.AppendLine($"Owner pricing confirmation skipped for MessageId={message.MessageId}: mobile is missing.");
+                return;
+            }
+
+            var ownerId = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.EmployeeIdFieldKinds);
+            if (string.IsNullOrWhiteSpace(ownerId))
+            {
+                ownerId = (message.CreatedBy ?? string.Empty).Trim();
+            }
+
+            var referenceNo = string.IsNullOrWhiteSpace(message.RequestRef)
+                ? $"SUMMER-{message.MessageId}"
+                : message.RequestRef.Trim();
+
+            if (!string.IsNullOrWhiteSpace(normalizedSmsText))
+            {
+                var smsResponse = await _notificationService.SendSmsAsync(new SmsDispatchRequest
+                {
+                    MobileNumber = mobile,
+                    Message = normalizedSmsText.Trim(),
+                    UserId = string.IsNullOrWhiteSpace(ownerId) ? "SYSTEM" : ownerId,
+                    ReferenceNo = referenceNo
+                });
+
+                if (!smsResponse.IsSuccess)
+                {
+                    var smsErrors = string.Join(" | ", smsResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.AppendLine($"Owner pricing SMS notification failed for MessageId={message.MessageId}. Errors={smsErrors}");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(whatsappText))
+            {
+                var whatsappResponse = await _notificationService.SendWhatsAppAsync(new WhatsAppDispatchRequest
+                {
+                    MobileNumber = mobile,
+                    Message = whatsappText.Trim()
+                });
+
+                if (!whatsappResponse.IsSuccess)
+                {
+                    var whatsappErrors = string.Join(" | ", whatsappResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.AppendLine($"Owner pricing WhatsApp notification failed for MessageId={message.MessageId}. Errors={whatsappErrors}");
+                }
+            }
+        }
+
+        private static void AlignPricingDisplayAndSmsFieldsForOwnerMessage(
+            List<TkmendField>? fields,
+            int messageId,
+            string? requestRef,
+            int categoryId)
+        {
+            if (fields == null || fields.Count == 0 || messageId <= 0)
+            {
+                return;
+            }
+
+            var baseSmsText = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.SmsText });
+            var smsText = BuildOwnerPricingSmsText(
+                new MessageDto
+                {
+                    MessageId = messageId,
+                    RequestRef = (requestRef ?? string.Empty).Trim(),
+                    CategoryCd = categoryId
+                },
+                fields,
+                baseSmsText);
+
+            if (string.IsNullOrWhiteSpace(smsText))
+            {
+                return;
+            }
+
+            UpsertRequestField(fields, SummerWorkflowDomainConstants.PricingFieldKinds.SmsText, smsText);
+            UpsertRequestField(fields, SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText, smsText);
+        }
+
+        private static string BuildOwnerPricingSmsText(
+            MessageDto? message,
+            IEnumerable<TkmendField>? fields,
+            string? fallbackText)
+        {
+            var safeFields = fields ?? Enumerable.Empty<TkmendField>();
+            var bookingNumber = string.IsNullOrWhiteSpace(message?.RequestRef)
+                ? $"SUMMER-{message?.MessageId ?? 0}"
+                : message.RequestRef.Trim();
+            var referenceNumber = message?.MessageId > 0
+                ? message.MessageId.ToString(CultureInfo.InvariantCulture)
+                : bookingNumber;
+
+            var destinationName = GetFirstFieldValue(safeFields, SummerWorkflowDomainConstants.DestinationNameFieldKinds);
+            if (string.IsNullOrWhiteSpace(destinationName))
+            {
+                destinationName = message != null && message.CategoryCd > 0
+                    ? $"المصيف رقم {message.CategoryCd}"
+                    : "-";
+            }
+
+            var paymentModeToken = NormalizePaymentModeToken(GetFirstFieldValue(safeFields, SummerWorkflowDomainConstants.PaymentModeFieldKinds));
+            var paymentModeLabel = string.Equals(
+                paymentModeToken,
+                SummerWorkflowDomainConstants.PaymentModes.Installment,
+                StringComparison.OrdinalIgnoreCase)
+                ? "تقسيط"
+                : "كاش";
+
+            var grandTotal = NormalizeMoney(ParseDecimal(GetFirstFieldValue(
+                safeFields,
+                new[] { SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal })));
+
+            var waveDateText = ResolveWaveDateTextForOwnerSms(safeFields);
+            var paymentDueDateText = ResolvePaymentDueDateTextForOwnerSms(safeFields);
+            var paymentPlanSegment = BuildOwnerPaymentPlanSmsSegment(safeFields, paymentModeToken, grandTotal);
+
+            var summary = $"رقم الحجز: {bookingNumber}، المرجعي: {referenceNumber}، المصيف: {destinationName}، تاريخ الفوج: {waveDateText}، طريقة السداد: {paymentModeLabel}، {paymentPlanSegment}، إجمالي الحجز: {FormatDecimalValue(grandTotal)} جنيه";
+            if (!string.IsNullOrWhiteSpace(paymentDueDateText))
+            {
+                summary = $"{summary}. يرجى السداد قبل موعد أقصاه {paymentDueDateText}.";
+            }
+            else
+            {
+                summary = $"{summary}.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(summary))
+            {
+                return summary;
+            }
+
+            return (fallbackText ?? string.Empty).Trim();
+        }
+
+        private static string BuildOwnerPaymentPlanSmsSegment(
+            IEnumerable<TkmendField>? fields,
+            string paymentModeToken,
+            decimal grandTotal)
+        {
+            var safeFields = fields ?? Enumerable.Empty<TkmendField>();
+            var normalizedGrandTotal = NormalizeMoney(grandTotal);
+
+            if (!string.Equals(
+                    paymentModeToken,
+                    SummerWorkflowDomainConstants.PaymentModes.Installment,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var cashAmount = normalizedGrandTotal;
+                if (cashAmount <= 0m)
+                {
+                    cashAmount = NormalizeMoney(ParseDecimal(GetFirstFieldValue(
+                        safeFields,
+                        SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(1))));
+                }
+
+                return $"قيمة السداد النقدي: {FormatDecimalValue(cashAmount)} جنيه";
+            }
+
+            var rawInstallmentCount = ParseInt(
+                GetFirstFieldValue(safeFields, SummerWorkflowDomainConstants.InstallmentCountFieldKinds),
+                SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount);
+            var installmentCount = Math.Clamp(
+                rawInstallmentCount,
+                1,
+                SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            var tailInstallmentsCount = Math.Max(0, installmentCount - 1);
+            var downPaymentAmount = NormalizeMoney(ParseDecimal(GetFirstFieldValue(
+                safeFields,
+                SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(1))));
+
+            var installmentAmounts = new List<decimal>();
+            for (var installmentNo = 2; installmentNo <= installmentCount; installmentNo++)
+            {
+                var amount = NormalizeMoney(ParseDecimal(GetFirstFieldValue(
+                    safeFields,
+                    SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo))));
+                installmentAmounts.Add(amount);
+            }
+
+            if (downPaymentAmount <= 0m
+                && normalizedGrandTotal > 0m
+                && installmentAmounts.Count > 0)
+            {
+                downPaymentAmount = NormalizeMoney(normalizedGrandTotal - installmentAmounts.Sum());
+            }
+
+            if (tailInstallmentsCount <= 0)
+            {
+                return $"مقدم الحجز: {FormatDecimalValue(Math.Max(0m, downPaymentAmount))} جنيه";
+            }
+
+            var firstInstallmentAmount = installmentAmounts.FirstOrDefault();
+            var hasEqualInstallments = installmentAmounts.Count == tailInstallmentsCount
+                && installmentAmounts.All(value => Math.Abs(value - firstInstallmentAmount) <= 0.01m);
+
+            if (hasEqualInstallments)
+            {
+                return $"مقدم الحجز: {FormatDecimalValue(Math.Max(0m, downPaymentAmount))} جنيه، عدد الأقساط: {tailInstallmentsCount}، قيمة كل قسط: {FormatDecimalValue(Math.Max(0m, firstInstallmentAmount))} جنيه";
+            }
+
+            var installmentsText = string.Join(
+                "، ",
+                installmentAmounts.Select((value, index) => $"القسط {index + 1}: {FormatDecimalValue(Math.Max(0m, value))} جنيه"));
+            if (installmentsText.Length == 0)
+            {
+                installmentsText = "قيمة القسط: -";
+            }
+
+            return $"مقدم الحجز: {FormatDecimalValue(Math.Max(0m, downPaymentAmount))} جنيه، عدد الأقساط: {tailInstallmentsCount}، {installmentsText}";
+        }
+
+        private static string ResolveWaveDateTextForOwnerSms(IEnumerable<TkmendField>? fields)
+        {
+            var waveDateValue = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PricingFieldKinds.WaveDate });
+            if (DateTime.TryParse(
+                    waveDateValue,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var waveDateUtc))
+            {
+                return FormatBusinessDate(waveDateUtc);
+            }
+
+            var waveLabel = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.WaveLabelFieldKinds);
+            if (SummerCalendarRules.TryParseWaveLabelDateUtc(waveLabel, out var waveStartUtc))
+            {
+                return FormatBusinessDate(waveStartUtc);
+            }
+
+            return "-";
+        }
+
+        private static string ResolvePaymentDueDateTextForOwnerSms(IEnumerable<TkmendField>? fields)
+        {
+            var dueDateValue = GetFirstFieldValue(fields, new[] { SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind });
+            if (!DateTime.TryParse(
+                    dueDateValue,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var paymentDueUtc))
+            {
+                return string.Empty;
+            }
+
+            return FormatBusinessDateTimeForSms(paymentDueUtc);
+        }
+
+        private static void ApplyPricingSnapshotFields(List<TkmendField>? fields, SummerPricingQuoteDto quote)
+        {
+            if (fields == null || quote == null)
+            {
+                return;
+            }
+
+            var waveDateValue = string.Empty;
+            if (SummerCalendarRules.TryParseWaveLabelDateUtc(quote.WaveLabel, out var waveStartUtc))
+            {
+                waveDateValue = waveStartUtc.ToString("o");
+            }
+
+            var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [SummerWorkflowDomainConstants.PricingFieldKinds.ConfigId] = quote.PricingConfigId,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.PolicyId] = quote.PricingConfigId,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.PricingMode] = quote.PricingMode,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.MembershipType] = quote.MembershipType,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.TransportationMandatory] = quote.TransportationMandatory ? "true" : "false",
+                [SummerWorkflowDomainConstants.PricingFieldKinds.SelectedStayMode] = quote.NormalizedStayMode,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.PersonsCount] = quote.PersonsCount.ToString(CultureInfo.InvariantCulture),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.PeriodKey] = quote.PeriodKey,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.WaveDate] = waveDateValue,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationPricePerPerson] = FormatDecimalValue(quote.AccommodationPricePerPerson),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.TransportationPricePerPerson] = FormatDecimalValue(quote.TransportationPricePerPerson),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationTotal] = FormatDecimalValue(quote.AccommodationTotal),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.TransportationTotal] = FormatDecimalValue(quote.TransportationTotal),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.InsuranceAmount] = FormatDecimalValue(quote.InsuranceAmount),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.ProxyInsuranceAmount] = quote.ProxyInsuranceAmount.HasValue
+                    ? FormatDecimalValue(quote.ProxyInsuranceAmount.Value)
+                    : string.Empty,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.AppliedInsuranceAmount] = FormatDecimalValue(quote.AppliedInsuranceAmount),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal] = FormatDecimalValue(quote.GrandTotal),
+                [SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText] = quote.DisplayText,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.SmsText] = quote.SmsText,
+                [SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText] = quote.WhatsAppText
+            };
+
+            foreach (var item in snapshot)
+            {
+                UpsertRequestField(fields, item.Key, item.Value);
+            }
+        }
+
+        private static void ApplyPricingMessageIdentity(SummerPricingQuoteDto quote, int messageId, string? requestRef)
+        {
+            if (quote == null)
+            {
+                return;
+            }
+
+            var bookingNumber = string.IsNullOrWhiteSpace(requestRef)
+                ? $"SUMMER-{messageId}"
+                : requestRef.Trim();
+            var referenceNumber = messageId > 0
+                ? messageId.ToString(CultureInfo.InvariantCulture)
+                : bookingNumber;
+
+            quote.DisplayText = ReplacePricingMessageTokens(quote.DisplayText, bookingNumber, referenceNumber);
+            quote.SmsText = ReplacePricingMessageTokens(quote.SmsText, bookingNumber, referenceNumber);
+            quote.WhatsAppText = ReplacePricingMessageTokens(quote.WhatsAppText, bookingNumber, referenceNumber);
+        }
+
+        private static string ReplacePricingMessageTokens(string? template, string bookingNumber, string referenceNumber)
+        {
+            var text = (template ?? string.Empty).Trim();
+            if (text.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            return text
+                .Replace("{bookingNumber}", bookingNumber, StringComparison.Ordinal)
+                .Replace("{referenceNumber}", referenceNumber, StringComparison.Ordinal);
+        }
+
+        private static string FormatDecimalValue(decimal value)
+        {
+            return value % 1m == 0m
+                ? decimal.Truncate(value).ToString("0", CultureInfo.InvariantCulture)
+                : value.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
         private static string? GetFieldValue(IEnumerable<TkmendField>? fields, string fieldKind)
         {
             return fields?
-                .FirstOrDefault(x => x.FildKind == fieldKind)?
+                .FirstOrDefault(x => string.Equals(x.FildKind, fieldKind, StringComparison.OrdinalIgnoreCase))?
                 .FildTxt?
                 .Trim();
+        }
+
+        private static string GetFirstFieldValue(IEnumerable<TkmendField>? fields, IEnumerable<string> fieldKinds)
+        {
+            if (fields == null || fieldKinds == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (var fieldKind in fieldKinds)
+            {
+                if (string.IsNullOrWhiteSpace(fieldKind))
+                {
+                    continue;
+                }
+
+                var value = GetFieldValue(fields, fieldKind.Trim());
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static bool ParseBoolean(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return false;
+            }
+
+            return normalized.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("1", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("yes", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("y", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("نعم", StringComparison.OrdinalIgnoreCase);
         }
 
         private static int ParseInt(string? value, int fallback = 0)
         {
             return int.TryParse((value ?? string.Empty).Trim(), out var parsed) ? parsed : fallback;
+        }
+
+        private static decimal ParseDecimal(string? value, decimal fallback = 0m)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return fallback;
+            }
+
+            if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var invariantParsed))
+            {
+                return invariantParsed;
+            }
+
+            if (decimal.TryParse(normalized, NumberStyles.Number, new CultureInfo("ar-EG"), out var arabicParsed))
+            {
+                return arabicParsed;
+            }
+
+            return fallback;
+        }
+
+        private async Task<Dictionary<string, string>> LoadExistingSummerPaymentPlanSnapshotAsync(int messageId)
+        {
+            if (messageId <= 0)
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            var fieldKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            fieldKinds.UnionWith(SummerWorkflowDomainConstants.PaymentModeFieldKinds);
+            fieldKinds.UnionWith(SummerWorkflowDomainConstants.InstallmentCountFieldKinds);
+            fieldKinds.UnionWith(SummerWorkflowDomainConstants.InstallmentsTotalFieldKinds);
+            for (var installmentNo = 1; installmentNo <= SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount; installmentNo++)
+            {
+                fieldKinds.UnionWith(SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo));
+                fieldKinds.UnionWith(SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo));
+                fieldKinds.UnionWith(SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo));
+            }
+
+            var rows = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(field =>
+                    field.FildRelted == messageId
+                    && fieldKinds.Contains(field.FildKind ?? string.Empty))
+                .Select(field => new
+                {
+                    Key = (field.FildKind ?? string.Empty).Trim(),
+                    Value = (field.FildTxt ?? string.Empty).Trim()
+                })
+                .ToListAsync();
+
+            var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows)
+            {
+                if (row.Key.Length == 0 || snapshot.ContainsKey(row.Key))
+                {
+                    continue;
+                }
+
+                snapshot[row.Key] = row.Value;
+            }
+
+            return snapshot;
+        }
+
+        private static bool ApplySummerPaymentPlanFields(
+            List<TkmendField>? fields,
+            SummerPricingQuoteDto? pricingQuote,
+            decimal grandTotal,
+            bool hasSummerGeneralManagerPermission,
+            bool isEditOperation,
+            Dictionary<string, string>? existingSnapshot,
+            CommonResponse<MessageDto> response)
+        {
+            if (response == null)
+            {
+                return false;
+            }
+
+            if (fields == null)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "بيانات السداد غير متاحة."
+                });
+                return false;
+            }
+
+            var normalizedGrandTotal = NormalizeMoney(grandTotal);
+            var quoteFixedInstallments = ResolveQuoteFixedInstallments(pricingQuote, normalizedGrandTotal);
+            var hasQuoteFixedInstallments = quoteFixedInstallments.Length > 0;
+            var quoteFixedInstallmentCount = quoteFixedInstallments.Length;
+            var incomingPaymentModeRaw = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.PaymentModeFieldKinds);
+            var incomingPaymentMode = NormalizePaymentModeToken(incomingPaymentModeRaw);
+            var hasExistingSnapshot = existingSnapshot != null && existingSnapshot.Count > 0;
+
+            var resolvedPaymentMode = incomingPaymentMode;
+            if (!hasSummerGeneralManagerPermission
+                && isEditOperation
+                && hasExistingSnapshot)
+            {
+                resolvedPaymentMode = NormalizePaymentModeToken(
+                    GetFirstSnapshotValue(existingSnapshot, SummerWorkflowDomainConstants.PaymentModeFieldKinds));
+            }
+
+            UpsertRequestFieldRange(
+                fields,
+                SummerWorkflowDomainConstants.PaymentModeFieldKinds,
+                resolvedPaymentMode);
+
+            if (!string.Equals(
+                    resolvedPaymentMode,
+                    SummerWorkflowDomainConstants.PaymentModes.Installment,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                UpsertRequestFieldRange(fields, SummerWorkflowDomainConstants.InstallmentCountFieldKinds, "0");
+                UpsertRequestFieldRange(fields, SummerWorkflowDomainConstants.InstallmentsTotalFieldKinds, "0");
+                for (var installmentNo = 1; installmentNo <= SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount; installmentNo++)
+                {
+                    UpsertRequestFieldRange(
+                        fields,
+                        SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo),
+                        "0");
+                    UpsertRequestFieldRange(
+                        fields,
+                        SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo),
+                        "false");
+                    UpsertRequestFieldRange(
+                        fields,
+                        SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo),
+                        string.Empty);
+                }
+
+                return true;
+            }
+
+            var maxInstallmentCount = SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount;
+            var defaultInstallmentCount = SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount;
+            var minInstallmentCount = SummerWorkflowDomainConstants.PaymentModes.MinInstallmentCount;
+
+            var incomingInstallmentCountRaw = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.InstallmentCountFieldKinds);
+            if (!TryResolveInstallmentCount(
+                    incomingInstallmentCountRaw,
+                    defaultInstallmentCount,
+                    response,
+                    out var incomingInstallmentCount))
+            {
+                return false;
+            }
+
+            var existingInstallmentCount = defaultInstallmentCount;
+            if (hasExistingSnapshot
+                && !TryResolveInstallmentCount(
+                    GetFirstSnapshotValue(existingSnapshot, SummerWorkflowDomainConstants.InstallmentCountFieldKinds),
+                    defaultInstallmentCount,
+                    response,
+                    out existingInstallmentCount))
+            {
+                return false;
+            }
+
+            var resolvedInstallmentCount = defaultInstallmentCount;
+            if (isEditOperation && hasExistingSnapshot)
+            {
+                resolvedInstallmentCount = existingInstallmentCount;
+            }
+            else if (hasSummerGeneralManagerPermission)
+            {
+                resolvedInstallmentCount = incomingInstallmentCount;
+            }
+
+            if (hasQuoteFixedInstallments
+                && !hasSummerGeneralManagerPermission
+                && !(isEditOperation && hasExistingSnapshot))
+            {
+                resolvedInstallmentCount = quoteFixedInstallmentCount;
+            }
+
+            if (resolvedInstallmentCount < minInstallmentCount || resolvedInstallmentCount > maxInstallmentCount)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"عدد الأقساط يجب أن يكون بين {minInstallmentCount} و {maxInstallmentCount}."
+                });
+                return false;
+            }
+
+            var defaultInstallments = hasQuoteFixedInstallments && resolvedInstallmentCount == quoteFixedInstallmentCount
+                ? quoteFixedInstallments
+                : BuildEqualInstallments(normalizedGrandTotal, resolvedInstallmentCount);
+            var resolvedInstallments = new decimal[resolvedInstallmentCount];
+            var resolvedPaid = new bool[resolvedInstallmentCount];
+            var resolvedPaidAt = new string[resolvedInstallmentCount];
+            var canPreserveExistingInstallments = !hasSummerGeneralManagerPermission
+                && isEditOperation
+                && hasExistingSnapshot
+                && resolvedInstallmentCount == existingInstallmentCount;
+
+            for (var index = 0; index < resolvedInstallmentCount; index++)
+            {
+                var installmentNo = index + 1;
+                var amountFieldKinds = SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo);
+                var paidFieldKinds = SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo);
+                var paidAtFieldKinds = SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo);
+
+                decimal amount;
+                bool isPaid;
+                string paidAtValue;
+
+                if (hasSummerGeneralManagerPermission)
+                {
+                    amount = NormalizeMoney(ParseDecimal(GetFirstFieldValue(fields, amountFieldKinds), defaultInstallments[index]));
+                    isPaid = ParseBoolean(GetFirstFieldValue(fields, paidFieldKinds));
+                    paidAtValue = NormalizeUtcValue(GetFirstFieldValue(fields, paidAtFieldKinds), response, installmentNo);
+                    if (response.Errors.Count > 0)
+                    {
+                        return false;
+                    }
+                }
+                else if (canPreserveExistingInstallments)
+                {
+                    amount = NormalizeMoney(ParseDecimal(GetFirstSnapshotValue(existingSnapshot, amountFieldKinds), defaultInstallments[index]));
+                    isPaid = ParseBoolean(GetFirstSnapshotValue(existingSnapshot, paidFieldKinds));
+                    paidAtValue = NormalizeSnapshotUtcValue(GetFirstSnapshotValue(existingSnapshot, paidAtFieldKinds));
+                }
+                else
+                {
+                    amount = defaultInstallments[index];
+                    isPaid = false;
+                    paidAtValue = string.Empty;
+                }
+
+                resolvedInstallments[index] = amount;
+                resolvedPaid[index] = isPaid && amount > 0m;
+                resolvedPaidAt[index] = resolvedPaid[index] ? paidAtValue : string.Empty;
+            }
+
+            var installmentsTotal = NormalizeMoney(resolvedInstallments.Sum());
+            if (installmentsTotal > normalizedGrandTotal)
+            {
+                if (!hasSummerGeneralManagerPermission)
+                {
+                    var normalizedDefaults = hasQuoteFixedInstallments && resolvedInstallmentCount == quoteFixedInstallmentCount
+                        ? quoteFixedInstallments
+                        : BuildEqualInstallments(normalizedGrandTotal, resolvedInstallmentCount);
+                    for (var index = 0; index < resolvedInstallmentCount; index++)
+                    {
+                        resolvedInstallments[index] = normalizedDefaults[index];
+                        resolvedPaid[index] = false;
+                        resolvedPaidAt[index] = string.Empty;
+                    }
+                    installmentsTotal = NormalizeMoney(resolvedInstallments.Sum());
+                }
+                else
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = $"إجمالي الأقساط ({FormatDecimalValue(installmentsTotal)}) لا يجب أن يتجاوز إجمالي الحجز ({FormatDecimalValue(normalizedGrandTotal)})."
+                    });
+                    return false;
+                }
+            }
+
+            UpsertRequestFieldRange(
+                fields,
+                SummerWorkflowDomainConstants.InstallmentCountFieldKinds,
+                resolvedInstallmentCount.ToString(CultureInfo.InvariantCulture));
+            UpsertRequestFieldRange(
+                fields,
+                SummerWorkflowDomainConstants.InstallmentsTotalFieldKinds,
+                FormatDecimalValue(installmentsTotal));
+
+            for (var installmentNo = 1; installmentNo <= maxInstallmentCount; installmentNo++)
+            {
+                var index = installmentNo - 1;
+                var isActiveInstallment = installmentNo <= resolvedInstallmentCount;
+                var amountValue = isActiveInstallment ? FormatDecimalValue(resolvedInstallments[index]) : "0";
+                var isPaidValue = isActiveInstallment && resolvedPaid[index] ? "true" : "false";
+                var paidAtValue = isActiveInstallment ? resolvedPaidAt[index] : string.Empty;
+
+                UpsertRequestFieldRange(
+                    fields,
+                    SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo),
+                    amountValue);
+                UpsertRequestFieldRange(
+                    fields,
+                    SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo),
+                    isPaidValue);
+                UpsertRequestFieldRange(
+                    fields,
+                    SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo),
+                    paidAtValue);
+            }
+
+            return true;
+        }
+
+        private static string NormalizePaymentModeToken(string? value)
+        {
+            var token = (value ?? string.Empty).Trim().ToUpperInvariant();
+            return token == SummerWorkflowDomainConstants.PaymentModes.Installment
+                ? SummerWorkflowDomainConstants.PaymentModes.Installment
+                : SummerWorkflowDomainConstants.PaymentModes.Cash;
+        }
+
+        private static bool TryResolveInstallmentCount(
+            string? value,
+            int fallback,
+            CommonResponse<MessageDto> response,
+            out int installmentCount)
+        {
+            installmentCount = fallback;
+            var minCount = SummerWorkflowDomainConstants.PaymentModes.MinInstallmentCount;
+            var maxCount = SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount;
+            var normalized = (value ?? string.Empty).Trim();
+
+            if (normalized.Length == 0)
+            {
+                installmentCount = Math.Clamp(fallback, minCount, maxCount);
+                return true;
+            }
+
+            if (!int.TryParse(normalized, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = "عدد الأقساط غير صالح."
+                });
+                installmentCount = Math.Clamp(fallback, minCount, maxCount);
+                return false;
+            }
+
+            if (parsed < minCount || parsed > maxCount)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"عدد الأقساط يجب أن يكون بين {minCount} و {maxCount}."
+                });
+                installmentCount = Math.Clamp(fallback, minCount, maxCount);
+                return false;
+            }
+
+            installmentCount = parsed;
+            return true;
+        }
+
+        private static decimal[] ResolveQuoteFixedInstallments(
+            SummerPricingQuoteDto? pricingQuote,
+            decimal normalizedGrandTotal)
+        {
+            if (pricingQuote?.FixedInstallmentAmounts == null || pricingQuote.FixedInstallmentAmounts.Count == 0)
+            {
+                return Array.Empty<decimal>();
+            }
+
+            var minCount = SummerWorkflowDomainConstants.PaymentModes.MinInstallmentCount;
+            var maxCount = SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount;
+            var normalized = pricingQuote.FixedInstallmentAmounts
+                .Select(NormalizeMoney)
+                .ToArray();
+            if (normalized.Length < minCount || normalized.Length > maxCount)
+            {
+                return Array.Empty<decimal>();
+            }
+
+            if (normalized.Any(item => item < 0m))
+            {
+                return Array.Empty<decimal>();
+            }
+
+            var total = NormalizeMoney(normalized.Sum());
+            if (total <= 0m)
+            {
+                return Array.Empty<decimal>();
+            }
+
+            if (normalizedGrandTotal > 0m)
+            {
+                var delta = NormalizeMoney(normalizedGrandTotal - total);
+                if (delta != 0m)
+                {
+                    normalized[0] = NormalizeMoney(Math.Max(0m, normalized[0] + delta));
+                    total = NormalizeMoney(normalized.Sum());
+                }
+
+                if (total > normalizedGrandTotal)
+                {
+                    var overflow = NormalizeMoney(total - normalizedGrandTotal);
+                    normalized[0] = NormalizeMoney(Math.Max(0m, normalized[0] - overflow));
+                }
+            }
+
+            return normalized;
+        }
+
+        private static decimal NormalizeMoney(decimal value)
+        {
+            if (value <= 0m)
+            {
+                return 0m;
+            }
+
+            return Math.Round(value, 2, MidpointRounding.AwayFromZero);
+        }
+
+        private static decimal[] BuildEqualInstallments(decimal totalAmount, int installmentCount)
+        {
+            var count = installmentCount > 0 ? installmentCount : 1;
+            var normalizedTotal = NormalizeMoney(totalAmount);
+            if (count == SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount && normalizedTotal > 0m)
+            {
+                return BuildReservationInstallments(normalizedTotal);
+            }
+
+            return BuildEvenInstallmentsByCents(normalizedTotal, count);
+        }
+
+        private static decimal[] BuildReservationInstallments(decimal normalizedTotal)
+        {
+            const decimal downPaymentTargetPercent = 20m;
+            var installmentsTailCount = SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount - 1;
+            var bestStep = 0m;
+            var bestInstallmentValue = 0m;
+            var bestDownPayment = 0m;
+            var bestScore = decimal.MaxValue;
+
+            foreach (var step in new[] { 50m, 100m })
+            {
+                if (step <= 0m)
+                {
+                    continue;
+                }
+
+                var targetDownPayment = normalizedTotal * (downPaymentTargetPercent / 100m);
+                var roundedTargetDownPayment = RoundToNearestStep(targetDownPayment, step);
+                var installmentValue = RoundToNearestStep(
+                    (normalizedTotal - roundedTargetDownPayment) / installmentsTailCount,
+                    step);
+
+                if (installmentValue < 0m)
+                {
+                    continue;
+                }
+
+                var downPayment = NormalizeMoney(normalizedTotal - (installmentValue * installmentsTailCount));
+                if (downPayment <= 0m)
+                {
+                    continue;
+                }
+
+                var downPaymentPercent = (downPayment / normalizedTotal) * 100m;
+                var score = Math.Abs(downPaymentPercent - downPaymentTargetPercent);
+                if (score < bestScore
+                    || (score == bestScore && (bestStep <= 0m || step < bestStep)))
+                {
+                    bestScore = score;
+                    bestStep = step;
+                    bestInstallmentValue = NormalizeMoney(installmentValue);
+                    bestDownPayment = downPayment;
+                }
+            }
+
+            if (bestStep <= 0m)
+            {
+                return BuildEvenInstallmentsByCents(
+                    normalizedTotal,
+                    SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount);
+            }
+
+            var result = new decimal[SummerWorkflowDomainConstants.PaymentModes.DefaultInstallmentCount];
+            result[0] = bestDownPayment;
+            for (var index = 1; index < result.Length; index++)
+            {
+                result[index] = bestInstallmentValue;
+            }
+
+            return result;
+        }
+
+        private static decimal[] BuildEvenInstallmentsByCents(decimal normalizedTotal, int count)
+        {
+            var totalCents = decimal.ToInt64(normalizedTotal * 100m);
+            var baseCents = totalCents / count;
+            var remainder = totalCents % count;
+
+            var values = new decimal[count];
+            for (var index = 0; index < count; index++)
+            {
+                var cents = baseCents + (index < remainder ? 1 : 0);
+                values[index] = cents / 100m;
+            }
+
+            return values;
+        }
+
+        private static decimal RoundToNearestStep(decimal value, decimal step)
+        {
+            if (step <= 0m)
+            {
+                return NormalizeMoney(value);
+            }
+
+            var roundedUnits = Math.Round(value / step, 0, MidpointRounding.AwayFromZero);
+            return NormalizeMoney(roundedUnits * step);
+        }
+
+        private static string GetFirstSnapshotValue(
+            IReadOnlyDictionary<string, string>? snapshot,
+            IEnumerable<string> fieldKinds)
+        {
+            if (snapshot == null || snapshot.Count == 0 || fieldKinds == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (var fieldKind in fieldKinds)
+            {
+                var key = (fieldKind ?? string.Empty).Trim();
+                if (key.Length == 0)
+                {
+                    continue;
+                }
+
+                if (snapshot.TryGetValue(key, out var value)
+                    && !string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string NormalizeSnapshotUtcValue(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            return DateTimeOffset.TryParse(normalized, out var parsed)
+                ? parsed.UtcDateTime.ToString("o")
+                : string.Empty;
+        }
+
+        private static string NormalizeUtcValue(string? value, CommonResponse<MessageDto> response, int installmentNo)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            if (!DateTimeOffset.TryParse(normalized, out var parsed))
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"تاريخ سداد القسط رقم {installmentNo} غير صالح."
+                });
+                return string.Empty;
+            }
+
+            return parsed.UtcDateTime.ToString("o");
+        }
+
+        private static bool ValidateSummerExtraMembersRules(
+            int categoryId,
+            string? destinationName,
+            int familyCount,
+            int extraCount,
+            bool hasSummerAdminPermission,
+            bool hasAdminEditOverride,
+            CommonResponse<MessageDto> response)
+        {
+            if (!TryResolveSummerMaxExtraMembers(categoryId, out var maxExtraMembers))
+            {
+                return true;
+            }
+
+            if (hasAdminEditOverride)
+            {
+                return true;
+            }
+
+            var normalizedDestinationName = string.IsNullOrWhiteSpace(destinationName)
+                ? $"المصيف رقم {categoryId}"
+                : destinationName.Trim();
+            var maxFamilyCount = ResolveSummerMaxFamilyCount(categoryId);
+            var isAdminExceedingDestinationLimit = hasSummerAdminPermission && extraCount > maxExtraMembers;
+
+            if (maxFamilyCount > 0
+                && familyCount != maxFamilyCount
+                && extraCount > 0
+                && !isAdminExceedingDestinationLimit)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"الأفراد الإضافيون متاحون فقط عند اختيار السعة القصوى ({maxFamilyCount})."
+                });
+                return false;
+            }
+
+            if (!hasSummerAdminPermission && extraCount > maxExtraMembers)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = $"الحد الأقصى للأفراد الإضافيين في {normalizedDestinationName} هو {maxExtraMembers}."
+                });
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool TryResolveSummerMaxExtraMembers(int categoryId, out int maxExtraMembers)
+        {
+            if (SummerMaxExtraMembersRules.TryGetValue(categoryId, out var configuredMaxExtra))
+            {
+                maxExtraMembers = Math.Max(0, configuredMaxExtra);
+                return true;
+            }
+
+            maxExtraMembers = 0;
+            return false;
+        }
+
+        private static int ResolveSummerMaxFamilyCount(int categoryId)
+        {
+            if (!SummerCapacityRules.TryGetValue(categoryId, out var capacityByFamily)
+                || capacityByFamily == null
+                || capacityByFamily.Count == 0)
+            {
+                return 0;
+            }
+
+            return capacityByFamily.Keys.Max();
+        }
+
+        private static bool CanCreateSummerRequestForDestination(
+            int categoryId,
+            string? categoryName,
+            bool hasSummerAdminPermission)
+        {
+            if (!IsSummerDestinationRestrictedToSummerAdmin(categoryId, categoryName))
+            {
+                return true;
+            }
+
+            return hasSummerAdminPermission;
+        }
+
+        private static bool IsSummerDestinationRestrictedToSummerAdmin(int categoryId, string? categoryName)
+        {
+            if (categoryId == SummerWorkflowDomainConstants.DestinationCategoryIds.Matrouh
+                || categoryId == SummerWorkflowDomainConstants.DestinationCategoryIds.RasElBar)
+            {
+                return true;
+            }
+
+            if (categoryId == SummerWorkflowDomainConstants.DestinationCategoryIds.PortFouad)
+            {
+                return false;
+            }
+
+            var normalizedName = NormalizeArabicLookup(categoryName);
+            if (normalizedName.Contains("مرسي مطروح", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (normalizedName.Contains("راس البر", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (normalizedName.Contains("بور فواد", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return false;
+        }
+
+        private static string NormalizeArabicLookup(string? value)
+        {
+            return (value ?? string.Empty)
+                .Trim()
+                .Replace("أ", "ا", StringComparison.Ordinal)
+                .Replace("إ", "ا", StringComparison.Ordinal)
+                .Replace("آ", "ا", StringComparison.Ordinal)
+                .Replace("ى", "ي", StringComparison.Ordinal)
+                .Replace("ؤ", "و", StringComparison.Ordinal)
+                .Replace("ئ", "ي", StringComparison.Ordinal)
+                .ToLowerInvariant();
+        }
+
+        private async Task<bool> CanUserManageSummerCategoryAsync(string userId, int categoryId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId) || categoryId <= 0)
+            {
+                return false;
+            }
+
+            var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+            if (userUnitIds.Count == 0)
+            {
+                return false;
+            }
+
+            var categoryProjection = await _connectContext.Cdcategories
+                .AsNoTracking()
+                .Where(category => category.CatId == categoryId)
+                .Select(category => new { category.CatId, category.CatParent, category.Stockholder })
+                .FirstOrDefaultAsync();
+            if (categoryProjection == null)
+            {
+                return false;
+            }
+
+            var allowedUnitIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (categoryProjection.Stockholder.HasValue)
+            {
+                allowedUnitIds.Add(categoryProjection.Stockholder.Value.ToString());
+            }
+
+            if (categoryProjection.CatParent > 0)
+            {
+                var parentStockholder = await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .Where(parent => parent.CatId == categoryProjection.CatParent)
+                    .Select(parent => parent.Stockholder)
+                    .FirstOrDefaultAsync();
+                if (parentStockholder.HasValue)
+                {
+                    allowedUnitIds.Add(parentStockholder.Value.ToString());
+                }
+            }
+
+            if (allowedUnitIds.Count == 0)
+            {
+                return false;
+            }
+
+            return userUnitIds.Any(unitId => allowedUnitIds.Contains(unitId));
+        }
+
+        private async Task<bool> CanUserEditExistingSummerMessageAsync(string userId, Message existingMessage)
+        {
+            if (existingMessage == null)
+            {
+                return false;
+            }
+
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return false;
+            }
+
+            if (string.Equals(
+                    (existingMessage.CreatedBy ?? string.Empty).Trim(),
+                    normalizedUserId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (await CanUserManageSummerCategoryAsync(normalizedUserId, existingMessage.CategoryCd))
+            {
+                return true;
+            }
+
+            var ownerEmployeeId = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(field =>
+                    field.FildRelted == existingMessage.MessageId
+                    && SummerWorkflowDomainConstants.EmployeeIdFieldKinds.Contains(field.FildKind))
+                .Select(field => field.FildTxt)
+                .FirstOrDefaultAsync();
+
+            return string.Equals(
+                (ownerEmployeeId ?? string.Empty).Trim(),
+                normalizedUserId,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task RevokeSummerEditTokensAsync(int messageId, string revokedBy)
+        {
+            if (messageId <= 0)
+            {
+                return;
+            }
+
+            var normalizedRevokedBy = (revokedBy ?? string.Empty).Trim();
+            var now = DateTime.UtcNow;
+            var activeTokens = await _connectContext.RequestTokens
+                .Where(tokenRow =>
+                    tokenRow.MessageId == messageId
+                    && tokenRow.TokenPurpose == SummerWorkflowDomainConstants.RequestTokenPurposes.SummerEdit
+                    && tokenRow.RevokedAt == null
+                    && (!tokenRow.ExpiresAt.HasValue || tokenRow.ExpiresAt > now)
+                    && (!tokenRow.IsOneTimeUse || !tokenRow.IsUsed))
+                .ToListAsync();
+
+            if (activeTokens.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var tokenRow in activeTokens)
+            {
+                tokenRow.RevokedAt = now;
+                tokenRow.RevokedBy = normalizedRevokedBy.Length == 0 ? "SYSTEM" : normalizedRevokedBy;
+            }
+        }
+
+        private async Task<List<string>> GetActiveUserUnitIdsAsync(string userId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return new List<string>();
+            }
+
+            var now = DateTime.Now.Date;
+            var unitIds = await _gPAContext.UserPositions
+                .AsNoTracking()
+                .Where(position =>
+                    position.UserId == normalizedUserId
+                    && position.IsActive != false
+                    && (!position.StartDate.HasValue || position.StartDate.Value <= now)
+                    && (!position.EndDate.HasValue || position.EndDate.Value >= now))
+                .Select(position => position.UnitId)
+                .Distinct()
+                .ToListAsync();
+
+            return unitIds
+                .Select(unitId => unitId.ToString())
+                .Select(unitId => (unitId ?? string.Empty).Trim())
+                .Where(unitId => unitId.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static bool ValidateAndNormalizeCompanionNames(List<TkmendField>? fields, CommonResponse<MessageDto> response)
+        {
+            if (fields == null || fields.Count == 0)
+            {
+                return true;
+            }
+
+            var invalidCompanionFound = false;
+
+            foreach (var field in fields.Where(field => field != null && SummerCompanionNamePolicy.IsCompanionNameFieldKind(field.FildKind)))
+            {
+                var normalizedName = SummerCompanionNamePolicy.NormalizeCompanionName(field.FildTxt);
+                field.FildTxt = normalizedName;
+
+                if (string.IsNullOrWhiteSpace(normalizedName))
+                {
+                    continue;
+                }
+
+                if (!SummerCompanionNamePolicy.HasMinimumNameParts(normalizedName))
+                {
+                    invalidCompanionFound = true;
+                    break;
+                }
+            }
+
+            if (!invalidCompanionFound)
+            {
+                return true;
+            }
+
+            response.Errors.Add(new Error
+            {
+                Code = "400",
+                Message = "يجب إدخال اسم المرافق ثلاثي على الأقل."
+            });
+            return false;
         }
 
         private static string GetSummerSequenceName(int categoryId)
@@ -772,7 +2587,29 @@ SELECT @result;
             }
         }
 
-        private async Task ReplaceMessageFieldsAsync(int messageId, List<TkmendField>? incomingFields)
+        private static void UpsertRequestFieldRange(List<TkmendField>? fields, IEnumerable<string> kinds, string value)
+        {
+            if (fields == null || kinds == null)
+            {
+                return;
+            }
+
+            foreach (var kind in kinds)
+            {
+                if (string.IsNullOrWhiteSpace(kind))
+                {
+                    continue;
+                }
+
+                UpsertRequestField(fields, kind.Trim(), value);
+            }
+        }
+
+        private async Task<List<SummerFieldAuditEntry>> ReplaceMessageFieldsAsync(
+            int messageId,
+            List<TkmendField>? incomingFields,
+            int? categoryId = null,
+            string? changedBy = null)
         {
             var existingFields = await _connectContext.TkmendFields
                 .Where(x => x.FildRelted == messageId)
@@ -792,15 +2629,21 @@ SELECT @result;
                 })
                 .ToList();
 
-            var hasDateMetadata = await _connectContext.Cdmends
+            var dateFieldKinds = await _connectContext.Cdmends
                 .AsNoTracking()
-                .AnyAsync(x => x.CdmendType != null && x.CdmendType.ToLower() == "date");
+                .Where(x => x.CdmendType != null
+                    && x.CdmendTxt != null
+                    && x.CdmendType.ToLower() == "date")
+                .Select(x => x.CdmendTxt!.Trim())
+                .Distinct()
+                .ToListAsync();
 
-            if (hasDateMetadata)
+            var dateFieldKindSet = new HashSet<string>(dateFieldKinds, StringComparer.OrdinalIgnoreCase);
+            if (dateFieldKindSet.Count > 0)
             {
                 nextFields.ForEach(field =>
                 {
-                    if (!string.IsNullOrWhiteSpace(field.FildTxt))
+                    if (ShouldNormalizeToShortDate(field.FildKind, field.FildTxt, dateFieldKindSet))
                     {
                         field.FildTxt = helperService.NormalizeToShortDate(field.FildTxt);
                     }
@@ -829,6 +2672,13 @@ SELECT @result;
                 .Select(group => group.First())
                 .ToList();
 
+            var auditEntries = await LogSummerFieldDeltaAsync(
+                messageId,
+                categoryId,
+                changedBy,
+                existingFields,
+                mergedFields);
+
             if (existingFields.Count > 0)
             {
                 _connectContext.TkmendFields.RemoveRange(existingFields);
@@ -838,6 +2688,859 @@ SELECT @result;
             {
                 await _connectContext.TkmendFields.AddRangeAsync(mergedFields);
             }
+
+            return auditEntries;
+        }
+
+        private async Task<List<SummerFieldAuditEntry>> LogSummerFieldDeltaAsync(
+            int messageId,
+            int? categoryId,
+            string? changedBy,
+            IReadOnlyCollection<TkmendField> existingFields,
+            IReadOnlyCollection<TkmendField> mergedFields)
+        {
+            var auditEntries = new List<SummerFieldAuditEntry>();
+            if (messageId <= 0)
+            {
+                return auditEntries;
+            }
+
+            var existingByKey = existingFields
+                .Where(field => field != null && IsAuditableSummerField(field.FildKind))
+                .GroupBy(BuildFieldInstanceKey, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            var mergedByKey = mergedFields
+                .Where(field => field != null && IsAuditableSummerField(field.FildKind))
+                .GroupBy(BuildFieldInstanceKey, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+            var allKeys = new HashSet<string>(existingByKey.Keys, StringComparer.OrdinalIgnoreCase);
+            allKeys.UnionWith(mergedByKey.Keys);
+            if (allKeys.Count == 0)
+            {
+                return auditEntries;
+            }
+
+            Dictionary<string, SummerFieldAuditMetadata> metadataByFieldKind;
+            if (categoryId.HasValue && categoryId.Value > 0)
+            {
+                metadataByFieldKind = await BuildSummerFieldMetadataByKindAsync(categoryId.Value);
+            }
+            else
+            {
+                metadataByFieldKind = new Dictionary<string, SummerFieldAuditMetadata>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            var normalizedActor = TruncateAuditValue(NormalizeAuditText(changedBy) ?? "SYSTEM", 20);
+
+            foreach (var key in allKeys.OrderBy(item => item, StringComparer.OrdinalIgnoreCase))
+            {
+                existingByKey.TryGetValue(key, out var oldField);
+                mergedByKey.TryGetValue(key, out var newField);
+
+                var oldValue = NormalizeAuditText(oldField?.FildTxt);
+                var newValue = NormalizeAuditText(newField?.FildTxt);
+
+                if (oldField != null
+                    && newField != null
+                    && string.Equals(oldValue, newValue, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var fieldKind = NormalizeAuditText(newField?.FildKind)
+                    ?? NormalizeAuditText(oldField?.FildKind);
+                if (string.IsNullOrWhiteSpace(fieldKind))
+                {
+                    continue;
+                }
+
+                metadataByFieldKind.TryGetValue(fieldKind, out var metadata);
+                var groupName = metadata?.GroupName ?? "بدون مجموعة";
+                var fieldName = metadata?.FieldLabel ?? fieldKind;
+                var operation = GetAuditOperationArabic(oldField, newField);
+                var instanceGroupId = newField?.InstanceGroupId ?? oldField?.InstanceGroupId ?? 1;
+                var beforeValue = FormatAuditValue(oldValue, fieldKind, metadata);
+                var afterValue = FormatAuditValue(newValue, fieldKind, metadata);
+
+                auditEntries.Add(new SummerFieldAuditEntry
+                {
+                    Operation = operation,
+                    GroupName = groupName,
+                    FieldName = fieldName,
+                    FieldKey = fieldKind,
+                    InstanceGroupId = instanceGroupId,
+                    BeforeValue = beforeValue,
+                    AfterValue = afterValue
+                });
+
+                _logger.AppendLine(
+                    $"SummerRequests FieldAudit | MessageId={messageId} | Operation={operation} | Group={groupName} | Field={fieldName} | FieldKey={fieldKind} | InstanceGroupId={instanceGroupId} | Before={beforeValue} | After={afterValue} | ChangedBy={normalizedActor}");
+            }
+
+            return auditEntries;
+        }
+
+        private async Task<Dictionary<string, SummerFieldAuditMetadata>> BuildSummerFieldMetadataByKindAsync(int categoryId)
+        {
+            var rows = await (
+                from categoryMand in _connectContext.CdCategoryMands.AsNoTracking()
+                join mend in _connectContext.Cdmends.AsNoTracking()
+                    on categoryMand.MendField equals mend.CdmendTxt into mendJoin
+                from mend in mendJoin.DefaultIfEmpty()
+                join mandGroup in _connectContext.MandGroups.AsNoTracking()
+                    on categoryMand.MendGroup equals mandGroup.GroupId into mandGroupJoin
+                from mandGroup in mandGroupJoin.DefaultIfEmpty()
+                where categoryMand.MendCategory == categoryId
+                select new
+                {
+                    categoryMand.MendField,
+                    GroupName = mandGroup != null ? mandGroup.GroupName : null,
+                    FieldLabel = mend != null ? mend.CDMendLbl : null,
+                    FieldType = mend != null ? mend.CdmendType : null,
+                    FieldOptions = mend != null ? mend.CdmendTbl : null
+                }).ToListAsync();
+
+            var result = new Dictionary<string, SummerFieldAuditMetadata>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows)
+            {
+                var fieldKind = NormalizeAuditText(row.MendField);
+                if (string.IsNullOrWhiteSpace(fieldKind) || result.ContainsKey(fieldKind))
+                {
+                    continue;
+                }
+
+                result[fieldKind] = new SummerFieldAuditMetadata
+                {
+                    GroupName = NormalizeAuditText(row.GroupName),
+                    FieldLabel = NormalizeAuditText(row.FieldLabel),
+                    FieldType = NormalizeAuditText(row.FieldType),
+                    FieldOptions = row.FieldOptions
+                };
+            }
+
+            return result;
+        }
+
+        private static bool IsAuditableSummerField(string? fieldKind)
+        {
+            if (string.IsNullOrWhiteSpace(fieldKind))
+            {
+                return false;
+            }
+
+            return !IsSystemManagedSummerField(fieldKind);
+        }
+
+        private static string GetAuditOperationArabic(TkmendField? oldField, TkmendField? newField)
+        {
+            if (oldField == null && newField != null)
+            {
+                return "إضافة";
+            }
+
+            if (oldField != null && newField == null)
+            {
+                return "حذف";
+            }
+
+            return "تعديل";
+        }
+
+        private static string? NormalizeAuditText(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return value
+                .Replace("\r", " ", StringComparison.Ordinal)
+                .Replace("\n", " ", StringComparison.Ordinal)
+                .Trim();
+        }
+
+        private static string FormatAuditValue(
+            string? value,
+            string? fieldKind = null,
+            SummerFieldAuditMetadata? metadata = null)
+        {
+            var normalized = NormalizeAuditText(value);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return "(فارغ)";
+            }
+
+            var optionLabel = ResolveAuditOptionLabelFromMetadata(metadata, normalized);
+            if (!string.IsNullOrWhiteSpace(optionLabel))
+            {
+                return optionLabel;
+            }
+
+            if (!string.IsNullOrWhiteSpace(fieldKind))
+            {
+                var canonicalAlias = ResolveSummerAuditAlias(fieldKind);
+                var mappedBooleanValue = ResolveBooleanAuditDisplayText(normalized, canonicalAlias, metadata);
+                if (!string.IsNullOrWhiteSpace(mappedBooleanValue))
+                {
+                    return mappedBooleanValue;
+                }
+            }
+
+            if (SummerAuditKnownValueLabels.TryGetValue(normalized, out var knownLabel)
+                && !string.IsNullOrWhiteSpace(knownLabel))
+            {
+                return knownLabel;
+            }
+
+            return normalized;
+        }
+
+        private static string? ResolveAuditOptionLabelFromMetadata(SummerFieldAuditMetadata? metadata, string normalizedValue)
+        {
+            if (metadata == null || string.IsNullOrWhiteSpace(normalizedValue))
+            {
+                return null;
+            }
+
+            var optionCandidates = TryParseAuditFieldOptions(metadata.FieldOptions);
+            if (optionCandidates.Count == 0)
+            {
+                return null;
+            }
+
+            return optionCandidates.TryGetValue(normalizedValue, out var mappedLabel)
+                && !string.IsNullOrWhiteSpace(mappedLabel)
+                ? mappedLabel
+                : null;
+        }
+
+        private static Dictionary<string, string> TryParseAuditFieldOptions(string? rawOptions)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var normalizedOptions = NormalizeAuditText(rawOptions);
+            if (string.IsNullOrWhiteSpace(normalizedOptions)
+                || string.Equals(normalizedOptions, "[]", StringComparison.Ordinal))
+            {
+                return result;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(normalizedOptions);
+                if (document.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in document.RootElement.EnumerateArray())
+                    {
+                        AppendAuditOptionCandidate(result, item);
+                    }
+
+                    return result;
+                }
+
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    return result;
+                }
+
+                foreach (var arrayContainerName in new[] { "options", "items", "data", "list", "values" })
+                {
+                    if (!TryGetJsonPropertyIgnoreCase(document.RootElement, arrayContainerName, out var arrayContainer)
+                        || arrayContainer.ValueKind != JsonValueKind.Array)
+                    {
+                        continue;
+                    }
+
+                    foreach (var item in arrayContainer.EnumerateArray())
+                    {
+                        AppendAuditOptionCandidate(result, item);
+                    }
+                }
+
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    var key = NormalizeAuditText(property.Name);
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        continue;
+                    }
+
+                    if (property.Value.ValueKind == JsonValueKind.Object)
+                    {
+                        var labelFromObject = ExtractJsonTextProperty(property.Value, "name")
+                            ?? ExtractJsonTextProperty(property.Value, "label")
+                            ?? ExtractJsonTextProperty(property.Value, "text")
+                            ?? ExtractJsonTextProperty(property.Value, "title");
+                        if (!string.IsNullOrWhiteSpace(labelFromObject) && !result.ContainsKey(key))
+                        {
+                            result[key] = labelFromObject;
+                        }
+
+                        continue;
+                    }
+
+                    var directLabel = ExtractJsonElementText(property.Value);
+                    if (!string.IsNullOrWhiteSpace(directLabel) && !result.ContainsKey(key))
+                    {
+                        result[key] = directLabel;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore invalid/legacy option payloads.
+            }
+
+            return result;
+        }
+
+        private static void AppendAuditOptionCandidate(Dictionary<string, string> result, JsonElement item)
+        {
+            if (result == null)
+            {
+                return;
+            }
+
+            if (item.ValueKind == JsonValueKind.Object)
+            {
+                var key = ExtractJsonTextProperty(item, "key")
+                    ?? ExtractJsonTextProperty(item, "code")
+                    ?? ExtractJsonTextProperty(item, "value")
+                    ?? ExtractJsonTextProperty(item, "id");
+                var label = ExtractJsonTextProperty(item, "name")
+                    ?? ExtractJsonTextProperty(item, "label")
+                    ?? ExtractJsonTextProperty(item, "text")
+                    ?? ExtractJsonTextProperty(item, "title")
+                    ?? key;
+                if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(label))
+                {
+                    return;
+                }
+
+                if (!result.ContainsKey(key))
+                {
+                    result[key] = label;
+                }
+
+                return;
+            }
+
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                return;
+            }
+
+            var stringValue = NormalizeAuditText(item.GetString());
+            if (string.IsNullOrWhiteSpace(stringValue))
+            {
+                return;
+            }
+
+            if (!result.ContainsKey(stringValue))
+            {
+                result[stringValue] = stringValue;
+            }
+        }
+
+        private static string? ExtractJsonTextProperty(JsonElement element, string propertyName)
+        {
+            if (element.ValueKind != JsonValueKind.Object
+                || string.IsNullOrWhiteSpace(propertyName)
+                || !TryGetJsonPropertyIgnoreCase(element, propertyName, out var propertyValue))
+            {
+                return null;
+            }
+
+            return ExtractJsonElementText(propertyValue);
+        }
+
+        private static bool TryGetJsonPropertyIgnoreCase(
+            JsonElement element,
+            string propertyName,
+            out JsonElement propertyValue)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        propertyValue = property.Value;
+                        return true;
+                    }
+                }
+            }
+
+            propertyValue = default;
+            return false;
+        }
+
+        private static string? ExtractJsonElementText(JsonElement propertyValue)
+        {
+            return propertyValue.ValueKind switch
+            {
+                JsonValueKind.String => NormalizeAuditText(propertyValue.GetString()),
+                JsonValueKind.Number => NormalizeAuditText(propertyValue.GetRawText()),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => null
+            };
+        }
+
+        private static string? ResolveBooleanAuditDisplayText(
+            string normalizedValue,
+            string canonicalAlias,
+            SummerFieldAuditMetadata? metadata)
+        {
+            var allowNumericTokens = IsLikelyBooleanAuditField(canonicalAlias, metadata);
+            if (!TryParseBooleanAuditValue(normalizedValue, allowNumericTokens, out var booleanValue))
+            {
+                return null;
+            }
+
+            return canonicalAlias switch
+            {
+                "PROXY_MODE" => booleanValue ? "مسجل بالنيابة" : "غير مسجل بالنيابة",
+                "USE_FROZEN_UNIT" => booleanValue ? "يشمل الوحدات المجمدة" : "لا يشمل الوحدات المجمدة",
+                _ => booleanValue ? "نعم" : "لا"
+            };
+        }
+
+        private static bool IsLikelyBooleanAuditField(string canonicalAlias, SummerFieldAuditMetadata? metadata)
+        {
+            if (string.Equals(canonicalAlias, "PROXY_MODE", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(canonicalAlias, "USE_FROZEN_UNIT", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var normalizedFieldType = NormalizeAuditText(metadata?.FieldType);
+            if (string.IsNullOrWhiteSpace(normalizedFieldType))
+            {
+                return false;
+            }
+
+            return normalizedFieldType.Contains("toggle", StringComparison.OrdinalIgnoreCase)
+                || normalizedFieldType.Contains("switch", StringComparison.OrdinalIgnoreCase)
+                || normalizedFieldType.Contains("checkbox", StringComparison.OrdinalIgnoreCase)
+                || normalizedFieldType.Contains("boolean", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryParseBooleanAuditValue(string? value, bool allowNumericTokens, out bool parsed)
+        {
+            parsed = false;
+            var normalized = NormalizeAuditText(value);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return false;
+            }
+
+            if (string.Equals(normalized, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "yes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "y", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "نعم", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = true;
+                return true;
+            }
+
+            if (string.Equals(normalized, "false", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "no", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "n", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "لا", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = false;
+                return true;
+            }
+
+            if (!allowNumericTokens)
+            {
+                return false;
+            }
+
+            if (string.Equals(normalized, "1", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = true;
+                return true;
+            }
+
+            if (string.Equals(normalized, "0", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = false;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static string TruncateAuditValue(string? value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            return value.Length <= maxLength ? value : value[..maxLength];
+        }
+
+        private static string BuildSummerEditFriendlyReplyText(IReadOnlyCollection<SummerFieldAuditEntry>? auditEntries)
+        {
+            var entries = (auditEntries ?? Array.Empty<SummerFieldAuditEntry>())
+                .Where(item => item != null)
+                .ToList();
+
+            var distinctEntries = NormalizeAndDeduplicateAuditEntries(entries);
+
+            if (distinctEntries.Count == 0)
+            {
+                return "تم تعديل طلب المصيف.";
+            }
+
+            const int maxVisibleEntries = 20;
+            var lines = new List<string> { "تم تعديل طلب المصيف." };
+
+            foreach (var entry in distinctEntries.Take(maxVisibleEntries))
+            {
+                lines.Add($"- {BuildSummerFriendlyAuditLine(entry)}");
+            }
+
+            if (distinctEntries.Count > maxVisibleEntries)
+            {
+                var hiddenCount = distinctEntries.Count - maxVisibleEntries;
+                lines.Add($"- تم إجراء {ConvertToArabicIndicDigits(hiddenCount.ToString(CultureInfo.InvariantCulture))} تعديلات إضافية.");
+            }
+
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        private static string BuildSummerFriendlyAuditLine(SummerFieldAuditEntry entry)
+        {
+            var groupContext = BuildSummerGroupContext(entry.GroupName, entry.InstanceGroupId);
+            var fieldLabel = NormalizeAuditText(entry.FieldName) ?? "الحقل";
+            var beforeValue = FormatAuditValueForReply(entry.BeforeValue);
+            var afterValue = FormatAuditValueForReply(entry.AfterValue);
+
+            return entry.Operation switch
+            {
+                "إضافة" => $"تمت إضافة {groupContext} في حقل {fieldLabel} بالقيمة {afterValue}.",
+                "حذف" => $"تم حذف قيمة {beforeValue} من حقل {fieldLabel} في {groupContext}.",
+                _ => $"تم تعديل {groupContext} في حقل {fieldLabel} من {beforeValue} إلى {afterValue}."
+            };
+        }
+
+        private static List<SummerFieldAuditEntry> NormalizeAndDeduplicateAuditEntries(IReadOnlyCollection<SummerFieldAuditEntry> entries)
+        {
+            var orderedKeys = new List<string>();
+            var mergedEntries = new Dictionary<string, SummerFieldAuditEntry>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in entries.Where(item => item != null))
+            {
+                var canonicalAlias = ResolveSummerAuditAlias(entry.FieldKey);
+                var normalizedEntry = new SummerFieldAuditEntry
+                {
+                    Operation = NormalizeAuditText(entry.Operation) ?? "تعديل",
+                    GroupName = ResolvePreferredAuditGroupName(entry.GroupName, canonicalAlias),
+                    FieldName = ResolvePreferredAuditFieldLabel(entry.FieldName, entry.FieldKey, canonicalAlias),
+                    FieldKey = NormalizeAuditText(entry.FieldKey) ?? string.Empty,
+                    InstanceGroupId = entry.InstanceGroupId,
+                    BeforeValue = FormatAuditValue(entry.BeforeValue),
+                    AfterValue = FormatAuditValue(entry.AfterValue)
+                };
+
+                var semanticKey = BuildSummerAuditSemanticKey(normalizedEntry, canonicalAlias);
+                if (!mergedEntries.TryGetValue(semanticKey, out var currentEntry))
+                {
+                    mergedEntries[semanticKey] = normalizedEntry;
+                    orderedKeys.Add(semanticKey);
+                    continue;
+                }
+
+                if (GetAuditEntryQualityScore(normalizedEntry) > GetAuditEntryQualityScore(currentEntry))
+                {
+                    mergedEntries[semanticKey] = normalizedEntry;
+                }
+            }
+
+            return orderedKeys
+                .Where(key => mergedEntries.ContainsKey(key))
+                .Select(key => mergedEntries[key])
+                .ToList();
+        }
+
+        private static string BuildSummerAuditSemanticKey(SummerFieldAuditEntry entry, string canonicalAlias)
+        {
+            var operation = NormalizeAuditText(entry.Operation) ?? "تعديل";
+            var instanceGroup = entry.InstanceGroupId > 0 ? entry.InstanceGroupId : 1;
+            var beforeValue = NormalizeAuditText(entry.BeforeValue) ?? "(فارغ)";
+            var afterValue = NormalizeAuditText(entry.AfterValue) ?? "(فارغ)";
+            return $"{operation}|{canonicalAlias}|{instanceGroup}|{beforeValue}|{afterValue}";
+        }
+
+        private static int GetAuditEntryQualityScore(SummerFieldAuditEntry entry)
+        {
+            var score = 0;
+
+            var normalizedGroup = NormalizeAuditText(entry.GroupName);
+            if (!string.IsNullOrWhiteSpace(normalizedGroup)
+                && !string.Equals(normalizedGroup, "بدون مجموعة", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(normalizedGroup, "البيانات", StringComparison.OrdinalIgnoreCase))
+            {
+                score += 2;
+            }
+
+            if (!IsTechnicalAuditFieldLabel(entry.FieldName, entry.FieldKey))
+            {
+                score += 3;
+            }
+
+            if (!string.Equals(
+                NormalizeAuditText(entry.FieldName),
+                NormalizeAuditText(entry.FieldKey),
+                StringComparison.OrdinalIgnoreCase))
+            {
+                score += 1;
+            }
+
+            return score;
+        }
+
+        private static string ResolvePreferredAuditFieldLabel(string? fieldName, string? fieldKey, string canonicalAlias)
+        {
+            var normalizedFieldName = NormalizeAuditText(fieldName);
+            var normalizedFieldKey = NormalizeAuditText(fieldKey);
+
+            if (!IsTechnicalAuditFieldLabel(normalizedFieldName, normalizedFieldKey))
+            {
+                return normalizedFieldName!;
+            }
+
+            if (SummerAuditFallbackFieldLabelByAlias.TryGetValue(canonicalAlias, out var fallbackLabel)
+                && !string.IsNullOrWhiteSpace(fallbackLabel))
+            {
+                return fallbackLabel;
+            }
+
+            return normalizedFieldName
+                ?? normalizedFieldKey
+                ?? "الحقل";
+        }
+
+        private static string ResolvePreferredAuditGroupName(string? groupName, string canonicalAlias)
+        {
+            var normalizedGroup = NormalizeAuditText(groupName);
+            if (!string.IsNullOrWhiteSpace(normalizedGroup)
+                && !string.Equals(normalizedGroup, "بدون مجموعة", StringComparison.OrdinalIgnoreCase))
+            {
+                return normalizedGroup;
+            }
+
+            if (SummerAuditFallbackGroupByAlias.TryGetValue(canonicalAlias, out var fallbackGroup)
+                && !string.IsNullOrWhiteSpace(fallbackGroup))
+            {
+                return fallbackGroup;
+            }
+
+            return normalizedGroup ?? "بدون مجموعة";
+        }
+
+        private static bool IsTechnicalAuditFieldLabel(string? label, string? fieldKey)
+        {
+            var normalizedLabel = NormalizeAuditText(label);
+            if (string.IsNullOrWhiteSpace(normalizedLabel))
+            {
+                return true;
+            }
+
+            var normalizedFieldKey = NormalizeAuditText(fieldKey);
+            if (!string.IsNullOrWhiteSpace(normalizedFieldKey)
+                && string.Equals(normalizedLabel, normalizedFieldKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (normalizedLabel.StartsWith("SUM2026_", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var hasArabicCharacters = normalizedLabel.Any(ch => ch >= '\u0600' && ch <= '\u06FF');
+            if (hasArabicCharacters)
+            {
+                return false;
+            }
+
+            var hasWhiteSpace = normalizedLabel.Any(char.IsWhiteSpace);
+            if (hasWhiteSpace)
+            {
+                return false;
+            }
+
+            return normalizedLabel.All(ch => char.IsLetterOrDigit(ch) || ch == '_' || ch == '-');
+        }
+
+        private static string ResolveSummerAuditAlias(string? fieldKey)
+        {
+            var normalizedFieldKey = NormalizeAuditText(fieldKey);
+            if (string.IsNullOrWhiteSpace(normalizedFieldKey))
+            {
+                return string.Empty;
+            }
+
+            return SummerAuditAliasMap.TryGetValue(normalizedFieldKey, out var alias)
+                ? alias
+                : normalizedFieldKey;
+        }
+
+        private static Dictionary<string, string> BuildSummerAuditAliasMap()
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            AddSummerAuditAliasRange(map, "OWNER_NAME", SummerWorkflowDomainConstants.EmployeeNameFieldKinds);
+            AddSummerAuditAliasRange(map, "OWNER_FILE_NUMBER", SummerWorkflowDomainConstants.EmployeeIdFieldKinds);
+            AddSummerAuditAliasRange(map, "OWNER_NATIONAL_ID", SummerWorkflowDomainConstants.EmployeeNationalIdFieldKinds);
+            AddSummerAuditAliasRange(map, "OWNER_PHONE", SummerWorkflowDomainConstants.EmployeePhoneFieldKinds);
+            AddSummerAuditAliasRange(map, "OWNER_EXTRA_PHONE", SummerWorkflowDomainConstants.EmployeeExtraPhoneFieldKinds);
+            AddSummerAuditAliasRange(map, "SEASON_YEAR", SummerWorkflowDomainConstants.SeasonYearFieldKinds);
+            AddSummerAuditAliasRange(map, "DESTINATION_ID", SummerWorkflowDomainConstants.DestinationIdFieldKinds);
+            AddSummerAuditAliasRange(map, "DESTINATION_NAME", SummerWorkflowDomainConstants.DestinationNameFieldKinds);
+            AddSummerAuditAliasRange(map, "WAVE_CODE", SummerWorkflowDomainConstants.WaveCodeFieldKinds);
+            AddSummerAuditAliasRange(map, "WAVE_LABEL", SummerWorkflowDomainConstants.WaveLabelFieldKinds);
+            AddSummerAuditAliasRange(map, "STAY_MODE", SummerWorkflowDomainConstants.StayModeFieldKinds);
+            AddSummerAuditAliasRange(map, "PROXY_MODE", SummerWorkflowDomainConstants.ProxyModeFieldKinds);
+            AddSummerAuditAliasRange(map, "USE_FROZEN_UNIT", SummerWorkflowDomainConstants.UseFrozenUnitFieldKinds);
+            AddSummerAuditAliasRange(map, "FAMILY_COUNT", SummerWorkflowDomainConstants.FamilyCountFieldKinds);
+            AddSummerAuditAliasRange(map, "EXTRA_COUNT", SummerWorkflowDomainConstants.ExtraCountFieldKinds);
+
+            AddSummerAuditAliasRange(map, "COMPANION_NAME", new[] { "SUM2026_CompanionName", "CompanionName", "Companion_Name", "CompanionNameAr" });
+            AddSummerAuditAliasRange(map, "COMPANION_AGE", new[] { "SUM2026_CompanionAge", "CompanionAge", "Companion_Age" });
+            AddSummerAuditAliasRange(map, "COMPANION_RELATION", new[] { "SUM2026_CompanionRelation", "CompanionRelation", "Companion_Relation" });
+            AddSummerAuditAliasRange(map, "COMPANION_NATIONAL_ID", new[] { "SUM2026_CompanionNationalId", "CompanionNationalId", "Companion_NationalId" });
+
+            return map;
+        }
+
+        private static void AddSummerAuditAliasRange(
+            Dictionary<string, string> map,
+            string alias,
+            IEnumerable<string> keys)
+        {
+            if (map == null || string.IsNullOrWhiteSpace(alias) || keys == null)
+            {
+                return;
+            }
+
+            foreach (var key in keys)
+            {
+                var normalizedKey = NormalizeAuditText(key);
+                if (string.IsNullOrWhiteSpace(normalizedKey))
+                {
+                    continue;
+                }
+
+                if (!map.ContainsKey(normalizedKey))
+                {
+                    map[normalizedKey] = alias;
+                }
+            }
+        }
+
+        private static string BuildSummerGroupContext(string? groupName, int instanceGroupId)
+        {
+            var normalizedGroup = NormalizeAuditText(groupName);
+            var groupLabel = string.IsNullOrWhiteSpace(normalizedGroup)
+                || string.Equals(normalizedGroup, "بدون مجموعة", StringComparison.OrdinalIgnoreCase)
+                    ? "البيانات"
+                    : normalizedGroup;
+            var instanceContext = BuildSummerInstanceContext(normalizedGroup, instanceGroupId);
+            return string.IsNullOrWhiteSpace(instanceContext)
+                ? groupLabel
+                : $"{groupLabel} {instanceContext}";
+        }
+
+        private static string BuildSummerInstanceContext(string? groupName, int instanceGroupId)
+        {
+            if (instanceGroupId <= 0)
+            {
+                return string.Empty;
+            }
+
+            var isCompanionGroup = !string.IsNullOrWhiteSpace(groupName)
+                && groupName.Contains("مرافق", StringComparison.OrdinalIgnoreCase);
+            var shouldShowInstance = instanceGroupId > 1 || isCompanionGroup;
+            if (!shouldShowInstance)
+            {
+                return string.Empty;
+            }
+
+            var ordinal = ResolveArabicOrdinalText(instanceGroupId);
+            if (isCompanionGroup)
+            {
+                return $"للمرافق {ordinal}";
+            }
+
+            return $"للعنصر {ordinal}";
+        }
+
+        private static string ResolveArabicOrdinalText(int number)
+        {
+            return number switch
+            {
+                1 => "الأول",
+                2 => "الثاني",
+                3 => "الثالث",
+                4 => "الرابع",
+                5 => "الخامس",
+                6 => "السادس",
+                7 => "السابع",
+                8 => "الثامن",
+                9 => "التاسع",
+                10 => "العاشر",
+                _ => $"رقم {ConvertToArabicIndicDigits(number.ToString(CultureInfo.InvariantCulture))}"
+            };
+        }
+
+        private static string FormatAuditValueForReply(string? value)
+        {
+            return ConvertToArabicIndicDigits(FormatAuditValue(value));
+        }
+
+        private static string ConvertToArabicIndicDigits(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            var buffer = value.ToCharArray();
+            for (var index = 0; index < buffer.Length; index++)
+            {
+                var current = buffer[index];
+                if (current >= '0' && current <= '9')
+                {
+                    buffer[index] = (char)('٠' + (current - '0'));
+                }
+            }
+
+            return new string(buffer);
+        }
+
+        private sealed class SummerFieldAuditMetadata
+        {
+            public string? GroupName { get; set; }
+            public string? FieldLabel { get; set; }
+            public string? FieldType { get; set; }
+            public string? FieldOptions { get; set; }
+        }
+
+        private sealed class SummerFieldAuditEntry
+        {
+            public string Operation { get; set; } = "تعديل";
+            public string GroupName { get; set; } = "بدون مجموعة";
+            public string FieldName { get; set; } = string.Empty;
+            public string FieldKey { get; set; } = string.Empty;
+            public int InstanceGroupId { get; set; }
+            public string BeforeValue { get; set; } = "(فارغ)";
+            public string AfterValue { get; set; } = "(فارغ)";
         }
 
         private async Task SaveRequestAttachmentsAsync(List<IFormFile>? files, int replyId)
@@ -872,6 +3575,105 @@ SELECT @result;
             return SystemManagedSummerFieldKinds.Contains(fieldKind.Trim());
         }
 
+        private static bool ShouldNormalizeToShortDate(
+            string? fieldKind,
+            string? fieldValue,
+            HashSet<string> dateFieldKinds)
+        {
+            if (string.IsNullOrWhiteSpace(fieldKind)
+                || string.IsNullOrWhiteSpace(fieldValue)
+                || dateFieldKinds == null
+                || dateFieldKinds.Count == 0)
+            {
+                return false;
+            }
+
+            var normalizedKind = fieldKind.Trim();
+            if (!dateFieldKinds.Contains(normalizedKind))
+            {
+                return false;
+            }
+
+            if (SystemManagedSummerFieldKinds.Contains(normalizedKind))
+            {
+                return false;
+            }
+
+            return !ContainsTimePortion(fieldValue);
+        }
+
+        private static bool ContainsTimePortion(string? fieldValue)
+        {
+            var value = (fieldValue ?? string.Empty).Trim();
+            if (value.Length == 0)
+            {
+                return false;
+            }
+
+            return value.Contains('T', StringComparison.Ordinal)
+                || value.Contains(':', StringComparison.Ordinal)
+                || value.EndsWith("Z", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static DateTime TruncateToWholeSecondUtc(DateTime dateTimeUtc)
+        {
+            var utc = dateTimeUtc.Kind == DateTimeKind.Utc
+                ? dateTimeUtc
+                : dateTimeUtc.ToUniversalTime();
+
+            var ticks = utc.Ticks - (utc.Ticks % TimeSpan.TicksPerSecond);
+            return new DateTime(ticks, DateTimeKind.Utc);
+        }
+
+        private static string FormatBusinessDate(DateTime valueUtc)
+        {
+            var utc = NormalizeToUtc(valueUtc);
+            var businessDateTime = TimeZoneInfo.ConvertTimeFromUtc(utc, SummerBusinessTimeZone);
+            return businessDateTime.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatBusinessDateTimeForSms(DateTime valueUtc)
+        {
+            var utc = NormalizeToUtc(valueUtc);
+            var businessDateTime = TimeZoneInfo.ConvertTimeFromUtc(utc, SummerBusinessTimeZone);
+            return $"{businessDateTime:dd/MM/yyyy HH:mm} بتوقيت القاهرة ({utc:dd/MM/yyyy HH:mm} UTC)";
+        }
+
+        private static DateTime NormalizeToUtc(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Utc)
+            {
+                return value;
+            }
+
+            if (value.Kind == DateTimeKind.Local)
+            {
+                return value.ToUniversalTime();
+            }
+
+            var unspecified = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+            return TimeZoneInfo.ConvertTimeToUtc(unspecified, SummerBusinessTimeZone);
+        }
+
+        private static TimeZoneInfo ResolveSummerBusinessTimeZone()
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo");
+            }
+            catch
+            {
+                try
+                {
+                    return TimeZoneInfo.FindSystemTimeZoneById("Egypt Standard Time");
+                }
+                catch
+                {
+                    return TimeZoneInfo.Utc;
+                }
+            }
+        }
+
         private static bool ValidateAllowedAttachmentExtensions<T>(List<IFormFile>? files, CommonResponse<T> response)
         {
             if (files == null || files.Count == 0)
@@ -900,6 +3702,3 @@ SELECT @result;
         }
     }
 }
-
-
-

@@ -1,3 +1,5 @@
+const MainDomain = 'https://test.egyptpost.gov.eg';
+
 export const environment = {
   production: true,
   deploymentMode: 'prod',
@@ -9,15 +11,16 @@ export const environment = {
   titleSuffix: '',
   favicon: 'assets/brand/favicon.ico',
 
-  OTPApplicationName: 'CONNECT - Test',
+  OTPApplicationName: 'CONNECT - TEST',
 
-  ConnectApiURL: 'https://connect.webserver.local',
-  LandTransportationApiURL: 'https://connect.webserver.local',
-  DomainAuthURL: 'https://auth.webserver.local',
-  SSoURL: 'https://auth.webserver.local',
-  PowerBi: 'https://powerbi.webserver.local',
-  SignalRHubServer: 'https://sync.webserver.local',
-  PublicationsUrl: 'https://publications.webserver.local',
+  ConnectApiURL: `${MainDomain}/Applications/Connect_API`,
+  LandTransportationApiURL: `${MainDomain}/Applications/Connect_API`,
+  DomainAuthURL: `${MainDomain}/Applications/Domain_Authorization`,
+  SSoURL: `${MainDomain}/Applications/SSO`,
+  PowerBi: `${MainDomain}/Applications/PowerBi`,
+  SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
+    PublicationsUrl: `http://10.10.31.52/publicationsApi`,
+
 
   summerFeature: {
     seasonYear: 2026,

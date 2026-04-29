@@ -1,0 +1,93 @@
+.list-page {
+  direction: rtl;
+  text-align: right;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.header h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.header button,
+.filters button {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+}
+
+.filters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.8rem;
+}
+
+.filters input,
+.filters select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.55rem 0.3rem;
+  text-align: right;
+  font-size: 0.88rem;
+}
+
+th {
+  color: #334155;
+}
+
+.status-pill {
+  border-radius: 999px;
+  background: #ecfeff;
+  color: #0f766e;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+td a {
+  margin-inline-start: 0.6rem;
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.empty-state {
+  color: #64748b;
+  text-align: center;
+  padding: 1rem 0.25rem;
+}
+
+.pager {
+  margin-top: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.pager button {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0.25rem 0.5rem;
+}
+
+.loading {
+  color: #64748b;
+}

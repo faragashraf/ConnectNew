@@ -28,7 +28,31 @@ namespace Models.DTO.Correspondance.Enums
         Printed = 4,
 
         [Description("الكل")]
-        All = 5
+        All = 5,
+
+        [Description("مسودة")]
+        Draft = 10,
+
+        [Description("تم الإرسال")]
+        Submitted = 11,
+
+        [Description("قيد المراجعة")]
+        UnderReview = 12,
+
+        [Description("معلق لاستكمال البيانات")]
+        PendingCompletion = 13,
+
+        [Description("قيد التنفيذ")]
+        WorkflowInProgress = 14,
+
+        [Description("مكتمل")]
+        Completed = 15,
+
+        [Description("مرفوض")]
+        WorkflowRejected = 16,
+
+        [Description("مؤرشف")]
+        Archived = 17
     }
 
     public static class EnumExtensions

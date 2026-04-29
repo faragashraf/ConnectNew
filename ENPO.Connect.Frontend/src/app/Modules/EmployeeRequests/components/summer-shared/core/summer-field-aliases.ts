@@ -5,6 +5,7 @@ export type SummerFieldAliasMap = {
   familyCount: string[];
   extraCount: string[];
   proxyMode: string[];
+  membershipType: string[];
   ownerName: string[];
   ownerFileNumber: string[];
   ownerNationalId: string[];
@@ -19,6 +20,23 @@ export type SummerFieldAliasMap = {
   seasonYear: string[];
   destinationId: string[];
   destinationName: string[];
+  pricingConfigId: string[];
+  pricingMode: string[];
+  pricingTransportationMandatory: string[];
+  pricingMembershipType: string[];
+  pricingSelectedStayMode: string[];
+  pricingPersonsCount: string[];
+  pricingAccommodationUnitPrice: string[];
+  pricingTransportationUnitPrice: string[];
+  pricingInsuranceAmount: string[];
+  pricingProxyInsuranceAmount: string[];
+  pricingAppliedInsuranceAmount: string[];
+  pricingAccommodationTotal: string[];
+  pricingTransportationTotal: string[];
+  pricingGrandTotal: string[];
+  pricingDisplayText: string[];
+  pricingSmsText: string[];
+  pricingWhatsAppText: string[];
 };
 
 export const SUMMER_CANONICAL_FIELD_KEYS = {
@@ -26,6 +44,7 @@ export const SUMMER_CANONICAL_FIELD_KEYS = {
   waveLabel: ['SummerCampLabel', 'SUM2026_WaveLabel', 'WaveLabel'],
   familyCount: ['FamilyCount', 'SUM2026_FamilyCount'],
   extraCount: ['Over_Count', 'SUM2026_ExtraCount', 'ExtraCount'],
+  proxyMode: ['SummerProxyMode', 'SUM2026_ProxyMode', 'ProxyMode'],
   destinationId: ['SummerDestinationId', 'SUM2026_DestinationId'],
   destinationName: ['SummerDestinationName', 'SUM2026_DestinationName'],
   companionName: ['SUM2026_CompanionName', 'FamilyMember_Name', 'CompanionName'],
@@ -42,7 +61,8 @@ const SUMMER_DEFAULT_FIELD_ALIASES: SummerFieldAliasMap = {
   stayMode: ['SummerStayMode', 'StayMode'],
   familyCount: ['FamilyCount'],
   extraCount: ['Over_Count', 'ExtraCount'],
-  proxyMode: ['SummerProxyMode', 'ProxyMode'],
+  proxyMode: [...SUMMER_CANONICAL_FIELD_KEYS.proxyMode],
+  membershipType: ['SummerMembershipType', 'SUM2026_MembershipType', 'MembershipType'],
   ownerName: ['Emp_Name', 'EmployeeName', 'EmpName', 'OwnerName'],
   ownerFileNumber: ['Emp_Id', 'EmployeeFileNumber', 'FileNumber'],
   ownerNationalId: ['NationalId', 'EmployeeNationalId', 'National_ID'],
@@ -56,7 +76,24 @@ const SUMMER_DEFAULT_FIELD_ALIASES: SummerFieldAliasMap = {
   companionAge: [...SUMMER_CANONICAL_FIELD_KEYS.companionAge],
   seasonYear: ['SummerSeasonYear'],
   destinationId: ['SummerDestinationId'],
-  destinationName: ['SummerDestinationName']
+  destinationName: ['SummerDestinationName'],
+  pricingConfigId: ['Summer_PricingConfigId', 'Summer_PricingPolicyId'],
+  pricingMode: ['Summer_PricingMode'],
+  pricingTransportationMandatory: ['Summer_PricingTransportationMandatory'],
+  pricingMembershipType: ['Summer_PricingMembershipType'],
+  pricingSelectedStayMode: ['Summer_PricingSelectedStayMode'],
+  pricingPersonsCount: ['Summer_PricingPersonsCount'],
+  pricingAccommodationUnitPrice: ['Summer_PricingAccommodationPricePerPerson'],
+  pricingTransportationUnitPrice: ['Summer_PricingTransportationPricePerPerson'],
+  pricingInsuranceAmount: ['Summer_PricingInsuranceAmount'],
+  pricingProxyInsuranceAmount: ['Summer_PricingProxyInsuranceAmount'],
+  pricingAppliedInsuranceAmount: ['Summer_PricingAppliedInsuranceAmount'],
+  pricingAccommodationTotal: ['Summer_PricingAccommodationTotal'],
+  pricingTransportationTotal: ['Summer_PricingTransportationTotal'],
+  pricingGrandTotal: ['Summer_PricingGrandTotal'],
+  pricingDisplayText: ['Summer_PricingDisplayText'],
+  pricingSmsText: ['Summer_PricingSmsText'],
+  pricingWhatsAppText: ['Summer_PricingWhatsAppText']
 };
 
 export function createDefaultSummerFieldAliases(): SummerFieldAliasMap {
@@ -67,6 +104,7 @@ export function createDefaultSummerFieldAliases(): SummerFieldAliasMap {
     familyCount: [...SUMMER_DEFAULT_FIELD_ALIASES.familyCount],
     extraCount: [...SUMMER_DEFAULT_FIELD_ALIASES.extraCount],
     proxyMode: [...SUMMER_DEFAULT_FIELD_ALIASES.proxyMode],
+    membershipType: [...SUMMER_DEFAULT_FIELD_ALIASES.membershipType],
     ownerName: [...SUMMER_DEFAULT_FIELD_ALIASES.ownerName],
     ownerFileNumber: [...SUMMER_DEFAULT_FIELD_ALIASES.ownerFileNumber],
     ownerNationalId: [...SUMMER_DEFAULT_FIELD_ALIASES.ownerNationalId],
@@ -80,6 +118,23 @@ export function createDefaultSummerFieldAliases(): SummerFieldAliasMap {
     companionAge: [...SUMMER_DEFAULT_FIELD_ALIASES.companionAge],
     seasonYear: [...SUMMER_DEFAULT_FIELD_ALIASES.seasonYear],
     destinationId: [...SUMMER_DEFAULT_FIELD_ALIASES.destinationId],
-    destinationName: [...SUMMER_DEFAULT_FIELD_ALIASES.destinationName]
+    destinationName: [...SUMMER_DEFAULT_FIELD_ALIASES.destinationName],
+    pricingConfigId: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingConfigId],
+    pricingMode: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingMode],
+    pricingTransportationMandatory: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingTransportationMandatory],
+    pricingMembershipType: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingMembershipType],
+    pricingSelectedStayMode: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingSelectedStayMode],
+    pricingPersonsCount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingPersonsCount],
+    pricingAccommodationUnitPrice: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingAccommodationUnitPrice],
+    pricingTransportationUnitPrice: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingTransportationUnitPrice],
+    pricingInsuranceAmount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingInsuranceAmount],
+    pricingProxyInsuranceAmount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingProxyInsuranceAmount],
+    pricingAppliedInsuranceAmount: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingAppliedInsuranceAmount],
+    pricingAccommodationTotal: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingAccommodationTotal],
+    pricingTransportationTotal: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingTransportationTotal],
+    pricingGrandTotal: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingGrandTotal],
+    pricingDisplayText: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingDisplayText],
+    pricingSmsText: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingSmsText],
+    pricingWhatsAppText: [...SUMMER_DEFAULT_FIELD_ALIASES.pricingWhatsAppText]
   };
 }

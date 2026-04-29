@@ -1,0 +1,153 @@
+.dashboard {
+  direction: rtl;
+  text-align: right;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.dashboard-header h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.dashboard-header p {
+  margin: 0.25rem 0 0;
+  color: #64748b;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.actions button {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 8px;
+  padding: 0.45rem 0.8rem;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.7rem;
+}
+
+.card h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.card strong {
+  margin-top: 0.35rem;
+  display: block;
+  font-size: 1.35rem;
+  color: #0f172a;
+}
+
+.card-total {
+  background: #ecfeff;
+  border-color: #a5f3fc;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.8rem;
+}
+
+.panel h3 {
+  margin: 0 0 0.6rem;
+  color: #0f172a;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  text-align: right;
+  border-bottom: 1px solid #eef2f7;
+  padding: 0.45rem 0.25rem;
+  font-size: 0.85rem;
+}
+
+.row-clickable {
+  cursor: pointer;
+}
+
+.row-clickable:hover td {
+  background: #f8fafc;
+}
+
+.row-clickable:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: -2px;
+}
+
+.row-disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+li {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+li strong {
+  font-size: 0.8rem;
+  color: #1e3a8a;
+}
+
+li span {
+  font-size: 0.9rem;
+}
+
+li small {
+  color: #64748b;
+}
+
+.loading {
+  color: #64748b;
+}
+
+@media (max-width: 960px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

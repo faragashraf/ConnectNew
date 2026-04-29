@@ -8,6 +8,7 @@ import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
 import { JWT_OPTIONS, JwtHelperService } from '@auth0/angular-jwt';
 import { NgxSpinnerModule } from 'ngx-spinner';
 import { BasicInterceptorService } from './shared/services/helper/basic-interceptor.service';
+import { ApiResponseFeedbackInterceptor } from './shared/services/helper/api-response-feedback.interceptor';
 import { NavBarComponent } from './shared/components/nav-bar/nav-bar.component';
 import { PrimengModule } from './shared/Modules/primeng.module';
 import { MessageService, ConfirmationService } from 'primeng/api';
@@ -59,6 +60,7 @@ import { ThemeService } from './shared/services/theme.service';
   providers: [
     JwtHelperService, { provide: JWT_OPTIONS, useValue: JWT_OPTIONS }, { provide: LocationStrategy, useClass: HashLocationStrategy },
     { provide: HTTP_INTERCEPTORS, useClass: BasicInterceptorService, multi: true, },
+    { provide: HTTP_INTERCEPTORS, useClass: ApiResponseFeedbackInterceptor, multi: true, },
     MessageService, ConfirmationService, SpinnerService, AuthorizationController, ConditionalDate, PowerBiController, DynamicFormController, DomainAuthController
     , PublicationsController,
     {

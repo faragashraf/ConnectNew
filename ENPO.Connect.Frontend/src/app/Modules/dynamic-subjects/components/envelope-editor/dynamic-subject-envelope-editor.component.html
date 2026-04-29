@@ -1,0 +1,42 @@
+<section class="envelope-editor">
+  <header>
+    <h2>{{ isEditMode ? 'تعديل ظرف وارد' : 'إنشاء ظرف وارد' }}</h2>
+    <button type="button" (click)="save()" [disabled]="saving || loading">حفظ الظرف</button>
+  </header>
+
+  <div class="loading" *ngIf="loading">جاري تحميل بيانات الظرف...</div>
+
+  <form [formGroup]="form" *ngIf="!loading">
+    <div class="field">
+      <label>مرجع الظرف *</label>
+      <input type="text" formControlName="envelopeRef" />
+      <small class="error" *ngIf="shouldShowError('envelopeRef')">{{ getControlErrorMessage('envelopeRef') }}</small>
+    </div>
+
+    <div class="field">
+      <label>تاريخ الورود *</label>
+      <input type="date" formControlName="incomingDate" />
+      <small class="error" *ngIf="shouldShowError('incomingDate')">{{ getControlErrorMessage('incomingDate') }}</small>
+    </div>
+
+    <div class="field">
+      <label>الجهة الواردة</label>
+      <input type="text" formControlName="sourceEntity" />
+    </div>
+
+    <div class="field">
+      <label>المندوب المستلم</label>
+      <input type="text" formControlName="deliveryDelegate" />
+    </div>
+
+    <div class="field field-wide">
+      <label>ملاحظات</label>
+      <textarea rows="3" formControlName="notes"></textarea>
+    </div>
+
+    <div class="field field-wide">
+      <label>أرقام الموضوعات المرتبطة (مفصولة بفاصلة)</label>
+      <textarea rows="2" formControlName="linkedSubjectIdsText"></textarea>
+    </div>
+  </form>
+</section>

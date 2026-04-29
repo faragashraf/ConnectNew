@@ -1,0 +1,51 @@
+<section class="freeze-table-shell">
+  <div class="loading-note" *ngIf="loading">جاري تحميل بيانات التجميد...</div>
+
+  <div class="table-wrap" *ngIf="!loading && rows.length > 0">
+    <table>
+      <thead>
+        <tr>
+          <th>المصيف</th>
+          <th>الفوج</th>
+          <th>السعة</th>
+          <th>إجمالي الوحدات</th>
+          <th>الوحدات المستخدمة</th>
+          <th>الوحدات المتبقية</th>
+          <th>الحالة</th>
+          <th>أنشأ بواسطة</th>
+          <th>تاريخ الإنشاء</th>
+          <th *ngIf="showActions">إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of rows">
+          <td>{{ getDestinationName(row.categoryId) }}</td>
+          <td>{{ row.waveCode }}</td>
+          <td>{{ row.familyCount }}</td>
+          <td>{{ row.requestedUnitsCount }}</td>
+          <td>{{ row.frozenAssignedUnits }}</td>
+          <td>{{ row.frozenAvailableUnits }}</td>
+          <td>
+            <span class="status" [class.active]="row.isActive" [class.inactive]="!row.isActive">{{ statusLabel(row) }}</span>
+          </td>
+          <td>{{ row.createdBy || '-' }}</td>
+          <td>{{ formatDate(row.createdAtUtc) }}</td>
+          <td *ngIf="showActions" class="actions">
+            <button type="button" class="ghost" (click)="viewDetails.emit(row.freezeId)">تفاصيل</button>
+            <button type="button" class="primary" *ngIf="!row.isActive" (click)="reFreeze.emit(row)">إعادة تجميد</button>
+            <button
+              type="button"
+              class="danger"
+              (click)="releaseFreeze.emit(row.freezeId)"
+              [disabled]="!row.isActive"
+              [attr.title]="row.isActive ? null : 'تم فك التجميد بالفعل لهذا السجل'">
+              {{ row.isActive ? 'فك التجميد' : 'تم الفك' }}
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="empty" *ngIf="!loading && rows.length === 0">لا توجد عمليات تجميد مطابقة حالياً.</p>
+</section>

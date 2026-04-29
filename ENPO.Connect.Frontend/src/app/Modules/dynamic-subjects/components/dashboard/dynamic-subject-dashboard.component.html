@@ -1,0 +1,78 @@
+<div class="dashboard">
+  <header class="dashboard-header">
+    <div>
+      <h2>لوحة المتابعة التشغيلية</h2>
+      <p>ملخص لحظي للموضوعات والطلبات والحالات والمهام والأظرف الواردة.</p>
+    </div>
+    <div class="actions">
+      <button type="button" (click)="toggleOnlyMyItems()">
+        {{ query.onlyMyItems ? 'عرض جميع العناصر' : 'عناصري فقط' }}
+      </button>
+      <button type="button" (click)="loadDashboard()">تحديث</button>
+    </div>
+  </header>
+
+  <div class="loading" *ngIf="loading">جاري تحميل لوحة المتابعة...</div>
+  <div class="loading" *ngIf="!loading && !dashboard">لا تتوفر بيانات حالياً للعرض.</div>
+
+  <ng-container *ngIf="dashboard && !loading">
+    <section class="cards">
+      <article class="card" *ngFor="let card of dashboard.statusCards">
+        <h3>{{ card.label }}</h3>
+        <strong>{{ card.count }}</strong>
+      </article>
+      <article class="card card-total">
+        <h3>إجمالي الموضوعات/الطلبات</h3>
+        <strong>{{ dashboard.totalSubjects }}</strong>
+      </article>
+      <article class="card card-total">
+        <h3>إجمالي الأظرف الواردة</h3>
+        <strong>{{ dashboard.totalEnvelopes }}</strong>
+      </article>
+      <article class="card card-total">
+        <h3>المهام المفتوحة</h3>
+        <strong>{{ dashboard.openTasksCount }}</strong>
+      </article>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h3>آخر الموضوعات/الطلبات</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>المرجع</th>
+              <th>الموضوع</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let item of dashboard.recentSubjects"
+              [class.row-clickable]="canOpenRecentSubject(item)"
+              [class.row-disabled]="!canOpenRecentSubject(item)"
+              [attr.tabindex]="canOpenRecentSubject(item) ? 0 : -1"
+              [attr.role]="canOpenRecentSubject(item) ? 'button' : null"
+              (click)="canOpenRecentSubject(item) && openRecentSubject(item)"
+              (keydown)="onRecentSubjectKeydown($event, item)">
+              <td>{{ item.requestRef }}</td>
+              <td>{{ item.subject }}</td>
+              <td>{{ toArabicStatusLabel(item.status, item.statusLabel) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>سجل النشاط</h3>
+        <ul>
+          <li *ngFor="let update of dashboard.recentUpdates">
+            <strong>{{ toArabicEventType(update.eventType) }}</strong>
+            <span>{{ toArabicTimelineTitle(update.eventType, update.eventTitle) }}</span>
+            <small>{{ update.createdAtUtc | date:'short' }}</small>
+          </li>
+        </ul>
+      </div>
+    </section>
+  </ng-container>
+</div>

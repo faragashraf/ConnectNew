@@ -574,6 +574,7 @@ namespace Persistence.HelperServices
                     .ToList();
 
                 var authorNameById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var authorUnitIdsByUser = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
                 if (authorIds.Count > 0)
                 {
                     var normalizedAuthorIds = authorIds
@@ -589,6 +590,45 @@ namespace Persistence.HelperServices
                             group => group.Key,
                             group => group.Select(user => user.ArabicName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ?? group.Key,
                             StringComparer.OrdinalIgnoreCase);
+
+                    var now = DateTime.Now.Date;
+                    var authorUnits = await _gPAContext.UserPositions
+                        .AsNoTracking()
+                        .Where(position =>
+                            normalizedAuthorIds.Contains(position.UserId.ToUpper())
+                            && position.IsActive != false
+                            && (!position.StartDate.HasValue || position.StartDate.Value <= now)
+                            && (!position.EndDate.HasValue || position.EndDate.Value >= now))
+                        .Select(position => new
+                        {
+                            UserId = (position.UserId ?? string.Empty).Trim(),
+                            UnitId = position.UnitId.ToString()
+                        })
+                        .ToListAsync();
+
+                    authorUnitIdsByUser = authorUnits
+                        .Where(item => !string.IsNullOrWhiteSpace(item.UserId) && !string.IsNullOrWhiteSpace(item.UnitId))
+                        .GroupBy(item => item.UserId.Trim(), StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(
+                            group => group.Key,
+                            group => group
+                                .Select(item => item.UnitId.Trim())
+                                .Where(unitId => unitId.Length > 0)
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase),
+                            StringComparer.OrdinalIgnoreCase);
+                }
+
+                var responsibleUnitIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var currentResponsibleSectorId = (message.CurrentResponsibleSectorId ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(currentResponsibleSectorId))
+                {
+                    responsibleUnitIds.Add(currentResponsibleSectorId);
+                }
+
+                var assignedSectorId = (message.AssignedSectorId ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(assignedSectorId))
+                {
+                    responsibleUnitIds.Add(assignedSectorId);
                 }
 
                 var replyDtos = replies.Select(reply =>
@@ -609,6 +649,7 @@ namespace Persistence.HelperServices
                         AuthorName = authorName,
                         NextResponsibleSectorId = reply.NextResponsibleSectorId,
                         CreatedDate = reply.CreatedDate,
+                        IsAdminAction = IsAdminReplyAuthor(authorId, responsibleUnitIds, authorUnitIdsByUser),
                         AttchShipmentDtos = _mapper.Map<List<AttchShipmentDto>>(
                             replyAttachments.Where(attachment => attachment.AttchId == reply.ReplyId).ToList())
                     };
@@ -694,6 +735,38 @@ namespace Persistence.HelperServices
             }
 
             return false;
+        }
+
+        private static bool IsAdminReplyAuthor(
+            string authorId,
+            HashSet<string> responsibleUnitIds,
+            Dictionary<string, HashSet<string>> authorUnitIdsByUser)
+        {
+            var normalizedAuthorId = (authorId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedAuthorId))
+            {
+                return false;
+            }
+
+            if (string.Equals(normalizedAuthorId, "SYSTEM", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (responsibleUnitIds == null || responsibleUnitIds.Count == 0)
+            {
+                return false;
+            }
+
+            if (authorUnitIdsByUser == null
+                || !authorUnitIdsByUser.TryGetValue(normalizedAuthorId, out var authorUnitIds)
+                || authorUnitIds == null
+                || authorUnitIds.Count == 0)
+            {
+                return false;
+            }
+
+            return authorUnitIds.Any(unitId => responsibleUnitIds.Contains(unitId));
         }
 
         public async Task GetDepartments(InternalCommunicationDto internalDto)

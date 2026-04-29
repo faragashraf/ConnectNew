@@ -29,8 +29,12 @@ export const SUMMER_PDF_REFERENCE_TITLE_DEFAULT = normalizeNonEmptyString(
 
 export const SUMMER_FEATURE_ROUTES = {
   workspace: 'SummerRequests',
-  workspaceEdit: 'SummerRequests/edit/:id',
+  workspaceEdit: 'SummerRequests/edit/:token',
   adminConsole: 'SummerRequestsManagement',
+  adminConsoleEdit: 'SummerRequestsManagement/edit/:token',
+  waveBookingsPrint: 'SummerRequestsManagement/print-bookings',
+  unitFreezeList: 'resorts/unit-freeze',
+  unitFreezeCreate: 'resorts/unit-freeze/create',
+  unitFreezeDetails: 'resorts/unit-freeze/:id',
   dashboard: 'Chart'
 } as const;
-

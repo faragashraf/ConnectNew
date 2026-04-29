@@ -13,6 +13,9 @@ import { ComponentConfigManagerComponent } from './Managementcomponents/componen
 import { NswagEditorComponent } from './Managementcomponents/nswag-editor/nswag-editor.component';
 import { ModuleChartsComponent } from '../GenericComponents/ConnectComponents/module-charts/module-charts.component';
 import { ApplicationGenericManagerComponent } from './components/application-generic-manager/application-generic-manager.component';
+import { DynamicSubjectTypeAdminComponent } from './components/dynamic-subject-type-admin/dynamic-subject-type-admin.component';
+import { CentralAdminShellComponent } from './components/central-admin-shell/central-admin-shell.component';
+import { CentralAdminPreviewWorkspaceComponent } from './components/central-admin-preview-workspace/central-admin-preview-workspace.component';
 
 const routes: Routes =
   [
@@ -22,13 +25,38 @@ const routes: Routes =
       pathMatch: 'full'
     },
     {
+      path: 'SummerRequestsManagement/print-bookings',
+      redirectTo: '/EmployeeRequests/SummerRequestsManagement/print-bookings',
+      pathMatch: 'full'
+    },
+    {
       path: 'SummerRequests',
       redirectTo: '/EmployeeRequests/SummerRequests',
       pathMatch: 'full'
     },
     {
-      path: 'SummerRequests/edit/:id',
-      redirectTo: '/EmployeeRequests/SummerRequests/edit/:id',
+      path: 'SummerRequests/edit/:token',
+      redirectTo: '/EmployeeRequests/SummerRequests/edit/:token',
+      pathMatch: 'full'
+    },
+    {
+      path: 'SummerRequestsManagement/edit/:token',
+      redirectTo: '/EmployeeRequests/SummerRequestsManagement/edit/:token',
+      pathMatch: 'full'
+    },
+    {
+      path: 'resorts/unit-freeze',
+      redirectTo: '/EmployeeRequests/resorts/unit-freeze',
+      pathMatch: 'full'
+    },
+    {
+      path: 'resorts/unit-freeze/create',
+      redirectTo: '/EmployeeRequests/resorts/unit-freeze/create',
+      pathMatch: 'full'
+    },
+    {
+      path: 'resorts/unit-freeze/:id',
+      redirectTo: '/EmployeeRequests/resorts/unit-freeze/:id',
       pathMatch: 'full'
     },
     {
@@ -66,7 +94,7 @@ const routes: Routes =
       component: DynamicFieldsManagerComponent,
       canActivate: [AuthNewGuardService],
       data: {
-        func: 'ConnectAdminFunc'
+        func: 'ConnectSupperAdminFunc'
       }
     }, {
       path: 'ServerMonitorManager',
@@ -118,6 +146,46 @@ const routes: Routes =
       canActivate: [AuthNewGuardService], data: {
         func: 'ServiceDashboardFunc'
       }
+    },
+    {
+      path: 'DynamicSubjectTypes',
+      component: DynamicSubjectTypeAdminComponent,
+      canActivate: [AuthNewGuardService], data: {
+        func: 'ConnectSupperAdminFunc'
+      }
+    },
+    {
+      path: 'CentralAdminShellLegacy',
+      component: CentralAdminShellComponent,
+      canActivate: [AuthNewGuardService], data: {
+        func: 'ConnectSupperAdminFunc'
+      },
+      children: [
+        { path: '', redirectTo: 'subject-types', pathMatch: 'full' },
+        { path: 'subject-types', component: DynamicSubjectTypeAdminComponent },
+        { path: 'fields-library', component: DynamicFieldsManagerComponent },
+        { path: 'application-configuration', component: ComponentConfigManagerComponent },
+        { path: 'preview-workspace', component: CentralAdminPreviewWorkspaceComponent }
+      ]
+    },
+    {
+      path: 'CentralAdminShell',
+      canActivate: [AuthNewGuardService], data: {
+        func: 'ConnectSupperAdminFunc'
+      },
+      children: [
+        { path: '', redirectTo: '/Admin/ControlCenterCatalog', pathMatch: 'full' },
+        { path: 'subject-types', redirectTo: '/Admin/ControlCenterCatalog', pathMatch: 'full' },
+        { path: 'fields-library', redirectTo: '/Admin/ControlCenterCatalog', pathMatch: 'full' },
+        { path: 'application-configuration', redirectTo: '/Admin/ControlCenterCatalog', pathMatch: 'full' },
+        { path: 'preview-workspace', redirectTo: '/Admin/ControlCenterCatalog/request-preview', pathMatch: 'full' },
+        { path: '**', redirectTo: '/Admin/ControlCenterCatalog' }
+      ]
+    },
+    {
+      path: 'DynamicSubjectManagement',
+      redirectTo: 'CentralAdminShell',
+      pathMatch: 'full'
     }
   ];
 

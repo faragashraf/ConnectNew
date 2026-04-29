@@ -55,6 +55,7 @@ export class GenericFormsService {
   selections: { keyProp: string, nameProp: string, items?: selection[] } = { keyProp: '', nameProp: '', items: [] };
   selectionArrays: { keyProp: string, nameProp: string, items: selection[] }[] = [];
   private staticSelectionCache: Map<string, selection[]> = new Map();
+  private treeBoundFieldKeys: Set<string> = new Set();
 
   dynamicGroups: GroupInfo[] = [];
 
@@ -124,9 +125,32 @@ export class GenericFormsService {
     this.dynamicGroups = [];
     this.formErrors = [];
     this.validationMessages = [];
+    this.treeBoundFieldKeys.clear();
     if (clearSelections) {
       this.selectionArrays = [];
+      this.staticSelectionCache.clear();
     }
+  }
+
+  markTreeBoundFields(fieldKeys: string[]): void {
+    (fieldKeys ?? []).forEach(fieldKey => {
+      const normalized = this.normalizeDynamicFieldKey(fieldKey);
+      if (!normalized) {
+        return;
+      }
+
+      this.treeBoundFieldKeys.add(normalized);
+    });
+  }
+
+  isTreeBoundField(controlFullName: string): boolean {
+    const parsed = this.nameIndexes(controlFullName ?? '');
+    const normalized = this.normalizeDynamicFieldKey(parsed.name);
+    if (!normalized) {
+      return false;
+    }
+
+    return this.treeBoundFieldKeys.has(normalized);
   }
 
   /**
@@ -454,8 +478,10 @@ export class GenericFormsService {
 
         for (const errorKey in abstractControl.errors) {
           if (errorKey) {
+            const errorPayload = (abstractControl.errors as Record<string, unknown>)[errorKey];
             const configuredMessage = String(messages_X?.find(f => f.key == errorKey)?.value ?? '').trim();
-            const resolvedMessage = configuredMessage || this.resolveFallbackValidationMessage(errorKey);
+            const payloadMessage = this.extractValidationErrorMessage(errorPayload);
+            const resolvedMessage = configuredMessage || payloadMessage || this.resolveFallbackValidationMessage(errorKey);
             if (!resolvedMessage) {
               continue;
             }
@@ -486,6 +512,20 @@ export class GenericFormsService {
     return this.formErrors?.find(f => f.key == key)?.value
   }
 
+  private extractValidationErrorMessage(errorPayload: unknown): string | null {
+    if (typeof errorPayload === 'string') {
+      const normalized = errorPayload.trim();
+      return normalized.length > 0 ? normalized : null;
+    }
+
+    if (!errorPayload || typeof errorPayload !== 'object' || Array.isArray(errorPayload)) {
+      return null;
+    }
+
+    const messageCandidate = String((errorPayload as Record<string, unknown>)['message'] ?? '').trim();
+    return messageCandidate.length > 0 ? messageCandidate : null;
+  }
+
   private resolveFallbackValidationMessage(errorKey: string): string {
     switch (String(errorKey ?? '').trim().toLowerCase()) {
       case 'required':
@@ -511,41 +551,104 @@ export class GenericFormsService {
 
   implementControlSelection(filedName: string): selection[] {
     const _filedName = this.nameIndexes(filedName).name;
+    const normalizedFieldKey = this.normalizeDynamicFieldKey(_filedName);
+    if (!normalizedFieldKey) {
+      return [];
+    }
 
-    const _apiSelection = this.selectionArrays.find(arr => arr.nameProp === _filedName);
+    const _apiSelection = this.selectionArrays.find(arr =>
+      this.normalizeDynamicFieldKey(arr?.nameProp) === normalizedFieldKey
+    );
     if (_apiSelection != undefined) {
-      return _apiSelection.items;
+      const runtimeItems = Array.isArray(_apiSelection.items) ? _apiSelection.items : [];
+      // Runtime arrays should override static options only when they actually provide values.
+      // This prevents stale/empty runtime payloads from hiding valid CDMendTbl choices.
+      if (runtimeItems.length > 0) {
+        return runtimeItems;
+      }
     }
     
     // Check cache for static metadata selections
-    if (this.staticSelectionCache.has(_filedName)) {
-      return this.staticSelectionCache.get(_filedName)!;
+    if (this.staticSelectionCache.has(normalizedFieldKey)) {
+      return this.staticSelectionCache.get(normalizedFieldKey)!;
     }
 
     // Default logic
-    let _mandData = this.cdmendDto.find(f => f.cdmendTxt == _filedName)
+    let _mandData = this.cdmendDto.find(f =>
+      this.normalizeDynamicFieldKey(f.cdmendTxt) === normalizedFieldKey
+    );
+    if (!_mandData) {
+      _mandData = this.cdmendDto.find(f => f.cdmendTxt == _filedName);
+    }
     if (_mandData) {
       const raw = String(_mandData.cdmendTbl ?? '');
       try {
         const parsed = JSON.parse(raw) as selection[];
-        this.staticSelectionCache.set(_filedName, parsed);
+        this.staticSelectionCache.set(normalizedFieldKey, parsed);
         return parsed;
       } catch (e) {
         try {
           // tolerate single-quoted JSON stored in DB: replace single quotes with double quotes
           const fixed = raw.replace(/\'/g, '"');
           const parsed = JSON.parse(fixed) as selection[];
-          this.staticSelectionCache.set(_filedName, parsed);
+          this.staticSelectionCache.set(normalizedFieldKey, parsed);
           return parsed;
         } catch (e2) {
           console.warn('implementControlSelection: failed to parse cdmendTbl for', _filedName, raw);
           const empty: selection[] = [];
-          this.staticSelectionCache.set(_filedName, empty);
+          this.staticSelectionCache.set(normalizedFieldKey, empty);
           return empty;
         }
       }
     }
     return []
+  }
+
+  setRuntimeSelectionForField(fieldKey: string, items: selection[]): void {
+    const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
+    if (!normalizedFieldKey) {
+      return;
+    }
+
+    const normalizedItems = (items ?? [])
+      .map(item => ({
+        key: String(item?.key ?? '').trim(),
+        name: String(item?.name ?? '').trim()
+      }))
+      .filter(item => item.key.length > 0 || item.name.length > 0)
+      .map(item => ({
+        key: item.key.length > 0 ? item.key : item.name,
+        name: item.name.length > 0 ? item.name : item.key
+      }));
+
+    const existingIndex = this.selectionArrays.findIndex(entry =>
+      this.normalizeDynamicFieldKey(entry?.nameProp) === normalizedFieldKey
+    );
+    const nextPayload = {
+      keyProp: 'key',
+      nameProp: normalizedFieldKey,
+      items: normalizedItems
+    };
+
+    if (existingIndex >= 0) {
+      this.selectionArrays[existingIndex] = nextPayload;
+    } else {
+      this.selectionArrays.push(nextPayload);
+    }
+
+    this.staticSelectionCache.delete(normalizedFieldKey);
+  }
+
+  clearRuntimeSelectionForField(fieldKey: string): void {
+    const normalizedFieldKey = this.normalizeDynamicFieldKey(fieldKey);
+    if (!normalizedFieldKey) {
+      return;
+    }
+
+    this.selectionArrays = this.selectionArrays.filter(entry =>
+      this.normalizeDynamicFieldKey(entry?.nameProp) !== normalizedFieldKey
+    );
+    this.staticSelectionCache.delete(normalizedFieldKey);
   }
   getRequesterFieldTxt(message: MessageDto, fieldValue: string): string | '' {
     const requesterField = message.fields?.find(field => field.fildKind === fieldValue);
@@ -579,6 +682,15 @@ export class GenericFormsService {
   nameIndexes(metaFiled: string): { name: string, index: number } {
     const [name, index] = metaFiled?.split('|');
     return { name, index: parseInt(index, 10) };
+  }
+
+  private normalizeDynamicFieldKey(value: unknown): string {
+    const raw = String(value ?? '').trim().toLowerCase();
+    if (!raw) {
+      return '';
+    }
+
+    return raw.split('|')[0].split('__')[0].trim();
   }
   public updateNextControlLabel(form: FormGroup | FormArray, event: any, ctrlFullNameToMatch: string, targetControlFullName: string, labelPattern: string | null, filtered_CategoryMand: CdCategoryMandDto[]) {
     const parsed = this.nameIndexes(event.controlFullName);

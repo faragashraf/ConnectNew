@@ -93,11 +93,25 @@ export class SummerNotificationDisplayMapperService {
     };
   }
 
+  buildToastSummary(notification: SummerDisplayNotificationDto): string {
+    const sender = this.getText(notification?.sender, 'Connect');
+    const title = this.getText(notification?.title, this.summerTitle);
+    const message = this.getText(notification?.notification, 'تم استلام تحديث جديد.');
+    return `${sender} - ${title}: ${message}`;
+  }
+
   private mapEvent(event: SummerRealtimeEvent): SummerNotificationDisplayResult {
     if (event.kind === 'capacity') {
+      const destinationName = this.getText(
+        event.destinationName,
+        Number.isFinite(Number(event.destinationId ?? 0)) && Number(event.destinationId ?? 0) > 0
+          ? `المصيف رقم ${Number(event.destinationId)}`
+          : 'المصيف غير محدد'
+      );
+      const batchNumber = this.getText(event.batchNumber, this.getText(event.waveCode, '-'));
       return {
         title: this.summerTitle,
-        message: 'تم تحديث سعة الفوج.',
+        message: `تم تحديث سعة الفوج رقم (${batchNumber}) بمصيف (${destinationName})، يرجى مراجعة التفاصيل.`,
         type: 'Info',
         isSummerEvent: true
       };
@@ -154,6 +168,15 @@ export class SummerNotificationDisplayMapperService {
       };
     }
 
+    if (action === 'REJECT_REQUEST') {
+      return {
+        title: this.summerTitle,
+        message: 'تم رفض الطلب.',
+        type: 'Warn',
+        isSummerEvent: true
+      };
+    }
+
     if (action === 'MANUAL_CANCEL' || action === 'CANCEL' || action === 'AUTO_CANCEL' || action === 'ADMIN_CANCEL') {
       return {
         title: this.summerTitle,
@@ -172,10 +195,37 @@ export class SummerNotificationDisplayMapperService {
       };
     }
 
+    if (action === 'INTERNAL_ADMIN_ACTION') {
+      return {
+        title: this.summerTitle,
+        message: 'تم تسجيل إجراء إداري داخلي.',
+        type: 'Info',
+        isSummerEvent: true
+      };
+    }
+
     if (action === 'APPROVE_TRANSFER') {
       return {
         title: this.summerTitle,
         message: 'تم اعتماد تحويل الطلب.',
+        type: 'Success',
+        isSummerEvent: true
+      };
+    }
+
+    if (action === 'MARK_UNPAID') {
+      return {
+        title: this.summerTitle,
+        message: 'تم تحويل حالة السداد إلى غير مسدد.',
+        type: 'Warn',
+        isSummerEvent: true
+      };
+    }
+
+    if (action === 'MARK_PAID_ADMIN') {
+      return {
+        title: this.summerTitle,
+        message: 'تم تسجيل سداد إداري للطلب.',
         type: 'Success',
         isSummerEvent: true
       };

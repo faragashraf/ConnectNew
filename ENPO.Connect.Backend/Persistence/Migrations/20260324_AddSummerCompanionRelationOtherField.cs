@@ -91,8 +91,51 @@ SELECT [CatId]
   FROM [CDCategory]
  WHERE [CatId] IN (147, 148, 149);
 
+DECLARE @TargetMendGroup INT = NULL;
+
+IF EXISTS (SELECT 1 FROM [MandGroups] WHERE [GroupID] = 9203)
+BEGIN
+    SET @TargetMendGroup = 9203;
+END
+
+IF @TargetMendGroup IS NULL
+BEGIN
+    SELECT TOP (1) @TargetMendGroup = existing.[MendGroup]
+      FROM [CdCategoryMand] AS existing
+     INNER JOIN @SummerCategories AS categoryIds
+        ON categoryIds.[CategoryId] = existing.[MendCategory]
+     WHERE existing.[MendField] = N'SUM2026_CompanionRelation'
+     ORDER BY existing.[MendCategory];
+END
+
+IF @TargetMendGroup IS NULL
+BEGIN
+    SELECT TOP (1) @TargetMendGroup = [GroupID]
+      FROM [MandGroups]
+     ORDER BY [GroupID];
+END
+
+IF @TargetMendGroup IS NULL
+BEGIN
+    THROW 50001, N'Unable to resolve a valid MendGroup for summer companion relation metadata.', 1;
+END
+
+DECLARE @CdCategoryMandMendSqlIsIdentity BIT = CASE
+    WHEN COALESCE(
+        COLUMNPROPERTY(OBJECT_ID(N'[dbo].[CdCategoryMand]'), N'MendSQL', N'IsIdentity'),
+        COLUMNPROPERTY(OBJECT_ID(N'[CdCategoryMand]'), N'MendSQL', N'IsIdentity'),
+        0
+    ) = 1 THEN 1
+    ELSE 0
+END;
+
+IF @CdCategoryMandMendSqlIsIdentity = 1
+BEGIN
+    SET IDENTITY_INSERT [CdCategoryMand] ON;
+END
+
 UPDATE existing
-   SET existing.[MendGroup] = 9203,
+   SET existing.[MendGroup] = @TargetMendGroup,
        existing.[MendStat] = 0
   FROM [CdCategoryMand] AS existing
  INNER JOIN @SummerCategories AS categoryIds
@@ -117,9 +160,14 @@ SELECT seed.[BaseSql] + missing.[RowNum],
        missing.[CategoryId],
        @RelationOtherFieldKey,
        0,
-       9203
+       @TargetMendGroup
   FROM MissingMap AS missing
  CROSS JOIN (SELECT ISNULL(MAX([MendSQL]), 0) AS [BaseSql] FROM [CdCategoryMand]) AS seed;
+
+IF @CdCategoryMandMendSqlIsIdentity = 1
+BEGIN
+    SET IDENTITY_INSERT [CdCategoryMand] OFF;
+END
 ");
         }
 

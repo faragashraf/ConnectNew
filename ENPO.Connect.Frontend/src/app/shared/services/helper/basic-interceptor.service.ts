@@ -8,12 +8,11 @@ import {
 import * as signalR from '@microsoft/signalr';
 
 import { Injectable } from "@angular/core";
-import { catchError, finalize, Observable, throwError, EMPTY } from "rxjs";
+import { BehaviorSubject, catchError, EMPTY, filter, finalize, from, Observable, switchMap, take, throwError } from "rxjs";
 import { SignalRService } from "../SignalRServices/SignalR.service";
 import { AuthObjectsService } from "./auth-objects.service";
 import { SpinnerService } from "./spinner.service";
 import { MsgsService } from "./msgs.service";
-import { JwtHelperService } from '@auth0/angular-jwt';
 import { Router } from '@angular/router';
 
 @Injectable({
@@ -28,13 +27,15 @@ export class BasicInterceptorService implements HttpInterceptor {
     'localhost:3002/nswag', 'admin/nswagconfiguration', 'publications/getdocumentslist_user',
     'publications/getmenuitems', 'publications/getcriteria'
   ];
+  private isRefreshingToken = false;
+  private readonly refreshedToken$ = new BehaviorSubject<string | null>(null);
+  private isSessionDialogOpen = false;
 
   constructor(
     private chatService: SignalRService,
     private msgsService: MsgsService,
     private AuthObjects: AuthObjectsService,
     private spinner: SpinnerService,
-    private jwtHelper: JwtHelperService,
     private router: Router
   ) { }
   intercept(
@@ -68,38 +69,21 @@ export class BasicInterceptorService implements HttpInterceptor {
       );
     }
     else if (token != null) {
-      // Prevent request if token is expired
-      try {
-        if (this.jwtHelper.isTokenExpired(token)) {
-          this.navigateToLoginAndSignOut();
-          this.msgsService.msgError('برجاء إعادة تسجيل الدخول', 'إنتهت صلاحية الجلسة', true);
-          this._Finalize();
-          return EMPTY as Observable<HttpEvent<any>>;
-        }
-      } catch (error) {
-        this.navigateToLoginAndSignOut();
-        return throwError(() => new HttpErrorResponse({ status: 401, statusText: 'Unauthorized - Invalid Token' }));
+      let tokenReq = this.attachBearer(req, token);
+      if (this.shouldApplyNoStore(tokenReq.url)) {
+        tokenReq = this.applyNoStoreHeaders(tokenReq);
       }
 
-      const tokenReq = req.clone({ setHeaders: { Authorization: `Bearer ${token}` } });
-      if (this.shouldApplyNoStore(tokenReq.url)) {
-        const noStoreReq = this.applyNoStoreHeaders(tokenReq);
-        return next.handle(noStoreReq).pipe(finalize(() => this._Finalize()));
-      }
-        return next.handle(tokenReq).pipe(
-        catchError((error: HttpErrorResponse) => {
-          console.log('error.status', error.status, error, tokenReq.url);
-          if (error.status === 401) {
-            // Delay slightly so UI can settle before showing modal
-            setTimeout(() => {
-              this.msgsService.msgConfirm('إنتهت صلاحية الجلسة', 'إعادة تسجيل الدخول').then(() => {
-                this.navigateToLoginAndSignOut();
-              });
-            }, 50);
-            // Finalize and silently cancel the request (no exception)
-            this._Finalize();
-            return EMPTY as Observable<HttpEvent<any>>;
+      return next.handle(tokenReq).pipe(
+        catchError((error: unknown) => {
+          if (error instanceof HttpErrorResponse) {
+            console.log('error.status', error.status, error, tokenReq.url);
           }
+
+          if (error instanceof HttpErrorResponse && error.status === 401) {
+            return this.handleUnauthorizedError(tokenReq, next, token);
+          }
+
           return throwError(() => error);
         }),
         finalize(() => this._Finalize())
@@ -127,6 +111,68 @@ export class BasicInterceptorService implements HttpInterceptor {
       });
     }
     this.AuthObjects.SignOut(true);
+  }
+
+  private attachBearer(req: HttpRequest<any>, token: string): HttpRequest<any> {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`
+    };
+    const functionsToken = localStorage.getItem('ConnectFunctions');
+    if (functionsToken) {
+      headers['ConnectFunctions'] = `Bearer ${functionsToken}`;
+    }
+    return req.clone({ setHeaders: headers });
+  }
+
+  private handleUnauthorizedError(
+    req: HttpRequest<any>,
+    next: HttpHandler,
+    currentToken: string
+  ): Observable<HttpEvent<any>> {
+    if (this.isRefreshingToken) {
+      return this.refreshedToken$.pipe(
+        filter((token): token is string => !!token),
+        take(1),
+        switchMap((token) => next.handle(this.attachBearer(req, token)))
+      );
+    }
+
+    this.isRefreshingToken = true;
+    this.refreshedToken$.next(null);
+
+    return from(this.chatService.requestTokenRefresh(currentToken)).pipe(
+      switchMap((newToken) => {
+        localStorage.setItem('ConnectToken', newToken);
+        this.refreshedToken$.next(newToken);
+        return next.handle(this.attachBearer(req, newToken));
+      }),
+      catchError((refreshError) => {
+        console.error('Token refresh failed after 401', refreshError);
+        this.promptSessionExpiredAndSignOut();
+        return EMPTY as Observable<HttpEvent<any>>;
+      }),
+      finalize(() => {
+        this.isRefreshingToken = false;
+      })
+    );
+  }
+
+  private promptSessionExpiredAndSignOut() {
+    if (this.isSessionDialogOpen) {
+      return;
+    }
+
+    this.isSessionDialogOpen = true;
+    setTimeout(() => {
+      this.msgsService
+        .msgConfirm('إنتهت صلاحية الجلسة', 'إعادة تسجيل الدخول')
+        .then(() => {
+          this.navigateToLoginAndSignOut();
+        })
+        .finally(() => {
+          this.isSessionDialogOpen = false;
+        });
+    }, 50);
   }
 
   domainHandlling(req: HttpRequest<any>, token: string | null): HttpRequest<any> {

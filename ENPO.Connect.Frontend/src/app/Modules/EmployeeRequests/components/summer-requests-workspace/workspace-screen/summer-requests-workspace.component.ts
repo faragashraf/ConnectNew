@@ -1,6 +1,8 @@
 ﻿import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { ElementRef, ViewChild } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
 import { ListRequestModel, MessageDto, RequestedData, SearchKind, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
@@ -28,6 +30,15 @@ import { SummerRequestRowRefreshService } from '../../summer-shared/core/summer-
 import { SummerRequestsListPatchService } from '../../summer-shared/core/summer-requests-list-patch.service';
 import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
 import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
+import { AuthObjectsService } from 'src/app/shared/services/helper/auth-objects.service';
+import {
+  buildSummerCancelDeductionMessage,
+  resolveSummerCancelDeductionAmount
+} from '../../summer-shared/core/summer-cancel-deduction.policy';
+import {
+  filterSummerDestinationsForBooking,
+  SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE
+} from '../../summer-shared/core/summer-destination-access.policy';
 import {
   parseSummerDestinationCatalog,
   SUMMER_PDF_REFERENCE_TITLE,
@@ -56,6 +67,19 @@ import {
 } from '../summer-requests-workspace.utils';
 
 type FileBucket = 'cancel' | 'payment' | 'transfer';
+type SummerPaymentStatusCode = 'PAID' | 'UNPAID';
+const SUMMER_INSTALLMENTS_MAX_COUNT = 7;
+
+interface SummerPaymentSnapshot {
+  paymentModeCode: 'INSTALLMENT' | 'CASH';
+  paymentModeLabel: string;
+  installmentLabel: string;
+  amountText: string;
+  paidAtDisplay: string;
+  paidAtLocal: string;
+  statusCode: SummerPaymentStatusCode;
+  statusLabel: string;
+}
 
 @Component({
   selector: 'app-summer-requests-workspace',
@@ -67,7 +91,14 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   readonly pdfReferenceTitle = SUMMER_PDF_REFERENCE_TITLE;
   readonly dynamicSummerApplicationId = SUMMER_DYNAMIC_APPLICATION_ID;
   readonly dynamicSummerConfigRouteKey = 'admins/summer-requests/dynamic-booking';
+  readonly summerGuideVideoPath = 'assets/videos/Summer.mp4';
+  // Temporary UI toggle requested by business: keep payment visible and hide transfer/cancel for now.
+  readonly showTransferWorkflowCard = false;
+  readonly showCancelWorkflowCard = false;
+  readonly paymentInFutureMessage = SUMMER_UI_TEXTS_AR.errors.paymentInFuture;
+  readonly destinationAccessDeniedMessage = SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE;
   destinations: SummerDestinationConfig[] = [];
+  hasSummerAdminPermission = false;
   loadingDestinations = false;
   destinationsError = '';
 
@@ -82,6 +113,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   myRequests: SummerRequestSummaryDto[] = [];
   selectedRequestId: number | null = null;
   selectedRequestDetails: MessageDto | null = null;
+  paymentSnapshot: SummerPaymentSnapshot | null = null;
 
   loadingRequests = false;
   loadingSelectedRequestDetails = false;
@@ -99,9 +131,33 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   seasonTransferAlreadyUsed = false;
   transferWaveCapacities: SummerWaveCapacityDto[] = [];
   activeTabIndex = 0;
+  editRouteToken: string | null = null;
   editRequestId: number | null = null;
+  creatingEditLink = false;
+  resolvingEditToken = false;
+  isAdminEditHost = false;
+  showGuideVideoDialog = true;
 
+  @ViewChild('summerGuideVideoPlayer')
+  private summerGuideVideoPlayer?: ElementRef<HTMLVideoElement>;
+
+  private readonly paymentInFutureErrorKey = 'paymentInFuture';
   private readonly subscriptions = new Subscription();
+  private readonly paymentDateNotInFutureValidator = (control: AbstractControl) => {
+    const paidAtLocal = String(control?.value ?? '').trim();
+    if (!paidAtLocal) {
+      return null;
+    }
+
+    const paidAt = this.parseDateTimeLocalInput(paidAtLocal);
+    if (!paidAt) {
+      return null;
+    }
+
+    return this.toComparableUnixSecond(paidAt) > this.toComparableUnixSecond(new Date())
+      ? { [this.paymentInFutureErrorKey]: true }
+      : null;
+  };
 
   constructor(
     private readonly fb: FormBuilder,
@@ -116,6 +172,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     private readonly spinner: SpinnerService,
     private readonly signalRService: SignalRService,
     private readonly summerRealtimeService: SummerRequestsRealtimeService,
+    private readonly authObjectsService: AuthObjectsService,
     private readonly rowRefreshService: SummerRequestRowRefreshService,
     private readonly listPatchService: SummerRequestsListPatchService
   ) {
@@ -124,9 +181,12 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     });
 
     this.paymentForm = this.fb.group({
-      paidAtLocal: ['', Validators.required],
+      paymentStatus: ['PAID'],
+      paidAtLocal: [''],
       notes: ['', Validators.maxLength(1000)]
     });
+    this.updatePaymentDateValidators();
+    this.applyPaymentStatusEditAccess();
 
     this.transferForm = this.fb.group({
       toCategoryId: [null, Validators.required],
@@ -138,15 +198,36 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.refreshDestinationAccess();
     this.bindRouteMode();
+    this.bindPaymentRules();
     this.bindTransferRules();
     this.bindSignalRRefresh();
     this.loadDestinationCatalog();
     this.loadMyRequests();
+
+    const authSub = this.authObjectsService.authObject$.subscribe(() => {
+      this.refreshDestinationAccess();
+    });
+    this.subscriptions.add(authSub);
   }
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
+  }
+
+  openGuideVideoDialog(): void {
+    this.showGuideVideoDialog = true;
+  }
+
+  onGuideVideoDialogHide(): void {
+    const player = this.summerGuideVideoPlayer?.nativeElement;
+    if (!player) {
+      return;
+    }
+
+    player.pause();
+    player.currentTime = 0;
   }
 
   get selectedRequest(): SummerRequestSummaryDto | undefined {
@@ -156,13 +237,68 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     return this.myRequests.find(item => item.messageId === this.selectedRequestId);
   }
 
+  get bookingDestinations(): SummerDestinationConfig[] {
+    return filterSummerDestinationsForBooking(this.destinations, this.hasSummerAdminPermission);
+  }
+
+  get canShowCreateBuilder(): boolean {
+    return this.isEditMode
+      ? this.destinations.length > 0
+      : this.bookingDestinations.length > 0;
+  }
+
+  get destinationCatalogEmptyStateMessage(): string {
+    if (this.destinationsError.length > 0) {
+      return this.destinationsError;
+    }
+
+    if (!this.loadingDestinations && this.destinations.length > 0 && this.bookingDestinations.length === 0) {
+      return this.destinationAccessDeniedMessage;
+    }
+
+    return '';
+  }
+
+  get canEditPaymentStatus(): boolean {
+    return this.hasSummerAdminPermission;
+  }
+
+  get paymentWorkflowTabHeader(): string {
+    if (this.showTransferWorkflowCard || this.showCancelWorkflowCard) {
+      return 'السداد / التحويل / الاعتذار';
+    }
+
+    return 'السداد';
+  }
+
+  get isPaymentOnlyWorkflowMode(): boolean {
+    return !this.showTransferWorkflowCard && !this.showCancelWorkflowCard;
+  }
+
   get isEditMode(): boolean {
-    return Number(this.editRequestId ?? 0) > 0;
+    return String(this.editRouteToken ?? '').trim().length > 0;
+  }
+
+  get editModeExitLabel(): string {
+    return this.isAdminEditHost ? 'العودة للوحة الإدارة' : 'العودة لإنشاء طلب جديد';
   }
 
   get transferDestination(): SummerDestinationConfig | undefined {
     const categoryId = this.getNumberValue(this.transferForm.get('toCategoryId'));
-    return this.destinations.find(item => item.categoryId === categoryId);
+    return this.transferDestinationOptions.find(item => item.categoryId === categoryId);
+  }
+
+  get transferDestinationOptions(): SummerDestinationConfig[] {
+    const request = this.selectedRequest;
+    if (!request) {
+      return [];
+    }
+
+    if (this.hasSummerAdminPermission) {
+      return this.destinations;
+    }
+
+    return this.destinations.filter(item => item.categoryId === request.categoryId);
   }
 
   get transferWaves(): SummerWaveDefinition[] {
@@ -322,6 +458,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     replyId: number;
     message: string;
     authorName: string;
+    isAdminAction: boolean;
     createdDate?: string;
     attachments: Array<{ id: number; name: string; size: number }>;
   }> {
@@ -333,6 +470,8 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           message?: unknown;
           authorName?: unknown;
           authorId?: unknown;
+          isAdminAction?: unknown;
+          IsAdminAction?: unknown;
           createdDate?: unknown;
           attchShipmentDtos?: Array<{ attchId?: unknown; id?: unknown; attchNm?: unknown; attchSize?: unknown }>;
         };
@@ -344,6 +483,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
             String(replyAny.authorName ?? '').trim(),
             String(replyAny.authorId ?? '').trim()
           ),
+          isAdminAction: this.parseReplyAdminFlag(replyAny.isAdminAction ?? replyAny.IsAdminAction),
           createdDate: replyAny.createdDate ? String(replyAny.createdDate) : undefined,
           attachments: (replyAny.attchShipmentDtos ?? [])
             .map(item => ({
@@ -405,6 +545,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return false;
     }
 
+    if (this.hasSummerAdminPermission) {
+      return true;
+    }
+
     if (this.isRejectedStatus(request.status)) {
       return false;
     }
@@ -419,6 +563,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   getEditBlockedReason(request: SummerRequestSummaryDto | undefined | null): string {
     if (!request) {
       return 'لا يمكن تعديل الطلب.';
+    }
+
+    if (this.hasSummerAdminPermission) {
+      return '';
     }
 
     if (this.isRejectedStatus(request.status)) {
@@ -443,16 +591,46 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.creatingEditLink) {
+      return;
+    }
+
+    this.creatingEditLink = true;
     this.activeTabIndex = 0;
-    this.router.navigate(['/EmployeeRequests/SummerRequests/edit', request.messageId]);
+    this.summerWorkflowController.createEditToken({
+      messageId: request.messageId,
+      oneTimeUse: false
+    }).subscribe({
+      next: response => {
+        const token = String(response?.data ?? '').trim();
+        if (response?.isSuccess && token.length > 0) {
+          this.router.navigate([this.getEditRoutePrefix(), token]);
+          return;
+        }
+
+        const errors = (response?.errors ?? [])
+          .map(item => String(item?.message ?? '').trim())
+          .filter(item => item.length > 0)
+          .join('<br/>');
+        this.msg.msgError('تعذر إنشاء رابط التعديل', `<h5>${errors || 'تعذر إنشاء رابط تعديل آمن للطلب.'}</h5>`, true);
+      },
+      error: () => {
+        this.msg.msgError('تعذر إنشاء رابط التعديل', '<h5>حدث خطأ أثناء إنشاء رابط تعديل آمن للطلب.</h5>', true);
+      },
+      complete: () => {
+        this.creatingEditLink = false;
+      }
+    });
   }
 
   exitEditMode(openMyRequestsTab = false): void {
+    this.editRouteToken = null;
     this.editRequestId = null;
+    this.resolvingEditToken = false;
     if (openMyRequestsTab) {
       this.activeTabIndex = 1;
     }
-    this.router.navigate(['/EmployeeRequests/SummerRequests']);
+    this.router.navigate([this.getEditExitRoute()]);
   }
 
   addFiles(event: Event, bucket: FileBucket): void {
@@ -547,6 +725,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   submitPayment(): void {
     this.paymentForm.markAllAsTouched();
     if (this.paymentForm.invalid) {
+      if (this.paymentForm.get('paidAtLocal')?.hasError(this.paymentInFutureErrorKey)) {
+        this.msg.msgError('خطأ', `<h5>${this.paymentInFutureMessage}</h5>`, true);
+        return;
+      }
       this.msg.msgError('خطأ', '<h5>يرجى استكمال بيانات السداد.</h5>', true);
       return;
     }
@@ -556,18 +738,46 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const currentRequest = this.selectedRequest;
+    if (currentRequest && this.isPaymentOverdue(currentRequest)) {
+      const dueAtText = this.formatUtcDate(currentRequest.paymentDueAtUtc);
+      const overdueMessage = dueAtText
+        ? `انتهت مهلة السداد لهذا الطلب. آخر موعد كان ${dueAtText}.`
+        : 'انتهت مهلة السداد لهذا الطلب.';
+      this.msg.msgError('خطأ', `<h5>${overdueMessage}</h5>`, true);
+      return;
+    }
+
+    if (currentRequest && isRejectedStatus(String(currentRequest.statusLabel ?? currentRequest.status ?? ''))) {
+      this.msg.msgError('خطأ', '<h5>لا يمكن تسجيل السداد لطلب تم إلغاؤه أو الاعتذار عنه.</h5>', true);
+      return;
+    }
+
     if (this.paymentAttachments.length === 0) {
       this.msg.msgError('خطأ', '<h5>يجب إرفاق ملف واحد على الأقل قبل تسجيل السداد.</h5>', true);
       return;
     }
 
-    const paidAtLocal = String(this.paymentForm.get('paidAtLocal')?.value ?? '').trim();
-    const paidAtUtcIso = paidAtLocal ? new Date(paidAtLocal).toISOString() : '';
+    const paymentFormValue = this.paymentForm.getRawValue();
+    const paymentStatus: SummerPaymentStatusCode = this.hasSummerAdminPermission
+      ? this.normalizePaymentStatusSelection(paymentFormValue.paymentStatus)
+      : 'PAID';
+    const isPaidStatus = paymentStatus === 'PAID';
+    const paidAtLocal = isPaidStatus
+      ? String(paymentFormValue.paidAtLocal ?? '').trim()
+      : '';
+    const paidAtParsed = this.parseDateTimeLocalInput(paidAtLocal);
+    if (isPaidStatus && !paidAtParsed) {
+      this.msg.msgError('خطأ', '<h5>يرجى تحديد تاريخ ووقت سداد صالح.</h5>', true);
+      return;
+    }
+    const paidAtUtcIso = isPaidStatus && paidAtParsed ? paidAtParsed.toISOString() : '';
 
     this.submittingPayment = true;
     this.summerWorkflowController.pay({
       messageId: this.selectedRequestId,
       paidAtUtc: paidAtUtcIso,
+      paymentStatus,
       forceOverride: false,
       notes: String(this.paymentForm.get('notes')?.value ?? '').trim(),
       files: this.toFileParameters(this.paymentAttachments)
@@ -575,7 +785,13 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       next: response => {
         if (response?.isSuccess) {
           this.msg.msgSuccess(SUMMER_UI_TEXTS_AR.success.payCompleted);
-          this.paymentForm.reset({ paidAtLocal: '', notes: '' });
+          this.paymentForm.reset({
+            paymentStatus: 'PAID',
+            paidAtLocal: '',
+            notes: ''
+          });
+          this.updatePaymentDateValidators();
+          this.applyPaymentStatusEditAccess();
           this.paymentAttachments = [];
           if (response.data) {
             this.upsertMyRequestSummary(response.data);
@@ -590,8 +806,9 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
         this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
       },
-      error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تسجيل السداد حاليًا.</h5>', true);
+      error: (error: unknown) => {
+        const errorMessage = this.collectHttpErrors(error, 'تعذر تسجيل السداد حاليًا.');
+        this.msg.msgError('خطأ', `<h5>${errorMessage}</h5>`, true);
       },
       complete: () => {
         this.submittingPayment = false;
@@ -619,6 +836,14 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     const destination = this.transferDestination;
     if (!destination) {
       this.msg.msgError('خطأ', '<h5>الوجهة المستهدفة غير صالحة.</h5>', true);
+      return;
+    }
+
+    const currentRequest = this.selectedRequest;
+    if (!this.hasSummerAdminPermission
+      && currentRequest
+      && destination.categoryId !== currentRequest.categoryId) {
+      this.msg.msgError('خطأ', '<h5>التحويل للمستخدم متاح بين الأفواج داخل نفس المصيف فقط.</h5>', true);
       return;
     }
 
@@ -678,6 +903,18 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   selectRequest(messageId: number): void {
     this.selectedRequestId = messageId;
     this.selectedRequestDetailsError = '';
+    this.paymentSnapshot = null;
+    this.paymentAttachments = [];
+    this.paymentForm.reset(
+      {
+        paymentStatus: 'PAID',
+        paidAtLocal: '',
+        notes: ''
+      },
+      { emitEvent: false }
+    );
+    this.updatePaymentDateValidators();
+    this.applyPaymentStatusEditAccess();
     const current = this.selectedRequest;
     if (!current) {
       this.selectedRequestDetails = null;
@@ -686,7 +923,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
     this.transferForm.patchValue(
       {
-        toCategoryId: null,
+        toCategoryId: this.hasSummerAdminPermission ? null : (current.categoryId ?? null),
         toWaveCode: '',
         newFamilyCount: null,
         newExtraCount: 0,
@@ -695,6 +932,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       { emitEvent: false }
     );
     this.transferWaveCapacities = [];
+    this.applyTransferRules(this.getNumberValue(this.transferForm.get('toCategoryId')));
     this.applyTransferExtraRules();
     this.loadSelectedRequestDetails(messageId);
   }
@@ -741,6 +979,10 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           if (this.isEditMode && this.editRequestId) {
             const editRequest = this.myRequests.find(item => item.messageId === this.editRequestId);
             if (!editRequest) {
+              if (this.isAdminEditHost) {
+                return;
+              }
+
               this.msg.msgError('خطأ', '<h5>تعذر العثور على الطلب المطلوب للتعديل ضمن طلباتك الحالية.</h5>', true);
               this.exitEditMode(true);
               return;
@@ -762,6 +1004,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           if (this.selectedRequestId && !this.myRequests.some(item => item.messageId === this.selectedRequestId)) {
             this.selectedRequestId = null;
             this.selectedRequestDetails = null;
+            this.paymentSnapshot = null;
           } else if (this.selectedRequestId) {
             this.loadSelectedRequestDetails(this.selectedRequestId);
           }
@@ -772,6 +1015,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         this.requestsFirst = 0;
         this.selectedRequestId = null;
         this.selectedRequestDetails = null;
+        this.paymentSnapshot = null;
         this.seasonTransferAlreadyUsed = false;
       },
       error: () => {
@@ -779,6 +1023,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
         this.requestsFirst = 0;
         this.selectedRequestId = null;
         this.selectedRequestDetails = null;
+        this.paymentSnapshot = null;
         this.seasonTransferAlreadyUsed = false;
       },
       complete: () => {
@@ -802,6 +1047,37 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     }
 
     return Date.now() > due.getTime();
+  }
+
+  getPaymentMaxDateTimeLocal(): string {
+    return this.toDateTimeLocalInputValue(new Date());
+  }
+
+  hasPaymentInFutureError(): boolean {
+    const control = this.paymentForm.get('paidAtLocal');
+    return Boolean(
+      control?.hasError(this.paymentInFutureErrorKey)
+      && (control.touched || control.dirty)
+    );
+  }
+
+  getCancelDeductionMessage(request: SummerRequestSummaryDto | undefined | null): string {
+    if (!request) {
+      return '';
+    }
+
+    const destination = this.destinations.find(item => item.categoryId === request.categoryId);
+    const deductionAmount = resolveSummerCancelDeductionAmount({
+      categoryId: request.categoryId,
+      destinationSlug: destination?.slug,
+      destinationName: destination?.name || request.categoryName
+    });
+
+    if (!deductionAmount || deductionAmount <= 0) {
+      return '';
+    }
+
+    return buildSummerCancelDeductionMessage(deductionAmount);
   }
 
   getStatusClass(request: SummerRequestSummaryDto): string {
@@ -982,23 +1258,95 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     });
   }
 
-  private bindRouteMode(): void {
-    const routeSub = this.route.paramMap.subscribe(params => {
-      const parsedId = this.parsePositiveInt(params.get('id'));
-      this.editRequestId = parsedId;
+  private getEditRoutePrefix(): string {
+    return this.isAdminEditHost
+      ? '/EmployeeRequests/SummerRequestsManagement/edit'
+      : '/EmployeeRequests/SummerRequests/edit';
+  }
 
-      if (parsedId) {
-        this.activeTabIndex = 0;
-        const matched = this.myRequests.find(item => item.messageId === parsedId);
-        if (matched) {
-          this.selectedRequestId = matched.messageId;
-          this.loadSelectedRequestDetails(matched.messageId);
-        }
+  private getEditExitRoute(): string {
+    return this.isAdminEditHost
+      ? '/EmployeeRequests/SummerRequestsManagement'
+      : '/EmployeeRequests/SummerRequests';
+  }
+
+  private bindRouteMode(): void {
+    const routeDataSub = this.route.data.subscribe(data => {
+      const host = String(data?.['summerEditHost'] ?? '').trim().toLowerCase();
+      if (host === 'admin') {
+        this.isAdminEditHost = true;
         return;
       }
+
+      if (host === 'employee') {
+        this.isAdminEditHost = false;
+        return;
+      }
+
+      const currentUrl = String(this.router.url ?? '').trim().toLowerCase();
+      this.isAdminEditHost = currentUrl.includes('/employeeRequests/summerrequestsmanagement/edit'.toLowerCase());
+    });
+    this.subscriptions.add(routeDataSub);
+
+    const routeSub = this.route.paramMap.subscribe(params => {
+      const routeToken = String(params.get('token') ?? params.get('id') ?? '').trim();
+      if (routeToken.length === 0) {
+        this.editRouteToken = null;
+        this.editRequestId = null;
+        this.resolvingEditToken = false;
+        return;
+      }
+
+      if (this.editRouteToken === routeToken && (this.resolvingEditToken || Number(this.editRequestId ?? 0) > 0)) {
+        return;
+      }
+
+      this.editRouteToken = routeToken;
+      this.editRequestId = null;
+      this.resolvingEditToken = true;
+      this.activeTabIndex = 0;
+
+      this.summerWorkflowController.resolveEditToken(routeToken).subscribe({
+        next: response => {
+          if (this.editRouteToken !== routeToken) {
+            return;
+          }
+
+          const resolvedMessageId = Number(response?.data?.messageId ?? 0);
+          if (response?.isSuccess && Number.isFinite(resolvedMessageId) && resolvedMessageId > 0) {
+            this.editRequestId = Math.floor(resolvedMessageId);
+            const matched = this.myRequests.find(item => item.messageId === this.editRequestId);
+            if (matched) {
+              this.selectedRequestId = matched.messageId;
+              this.loadSelectedRequestDetails(matched.messageId);
+            }
+            return;
+          }
+
+          this.handleEditTokenResolutionFailure(response?.errors);
+        },
+        error: () => {
+          this.handleEditTokenResolutionFailure();
+        },
+        complete: () => {
+          this.resolvingEditToken = false;
+        }
+      });
     });
 
     this.subscriptions.add(routeSub);
+  }
+
+  private handleEditTokenResolutionFailure(errors?: Array<{ message?: string }>): void {
+    const message = (errors ?? [])
+      .map(item => String(item?.message ?? '').trim())
+      .filter(item => item.length > 0)
+      .join('<br/>');
+    this.msg.msgError('رابط تعديل غير صالح', `<h5>${message || 'رابط التعديل غير صالح أو منتهي الصلاحية.'}</h5>`, true);
+    this.editRouteToken = null;
+    this.editRequestId = null;
+    this.resolvingEditToken = false;
+    this.router.navigate([this.getEditExitRoute()]);
   }
 
   private loadSelectedRequestDetails(messageId: number): void {
@@ -1009,6 +1357,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       next: response => {
         if (response?.isSuccess && response.data) {
           this.selectedRequestDetails = this.normalizeLoadedRequestDetails(response.data, messageId);
+          this.refreshPaymentSnapshot();
           this.selectedRequestDetailsError = '';
           return;
         }
@@ -1044,6 +1393,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
 
       if (index >= queries.length) {
         this.selectedRequestDetails = null;
+        this.paymentSnapshot = null;
         this.selectedRequestDetailsError = this.resolveRequestDetailsErrorMessage(
           collectedErrors,
           'تعذر تحميل تفاصيل الطلب من الخدمة حالياً.'
@@ -1070,6 +1420,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
           if (matched) {
             resolved = true;
             this.selectedRequestDetails = matched;
+            this.refreshPaymentSnapshot();
             this.selectedRequestDetailsError = '';
           }
         },
@@ -1087,6 +1438,362 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     };
 
     runAttempt(0);
+  }
+
+  private bindPaymentRules(): void {
+    const statusSub = this.paymentForm.get('paymentStatus')?.valueChanges.subscribe(() => {
+      this.updatePaymentDateValidators();
+    });
+    if (statusSub) {
+      this.subscriptions.add(statusSub);
+    }
+  }
+
+  private refreshPaymentSnapshot(): void {
+    this.paymentSnapshot = this.buildPaymentSnapshot();
+    const notesValue = String(this.paymentForm.get('notes')?.value ?? '').trim();
+    const paymentStatusControl = this.paymentForm.get('paymentStatus');
+    const paidAtControl = this.paymentForm.get('paidAtLocal');
+    if (!paymentStatusControl || !paidAtControl) {
+      return;
+    }
+
+    const paymentStatus = this.hasSummerAdminPermission
+      ? (this.paymentSnapshot?.statusCode ?? 'PAID')
+      : 'PAID';
+    paymentStatusControl.setValue(paymentStatus, { emitEvent: false });
+    paidAtControl.setValue(this.paymentSnapshot?.paidAtLocal ?? '', { emitEvent: false });
+    this.paymentForm.get('notes')?.setValue(notesValue, { emitEvent: false });
+
+    this.updatePaymentDateValidators();
+    this.applyPaymentStatusEditAccess();
+  }
+
+  private updatePaymentDateValidators(): void {
+    const paidAtControl = this.paymentForm.get('paidAtLocal');
+    if (!paidAtControl) {
+      return;
+    }
+
+    if (this.isSelectedPaymentStatusPaid()) {
+      paidAtControl.setValidators([Validators.required, this.paymentDateNotInFutureValidator]);
+    } else {
+      paidAtControl.setValidators([this.paymentDateNotInFutureValidator]);
+    }
+
+    paidAtControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private applyPaymentStatusEditAccess(): void {
+    const paymentStatusControl = this.paymentForm.get('paymentStatus');
+    if (!paymentStatusControl) {
+      return;
+    }
+
+    if (this.hasSummerAdminPermission) {
+      paymentStatusControl.enable({ emitEvent: false });
+    } else {
+      paymentStatusControl.disable({ emitEvent: false });
+    }
+  }
+
+  private isSelectedPaymentStatusPaid(): boolean {
+    if (!this.hasSummerAdminPermission) {
+      return true;
+    }
+
+    const paymentStatus = this.paymentForm.get('paymentStatus')?.value;
+    return this.normalizePaymentStatusSelection(paymentStatus) === 'PAID';
+  }
+
+  private normalizePaymentStatusSelection(value: unknown): SummerPaymentStatusCode {
+    if (typeof value === 'boolean') {
+      return value ? 'PAID' : 'UNPAID';
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return 'PAID';
+    }
+
+    const compact = normalized
+      .replace(/[\s_-]+/g, '')
+      .replace('إ', 'ا')
+      .replace('أ', 'ا')
+      .replace('آ', 'ا');
+
+    if (
+      compact === 'paid'
+      || compact === 'true'
+      || compact === '1'
+      || compact === 'yes'
+      || compact === 'y'
+      || compact === 'مسدد'
+      || compact === 'تمالسداد'
+    ) {
+      return 'PAID';
+    }
+
+    if (
+      compact === 'unpaid'
+      || compact === 'notpaid'
+      || compact === 'pendingpayment'
+      || compact === 'pending'
+      || compact === 'false'
+      || compact === '0'
+      || compact === 'no'
+      || compact === 'n'
+      || compact === 'غيرمسدد'
+      || compact === 'غيرمدفوع'
+      || compact === 'بانتظارالسداد'
+      || compact === 'pedingpayment'
+      || compact.includes('cancel')
+      || compact.includes('ملغي')
+    ) {
+      return 'UNPAID';
+    }
+
+    return 'PAID';
+  }
+
+  private buildPaymentSnapshot(): SummerPaymentSnapshot | null {
+    const fields = this.selectedRequestDetails?.fields ?? [];
+    if (fields.length === 0 && !this.selectedRequest) {
+      return null;
+    }
+
+    const paymentModeCode = this.resolvePaymentModeCode(fields);
+    const paymentModeLabel = paymentModeCode === 'INSTALLMENT' ? 'تقسيط' : 'كاش';
+    const installmentLabel = paymentModeCode === 'INSTALLMENT'
+      ? 'مقدم الحجز'
+      : 'قسط واحد (كاش)';
+
+    const amount = paymentModeCode === 'INSTALLMENT'
+      ? this.resolveInstallmentAmount(fields, 1)
+      : this.resolveCashInstallmentAmount(fields);
+
+    const installmentPaidRaw = this.getFieldTextByAliases(fields, [
+      ...this.resolveInstallmentPaidFieldKeys(1),
+      'Summer_PaymentInstallment1Paid',
+      'SUM2026_PaymentInstallment1Paid'
+    ]);
+    const installmentPaidAtRaw = this.getFieldTextByAliases(fields, [
+      ...this.resolveInstallmentPaidAtFieldKeys(1),
+      'Summer_PaymentInstallment1PaidAtUtc',
+      'SUM2026_PaymentInstallment1PaidAtUtc'
+    ]);
+    const paidAtRaw = installmentPaidAtRaw
+      || this.getFieldTextByAliases(fields, ['Summer_PaidAtUtc', 'SUM2026_PaidAtUtc', 'PaidAtUtc']);
+    const statusRaw = this.getFieldTextByAliases(fields, ['Summer_PaymentStatus', 'SUM2026_PaymentStatus', 'PaymentStatus']);
+
+    const parsedInstallmentPaid = this.parseBooleanLike(installmentPaidRaw);
+    let statusCode: SummerPaymentStatusCode;
+    if (parsedInstallmentPaid !== null) {
+      statusCode = parsedInstallmentPaid ? 'PAID' : 'UNPAID';
+    } else if (statusRaw.length > 0) {
+      statusCode = this.normalizePaymentStatusSelection(statusRaw);
+    } else {
+      statusCode = paidAtRaw.length > 0 ? 'PAID' : 'UNPAID';
+    }
+
+    const paidAtDisplay = statusCode === 'PAID' && paidAtRaw.length > 0
+      ? this.formatUtcDate(paidAtRaw)
+      : '-';
+    const paidAtLocal = statusCode === 'PAID' ? this.toDateTimeLocalInputFromUtc(paidAtRaw) : '';
+
+    return {
+      paymentModeCode,
+      paymentModeLabel,
+      installmentLabel,
+      amountText: this.formatMoney(amount),
+      paidAtDisplay: toDisplayOrDash(paidAtDisplay),
+      paidAtLocal,
+      statusCode,
+      statusLabel: statusCode === 'PAID' ? 'مسدد' : 'غير مسدد'
+    };
+  }
+
+  private resolvePaymentModeCode(fields: TkmendField[]): 'INSTALLMENT' | 'CASH' {
+    const paymentModeRaw = this.getFieldTextByAliases(fields, ['Summer_PaymentMode', 'SUM2026_PaymentMode', 'PaymentMode']);
+    const paymentModeToken = String(paymentModeRaw ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, '');
+
+    if (paymentModeToken.includes('installment') || paymentModeToken.includes('تقسيط')) {
+      return 'INSTALLMENT';
+    }
+
+    if (paymentModeToken.includes('cash') || paymentModeToken.includes('كاش') || paymentModeToken.includes('نقد')) {
+      return 'CASH';
+    }
+
+    const installmentCount = this.parseInteger(this.getFieldTextByAliases(fields, ['Summer_PaymentInstallmentCount', 'SUM2026_PaymentInstallmentCount']));
+    if (installmentCount > 1) {
+      return 'INSTALLMENT';
+    }
+
+    const secondInstallmentAmount = this.resolveInstallmentAmount(fields, 2);
+    return secondInstallmentAmount > 0 ? 'INSTALLMENT' : 'CASH';
+  }
+
+  private resolveInstallmentAmount(fields: TkmendField[], installmentNo: number): number {
+    return this.parseDecimal(
+      this.getFieldTextByAliases(fields, this.resolveInstallmentAmountFieldKeys(installmentNo))
+    );
+  }
+
+  private resolveCashInstallmentAmount(fields: TkmendField[]): number {
+    const grandTotal = this.parseDecimal(this.getFieldTextByAliases(fields, [
+      'Summer_PricingGrandTotal',
+      'SUM2026_PricingGrandTotal',
+      'PricingGrandTotal',
+      'Summer_GrandTotal',
+      'SUM2026_GrandTotal'
+    ]));
+    if (grandTotal > 0) {
+      return grandTotal;
+    }
+
+    const installmentTotal = this.parseDecimal(this.getFieldTextByAliases(fields, [
+      'Summer_PaymentInstallmentsTotal',
+      'SUM2026_PaymentInstallmentsTotal'
+    ]));
+    if (installmentTotal > 0) {
+      return installmentTotal;
+    }
+
+    return this.resolveInstallmentAmount(fields, 1);
+  }
+
+  private resolveInstallmentAmountFieldKeys(installmentNo: number): string[] {
+    const normalizedNo = Math.max(1, Math.min(SUMMER_INSTALLMENTS_MAX_COUNT, Math.floor(Number(installmentNo) || 1)));
+    return [
+      `Summer_PaymentInstallment${normalizedNo}Amount`,
+      `SUM2026_PaymentInstallment${normalizedNo}Amount`
+    ];
+  }
+
+  private resolveInstallmentPaidFieldKeys(installmentNo: number): string[] {
+    const normalizedNo = Math.max(1, Math.min(SUMMER_INSTALLMENTS_MAX_COUNT, Math.floor(Number(installmentNo) || 1)));
+    return [
+      `Summer_PaymentInstallment${normalizedNo}Paid`,
+      `SUM2026_PaymentInstallment${normalizedNo}Paid`
+    ];
+  }
+
+  private resolveInstallmentPaidAtFieldKeys(installmentNo: number): string[] {
+    const normalizedNo = Math.max(1, Math.min(SUMMER_INSTALLMENTS_MAX_COUNT, Math.floor(Number(installmentNo) || 1)));
+    return [
+      `Summer_PaymentInstallment${normalizedNo}PaidAtUtc`,
+      `SUM2026_PaymentInstallment${normalizedNo}PaidAtUtc`
+    ];
+  }
+
+  private parseBooleanLike(value: unknown): boolean | null {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    const compact = normalized
+      .replace(/[\s_-]+/g, '')
+      .replace('إ', 'ا')
+      .replace('أ', 'ا')
+      .replace('آ', 'ا');
+
+    if (compact === 'true' || compact === '1' || compact === 'yes' || compact === 'y' || compact === 'نعم') {
+      return true;
+    }
+
+    if (compact === 'false' || compact === '0' || compact === 'no' || compact === 'n' || compact === 'لا') {
+      return false;
+    }
+
+    return null;
+  }
+
+  private getFieldTextByAliases(fields: TkmendField[], aliases: string[]): string {
+    const normalizedAliases = aliases
+      .map(alias => String(alias ?? '').trim().toLowerCase())
+      .filter(alias => alias.length > 0);
+
+    if (normalizedAliases.length === 0) {
+      return '';
+    }
+
+    for (const alias of normalizedAliases) {
+      const matches = fields.filter(field =>
+        String(field?.fildKind ?? '').trim().toLowerCase() === alias);
+      if (matches.length === 0) {
+        continue;
+      }
+
+      const persistedMatches = matches.filter(field => Number(field?.fildSql ?? 0) > 0);
+      const latestField = (persistedMatches.length > 0 ? persistedMatches : matches)
+        .reduce((latest, current) =>
+          Number(current?.fildSql ?? 0) >= Number(latest?.fildSql ?? 0) ? current : latest
+        );
+
+      const text = String(latestField?.fildTxt ?? '').trim();
+      if (text.length > 0) {
+        return text;
+      }
+    }
+
+    return '';
+  }
+
+  private parseDecimal(value: unknown): number {
+    const raw = String(value ?? '').trim();
+    if (!raw) {
+      return 0;
+    }
+
+    const normalized = raw
+      .replace(/,/g, '')
+      .replace(/٫/g, '.')
+      .replace(/[^\d.-]/g, '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private parseInteger(value: unknown): number {
+    const parsed = Math.floor(this.parseDecimal(value));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private formatMoney(value: number): string {
+    const normalized = Number.isFinite(value) ? Math.max(0, value) : 0;
+    if (normalized <= 0) {
+      return '-';
+    }
+
+    const rounded = Math.round(normalized * 100) / 100;
+    const hasFraction = Math.abs(rounded - Math.trunc(rounded)) > 0.0001;
+    const display = rounded.toLocaleString('en-US', {
+      minimumFractionDigits: hasFraction ? 2 : 0,
+      maximumFractionDigits: 2
+    });
+    return `${display} جنيه`;
+  }
+
+  private toDateTimeLocalInputFromUtc(value: string): string {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    return this.toDateTimeLocalInputValue(parsed);
   }
 
   private bindTransferRules(): void {
@@ -1114,7 +1821,7 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private applyTransferRules(categoryId: number): void {
-    const destination = this.destinations.find(item => item.categoryId === categoryId);
+    const destination = this.transferDestinationOptions.find(item => item.categoryId === categoryId);
     if (!destination) {
       this.transferWaveCapacities = [];
       this.transferForm.patchValue(
@@ -1340,6 +2047,22 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     return String(getFieldValueByKeys(fields, ['Summer_CancelReason']) ?? '').trim();
   }
 
+  private refreshDestinationAccess(): void {
+    try {
+      const hasSummerGeneralManagerPermission =
+        this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc')
+        || this.authObjectsService.checkAuthRole('2021');
+      this.hasSummerAdminPermission =
+        this.authObjectsService.checkAuthFun('SummerAdminFunc')
+        || this.authObjectsService.checkAuthRole('2020')
+        || hasSummerGeneralManagerPermission;
+    } catch {
+      this.hasSummerAdminPermission = false;
+    }
+
+    this.applyPaymentStatusEditAccess();
+  }
+
   private toFileParameters(files: File[]): FileParameter[] {
     return files.map(file => ({
       data: file,
@@ -1356,6 +2079,74 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     return errors.length ? errors.join('<br/>') : 'لا توجد رسائل خطأ.';
   }
 
+  private collectHttpErrors(error: unknown, fallbackMessage: string): string {
+    const messages: string[] = [];
+    const appendMessage = (value: unknown): void => {
+      const text = String(value ?? '').trim();
+      if (!text || messages.includes(text)) {
+        return;
+      }
+      messages.push(text);
+    };
+
+    const collectFromPayload = (payload: unknown): void => {
+      if (!payload) {
+        return;
+      }
+
+      if (typeof payload === 'string') {
+        const trimmed = payload.trim();
+        if (!trimmed) {
+          return;
+        }
+
+        try {
+          collectFromPayload(JSON.parse(trimmed));
+        } catch {
+          appendMessage(trimmed);
+        }
+        return;
+      }
+
+      if (typeof payload !== 'object') {
+        return;
+      }
+
+      const record = payload as Record<string, unknown>;
+      const responseErrors = Array.isArray(record['errors']) ? record['errors'] : [];
+      responseErrors.forEach(item => {
+        if (item && typeof item === 'object') {
+          appendMessage((item as Record<string, unknown>)['message']);
+        }
+      });
+
+      const validationErrors = record['errors'];
+      if (validationErrors && !Array.isArray(validationErrors) && typeof validationErrors === 'object') {
+        Object.values(validationErrors as Record<string, unknown>).forEach(group => {
+          if (Array.isArray(group)) {
+            group.forEach(entry => appendMessage(entry));
+          }
+        });
+      }
+
+      appendMessage(record['message']);
+      appendMessage(record['detail']);
+      appendMessage(record['title']);
+    };
+
+    if (error instanceof HttpErrorResponse) {
+      collectFromPayload(error.error);
+      appendMessage(error.message);
+    } else {
+      const record = (error ?? {}) as Record<string, unknown>;
+      collectFromPayload(record['error']);
+      collectFromPayload(record['response']);
+      appendMessage(record['message']);
+    }
+
+    return messages.length > 0 ? messages.join('<br/>') : fallbackMessage;
+  }
+
   private getNumberValue(control: AbstractControl | null): number {
     const raw = control?.value;
     const numeric = Number(raw);
@@ -1368,6 +2159,50 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
       return null;
     }
     return Math.floor(parsed);
+  }
+
+  private parseReplyAdminFlag(value: unknown): boolean {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return normalized === 'true' || normalized === '1';
+  }
+
+  private tryParseDate(value: unknown): Date | null {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private parseDateTimeLocalInput(value: string): Date | null {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const withSeconds = normalized.length === 16 ? `${normalized}:00` : normalized;
+    const parsed = new Date(withSeconds);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private toDateTimeLocalInputValue(value: Date): string {
+    const year = String(value.getFullYear());
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    const hours = String(value.getHours()).padStart(2, '0');
+    const minutes = String(value.getMinutes()).padStart(2, '0');
+    const seconds = String(value.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+  }
+
+  private toComparableUnixSecond(value: Date): number {
+    return Math.floor(value.getTime() / 1000);
   }
 
   private normalizeLoadedRequestDetails(raw: unknown, fallbackMessageId?: number): MessageDto | null {
@@ -1734,6 +2569,3 @@ export class SummerRequestsWorkspaceComponent implements OnInit, OnDestroy {
     return combined || fallback;
   }
 }
-
-
-

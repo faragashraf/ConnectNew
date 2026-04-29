@@ -34,5 +34,6 @@ public partial class Cdcategory
     public int? CatIntervalCount { get; set; }
     public virtual ICollection<Application> Application { get; set; } = null!;
     public virtual ICollection<CdCategoryMand> CdCategoryMands { get; set; } = new List<CdCategoryMand>();
+    public virtual ICollection<AdminCatalogCategoryGroup> AdminCatalogCategoryGroups { get; set; } = new List<AdminCatalogCategoryGroup>();
 
 }

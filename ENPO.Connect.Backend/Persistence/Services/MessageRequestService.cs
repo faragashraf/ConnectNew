@@ -11,6 +11,7 @@ using Models.DTO.Common;
 using Models.DTO.Correspondance;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.Summer;
 
 namespace Persistence.Services
 {
@@ -65,7 +66,15 @@ namespace Persistence.Services
                 if (messageRequest.Fields != null && messageRequest.Fields.Any())
                 {
                     var msgId = messageRequest.MessageId.HasValue ? messageRequest.MessageId.Value : throw new InvalidOperationException("MessageId not set");
-                    var _mataData = await _connectContext.Cdmends.ToListAsync();
+                    var dateFieldKinds = await _connectContext.Cdmends
+                        .AsNoTracking()
+                        .Where(x => x.CdmendType != null
+                            && x.CdmendTxt != null
+                            && x.CdmendType.ToLower() == "date")
+                        .Select(x => x.CdmendTxt!.Trim())
+                        .Distinct()
+                        .ToListAsync();
+                    var dateFieldKindSet = new HashSet<string>(dateFieldKinds, StringComparer.OrdinalIgnoreCase);
                     messageRequest.Fields.ForEach(f =>
                     {
                         f.FildRelted = msgId;
@@ -73,12 +82,9 @@ namespace Persistence.Services
                         // Keep the client-provided instance id as-is.
                         // Frontend sends stable instance numbering and edits rely on exact matching.
 
-                        if (_mataData.Where(x => x.CdmendType!.Equals("date", StringComparison.OrdinalIgnoreCase)).DefaultIfEmpty().Any())
+                        if (ShouldNormalizeToShortDate(f.FildKind, f.FildTxt, dateFieldKindSet))
                         {
-                            if (!string.IsNullOrEmpty(f.FildTxt))
-                            {
-                                f.FildTxt = helperService.NormalizeToShortDate(f.FildTxt);
-                            }
+                            f.FildTxt = helperService.NormalizeToShortDate(f.FildTxt!);
                         }
                     });
                     await _connectContext.TkmendFields.AddRangeAsync(messageRequest.Fields);
@@ -110,6 +116,48 @@ namespace Persistence.Services
 
                 throw;
             }
+        }
+
+        private static bool ShouldNormalizeToShortDate(
+            string? fieldKind,
+            string? fieldValue,
+            HashSet<string> dateFieldKinds)
+        {
+            if (string.IsNullOrWhiteSpace(fieldKind)
+                || string.IsNullOrWhiteSpace(fieldValue)
+                || dateFieldKinds == null
+                || dateFieldKinds.Count == 0)
+            {
+                return false;
+            }
+
+            var normalizedKind = fieldKind.Trim();
+            if (!dateFieldKinds.Contains(normalizedKind))
+            {
+                return false;
+            }
+
+            if (string.Equals(normalizedKind, SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalizedKind, SummerWorkflowDomainConstants.PaidAtUtcFieldKind, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalizedKind, SummerWorkflowDomainConstants.RequestCreatedAtUtcFieldKind, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return !ContainsTimePortion(fieldValue);
+        }
+
+        private static bool ContainsTimePortion(string? fieldValue)
+        {
+            var value = (fieldValue ?? string.Empty).Trim();
+            if (value.Length == 0)
+            {
+                return false;
+            }
+
+            return value.Contains('T', StringComparison.Ordinal)
+                || value.Contains(':', StringComparison.Ordinal)
+                || value.EndsWith("Z", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

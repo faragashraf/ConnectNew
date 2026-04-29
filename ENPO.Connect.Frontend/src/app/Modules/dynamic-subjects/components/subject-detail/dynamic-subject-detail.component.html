@@ -1,0 +1,118 @@
+<section class="detail-page">
+  <div class="loading" *ngIf="loading">جاري تحميل التفاصيل...</div>
+
+  <ng-container *ngIf="subject && !loading">
+    <header class="header">
+      <div>
+        <h2>{{ subject.subject || screenTitle }}</h2>
+        <p>
+          {{ subject.requestRef }} |
+          {{ toArabicStatusLabel(subject.status, subject.statusLabel) }} |
+          الاتجاه: {{ toArabicDirectionLabel(subject.documentDirection) }}
+        </p>
+      </div>
+      <div class="status-change" *ngIf="allowStatusChange">
+        <select [(ngModel)]="statusToApply">
+          <option *ngFor="let option of statusOptions" [ngValue]="option.value">{{ option.label }}</option>
+        </select>
+        <button type="button" (click)="applyStatus()">تطبيق الحالة</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h3>نظرة عامة</h3>
+      <div class="summary-grid">
+        <div><strong>النوع</strong><span>{{ subject.categoryId }}</span></div>
+        <div><strong>الاتجاه</strong><span>{{ toArabicDirectionLabel(subject.documentDirection) }}</span></div>
+        <div><strong>تم الإنشاء بواسطة</strong><span>{{ subject.createdBy }}</span></div>
+        <div><strong>تاريخ الإنشاء</strong><span>{{ subject.createdDate | date:'short' }}</span></div>
+        <div><strong>آخر تعديل</strong><span>{{ subject.lastModifiedDate | date:'short' }}</span></div>
+      </div>
+      <p class="description">{{ subject.description }}</p>
+    </section>
+
+    <section class="panel">
+      <h3>قيم الحقول الديناميكية</h3>
+      <div class="groups-wrap" *ngIf="dynamicControls && renderGroups.length > 0" [formGroup]="dynamicControls">
+        <section class="group-card" *ngFor="let group of renderGroups; trackBy: trackByGroup">
+          <header class="group-header">
+            <h3>{{ getGroupDisplayName(group) }}</h3>
+            <span>{{ group.fields.length }} حقل</span>
+          </header>
+
+          <div [formArrayName]="group.formArrayName" class="form-array">
+            <div *ngFor="let mandFiled of getFormArrayControls(group.formArrayName); let i = index" [formGroupName]="i" style="display: contents;">
+              <div *ngFor="let ctrlName of getControlNamesFromGroup(mandFiled)" style="display: contents;">
+                <app-generic-form-array
+                  [controlFullName]="ctrlName"
+                  [index]="i"
+                  [filtered_CategoryMand]="group.fields"
+                  [isDivDisabled]="readOnlyDynamicFields"
+                  [ticketForm]="dynamicControls"
+                  [mandFileds]="getFormArrayInstance(group.formArrayName)!"
+                  (genericEvent)="onDynamicFieldGenericEvent($event)">
+                </app-generic-form-array>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <p class="empty-text" *ngIf="!renderGroups || renderGroups.length === 0">
+        لا توجد حقول ديناميكية مهيأة لهذا النوع.
+      </p>
+    </section>
+
+    <section class="panel two-col" *ngIf="showAttachmentsSection || showEnvelopesSection">
+      <div *ngIf="showAttachmentsSection">
+        <h3>المرفقات</h3>
+        <ul>
+          <li *ngFor="let attachment of subject.attachments">{{ attachment.fileName }}</li>
+          <li *ngIf="subject.attachments.length === 0">لا توجد مرفقات.</li>
+        </ul>
+      </div>
+
+      <div *ngIf="showEnvelopesSection">
+        <h3>الأظرف المرتبطة</h3>
+        <ul>
+          <li *ngFor="let envelope of subject.linkedEnvelopes">
+            <a [routerLink]="['/DynamicSubjects/envelopes', envelope.envelopeId]">{{ envelope.envelopeRef }}</a>
+          </li>
+          <li *ngIf="subject.linkedEnvelopes.length === 0">لا يوجد أي ظرف مرتبط.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="panel two-col" *ngIf="showStakeholdersSection || showTasksSection">
+      <div *ngIf="showStakeholdersSection">
+        <h3>الجهات المعنية</h3>
+        <ul>
+          <li *ngFor="let stakeholder of subject.stakeholders">
+            {{ stakeholder.stockholderId }} - {{ toArabicPartyType(stakeholder.partyType) }}
+          </li>
+          <li *ngIf="subject.stakeholders.length === 0">لا توجد جهات معنية.</li>
+        </ul>
+      </div>
+      <div *ngIf="showTasksSection">
+        <h3>المهام</h3>
+        <ul>
+          <li *ngFor="let task of subject.tasks">
+            {{ task.actionTitle }} ({{ task.status === 1 ? 'منتهية' : 'مفتوحة' }})
+          </li>
+          <li *ngIf="subject.tasks.length === 0">لا توجد مهام.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="panel" *ngIf="showTimelineSection">
+      <h3>السجل الزمني</h3>
+      <ul class="timeline">
+        <li *ngFor="let eventItem of subject.timeline">
+          <strong>{{ toArabicEventType(eventItem.eventType) }}</strong>
+          <span>{{ toArabicTimelineTitle(eventItem.eventType, eventItem.eventTitle) }}</span>
+          <small>{{ eventItem.createdAtUtc | date:'short' }}</small>
+        </li>
+        <li *ngIf="subject.timeline.length === 0">لا توجد أحداث مسجلة بعد.</li>
+      </ul>
+    </section>
+  </ng-container>
+</section>

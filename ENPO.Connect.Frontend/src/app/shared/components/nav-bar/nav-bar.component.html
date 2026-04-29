@@ -49,6 +49,21 @@
                         <i class="pi pi-question-circle" style="font-size: 1.5rem; color: #555;"></i>
                     </div>
 
+                    <!-- Click Sound Mute/Unmute -->
+                    <div class="notification-wrapper sound-toggle-wrapper" style="margin-left: 1rem;">
+                        <button
+                            type="button"
+                            class="sound-toggle-btn"
+                            [class.is-muted]="!isClickSoundEnabled"
+                            [attr.aria-label]="clickSoundTooltipText"
+                            [attr.title]="clickSoundTooltipText"
+                            [pTooltip]="clickSoundTooltipText"
+                            tooltipPosition="bottom"
+                            (click)="toggleClickSound($event)">
+                            <i [class]="clickSoundIconClass"></i>
+                        </button>
+                    </div>
+
                     <!-- Notification Bell -->
                     <div id="tour-notification-bell" class="notification-wrapper"
                         (mouseenter)="showNotifications = true" (mouseleave)="showNotifications = false">
@@ -101,7 +116,7 @@
     </p-megaMenu>
 </div>
 
-<app-all-notifications [notifications]="signalRService.primMsgList" [(display)]="showAllNotificationsDialog">
+<app-all-notifications [notifications]="signalRService.Notification" [(display)]="showAllNotificationsDialog">
 </app-all-notifications>
 
 
@@ -371,6 +386,12 @@
                                             class="p-button-info p-button-outlined" (click)="testInfo()"></button>
                                         <button pButton type="button" label="تأكيد" icon="pi pi-question"
                                             class="p-button-help p-button-outlined" (click)="testConfirm()"></button>
+                                        <button pButton type="button" label="اختبار إشعار النظام" icon="pi pi-bell"
+                                            class="p-button-warning p-button-outlined"
+                                            (click)="testSystemNotification()"></button>
+                                        <button pButton type="button" label="اختبار سعة المصيف" icon="pi pi-bolt"
+                                            class="p-button-secondary p-button-outlined"
+                                            (click)="testSummerCapacityNotification()"></button>
                                     </div>
                                 </p-accordionTab>
                             </p-accordion>

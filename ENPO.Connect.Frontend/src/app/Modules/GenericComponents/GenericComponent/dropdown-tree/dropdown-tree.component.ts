@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, ViewChild } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ViewChild, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 import { CdCategoryMandDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';;
 import { GenericFormsService } from '../../GenericForms.service';
@@ -11,7 +11,7 @@ import { OverlayPanel } from 'primeng/overlaypanel';
   templateUrl: './dropdown-tree.component.html',
   styleUrls: ['./dropdown-tree.component.scss']
 })
-export class DropdownTreeComponent {
+export class DropdownTreeComponent implements OnInit, OnChanges {
   @ViewChild('op') overlayPanel!: OverlayPanel;
   @Input() parentForm!: FormGroup;
   @Input() control: any;
@@ -25,7 +25,75 @@ export class DropdownTreeComponent {
   @Output() genericEvent = new EventEmitter<{ selected?: any, parent?: any, topParent?: any, controlFullName: string, eventType: string, event?: any }>();
 
   selectedNode: TreeNode = {} as TreeNode;
+  dropdownOptions: { key: any; name: string }[] = [];
   constructor(public genericFormService: GenericFormsService) { }
+
+  ngOnInit(): void {
+    this.refreshDropdownOptions();
+    this.syncControlDisabledState();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['tree'] || changes['controlFullName']) {
+      this.refreshDropdownOptions();
+    }
+    if (changes['isDivDisabled'] || changes['tree'] || changes['isCurrentUser'] || changes['controlFullName'] || changes['control']) {
+      this.syncControlDisabledState();
+    }
+  }
+
+  private refreshDropdownOptions(): void {
+    const runtimeOptions = this.genericFormService.implementControlSelection(this.controlFullName) || [];
+    if (runtimeOptions.length > 0) {
+      this.dropdownOptions = runtimeOptions;
+      return;
+    }
+
+    if (Array.isArray(this.tree) && this.tree.length > 0) {
+      this.dropdownOptions = this.flattenTreeToOptions(this.tree);
+      return;
+    }
+
+    this.dropdownOptions = [];
+  }
+
+  private flattenTreeToOptions(nodes: any[]): { key: any; name: string }[] {
+    const out: { key: any; name: string }[] = [];
+    const visit = (items: any[]) => {
+      for (const node of items || []) {
+        const key = node?.key ?? node?.id ?? node?.data?.UNIT_ID ?? node?.data?.id ?? null;
+        const name = String(node?.label ?? node?.data?.UNIT_NAME ?? node?.data?.name ?? key ?? '').trim();
+        if (key !== null && key !== undefined && name.length > 0) {
+          out.push({ key, name });
+        }
+        if (Array.isArray(node?.children) && node.children.length > 0) {
+          visit(node.children);
+        }
+      }
+    };
+    visit(nodes);
+    return out;
+  }
+
+  private shouldDisableDropdown(): boolean {
+    return this.isDivDisabled
+      || this.tree.length > 0
+      || (this.genericFormService.GetPropertyValue(this.controlFullName, 'isDisabledInit') == 'true' && !this.isCurrentUser);
+  }
+
+  private syncControlDisabledState(): void {
+    const isDisabled = this.shouldDisableDropdown();
+    const ctrl = this.control;
+    if (!ctrl || typeof ctrl.disable !== 'function' || typeof ctrl.enable !== 'function') {
+      return;
+    }
+
+    if (isDisabled && !ctrl.disabled) {
+      ctrl.disable({ emitEvent: false });
+    } else if (!isDisabled && ctrl.disabled) {
+      ctrl.enable({ emitEvent: false });
+    }
+  }
 
   onChange(event: any) {
     const isClear = event && (event.value === null || event.value === undefined);
@@ -53,13 +121,16 @@ export class DropdownTreeComponent {
     const selectedKey = event && (event.node?.key ?? event.key ?? event.value ?? event.id ?? null);
 
     // If `control` is a FormControl-like object, set its value
+    const matchedOption = this.dropdownOptions.find(opt => String(opt.key) === String(selectedKey));
+    const normalizedSelectedKey = matchedOption ? matchedOption.key : selectedKey;
+
     if (this.control && typeof this.control.setValue === 'function') {
-      this.control.setValue(selectedKey);
+      this.control.setValue(normalizedSelectedKey);
     } else if (this.parentForm && this.controlFullName) {
       // Fallback: try to find control by name in the parent form
       const ctrl = this.parentForm.get ? this.parentForm.get(this.controlFullName) : null;
       if (ctrl && typeof ctrl.setValue === 'function') {
-        ctrl.setValue(selectedKey);
+        ctrl.setValue(normalizedSelectedKey);
       }
     }
 
@@ -67,7 +138,8 @@ export class DropdownTreeComponent {
     this.selectedNode = event && (event.node ?? event) as TreeNode;
 
     this.genericEvent.emit({ selected: this.getParent(), parent: this.getTopParent(), topParent: this.getParent(), controlFullName: this.controlFullName, eventType: 'treeSelect' });
-    this.overlayPanel.hide();
+    // Avoid NG0100 by closing the overlay after the current change-detection cycle.
+    Promise.resolve().then(() => this.overlayPanel?.hide());
   }
 
   nodeUnselection(event: any) {

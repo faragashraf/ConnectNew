@@ -490,6 +490,53 @@ textarea:disabled {
   text-align: right !important;
 }
 
+.acc-dialog.p-dialog {
+  direction: rtl;
+  text-align: right;
+  max-width: 96vw;
+}
+
+.acc-dialog .p-dialog-header,
+.acc-dialog .p-dialog-content,
+.acc-dialog .p-dialog-footer {
+  direction: rtl;
+  text-align: right;
+}
+
+.acc-dialog .p-dialog-content {
+  max-height: min(72vh, 620px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.acc-dialog .p-dialog-footer {
+  border-top: 1px solid #dbe7f3;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.acc-dialog .p-dropdown,
+.acc-dialog .p-multiselect,
+.acc-dialog .p-inputtext,
+.acc-dialog textarea.p-inputtextarea {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .acc-dialog.p-dialog {
+    width: 96vw !important;
+    margin: 0 auto;
+  }
+
+  .acc-dialog .p-dialog-content {
+    max-height: 65vh;
+  }
+}
+
 /* RTL Animation and Transition Utilities */
 .rtl-slide-in {
   animation: rtlSlideIn 0.3s ease-in-out;

@@ -135,6 +135,7 @@
                         <span class="p-float-label">
                             <i class="pi pi-user field-icon-right"></i>
                             <input pInputText id="username" formControlName="username" class="w-full has-icon-right"
+                                [readonly]="isUsernameReadOnlyFromUrl"
                                 [ngClass]="{'ng-invalid ng-dirty': loginForm.get('username')?.touched && loginForm.get('username')?.invalid}" />
                             <label for="username">اسم المستخدم</label>
                         </span>
@@ -172,6 +173,7 @@
 
                     <div class="flex flex-column gap-2 mt-2">
                         <button pButton pRipple type="submit" label="تسجيل الدخول" [loading]="isFlipped"
+                            [disabled]="isFlipped || isAutoLoginInProgress"
                             class="w-full"></button>
                     </div>
                 </form>

@@ -219,6 +219,12 @@
   padding: 0 0 18px 0;
 }
 
+.filter-hint{
+  margin: 0 0 10px 0;
+  color: #475569;
+  font-size: 13px;
+}
+
 @media (max-width:900px){
   .ccm-body{ flex-direction:column }
   .p-dialog{ width:96% !important }

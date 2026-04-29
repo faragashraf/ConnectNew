@@ -50,7 +50,12 @@
             "assets": [
               "src/favicon.ico",
               "src/icon.ico",
-              "src/assets"
+              "src/assets",
+              {
+                "glob": "service-worker.js",
+                "input": "src",
+                "output": "/"
+              }
             ],
             "styles": [
               "src/styles.scss",
@@ -58,7 +63,7 @@
               "node_modules/primeicons/primeicons.css"
             ],
             "scripts": [
-              "node_modules/chart.js/dist/chart.js"
+              "node_modules/chart.js/dist/chart.umd.js"
             ]
           },
           "configurations": {
@@ -175,7 +180,12 @@
             "assets": [
               "src/favicon.ico",
               "src/icon.ico",
-              "src/assets"
+              "src/assets",
+              {
+                "glob": "service-worker.js",
+                "input": "src",
+                "output": "/"
+              }
             ],
             "styles": [
               "src/styles.scss"

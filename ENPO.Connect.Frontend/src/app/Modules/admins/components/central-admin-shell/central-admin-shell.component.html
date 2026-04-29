@@ -1,0 +1,157 @@
+<section class="central-admin-shell" dir="rtl">
+  <header class="shell-header">
+    <div class="title-wrap">
+      <h2>لوحة الإدارة المركزية الموحدة</h2>
+      <p>
+        نقطة دخول واحدة لإدارة أنواع الموضوعات، مكتبة الحقول الديناميكية، وإعدادات المكونات.
+        المرحلة الحالية تضيف Preview Workspace حقيقي للتحقق من جاهزية النموذج النهائي.
+      </p>
+    </div>
+  </header>
+
+  <section class="context-panel" [formGroup]="contextForm">
+    <div class="context-head">
+      <h3>سياق العمل الحالي</h3>
+      <span>يمكنك تمرير التطبيق/النوع/بادئة Route إلى الأدوات المختلفة.</span>
+    </div>
+
+    <div class="context-grid">
+      <label>
+        <span>Application ID</span>
+        <input type="text" pInputText formControlName="applicationId" placeholder="مثال: 60" />
+      </label>
+
+      <label>
+        <span>Category ID</span>
+        <input type="text" pInputText formControlName="categoryId" placeholder="مثال: 124" />
+      </label>
+
+      <label>
+        <span>RouteKey Prefix</span>
+        <input type="text" pInputText formControlName="routeKeyPrefix" placeholder="مثال: DynamicSubjects/" />
+      </label>
+
+      <label>
+        <span>Document Direction</span>
+        <p-dropdown
+          [options]="documentDirectionOptions"
+          optionLabel="label"
+          optionValue="value"
+          formControlName="documentDirection"
+          [showClear]="true"
+          placeholder="اختر الاتجاه">
+        </p-dropdown>
+      </label>
+
+      <label>
+        <span>Request Mode</span>
+        <input type="text" pInputText formControlName="requestMode" placeholder="create / edit / preview" />
+      </label>
+
+      <label>
+        <span>Creator Unit ID</span>
+        <input type="text" pInputText formControlName="creatorUnitId" placeholder="مثال: 60" />
+      </label>
+
+      <label>
+        <span>Target Unit ID</span>
+        <input type="text" pInputText formControlName="targetUnitId" placeholder="اختياري" />
+      </label>
+
+      <label class="span-3">
+        <span>Runtime Variables (JSON)</span>
+        <input type="text" pInputText formControlName="runtimeContextJson" placeholder='{"priority":"high","route":"incoming"}' />
+      </label>
+    </div>
+
+    <div class="context-actions">
+      <button pButton type="button" label="تطبيق السياق" icon="pi pi-check" (click)="applyContext()"></button>
+      <button pButton type="button" class="p-button-outlined" label="مسح السياق" icon="pi pi-times" (click)="clearContext()"></button>
+    </div>
+  </section>
+
+  <nav class="sections-nav" aria-label="Central admin sections">
+    <button
+      *ngFor="let section of sections"
+      type="button"
+      class="section-card"
+      [disabled]="isSectionDisabled(section)"
+      [class.disabled]="isSectionDisabled(section)"
+      [class.active]="isSectionActive(section)"
+      (click)="navigateTo(section)">
+      <strong>{{ section.label }}</strong>
+      <span>{{ section.description }}</span>
+      <small>داخل الـ Workspace الموحدة</small>
+    </button>
+  </nav>
+
+  <section class="workflow-panel">
+    <div class="workflow-actions">
+      <button pButton type="button" icon="pi pi-arrow-right" class="p-button-outlined" label="السابق" [disabled]="!canGoPrevious" (click)="previousSection()"></button>
+      <button pButton type="button" icon="pi pi-arrow-left" label="التالي" iconPos="right" [disabled]="!canGoNext" (click)="nextSection()"></button>
+    </div>
+    <p class="workflow-notice" *ngIf="workflowNotice">{{ workflowNotice }}</p>
+  </section>
+
+  <section class="preview-panel">
+    <h4>معاينة السياق الموحد (Foundation)</h4>
+    <div class="preview-grid">
+      <div>
+        <span>نوع الموضوع المختار</span>
+        <strong>{{ contextState.selectedSubjectTypeName || '-' }}</strong>
+      </div>
+      <div>
+        <span>Category ID</span>
+        <strong>{{ contextState.selectedCategoryId || '-' }}</strong>
+      </div>
+      <div>
+        <span>Application ID</span>
+        <strong>{{ contextState.selectedApplicationId || '-' }}</strong>
+      </div>
+      <div>
+        <span>عدد الحقول المرتبطة</span>
+        <strong>{{ workflowSummaryFieldsCount }}</strong>
+      </div>
+      <div>
+        <span>RouteKey / Config</span>
+        <strong>{{ workflowSummaryRouteKey }}</strong>
+      </div>
+      <div>
+        <span>عدد Configs المطابقة</span>
+        <strong>{{ workflowSummaryConfigsCount }}</strong>
+      </div>
+      <div>
+        <span>Document Direction</span>
+        <strong>{{ contextState.documentDirection || '-' }}</strong>
+      </div>
+      <div>
+        <span>Request Mode</span>
+        <strong>{{ contextState.requestMode || '-' }}</strong>
+      </div>
+      <div>
+        <span>Creator Unit</span>
+        <strong>{{ contextState.creatorUnitId || '-' }}</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="content-shell">
+    <router-outlet></router-outlet>
+  </section>
+
+  <section class="standalone-links">
+    <h4>الوصول المباشر (للتوافق)</h4>
+    <div class="links-row">
+      <button
+        pButton
+        *ngFor="let section of sections"
+        [hidden]="!section.standalonePath"
+        type="button"
+        class="p-button-text"
+        [label]="section.label"
+        icon="pi pi-external-link"
+        (click)="openStandalone(section)">
+      </button>
+    </div>
+  </section>
+</section>

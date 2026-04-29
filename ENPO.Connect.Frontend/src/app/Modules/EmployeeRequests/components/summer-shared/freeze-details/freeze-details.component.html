@@ -1,0 +1,83 @@
+<section class="freeze-details-shell" *ngIf="details as model; else emptyState">
+  <header class="head">
+    <h3>تفاصيل التجميد #{{ model.freeze.freezeId }}</h3>
+    <span class="status" [class.active]="model.freeze.isActive" [class.inactive]="!model.freeze.isActive">
+      {{ model.freeze.isActive ? 'نشط' : 'مفكوك' }}
+    </span>
+  </header>
+
+  <div class="summary-grid">
+    <article>
+      <span>المصيف</span>
+      <strong>{{ getDestinationName(model.freeze.categoryId) }}</strong>
+    </article>
+    <article>
+      <span>الفوج</span>
+      <strong>{{ model.freeze.waveCode || '-' }}</strong>
+    </article>
+    <article>
+      <span>السعة</span>
+      <strong>{{ model.freeze.familyCount }}</strong>
+    </article>
+    <article>
+      <span>إجمالي الوحدات</span>
+      <strong>{{ model.freeze.requestedUnitsCount }}</strong>
+    </article>
+    <article>
+      <span>مستخدمة</span>
+      <strong>{{ model.freeze.frozenAssignedUnits }}</strong>
+    </article>
+    <article>
+      <span>متبقية</span>
+      <strong>{{ model.freeze.frozenAvailableUnits }}</strong>
+    </article>
+    <article>
+      <span>أنشأ بواسطة</span>
+      <strong>{{ model.freeze.createdBy || '-' }}</strong>
+    </article>
+    <article>
+      <span>تاريخ الإنشاء</span>
+      <strong>{{ formatDate(model.freeze.createdAtUtc) }}</strong>
+    </article>
+  </div>
+
+  <div class="notes" *ngIf="(model.freeze.reason || '').trim().length > 0 || (model.freeze.notes || '').trim().length > 0">
+    <p><strong>السبب:</strong> {{ model.freeze.reason || '-' }}</p>
+    <p><strong>ملاحظات:</strong> {{ model.freeze.notes || '-' }}</p>
+  </div>
+
+  <div class="table-wrap" *ngIf="model.units.length > 0; else noUnits">
+    <table>
+      <thead>
+        <tr>
+          <th>الوحدة</th>
+          <th>الحالة</th>
+          <th>رقم الحجز</th>
+          <th>تاريخ الربط</th>
+          <th>تاريخ آخر تغيير</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let unit of model.units">
+          <td>{{ unit.slotNumber }}</td>
+          <td>
+            <span class="unit-status" [ngClass]="statusClass(unit.status)">
+              {{ statusLabel(unit.status) }}
+            </span>
+          </td>
+          <td>{{ unit.assignedMessageId || '-' }}</td>
+          <td>{{ formatDate(unit.assignedAtUtc) }}</td>
+          <td>{{ formatDate(unit.lastStatusChangedAtUtc) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <ng-template #noUnits>
+    <p class="empty">لا توجد وحدات مسجلة داخل عملية التجميد.</p>
+  </ng-template>
+</section>
+
+<ng-template #emptyState>
+  <p class="empty">لا توجد تفاصيل متاحة حالياً.</p>
+</ng-template>

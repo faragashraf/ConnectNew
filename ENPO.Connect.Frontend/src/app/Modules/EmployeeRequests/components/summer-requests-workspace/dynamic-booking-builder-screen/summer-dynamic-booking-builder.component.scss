@@ -36,11 +36,34 @@
   max-width: 320px;
 }
 
+.top-controls .toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: none;
+  width: fit-content;
+  font-weight: 600;
+  color: #124d73;
+}
+
+.top-controls .membership-select {
+  max-width: 360px;
+}
+
+:host ::ng-deep .top-controls .membership-select .p-dropdown {
+  width: 100%;
+}
+
 .top-controls select {
   border: 1px solid #c5d4e3;
   border-radius: 8px;
   padding: 0.45rem 0.6rem;
   background: #fff;
+}
+
+.top-controls .toggle-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
 }
 
 .required-label {
@@ -106,6 +129,209 @@
 
 .capacity-card small {
   color: #5d7388;
+}
+
+.capacity-card .capacity-breakdown {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.1rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 8px;
+  background: #f2f8ff;
+  border: 1px solid #d8e8f8;
+}
+
+.capacity-card .capacity-breakdown span {
+  color: #184c72;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.capacity-card.frozen-highlight {
+  border-color: #9dc3de;
+  box-shadow: inset 0 0 0 1px rgba(37, 102, 142, 0.12);
+}
+
+.capacity-card .frozen-tag {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 0.2rem;
+  padding: 0.08rem 0.5rem;
+  border-radius: 999px;
+  background: #e9f4ff;
+  color: #1f5f8a;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.pricing-summary {
+  border: 1px solid #c8e6d5;
+  border-radius: 12px;
+  background: #f3fbf7;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.pricing-summary h4 {
+  margin: 0;
+  color: #0f5b3a;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.55rem;
+}
+
+.pricing-item {
+  border: 1px solid #cfe8da;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.pricing-item span {
+  font-size: 0.85rem;
+  color: #3f6f57;
+}
+
+.pricing-item strong {
+  color: #145d3c;
+}
+
+.pricing-item.total {
+  border-color: #9fd1b3;
+  background: #ecf9f1;
+}
+
+.pricing-note {
+  margin: 0;
+  color: #155b3d;
+  font-weight: 600;
+}
+
+.payment-plan-shell {
+  margin-top: 0.2rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #c6e4d3;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.payment-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+}
+
+.payment-mode-row label {
+  display: grid;
+  gap: 0.35rem;
+  width: min(260px, 100%);
+}
+
+.payment-mode-row select {
+  border: 1px solid #c5d4e3;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  background: #fff;
+  min-height: 42px;
+}
+
+.payment-mode-row .mode-note {
+  width: 100%;
+}
+
+.installment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.7rem;
+}
+
+.installment-card {
+  border: 1px solid #cce3d4;
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: #fff;
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+}
+
+.installment-card header strong {
+  color: #145d3c;
+  font-size: 1.05rem;
+}
+
+.installment-card label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.installment-card label span {
+  color: #3f6f57;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.installment-card input[type='number'],
+.installment-card input[type='datetime-local'] {
+  border: 1px solid #c5d4e3;
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  background: #fff;
+  min-height: 42px;
+  font-size: 1rem;
+}
+
+.installment-card input[type='number'] {
+  text-align: center;
+  direction: ltr;
+}
+
+.installment-paid-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.installment-paid-toggle input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+}
+
+.installment-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  color: #145d3c;
+  font-weight: 700;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .payment-mode-row {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .payment-mode-row label {
+    width: 100%;
+  }
+
+  .installment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .installment-summary {
+    justify-content: flex-start;
+  }
 }
 
 .meta-error {

@@ -1,4 +1,5 @@
-﻿using Core;
+﻿using Api.Authorization;
+using Core;
 using Api.HostedServices;
 using ENPO.CreateLogFile;
 using ENPO.CustomSwagger;
@@ -17,10 +18,19 @@ using Models.DTO.Common;
 using Persistence.Data;
 using Persistence.HelperServices;
 using Persistence.Services;
+using Persistence.Services.DynamicSubjects;
+using Persistence.Services.DynamicSubjects.AdminAccessPolicy;
+using Persistence.Services.DynamicSubjects.AdminCatalog;
+using Persistence.Services.DynamicSubjects.AdminRouting;
+using Persistence.Services.DynamicSubjects.FieldAccess;
+using Persistence.Services.DynamicSubjects.RuntimeCatalog;
 using Persistence.Services.Notifications;
+using Persistence.Services.PowerBi;
 using Persistence.UnitOfWorks;
 using SignalR.Notification;
+using System.Data;
 using System.Reflection;
+using System.Text.Encodings.Web;
 using System.Text;
 
 string AllowAllCors = "AllowAll";
@@ -31,6 +41,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add(new AuthorizeFilter()); //Authorize All Controllers
+})
+.AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
 });
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -54,6 +68,7 @@ builder.Services.AddTransient<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 builder.Services.AddOptions<ApplicationConfig>().BindConfiguration(nameof(ApplicationConfig));
+builder.Services.AddOptions<ResortBookingBlacklistOptions>().BindConfiguration(ResortBookingBlacklistOptions.SectionName);
 //builder.Services.Configure<ApplicationConfig>(builder.Configuration.GetSection("ApplicationConfig"));
 
 builder.Services.AddSingleton<ApplicationConfig>(sp =>
@@ -68,6 +83,20 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.AddScoped<helperService>();
 builder.Services.AddScoped<SummerWorkflowService>();
 builder.Services.AddScoped<IConnectNotificationService, ConnectNotificationService>();
+builder.Services.AddScoped<ISubjectNotificationService, SubjectNotificationService>();
+builder.Services.AddScoped<IDynamicSubjectsService, DynamicSubjectsService>();
+builder.Services.AddScoped<IDynamicSubjectsAdminCatalogRepository, DynamicSubjectsAdminCatalogRepository>();
+builder.Services.AddScoped<IDynamicSubjectsAdminCatalogService, DynamicSubjectsAdminCatalogService>();
+builder.Services.AddSingleton<IAdminControlCenterRequestPreviewCache, AdminControlCenterRequestPreviewCache>();
+builder.Services.AddScoped<IAdminControlCenterRequestPreviewResolver, AdminControlCenterRequestPreviewResolver>();
+builder.Services.AddScoped<IRequestRuntimeCatalogService, RequestRuntimeCatalogService>();
+builder.Services.AddScoped<IDynamicSubjectsAdminRoutingRepository, DynamicSubjectsAdminRoutingRepository>();
+builder.Services.AddScoped<IDynamicSubjectsAdminRoutingService, DynamicSubjectsAdminRoutingService>();
+builder.Services.AddScoped<IDynamicSubjectsAdminAccessPolicyService, DynamicSubjectsAdminAccessPolicyService>();
+builder.Services.AddScoped<IFieldAccessResolutionService, FieldAccessResolutionService>();
+builder.Services.AddScoped<IDynamicSubjectsRealtimePublisher, DynamicSubjectsRealtimePublisher>();
+builder.Services.AddScoped<ISubjectReferenceGenerator, ReferenceNumberGeneratorService>();
+builder.Services.AddScoped<IPowerBiStatementsService, PowerBiStatementsService>();
 builder.Services.AddHostedService<SummerPaymentAutoCancellationHostedService>();
 builder.Services.AddSingleton<ENPOCreateLogFile>(provider => new ENPOCreateLogFile("YourStringValue", "YourSecondStringValue", FileExtension.txt));
 
@@ -80,6 +109,7 @@ var chatHubUrl = BuildAbsoluteUrl(
     builder.Configuration["AppUrls:PublicBaseUrl"],
     builder.Configuration["Routes:ChatHub"],
     "Routes:ChatHub");
+Console.WriteLine($"[Startup] Resolved ChatHub URL: {chatHubUrl}");
 
 builder.Services.AddSingleton<SignalRConnectionManager>(sp =>
 {
@@ -106,9 +136,31 @@ builder.Services.AddAuthentication(opt =>
         ValidateAudience = false,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        ClockSkew = TimeSpan.FromSeconds(30),
         ValidIssuer = applicationConfig.tokenOptions.Issuer,
         ValidAudience = applicationConfig.tokenOptions.Audience!,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(applicationConfig.tokenOptions.Key)),
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnAuthenticationFailed = context =>
+        {
+            if (!context.Response.HasStarted)
+            {
+                context.Response.Headers["X-Auth-Error-Code"] =
+                    context.Exception is SecurityTokenExpiredException ? "token_expired" : "token_invalid";
+            }
+            return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            if (!context.Response.HasStarted && !context.Response.Headers.ContainsKey("X-Auth-Error-Code"))
+            {
+                context.Response.Headers["X-Auth-Error-Code"] = "token_unauthorized";
+            }
+            return Task.CompletedTask;
+        }
     };
 });
 
@@ -118,7 +170,13 @@ builder.Services.Configure<FormOptions>(o =>
     o.MultipartBodyLengthLimit = int.MaxValue;
     o.MemoryBufferThreshold = int.MaxValue;
 });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(
+        DynamicSubjectsAdminAuthorization.PolicyName,
+        policy => policy.RequireAssertion(context =>
+            DynamicSubjectsAdminAuthorization.HasRequiredRoleClaim(context.User)));
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(option =>
@@ -173,12 +231,6 @@ builder.Services.AddSwaggerGen(option =>
     option.SchemaFilter<Api.CustomSwagger.EnumDescriptionSchemaFilter>();
 });
 
-//builder.Services.AddControllers().AddJsonOptions(opts =>
-//{
-//    opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-//});
-
-builder.Services.AddControllers();
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 builder.Services.AddCors(options =>
 {
@@ -186,6 +238,7 @@ builder.Services.AddCors(options =>
            builder => builder.SetIsOriginAllowed(origin => true)
                              .AllowAnyHeader()
                              .AllowAnyMethod()
+                             .WithExposedHeaders("X-Auth-Error-Code")
                              .AllowCredentials()
                              );
 });
@@ -205,56 +258,54 @@ builder.Services.AddSingleton<RedisConnectionManager>(serviceProvider =>
 
 var app = builder.Build();
 
-// Ensure pending EF Core migrations are applied for ConnectContext on startup (idempotent)
+// Ensure pending EF Core migrations are applied for ConnectContext on startup (idempotent + safe for multi-instance startup).
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var loggerFactory = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
+    var logger = loggerFactory?.CreateLogger("StartupMigrations");
     try
     {
         var connectContext = services.GetRequiredService<ConnectContext>();
-        // Apply migrations if any pending. If already applied, this is a no-op.
-        var configuration = services.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
-        var conn = configuration?.GetConnectionString("ConnectConnectingString");
-        Console.WriteLine($"[StartupMigrations] Target connection: {conn}");
+        var configuration = services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+        var startupMigrationsEnabled = configuration.GetValue("StartupMigrations:Enabled", true);
+        var failStartupOnError = configuration.GetValue("StartupMigrations:FailStartupOnError", true);
+        var commandTimeoutSeconds = Math.Max(30, configuration.GetValue("StartupMigrations:CommandTimeoutSeconds", 300));
+        var lockTimeoutSeconds = Math.Max(5, configuration.GetValue("StartupMigrations:SqlAppLockTimeoutSeconds", 120));
+        var lockResource = (configuration.GetValue<string>("StartupMigrations:SqlAppLockResource") ?? "CONNECT_STARTUP_MIGRATIONS").Trim();
+        if (string.IsNullOrWhiteSpace(lockResource))
+        {
+            lockResource = "CONNECT_STARTUP_MIGRATIONS";
+        }
 
-        var pending = connectContext.Database.GetPendingMigrations();
-        var pendingList = pending?.ToList() ?? new System.Collections.Generic.List<string>();
-        Console.WriteLine($"[StartupMigrations] Pending migrations: {(pendingList.Count > 0 ? string.Join(",", pendingList) : "<none>")}");
-
-        //// Ensure CDMend.ApplicationID allows NULL to avoid migration-insert failures when seed data
-        //try
-        //{
-        //    var dbConnection = connectContext.Database.GetDbConnection();
-        //    try
-        //    {
-        //        dbConnection.Open();
-        //        using (var cmd = dbConnection.CreateCommand())
-        //        {
-        //            // If the ApplicationID column exists, alter it to allow NULLs. This prevents migrations that re-insert seed data
-        //            // from failing due to NOT NULL constraint. If the column doesn't exist this statement is skipped.
-        //            cmd.CommandText = @"IF COL_LENGTH('dbo.CDMend','ApplicationID') IS NOT NULL BEGIN ALTER TABLE dbo.CDMend ALTER COLUMN ApplicationID NVARCHAR(10) NULL END";
-        //            cmd.ExecuteNonQuery();
-        //        }
-        //    }
-        //    finally
-        //    {
-        //        try { dbConnection.Close(); } catch { }
-        //    }
-        //}
-        //catch (Exception exAlter)
-        //{
-        //    var loggerFactoryLocal = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
-        //    var loggerLocal = loggerFactoryLocal?.CreateLogger("StartupMigrations:SchemaAdjust");
-        //    loggerLocal?.LogWarning(exAlter, "Could not ensure CDMend.ApplicationID is nullable before migrations. Continuing to migrations.");
-        //}
-
-        //connectContext.Database.Migrate();
-        //Console.WriteLine("[StartupMigrations] Database.Migrate() completed successfully.");
+        if (!startupMigrationsEnabled)
+        {
+            logger?.LogInformation("Startup migrations are disabled by configuration.");
+        }
+        else
+        {
+            try
+            {
+                connectContext.Database.SetCommandTimeout(commandTimeoutSeconds);
+                await EnsureConnectMigrationsAsync(
+                    connectContext,
+                    logger,
+                    lockResource,
+                    TimeSpan.FromSeconds(lockTimeoutSeconds),
+                    CancellationToken.None);
+            }
+            catch (Exception migrationEx)
+            {
+                logger?.LogError(migrationEx, "Error applying database migrations for ConnectContext.");
+                if (failStartupOnError)
+                {
+                    throw;
+                }
+            }
+        }
     }
     catch (Exception ex)
     {
-        var loggerFactory = services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>();
-        var logger = loggerFactory?.CreateLogger("StartupMigrations");
         logger?.LogError(ex, "Error applying database migrations for ConnectContext.");
         throw;
     }
@@ -325,10 +376,220 @@ static string BuildAbsoluteUrl(string? publicBaseUrl, string? routePath, string 
     }
 
     var normalizedRoutePath = routePath.Trim();
-    if (!normalizedRoutePath.StartsWith('/'))
+    if (Uri.TryCreate(normalizedRoutePath, UriKind.Absolute, out var absoluteRouteUri)
+        && (string.Equals(absoluteRouteUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(absoluteRouteUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
     {
-        normalizedRoutePath = $"/{normalizedRoutePath}";
+        return absoluteRouteUri.ToString();
     }
 
-    return new Uri(baseUri, normalizedRoutePath).ToString();
+    normalizedRoutePath = normalizedRoutePath.Trim('/');
+    if (normalizedRoutePath.Length == 0)
+    {
+        throw new InvalidOperationException($"{routePathConfigKey} is invalid.");
+    }
+
+    var basePath = baseUri.AbsolutePath.TrimEnd('/');
+    var combinedPath = string.IsNullOrWhiteSpace(basePath) || basePath == "/"
+        ? $"/{normalizedRoutePath}"
+        : $"{basePath}/{normalizedRoutePath}";
+
+    var builder = new UriBuilder(baseUri)
+    {
+        Path = combinedPath
+    };
+
+    return builder.Uri.ToString();
+}
+
+static async Task EnsureConnectMigrationsAsync(
+    ConnectContext connectContext,
+    Microsoft.Extensions.Logging.ILogger? logger,
+    string lockResource,
+    TimeSpan lockTimeout,
+    CancellationToken cancellationToken)
+{
+    var database = connectContext.Database;
+    var initialPending = database.GetPendingMigrations().ToList();
+    logger?.LogInformation(
+        "Startup migrations check: {PendingCount} pending migration(s).",
+        initialPending.Count);
+
+    var useSqlServerLock = database.IsSqlServer();
+    var lockAcquired = false;
+    if (useSqlServerLock)
+    {
+        await database.OpenConnectionAsync(cancellationToken);
+        lockAcquired = await TryAcquireStartupMigrationSqlLockAsync(
+            connectContext,
+            lockResource,
+            Math.Max(5000, (int)lockTimeout.TotalMilliseconds),
+            cancellationToken);
+
+        if (!lockAcquired)
+        {
+            throw new InvalidOperationException(
+                $"Could not acquire startup migration SQL lock '{lockResource}' within {lockTimeout.TotalSeconds} seconds.");
+        }
+    }
+
+    try
+    {
+        var pendingAfterLock = database.GetPendingMigrations().ToList();
+        if (pendingAfterLock.Count == 0)
+        {
+            logger?.LogInformation("Startup migrations: no pending migrations after lock acquisition.");
+        }
+        else
+        {
+            logger?.LogInformation(
+                "Applying pending migrations: {Migrations}",
+                string.Join(", ", pendingAfterLock));
+
+            await database.MigrateAsync(cancellationToken);
+
+            var remainingPending = database.GetPendingMigrations().ToList();
+            if (remainingPending.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Startup migrations finished with remaining pending migrations: {string.Join(", ", remainingPending)}");
+            }
+
+            logger?.LogInformation("Startup migrations completed successfully.");
+        }
+
+        await EnsureSubjectReferencePolicySchemaCompatibilityAsync(connectContext, logger, cancellationToken);
+    }
+    finally
+    {
+        if (useSqlServerLock && lockAcquired)
+        {
+            try
+            {
+                await ReleaseStartupMigrationSqlLockAsync(connectContext, lockResource, cancellationToken);
+            }
+            catch (Exception exRelease)
+            {
+                logger?.LogWarning(exRelease, "Failed to release startup migration SQL lock '{LockResource}'.", lockResource);
+            }
+        }
+
+        if (useSqlServerLock)
+        {
+            await database.CloseConnectionAsync();
+        }
+    }
+}
+
+static async Task EnsureSubjectReferencePolicySchemaCompatibilityAsync(
+    ConnectContext connectContext,
+    Microsoft.Extensions.Logging.ILogger? logger,
+    CancellationToken cancellationToken)
+{
+    if (!connectContext.Database.IsSqlServer())
+    {
+        return;
+    }
+
+    const string compatibilitySql = @"
+IF OBJECT_ID(N'[dbo].[SubjectReferencePolicies]', N'U') IS NULL
+    RETURN;
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'Mode') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[SubjectReferencePolicies]
+        ADD [Mode] [nvarchar](20) NOT NULL
+            CONSTRAINT [DF_SubjectReferencePolicies_Mode] DEFAULT (N'default');
+END
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'StartingValue') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[SubjectReferencePolicies]
+        ADD [StartingValue] [bigint] NOT NULL
+            CONSTRAINT [DF_SubjectReferencePolicies_StartingValue] DEFAULT ((1));
+END
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'ComponentsJson') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[SubjectReferencePolicies]
+        ADD [ComponentsJson] [nvarchar](max) NULL;
+END
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'Mode') IS NOT NULL
+BEGIN
+    EXEC(N'
+        UPDATE [dbo].[SubjectReferencePolicies]
+           SET [Mode] = N''default''
+         WHERE [Mode] IS NULL
+            OR LTRIM(RTRIM([Mode])) = N'''';
+    ');
+END
+
+IF COL_LENGTH(N'[dbo].[SubjectReferencePolicies]', N'StartingValue') IS NOT NULL
+BEGIN
+    EXEC(N'
+        UPDATE [dbo].[SubjectReferencePolicies]
+           SET [StartingValue] = 1
+         WHERE [StartingValue] IS NULL
+            OR [StartingValue] <= 0;
+    ');
+END
+";
+
+    await connectContext.Database.ExecuteSqlRawAsync(compatibilitySql, cancellationToken);
+    logger?.LogInformation("Startup schema compatibility check for SubjectReferencePolicies completed.");
+}
+
+static async Task<bool> TryAcquireStartupMigrationSqlLockAsync(
+    ConnectContext connectContext,
+    string lockResource,
+    int timeoutMs,
+    CancellationToken cancellationToken)
+{
+    var connection = connectContext.Database.GetDbConnection();
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
+DECLARE @result int;
+EXEC @result = sp_getapplock
+    @Resource = @resource,
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Session',
+    @LockTimeout = @timeout;
+SELECT @result;";
+
+    var resourceParam = command.CreateParameter();
+    resourceParam.ParameterName = "@resource";
+    resourceParam.Value = lockResource;
+    command.Parameters.Add(resourceParam);
+
+    var timeoutParam = command.CreateParameter();
+    timeoutParam.ParameterName = "@timeout";
+    timeoutParam.Value = timeoutMs;
+    command.Parameters.Add(timeoutParam);
+
+    var resultObject = await command.ExecuteScalarAsync(cancellationToken);
+    var resultCode = Convert.ToInt32(resultObject ?? -999);
+    return resultCode >= 0;
+}
+
+static async Task ReleaseStartupMigrationSqlLockAsync(
+    ConnectContext connectContext,
+    string lockResource,
+    CancellationToken cancellationToken)
+{
+    var connection = connectContext.Database.GetDbConnection();
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
+DECLARE @result int;
+EXEC @result = sp_releaseapplock
+    @Resource = @resource,
+    @LockOwner = 'Session';
+SELECT @result;";
+
+    var resourceParam = command.CreateParameter();
+    resourceParam.ParameterName = "@resource";
+    resourceParam.Value = lockResource;
+    command.Parameters.Add(resourceParam);
+
+    await command.ExecuteScalarAsync(cancellationToken);
 }

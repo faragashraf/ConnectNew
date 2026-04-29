@@ -10,8 +10,10 @@ using Models.DTO;
 using Models.DTO.Common;
 using Models.DTO.Correspondance.Enums;
 using Models.DTO.Correspondance.Replies;
+using Models.DTO.DynamicSubjects;
 using Persistence.Data;
 using Persistence.HelperServices;
+using Persistence.Services.Notifications;
 using Repositories;
 using SignalR.Notification;
 
@@ -27,9 +29,11 @@ namespace Persistence.Repositories
         private readonly GPAContext _gPAContext;
         private readonly helperService _helperService;
         private readonly SignalRConnectionManager _signalRConnectionManager;
+        private readonly ISubjectNotificationService _subjectNotificationService;
 
         public RepliesRepository(ConnectContext connectContext, GPAContext gPAContext, IMapper mapper, Attach_HeldContext attach_HeldContext, IOptions<ApplicationConfig> option, helperService helperService,
-            SignalRConnectionManager signalRConnectionManager)
+            SignalRConnectionManager signalRConnectionManager,
+            ISubjectNotificationService subjectNotificationService)
         {
             _attach_HeldContext = attach_HeldContext;
             _option = option.Value;
@@ -39,6 +43,7 @@ namespace Persistence.Repositories
             _helperService = helperService;
             _logger = new ENPOCreateLogFile("C:\\Connect_Log", "RepliesRepository_Log" + DateTime.Today.ToString("dd-MMM-yyyy"), FileExtension.txt);
             _signalRConnectionManager = signalRConnectionManager;
+            _subjectNotificationService = subjectNotificationService;
         }
 
         public async Task<CommonResponse<Reply>> CreateReplyAsync(ReplyCreateRequest dto, string userId, string ip)
@@ -92,6 +97,19 @@ namespace Persistence.Repositories
                 await _connectContext.SaveChangesAsync();
 
                 response.Data = reply;
+
+                await _subjectNotificationService.SendNotificationAsync(new SubjectNotificationDispatchRequestDto
+                {
+                    EventType = "FORWARD",
+                    SubjectTypeId = message.CategoryCd,
+                    Payload = new SubjectNotificationPayloadDto
+                    {
+                        RequestId = message.MessageId,
+                        RequestTitle = message.Subject,
+                        CreatedBy = message.CreatedBy,
+                        UnitName = _NextResposible
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -310,6 +328,19 @@ namespace Persistence.Repositories
                         time = DateTime.Now,
                         sender = "System",
                         Category = NotificationCategory.System
+                    });
+
+                    await _subjectNotificationService.SendNotificationAsync(new SubjectNotificationDispatchRequestDto
+                    {
+                        EventType = "FORWARD",
+                        SubjectTypeId = _message.CategoryCd,
+                        Payload = new SubjectNotificationPayloadDto
+                        {
+                            RequestId = _message.MessageId,
+                            RequestTitle = _message.Subject,
+                            CreatedBy = _message.CreatedBy,
+                            UnitName = _NextResposible
+                        }
                     });
                 }
                 catch (Exception ex)

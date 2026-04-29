@@ -1,0 +1,985 @@
+<section class="field-binding-page" dir="rtl" *ngIf="step as currentStep">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">لوحة الكتالوج - ربط مكتبة الحقول</p>
+      <h2>ربط مكتبة الحقول</h2>
+      <p>
+        هذه الشاشة مخصصة لربط الحقول بالنوع الحالي وترتيب عرضها فقط.
+      </p>
+    </div>
+
+    <div class="status-card">
+      <p-tag
+        [value]="currentStep.isCompleted ? 'جاهز' : 'غير مكتمل'"
+        [severity]="currentStep.isCompleted ? 'success' : 'warning'">
+      </p-tag>
+      <div class="status-row">
+        <span>اكتمال الإلزامي</span>
+        <strong>{{ requiredProgressText }}</strong>
+      </div>
+      <p-progressBar
+        [value]="currentStep.requiredTotal > 0 ? (currentStep.requiredCompleted / currentStep.requiredTotal) * 100 : 0">
+      </p-progressBar>
+    </div>
+  </header>
+
+  <div class="step-message" *ngIf="stepMessage.length > 0" [class.warn]="stepMessageSeverity === 'warn'">
+    {{ stepMessage }}
+  </div>
+
+  <section class="backend-status" *ngIf="vm as currentVm">
+    <span>
+      <strong>التصنيف:</strong>
+      {{ currentVm.context.categoryId ?? '-' }}
+    </span>
+    <span>
+      <strong>التطبيق:</strong>
+      {{ currentVm.context.applicationId ?? '-' }}
+    </span>
+    <p-tag
+      [value]="libraryLoadedFromDb ? 'تم التحميل من قاعدة البيانات' : 'تعذر التحميل من قاعدة البيانات'"
+      [severity]="libraryLoadedFromDb ? 'success' : 'warning'">
+    </p-tag>
+    <p-tag
+      [value]="hasPendingBackendChanges ? 'تغييرات غير محفوظة في قاعدة البيانات' : 'متزامن مع قاعدة البيانات'"
+      [severity]="hasPendingBackendChanges ? 'warning' : 'success'">
+    </p-tag>
+  </section>
+
+  <section class="step-message">
+    تم نقل تعريف الحقول وإعدادات السياسات إلى شاشاتها المخصصة. شاشة الربط تحفظ الربط والترتيب فقط.
+  </section>
+
+  <div class="layout">
+    <main class="workspace">
+      <section class="card" *ngIf="false">
+        <header class="card-head">
+          <h3>سياسة الرقم المرجعي</h3>
+          <small>إدارة فعلية مرتبطة بجدول سياسة الرقم المرجعي</small>
+        </header>
+
+        <form class="reference-grid" [formGroup]="referencePolicyForm" novalidate>
+          <article class="field switch-field field-wide">
+            <label for="referencePolicyEnabled">تفعيل السياسة</label>
+            <p-inputSwitch inputId="referencePolicyEnabled" formControlName="referencePolicyEnabled"></p-inputSwitch>
+          </article>
+
+          <article class="field">
+            <label for="referenceMode">وضع الترقيم</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="referenceMode"
+              [options]="referenceModeOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="referenceMode">
+            </p-dropdown>
+          </article>
+
+          <article class="field">
+            <label for="referenceSeparator">الفاصل العام</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="referenceSeparator"
+              [options]="referenceSeparatorOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="referenceSeparator">
+            </p-dropdown>
+          </article>
+
+          <article class="field">
+            <label for="referenceSerialId">اختيار مسلسل موجود</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="referenceSerialId"
+              [options]="serialOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="true"
+              placeholder="اختر مسلسلًا محفوظًا"
+              formControlName="serialId"
+              (onChange)="onSerialIdSelected()">
+            </p-dropdown>
+            <small class="field-note">اختر اسم مسلسل موجود لإعادة استخدامه بدون تكرار.</small>
+          </article>
+
+          <article class="field">
+            <label for="referenceSerialName">أو أدخل اسم مسلسل جديد</label>
+            <input
+              pInputText
+              id="referenceSerialName"
+              formControlName="serialName"
+              placeholder="مثال: Seq_GRV_2026"
+              (input)="onSerialNameEdited()" />
+            <small class="field-note">عند إدخال اسم جديد سيتم إنشاؤه تلقائيًا وربطه بالإعداد الحالي.</small>
+            <small class="error" *ngIf="referencePolicyForm.get('serialName')?.hasError('maxlength')">
+              اسم المسلسل يجب ألا يتجاوز 80 حرفًا.
+            </small>
+          </article>
+
+          <ng-container *ngIf="!isCustomReferenceMode">
+            <article class="field">
+              <label for="referencePrefix">البادئة (اختياري)</label>
+              <input pInputText id="referencePrefix" formControlName="referencePrefix" />
+            </article>
+
+            <article class="field">
+              <label for="referenceSequencePaddingLength">طول المسلسل</label>
+              <input
+                pInputText
+                id="referenceSequencePaddingLength"
+                type="number"
+                min="1"
+                max="12"
+                formControlName="referenceSequencePaddingLength" />
+            </article>
+
+            <article class="field">
+              <label for="referenceStartingValue">قيمة البداية</label>
+              <input
+                pInputText
+                id="referenceStartingValue"
+                type="number"
+                min="1"
+                formControlName="referenceStartingValue" />
+            </article>
+
+            <article class="field">
+              <label for="referenceSequenceResetScope">سياسة إعادة الضبط</label>
+              <p-dropdown
+                appendTo="body"
+                inputId="referenceSequenceResetScope"
+                [options]="sequenceResetScopeOptions"
+                optionLabel="label"
+                optionValue="value"
+                [showClear]="false"
+                formControlName="referenceSequenceResetScope">
+              </p-dropdown>
+            </article>
+          </ng-container>
+
+          <ng-container *ngIf="isCustomReferenceMode">
+            <article class="field">
+              <label for="referenceSequencePaddingLengthCustom">طول المسلسل</label>
+              <input
+                pInputText
+                id="referenceSequencePaddingLengthCustom"
+                type="number"
+                min="1"
+                max="12"
+                formControlName="referenceSequencePaddingLength" />
+            </article>
+
+            <article class="field">
+              <label for="referenceStartingValueCustom">قيمة البداية</label>
+              <input
+                pInputText
+                id="referenceStartingValueCustom"
+                type="number"
+                min="1"
+                formControlName="referenceStartingValue" />
+            </article>
+
+            <article class="field">
+              <label for="referenceSequenceResetScopeCustom">سياسة إعادة الضبط</label>
+              <p-dropdown
+                appendTo="body"
+                inputId="referenceSequenceResetScopeCustom"
+                [options]="sequenceResetScopeOptions"
+                optionLabel="label"
+                optionValue="value"
+                [showClear]="false"
+                formControlName="referenceSequenceResetScope">
+              </p-dropdown>
+            </article>
+
+            <article class="field field-wide">
+              <div class="component-builder-head">
+                <label>مكونات الترقيم المخصص</label>
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-sm p-button-outlined"
+                  icon="pi pi-plus"
+                  label="إضافة جزء"
+                  (click)="onAddReferenceComponent()">
+                </button>
+              </div>
+
+              <div class="table-wrapper reference-components-wrap">
+                <p-table [value]="referenceComponentRows" styleClass="p-datatable-sm reference-components-table">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th>نوع الجزء</th>
+                      <th>القيمة</th>
+                      <th>إجراءات</th>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="body" let-componentForm let-rowIndex="rowIndex">
+                    <tr [formGroup]="componentForm">
+                      <td>
+                        <p-dropdown
+                          appendTo="body"
+                          [options]="referenceComponentTypeOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          [showClear]="false"
+                          formControlName="type"
+                          (onChange)="onReferenceComponentTypeChanged(rowIndex, $event?.value)">
+                        </p-dropdown>
+                      </td>
+                      <td>
+                        <input
+                          *ngIf="componentForm.get('type')?.value === 'static_text'"
+                          pInputText
+                          type="text"
+                          placeholder="أدخل النص الثابت"
+                          formControlName="value"
+                          (input)="onReferenceComponentValueChanged()" />
+                        <p-dropdown
+                          *ngIf="componentForm.get('type')?.value === 'field'"
+                          appendTo="body"
+                          [options]="requiredReferenceFieldOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          [showClear]="false"
+                          placeholder="اختر حقلًا إلزاميًا"
+                          formControlName="fieldKey"
+                          (onChange)="onReferenceComponentValueChanged()">
+                        </p-dropdown>
+                        <span class="component-fixed" *ngIf="componentForm.get('type')?.value === 'year'">السنة</span>
+                        <span class="component-fixed" *ngIf="componentForm.get('type')?.value === 'month'">الشهر</span>
+                        <span class="component-fixed" *ngIf="componentForm.get('type')?.value === 'day'">اليوم</span>
+                        <span class="component-fixed" *ngIf="componentForm.get('type')?.value === 'sequence'">المسلسل (إجباري وآخر جزء)</span>
+                      </td>
+                      <td>
+                        <div class="row-actions">
+                          <button pButton type="button" icon="pi pi-arrow-up" class="p-button-text p-button-sm" (click)="onMoveReferenceComponentUp(rowIndex)"></button>
+                          <button pButton type="button" icon="pi pi-arrow-down" class="p-button-text p-button-sm" (click)="onMoveReferenceComponentDown(rowIndex)"></button>
+                          <button
+                            pButton
+                            type="button"
+                            icon="pi pi-trash"
+                            class="p-button-text p-button-danger p-button-sm"
+                            [disabled]="componentForm.get('type')?.value === 'sequence'"
+                            (click)="onDeleteReferenceComponent(rowIndex)">
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </ng-template>
+                </p-table>
+              </div>
+            </article>
+          </ng-container>
+
+          <article class="field field-wide preview-chip">
+            <label>معاينة مباشرة</label>
+            <code>{{ referencePreview }}</code>
+          </article>
+
+          <article class="field field-wide" *ngIf="referencePolicyBlockingIssues.length > 0">
+            <label>تنبيهات السياسة</label>
+            <ul class="reference-issues">
+              <li *ngFor="let issue of referencePolicyBlockingIssues">{{ issue }}</li>
+            </ul>
+          </article>
+        </form>
+      </section>
+
+      <section class="card" *ngIf="false">
+        <header class="card-head">
+          <h3>إعدادات عرض النموذج</h3>
+          <small>إعدادات العرض على مستوى نوع الطلب</small>
+        </header>
+
+        <form class="presentation-grid" [formGroup]="presentationForm" novalidate>
+          <article class="field">
+            <label for="defaultDisplayMode">وضع العرض الافتراضي</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="defaultDisplayMode"
+              [options]="displayModeOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="defaultDisplayMode">
+            </p-dropdown>
+            <small class="field-note">الوضع الافتراضي الذي يبدأ به نموذج التسجيل.</small>
+          </article>
+
+          <article class="field switch-field">
+            <label for="allowUserToChangeDisplayMode">السماح للمستخدم بتغيير وضع العرض</label>
+            <p-inputSwitch
+              inputId="allowUserToChangeDisplayMode"
+              formControlName="allowUserToChangeDisplayMode">
+            </p-inputSwitch>
+            <small class="field-note">عند الإيقاف سيتم فرض الوضع الافتراضي بدون أي اختيار للمستخدم.</small>
+          </article>
+        </form>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
+          <h3>مكتبة الحقول القابلة لإعادة الاستخدام</h3>
+          <input
+            class="library-search"
+            pInputText
+            type="text"
+            [(ngModel)]="librarySearchTerm"
+            [ngModelOptions]="{ standalone: true }"
+            placeholder="بحث بالاسم أو المفتاح" />
+        </header>
+
+        <div class="loading-wrap" *ngIf="loadingLibrary">
+          <p-progressSpinner strokeWidth="4"></p-progressSpinner>
+        </div>
+
+        <div class="table-wrapper table-wrapper--library" *ngIf="!loadingLibrary">
+          <p-table [value]="filteredReusableFields" styleClass="p-datatable-sm library-table">
+            <ng-template pTemplate="header">
+              <tr>
+                <th class="label-col">اسم الحقل</th>
+                <th class="key-col">مفتاح الحقل</th>
+                <th class="type-col">نوع الحقل</th>
+                <th class="actions-col">إجراء</th>
+              </tr>
+            </ng-template>
+
+            <ng-template pTemplate="body" let-row>
+              <tr>
+                <td class="label-col">{{ row.label }}</td>
+                <td class="key-col"><code>{{ row.fieldKey }}</code></td>
+                <td class="type-col">{{ getFieldTypeLabel(row.type) }}</td>
+                <td class="actions-col">
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-sm"
+                    icon="pi pi-plus"
+                    label="ربط"
+                    [disabled]="isFieldAlreadyBound(row)"
+                    (click)="onAddFromLibrary(row)">
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </section>
+
+      <section class="card" *ngIf="false">
+        <header class="card-head">
+          <h3>إضافة حقل جديد</h3>
+          <small>ينشأ في جدول تعريف الحقول ثم يُربط بالنوع الحالي عند الحفظ</small>
+        </header>
+
+        <form class="new-field-grid" [formGroup]="newFieldForm" novalidate>
+          <article class="field">
+            <label for="newFieldKey">مفتاح الحقل</label>
+            <input pInputText id="newFieldKey" formControlName="fieldKey" placeholder="مثال: requestNumber" />
+          </article>
+
+          <article class="field">
+            <label for="newFieldLabel">اسم الحقل</label>
+            <input pInputText id="newFieldLabel" formControlName="label" placeholder="اسم الحقل" />
+          </article>
+
+          <article class="field">
+            <label for="newFieldType">نوع الحقل</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="newFieldType"
+              [options]="fieldTypeOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="type">
+            </p-dropdown>
+          </article>
+
+          <article class="field">
+            <label for="newFieldGroup">المجموعة</label>
+            <p-dropdown
+              appendTo="body"
+              inputId="newFieldGroup"
+              [options]="groupOptions"
+              optionLabel="label"
+              optionValue="value"
+              [showClear]="false"
+              formControlName="groupId"
+              placeholder="اختر جروب">
+            </p-dropdown>
+          </article>
+
+          <article class="field switch-field">
+            <label for="newFieldVisible">ظاهر</label>
+            <p-inputSwitch inputId="newFieldVisible" formControlName="visible"></p-inputSwitch>
+          </article>
+
+          <article class="field switch-field">
+            <label for="newFieldRequired">إلزامي</label>
+            <p-inputSwitch inputId="newFieldRequired" formControlName="required"></p-inputSwitch>
+          </article>
+
+          <article class="field switch-field">
+            <label for="newFieldReadonly">قراءة فقط</label>
+            <p-inputSwitch inputId="newFieldReadonly" formControlName="readonly"></p-inputSwitch>
+          </article>
+
+          <article class="field">
+            <label for="newFieldDefault">القيمة الافتراضية</label>
+            <input pInputText id="newFieldDefault" formControlName="defaultValue" />
+          </article>
+
+          <article class="field field-wide form-actions">
+            <button
+              pButton
+              type="button"
+              class="p-button-outlined"
+              label="إضافة إلى قائمة الربط"
+              icon="pi pi-plus"
+              (click)="onCreateField()">
+            </button>
+          </article>
+        </form>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
+          <h3>الحقول المرتبطة بالنوع الحالي</h3>
+          <small>{{ bindings.length }} حقل</small>
+        </header>
+
+        <div class="table-wrapper table-wrapper--bindings">
+          <p-table [value]="bindings" styleClass="p-datatable-sm bindings-table">
+            <ng-template pTemplate="header">
+              <tr>
+                <th class="label-col">اسم الحقل</th>
+                <th class="type-col">نوع الحقل</th>
+                <th class="key-col">مفتاح الحقل</th>
+                <th class="group-col">المجموعة</th>
+                <th class="order-col">الترتيب</th>
+                <th class="switch-col">ظاهر</th>
+                <th class="switch-col">إلزامي</th>
+                <th class="switch-col">قراءة فقط</th>
+                <th class="default-col">القيمة الافتراضية</th>
+                <th class="dynamic-col">السلوك الديناميكي</th>
+                <th class="actions-col">إجراءات</th>
+              </tr>
+            </ng-template>
+
+            <ng-template pTemplate="body" let-row>
+              <tr>
+                <td class="label-col">
+                  <input
+                    pInputText
+                    [(ngModel)]="row.label"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()" />
+                </td>
+                <td class="type-col">
+                  <p-dropdown
+                    appendTo="body"
+                    [options]="fieldTypeOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="row.type"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-dropdown>
+                </td>
+                <td class="key-col">
+                  <input
+                    pInputText
+                    [(ngModel)]="row.fieldKey"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()" />
+                </td>
+                <td class="group-col">
+                  <p-dropdown
+                    appendTo="body"
+                    [options]="groupOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="row.groupId"
+                    [ngModelOptions]="{ standalone: true }"
+                    [showClear]="false"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-dropdown>
+                </td>
+                <td class="order-col">
+                  <input
+                    pInputText
+                    type="number"
+                    min="1"
+                    [(ngModel)]="row.displayOrder"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()" />
+                </td>
+                <td class="switch-col">
+                  <p-inputSwitch
+                    [(ngModel)]="row.visible"
+                    [disabled]="true"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-inputSwitch>
+                </td>
+                <td class="switch-col">
+                  <p-inputSwitch
+                    [(ngModel)]="row.required"
+                    [disabled]="true"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-inputSwitch>
+                </td>
+                <td class="switch-col">
+                  <p-inputSwitch
+                    [(ngModel)]="row.readonly"
+                    [disabled]="true"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()">
+                  </p-inputSwitch>
+                </td>
+                <td class="default-col">
+                  <input
+                    pInputText
+                    [(ngModel)]="row.defaultValue"
+                    [disabled]="true"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="onBindingChanged()" />
+                </td>
+                <td class="dynamic-col">
+                  <div class="dynamic-runtime-cell-actions">
+                    <button
+                      pButton
+                      type="button"
+                      class="p-button-text p-button-sm field-library-json-edit-button"
+                      [class.field-library-json-edit-button-hidden]="!canEditFieldLibraryJson(row)"
+                      label="تعديل JSON من مكتبة الحقول"
+                      icon="pi pi-external-link"
+                      [routerLink]="['/Admin/ControlCenterCatalog/field-library']"
+                      [queryParams]="buildFieldLibraryJsonEditorQueryParams(row)">
+                    </button>
+                  </div>
+                </td>
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button pButton type="button" icon="pi pi-arrow-up" class="p-button-text p-button-sm" (click)="onMoveBindingUp(row)"></button>
+                    <button pButton type="button" icon="pi pi-arrow-down" class="p-button-text p-button-sm" (click)="onMoveBindingDown(row)"></button>
+                    <button pButton type="button" icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm" (click)="onDeleteBinding(row)"></button>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+
+        <div class="dynamic-runtime-guide">
+          <h4>توجيه إعدادات الحقول</h4>
+          <p>
+            تم نقل إعدادات الحقول (الإلزامية، الظهور، المصدر الديناميكي، القيم الافتراضية، وسلوك التكامل) إلى شاشة مكتبة الحقول.
+            هذه الشاشة مخصصة للربط والترتيب فقط.
+          </p>
+          <button
+            pButton
+            type="button"
+            class="p-button-outlined p-button-sm"
+            label="فتح مكتبة الحقول"
+            icon="pi pi-external-link"
+            [routerLink]="['/Admin/ControlCenterCatalog/field-library']"
+            [queryParams]="fieldLibraryNavigationQueryParams">
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <aside class="summary">
+      <h3>فحص صلاحية الربط</h3>
+
+      <div class="summary-row">
+        <span>إجمالي الحقول المرتبطة</span>
+        <strong>{{ bindings.length }}</strong>
+      </div>
+      <div class="summary-row">
+        <span>حالة الربط</span>
+        <strong>{{ validation.isValid ? 'صالح' : 'غير صالح' }}</strong>
+      </div>
+      <div class="summary-row">
+        <span>مصدر المكتبة</span>
+        <strong>{{ libraryLoadedFromDb ? 'قاعدة البيانات' : 'غير متاح حاليًا' }}</strong>
+      </div>
+      <div class="summary-row">
+        <span>حالة المزامنة</span>
+        <strong>{{ hasPendingBackendChanges ? 'تعديلات غير محفوظة' : 'متزامن' }}</strong>
+      </div>
+
+      <section class="issues" *ngIf="validation.blockingIssues.length > 0; else noBlockingIssues">
+        <h4>مشكلات مانعة</h4>
+        <ul>
+          <li *ngFor="let issue of validation.blockingIssues">{{ issue }}</li>
+        </ul>
+      </section>
+      <ng-template #noBlockingIssues>
+        <p class="valid-note">لا توجد مشكلات مانعة في الربط الحالي.</p>
+      </ng-template>
+
+      <section class="warnings" *ngIf="validation.warnings.length > 0">
+        <h4>تنبيهات</h4>
+        <ul>
+          <li *ngFor="let warning of validation.warnings">{{ warning }}</li>
+        </ul>
+      </section>
+
+      <div class="actions">
+        <button pButton type="button" class="p-button-outlined" label="حفظ مسودة محلية" (click)="onSaveDraft()"></button>
+        <button
+          pButton
+          type="button"
+          label="حفظ في قاعدة البيانات"
+          icon="pi pi-save"
+          [loading]="savingToBackend"
+          [disabled]="savingToBackend || loadingLibrary"
+          (click)="onSaveToBackend()">
+        </button>
+        <button pButton type="button" label="العودة إلى لوحة التحكم الجديدة" icon="pi pi-arrow-left" iconPos="left" (click)="onBackToCatalogDashboard()"></button>
+      </div>
+      <p class="save-path-hint">
+        {{ saveToBackendActionHint }}
+      </p>
+    </aside>
+  </div>
+
+  <p-dialog
+    [(visible)]="dynamicRuntimeBuilderVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [style]="{ width: '76rem', maxWidth: '96vw' }"
+    [contentStyle]="{ overflow: 'auto' }"
+    header="منشئ إعدادات التكامل الديناميكي"
+    (onHide)="onDynamicRuntimeBuilderDialogHide()"
+    appendTo="body">
+    <div class="integration-builder">
+      <div class="builder-quick-actions">
+        <button
+          pButton
+          type="button"
+          class="p-button-outlined p-button-sm"
+          icon="pi pi-bolt"
+          label="تهيئة سيناريو تحميل الخيارات من Power BI"
+          (click)="onApplyDynamicRuntimePowerBiOptionLoaderPreset()">
+        </button>
+        <button
+          pButton
+          type="button"
+          class="p-button-outlined p-button-sm"
+          icon="pi pi-shield"
+          label="تهيئة سيناريو التحقق غير المتزامن"
+          (click)="onApplyDynamicRuntimeExternalAsyncValidationPreset()">
+        </button>
+      </div>
+      <div class="builder-validation" *ngIf="dynamicRuntimeBuilderInlineValidationIssues.length > 0">
+        <p>لا يمكن تطبيق الإعداد قبل معالجة النقاط التالية:</p>
+        <ul>
+          <li *ngFor="let issue of dynamicRuntimeBuilderInlineValidationIssues">{{ issue }}</li>
+        </ul>
+      </div>
+      <div class="integration-grid">
+        <div class="field">
+          <label>نوع السلوك</label>
+          <p-dropdown
+            appendTo="body"
+            [options]="dynamicRuntimeBehaviorOptions"
+            optionLabel="label"
+            optionValue="value"
+            [(ngModel)]="dynamicRuntimeBuilderModel.behaviorType"
+            [ngModelOptions]="{ standalone: true }">
+          </p-dropdown>
+        </div>
+        <div class="field">
+          <label>نوع الحدث</label>
+          <p-dropdown
+            appendTo="body"
+            [options]="dynamicRuntimeTriggerOptions"
+            optionLabel="label"
+            optionValue="value"
+            [(ngModel)]="dynamicRuntimeBuilderModel.trigger"
+            [ngModelOptions]="{ standalone: true }">
+          </p-dropdown>
+        </div>
+        <div class="field">
+          <label>نوع المصدر</label>
+          <p-dropdown
+            appendTo="body"
+            [options]="dynamicRuntimeSourceTypeOptions"
+            optionLabel="label"
+            optionValue="value"
+            [(ngModel)]="dynamicRuntimeBuilderModel.sourceType"
+            [ngModelOptions]="{ standalone: true }">
+          </p-dropdown>
+        </div>
+        <div class="field">
+          <label>تنسيق الطلب</label>
+          <p-dropdown
+            appendTo="body"
+            [options]="dynamicRuntimeRequestFormatOptions"
+            optionLabel="label"
+            optionValue="value"
+            [(ngModel)]="dynamicRuntimeBuilderModel.requestFormat"
+            [ngModelOptions]="{ standalone: true }">
+          </p-dropdown>
+        </div>
+        <div class="field">
+          <label>وضع المصادقة</label>
+          <p-dropdown
+            appendTo="body"
+            [options]="dynamicRuntimeAuthModeOptions"
+            optionLabel="label"
+            optionValue="value"
+            [(ngModel)]="dynamicRuntimeBuilderModel.authMode"
+            [ngModelOptions]="{ standalone: true }">
+          </p-dropdown>
+        </div>
+        <div class="field" *ngIf="isDynamicRuntimeOptionLoaderBehavior">
+          <label>حقل المصدر (اختياري)</label>
+          <input
+            pInputText
+            [(ngModel)]="dynamicRuntimeBuilderModel.sourceFieldKey"
+            [ngModelOptions]="{ standalone: true }"
+            placeholder="مثال: customerCode" />
+        </div>
+      </div>
+
+      <section class="builder-section" *ngIf="isDynamicRuntimePowerBiSource">
+        <h4>مصدر داخلي</h4>
+        <div class="integration-grid">
+          <div class="field">
+            <label>معرّف العبارة</label>
+            <input
+              pInputText
+              type="number"
+              [(ngModel)]="dynamicRuntimeBuilderModel.statementId"
+              [ngModelOptions]="{ standalone: true }" />
+            <small class="error" *ngIf="isDynamicRuntimeBuilderStatementIdMissing">
+              معرّف العبارة مطلوب ويجب أن يكون رقمًا موجبًا.
+            </small>
+          </div>
+        </div>
+        <div class="builder-list">
+          <div class="builder-list-head">
+            <h5>المعاملات</h5>
+            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة" (click)="onAddDynamicRuntimeBinding('parameters')"></button>
+          </div>
+          <div class="builder-list-row" *ngFor="let item of dynamicRuntimeBuilderModel.parameters; let idx = index">
+            <input pInputText [(ngModel)]="item.name" [ngModelOptions]="{ standalone: true }" placeholder="اسم المعامل" />
+            <p-dropdown appendTo="body" [options]="dynamicRuntimeValueSourceOptions" optionLabel="label" optionValue="value" [(ngModel)]="item.source" [ngModelOptions]="{ standalone: true }"></p-dropdown>
+            <input *ngIf="item.source === 'static'" pInputText [(ngModel)]="item.staticValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة ثابتة" />
+            <input *ngIf="item.source === 'field'" pInputText [(ngModel)]="item.fieldKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح الحقل" />
+            <input *ngIf="item.source === 'claim'" pInputText [(ngModel)]="item.claimKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح المطالبة" />
+            <input pInputText [(ngModel)]="item.fallbackValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة بديلة (اختياري)" />
+            <button pButton type="button" class="p-button-text p-button-danger p-button-sm" icon="pi pi-trash" (click)="onRemoveDynamicRuntimeBinding('parameters', idx)"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="builder-section" *ngIf="isDynamicRuntimeExternalSource">
+        <h4>مصدر خارجي</h4>
+        <div class="integration-grid">
+          <div class="field field-wide">
+            <label>الرابط الكامل</label>
+            <input
+              pInputText
+              [(ngModel)]="dynamicRuntimeBuilderModel.fullUrl"
+              [ngModelOptions]="{ standalone: true }"
+              placeholder="https://example.com/api/..." />
+            <small class="error" *ngIf="isDynamicRuntimeBuilderExternalUrlMissing">
+              الرابط الكامل مطلوب لمسار المصدر الخارجي.
+            </small>
+          </div>
+          <div class="field">
+            <label>طريقة الطلب</label>
+            <p-dropdown
+              appendTo="body"
+              [options]="dynamicRuntimeHttpMethodOptions"
+              optionLabel="label"
+              optionValue="value"
+              [(ngModel)]="dynamicRuntimeBuilderModel.method"
+              [ngModelOptions]="{ standalone: true }">
+            </p-dropdown>
+          </div>
+        </div>
+
+        <div class="builder-list">
+          <div class="builder-list-head">
+            <h5>معاملات الاستعلام</h5>
+            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة" (click)="onAddDynamicRuntimeBinding('query')"></button>
+          </div>
+          <div class="builder-list-row" *ngFor="let item of dynamicRuntimeBuilderModel.query; let idx = index">
+            <input pInputText [(ngModel)]="item.name" [ngModelOptions]="{ standalone: true }" placeholder="اسم المعامل" />
+            <p-dropdown appendTo="body" [options]="dynamicRuntimeValueSourceOptions" optionLabel="label" optionValue="value" [(ngModel)]="item.source" [ngModelOptions]="{ standalone: true }"></p-dropdown>
+            <input *ngIf="item.source === 'static'" pInputText [(ngModel)]="item.staticValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة ثابتة" />
+            <input *ngIf="item.source === 'field'" pInputText [(ngModel)]="item.fieldKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح الحقل" />
+            <input *ngIf="item.source === 'claim'" pInputText [(ngModel)]="item.claimKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح المطالبة" />
+            <input pInputText [(ngModel)]="item.fallbackValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة بديلة (اختياري)" />
+            <button pButton type="button" class="p-button-text p-button-danger p-button-sm" icon="pi pi-trash" (click)="onRemoveDynamicRuntimeBinding('query', idx)"></button>
+          </div>
+        </div>
+
+        <div class="builder-list">
+          <div class="builder-list-head">
+            <h5>معاملات جسم الطلب</h5>
+            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة" (click)="onAddDynamicRuntimeBinding('body')"></button>
+          </div>
+          <div class="builder-list-row" *ngFor="let item of dynamicRuntimeBuilderModel.body; let idx = index">
+            <input pInputText [(ngModel)]="item.name" [ngModelOptions]="{ standalone: true }" placeholder="اسم المفتاح" />
+            <p-dropdown appendTo="body" [options]="dynamicRuntimeValueSourceOptions" optionLabel="label" optionValue="value" [(ngModel)]="item.source" [ngModelOptions]="{ standalone: true }"></p-dropdown>
+            <input *ngIf="item.source === 'static'" pInputText [(ngModel)]="item.staticValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة ثابتة" />
+            <input *ngIf="item.source === 'field'" pInputText [(ngModel)]="item.fieldKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح الحقل" />
+            <input *ngIf="item.source === 'claim'" pInputText [(ngModel)]="item.claimKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح المطالبة" />
+            <input pInputText [(ngModel)]="item.fallbackValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة بديلة (اختياري)" />
+            <button pButton type="button" class="p-button-text p-button-danger p-button-sm" icon="pi pi-trash" (click)="onRemoveDynamicRuntimeBinding('body', idx)"></button>
+          </div>
+        </div>
+
+        <div class="builder-list">
+          <div class="builder-list-head">
+            <h5>رؤوس الطلب</h5>
+            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة" (click)="onAddDynamicRuntimeBinding('headers')"></button>
+          </div>
+          <div class="builder-list-row" *ngFor="let item of dynamicRuntimeBuilderModel.headers; let idx = index">
+            <input pInputText [(ngModel)]="item.name" [ngModelOptions]="{ standalone: true }" placeholder="اسم الرأس" />
+            <p-dropdown appendTo="body" [options]="dynamicRuntimeValueSourceOptions" optionLabel="label" optionValue="value" [(ngModel)]="item.source" [ngModelOptions]="{ standalone: true }"></p-dropdown>
+            <input *ngIf="item.source === 'static'" pInputText [(ngModel)]="item.staticValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة ثابتة" />
+            <input *ngIf="item.source === 'field'" pInputText [(ngModel)]="item.fieldKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح الحقل" />
+            <input *ngIf="item.source === 'claim'" pInputText [(ngModel)]="item.claimKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح المطالبة" />
+            <input pInputText [(ngModel)]="item.fallbackValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة بديلة (اختياري)" />
+            <button pButton type="button" class="p-button-text p-button-danger p-button-sm" icon="pi pi-trash" (click)="onRemoveDynamicRuntimeBinding('headers', idx)"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="builder-section" *ngIf="isDynamicRuntimeCustomAuth">
+        <h4>رؤوس المصادقة المخصصة</h4>
+        <div class="builder-list">
+          <div class="builder-list-head">
+            <h5>رؤوس مخصصة</h5>
+            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة" (click)="onAddDynamicRuntimeBinding('customHeaders')"></button>
+          </div>
+          <div class="builder-list-row" *ngFor="let item of dynamicRuntimeBuilderModel.customHeaders; let idx = index">
+            <input pInputText [(ngModel)]="item.name" [ngModelOptions]="{ standalone: true }" placeholder="اسم الرأس" />
+            <p-dropdown appendTo="body" [options]="dynamicRuntimeValueSourceOptions" optionLabel="label" optionValue="value" [(ngModel)]="item.source" [ngModelOptions]="{ standalone: true }"></p-dropdown>
+            <input *ngIf="item.source === 'static'" pInputText [(ngModel)]="item.staticValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة ثابتة" />
+            <input *ngIf="item.source === 'field'" pInputText [(ngModel)]="item.fieldKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح الحقل" />
+            <input *ngIf="item.source === 'claim'" pInputText [(ngModel)]="item.claimKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح المطالبة" />
+            <input pInputText [(ngModel)]="item.fallbackValue" [ngModelOptions]="{ standalone: true }" placeholder="قيمة بديلة (اختياري)" />
+            <button pButton type="button" class="p-button-text p-button-danger p-button-sm" icon="pi pi-trash" (click)="onRemoveDynamicRuntimeBinding('customHeaders', idx)"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="builder-section" *ngIf="isDynamicRuntimeOptionLoaderBehavior">
+        <h4>ربط الاستجابة - تحميل الخيارات</h4>
+        <div class="integration-grid">
+          <div class="field">
+            <label>مسار القائمة</label>
+            <input pInputText [(ngModel)]="dynamicRuntimeBuilderModel.responseListPath" [ngModelOptions]="{ standalone: true }" placeholder="data.items" />
+          </div>
+          <div class="field">
+            <label>مسار القيمة</label>
+            <input pInputText [(ngModel)]="dynamicRuntimeBuilderModel.responseValuePath" [ngModelOptions]="{ standalone: true }" placeholder="id" />
+          </div>
+          <div class="field">
+            <label>مسار الاسم</label>
+            <input pInputText [(ngModel)]="dynamicRuntimeBuilderModel.responseLabelPath" [ngModelOptions]="{ standalone: true }" placeholder="name" />
+          </div>
+          <div class="field">
+            <label>الحد الأدنى لطول الإدخال</label>
+            <input pInputText type="number" [(ngModel)]="dynamicRuntimeBuilderModel.minQueryLength" [ngModelOptions]="{ standalone: true }" />
+          </div>
+          <div class="field switch-field">
+            <label>مسح الخيارات عند فراغ المصدر</label>
+            <p-inputSwitch [(ngModel)]="dynamicRuntimeBuilderModel.clearWhenSourceEmpty" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+          </div>
+        </div>
+      </section>
+
+      <section class="builder-section" *ngIf="isDynamicRuntimeAsyncValidationBehavior">
+        <h4>ربط الاستجابة - التحقق غير المتزامن</h4>
+        <div class="integration-grid">
+          <div class="field">
+            <label>مسار نتيجة التحقق</label>
+            <input pInputText [(ngModel)]="dynamicRuntimeBuilderModel.responseValidPath" [ngModelOptions]="{ standalone: true }" placeholder="data.isValid" />
+          </div>
+          <div class="field">
+            <label>مسار الرسالة</label>
+            <input pInputText [(ngModel)]="dynamicRuntimeBuilderModel.responseMessagePath" [ngModelOptions]="{ standalone: true }" placeholder="data.message" />
+          </div>
+          <div class="field">
+            <label>رسالة افتراضية</label>
+            <input pInputText [(ngModel)]="dynamicRuntimeBuilderModel.defaultErrorMessage" [ngModelOptions]="{ standalone: true }" />
+          </div>
+          <div class="field">
+            <label>التأخير قبل التحقق (مللي ثانية)</label>
+            <input pInputText type="number" [(ngModel)]="dynamicRuntimeBuilderModel.debounceMs" [ngModelOptions]="{ standalone: true }" />
+          </div>
+          <div class="field">
+            <label>الحد الأدنى للطول</label>
+            <input pInputText type="number" [(ngModel)]="dynamicRuntimeBuilderModel.minValueLength" [ngModelOptions]="{ standalone: true }" />
+          </div>
+        </div>
+      </section>
+
+      <section class="builder-section" *ngIf="isDynamicRuntimeAutofillBehavior">
+        <h4>إعدادات التعبئة التلقائية والإجراءات</h4>
+        <div class="integration-grid">
+          <div class="field">
+            <label>شرط المساواة</label>
+            <input pInputText [(ngModel)]="dynamicRuntimeBuilderModel.whenEquals" [ngModelOptions]="{ standalone: true }" placeholder="اختياري" />
+          </div>
+          <div class="field switch-field">
+            <label>مسح الأهداف عند فراغ المصدر</label>
+            <p-inputSwitch [(ngModel)]="dynamicRuntimeBuilderModel.clearTargetsWhenEmpty" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+          </div>
+        </div>
+
+        <div class="builder-list">
+          <div class="builder-list-head">
+            <h5>حقول التعبئة</h5>
+            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة" (click)="onAddDynamicRuntimePatch()"></button>
+          </div>
+          <div class="builder-list-row patches-row" *ngFor="let patch of dynamicRuntimeBuilderModel.patches; let idx = index">
+            <input pInputText [(ngModel)]="patch.targetFieldKey" [ngModelOptions]="{ standalone: true }" placeholder="مفتاح الحقل المستهدف" />
+            <input pInputText [(ngModel)]="patch.valuePath" [ngModelOptions]="{ standalone: true }" placeholder="مسار القيمة" />
+            <input pInputText [(ngModel)]="patch.valueTemplate" [ngModelOptions]="{ standalone: true }" placeholder="قالب القيمة" />
+            <div class="patch-switch">
+              <label>مسح عند عدم وجود قيمة</label>
+              <p-inputSwitch [(ngModel)]="patch.clearWhenMissing" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+            </div>
+            <button pButton type="button" class="p-button-text p-button-danger p-button-sm" icon="pi pi-trash" (click)="onRemoveDynamicRuntimePatch(idx)"></button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <p class="builder-save-hint">
+        زر "تطبيق على الحقل" لا يحفظ في قاعدة البيانات، وإنما يطبّق التعديل داخل الشاشة فقط حتى تضغط "حفظ في قاعدة البيانات".
+      </p>
+      <div class="builder-footer">
+        <button pButton type="button" class="p-button-text" label="إلغاء" (click)="onCancelDynamicRuntimeBuilder()"></button>
+        <button
+          pButton
+          type="button"
+          label="تطبيق على الحقل"
+          icon="pi pi-check"
+          [disabled]="!isDynamicRuntimeBuilderReadyToApply"
+          (click)="onSaveDynamicRuntimeBuilder()">
+        </button>
+      </div>
+    </ng-template>
+  </p-dialog>
+</section>

@@ -29,15 +29,15 @@ export const environment = {
   
   // ConnectApiURL: `${MainDomain}/Applications/Connect_API`,
   LandTransportationApiURL: `${MainDomain}/Applications/Connect_API`,
-  // DomainAuthURL: `${MainDomain}/Applications/Domain_Authorization`,
+  DomainAuthURL: `${MainDomain}/Applications/Domain_Authorization`,
   SSoURL: `${MainDomain}/Applications/SSO`,
   PowerBi: `${MainDomain}/Applications/PowerBi`,
-  // SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
+  SignalRHubServer: `${MainDomain}/Applications/GlobalHubSync`,
   
-SignalRHubServer: `https://sync.webserver.local`,  // LandTransportationApiURL: `http://localhost:8888`,
-  ConnectApiURL: `https://connect.webserver.local`,
-  DomainAuthURL:  "https://auth.webserver.local",
-  // PowerBi: "http://localhost:8020",
+// SignalRHubServer: `https://sync.webserver.local`,  // LandTransportationApiURL: `http://localhost:8888`,
+  ConnectApiURL: `https://localhost:5001`,
+//   DomainAuthURL:  "https://auth.webserver.local",
+//   // PowerBi: "http://localhost:8020",
   // PublicationsUrl: "http://localhost:5269",
   
   // Home

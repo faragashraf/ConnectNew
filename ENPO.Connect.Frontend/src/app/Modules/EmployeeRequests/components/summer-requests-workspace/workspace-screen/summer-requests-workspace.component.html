@@ -1,4 +1,44 @@
 ﻿<div class="summer-shell">
+  <button
+    type="button"
+    class="video-guide-trigger"
+    (click)="openGuideVideoDialog()"
+    title="عرض فيديو شرح خطوات التسجيل"
+    aria-label="عرض فيديو شرح خطوات التسجيل">
+    <i class="pi pi-video"></i>
+  </button>
+
+  <p-dialog
+    [(visible)]="showGuideVideoDialog"
+    [modal]="true"
+    [dismissableMask]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [closeOnEscape]="true"
+    appendTo="body"
+    [style]="{ width: 'min(980px, 96vw)' }"
+    [styleClass]="'summer-guide-video-dialog'"
+    header="دليل خطوات التسجيل"
+    (onHide)="onGuideVideoDialogHide()">
+    <section class="summer-guide-video-shell">
+      <video
+        #summerGuideVideoPlayer
+        class="summer-guide-video-player"
+        controls
+        autoplay
+        muted
+        playsinline
+        preload="metadata">
+        <source [src]="summerGuideVideoPath" type="video/quicktime" />
+        <source [src]="summerGuideVideoPath" />
+        متصفحك لا يدعم تشغيل الفيديو. يمكنك فتحه في تبويب جديد.
+      </video>
+      <div class="summer-guide-video-actions">
+        <a [href]="summerGuideVideoPath" target="_blank" rel="noopener">فتح الفيديو في تبويب جديد</a>
+      </div>
+    </section>
+  </p-dialog>
+
   <section class="hero">
     <div>
       <h1>إدارة طلبات المصايف - موسم {{ seasonYear }}</h1>
@@ -15,7 +55,7 @@
         قاعدة الاعتذار: لا يمكن الاعتذار عن أي حجز قبل موعد الفوج بأقل من 14 يوم.
       </p>
 
-      <article class="destination-card" *ngFor="let destination of destinations; trackBy: destinationTrackBy">
+      <article class="destination-card" *ngFor="let destination of bookingDestinations; trackBy: destinationTrackBy">
         <header>
           <h3>{{ destination.name }}</h3>
           <span class="pill">{{ destination.waves.length }} فوج</span>
@@ -51,26 +91,38 @@
 
     <main class="workspace-panel">
       <p-tabView [activeIndex]="activeTabIndex" (onChange)="onTabChange($event)">
-        <p-tabPanel [header]="isEditMode ? ('تعديل الطلب #' + editRequestId) : 'إنشاء طلب جديد'">
+        <p-tabPanel [header]="isEditMode ? (editRequestId ? ('تعديل الطلب #' + editRequestId) : 'تعديل الطلب') : 'إنشاء طلب جديد'">
           <div class="edit-banner" *ngIf="isEditMode">
             <div>
               <h4>وضع تعديل الطلب</h4>
-              <p>يتم الآن تعديل الطلب رقم #{{ editRequestId }}.</p>
+              <p *ngIf="editRequestId; else editTokenLoadingState">
+                يتم الآن تعديل الطلب رقم #{{ editRequestId }}.
+              </p>
+              <ng-template #editTokenLoadingState>
+                <p>جاري التحقق من رابط التعديل وتحميل بيانات الطلب...</p>
+              </ng-template>
             </div>
             <button type="button" class="ghost" (click)="exitEditMode()">
-              العودة لإنشاء طلب جديد
+              {{ editModeExitLabel }}
             </button>
           </div>
 
-          <ng-container *ngIf="destinations.length > 0; else destinationCatalogState">
-            <app-summer-dynamic-booking-builder
-              [destinations]="destinations"
-              [seasonYear]="seasonYear"
-              [applicationId]="dynamicSummerApplicationId"
-              [configRouteKey]="dynamicSummerConfigRouteKey"
-              [editRequestId]="editRequestId"
-              (bookingCreated)="onDynamicBookingCreated($event)">
-            </app-summer-dynamic-booking-builder>
+          <ng-container *ngIf="canShowCreateBuilder; else destinationCatalogState">
+            <ng-container *ngIf="!isEditMode || editRequestId; else editBuilderLoadingState">
+              <app-summer-dynamic-booking-builder
+                [destinations]="isEditMode ? destinations : bookingDestinations"
+                [seasonYear]="seasonYear"
+                [applicationId]="dynamicSummerApplicationId"
+                [configRouteKey]="dynamicSummerConfigRouteKey"
+                [editRequestId]="editRequestId"
+                (bookingCreated)="onDynamicBookingCreated($event)">
+              </app-summer-dynamic-booking-builder>
+            </ng-container>
+            <ng-template #editBuilderLoadingState>
+              <div class="empty-state">
+                <small class="loading-note">جاري تجهيز نموذج التعديل...</small>
+              </div>
+            </ng-template>
           </ng-container>
           <ng-template #destinationCatalogState>
             <div class="empty-state">
@@ -83,8 +135,10 @@
                 [showTitle]="false"
                 [ariaLabel]="'جاري تحميل إعدادات المصايف'">
               </app-summer-skeleton>
-              <h3 *ngIf="!loadingDestinations && destinationsError.length > 0">تعذر تحميل إعدادات المصايف</h3>
-              <p *ngIf="!loadingDestinations && destinationsError.length > 0">{{ destinationsError }}</p>
+              <h3 *ngIf="!loadingDestinations && destinationCatalogEmptyStateMessage.length > 0">
+                {{ destinationsError.length > 0 ? 'تعذر تحميل إعدادات المصايف' : 'غير متاح' }}
+              </h3>
+              <p *ngIf="!loadingDestinations && destinationCatalogEmptyStateMessage.length > 0">{{ destinationCatalogEmptyStateMessage }}</p>
             </div>
           </ng-template>
         </p-tabPanel>
@@ -133,9 +187,9 @@
                 *ngIf="selectedRequest as request"
                 type="button"
                 class="ghost edit-request-btn"
-                [disabled]="!canEditRequest(request)"
+                [disabled]="!canEditRequest(request) || creatingEditLink"
                 (click)="openEditRequest(request)">
-                {{ canEditRequest(request) ? 'تعديل الطلب' : 'التعديل غير متاح' }}
+                {{ creatingEditLink ? 'جاري تجهيز الرابط...' : (canEditRequest(request) ? 'تعديل الطلب' : 'التعديل غير متاح') }}
               </button>
             </header>
             <p class="warn" *ngIf="selectedRequest as request">
@@ -191,7 +245,7 @@
           </section>
         </p-tabPanel>
 
-        <p-tabPanel header="السداد / التحويل / الاعتذار">
+        <p-tabPanel [header]="paymentWorkflowTabHeader">
           <ng-container *ngIf="selectedRequest as request; else emptyRequestState">
             <div class="selected-request">
               <h3>الطلب المحدد: #{{ request.messageId }} - {{ request.requestRef }}</h3>
@@ -201,13 +255,52 @@
               </p>
             </div>
 
-            <div class="workflow-grid">
+            <div class="workflow-grid" [class.payment-only]="isPaymentOnlyWorkflowMode">
               <form [formGroup]="paymentForm" class="workflow-card" (ngSubmit)="submitPayment()">
                 <h4>تسجيل السداد</h4>
+                <div class="payment-snapshot" *ngIf="paymentSnapshot as snapshot">
+                  <div class="payment-snapshot-row">
+                    <span>طريقة السداد</span>
+                    <strong>{{ snapshot.paymentModeLabel }}</strong>
+                  </div>
+                  <div class="payment-snapshot-row">
+                    <span>البيان</span>
+                    <strong>{{ snapshot.installmentLabel }}</strong>
+                  </div>
+                  <div class="payment-snapshot-row">
+                    <span>مبلغ السداد</span>
+                    <strong>{{ snapshot.amountText }}</strong>
+                  </div>
+                  <div class="payment-snapshot-row">
+                    <span>تاريخ السداد الحالي</span>
+                    <strong>{{ snapshot.paidAtDisplay }}</strong>
+                  </div>
+                  <div class="payment-snapshot-row">
+                    <span>حالة السداد الحالية</span>
+                    <strong>{{ snapshot.statusLabel }}</strong>
+                  </div>
+                </div>
+                <label *ngIf="canEditPaymentStatus; else ownerPaymentStatusInfo">
+                  <span class="required-label">حالة السداد</span>
+                  <select formControlName="paymentStatus">
+                    <option value="PAID">مسدد</option>
+                    <option value="UNPAID">غير مسدد</option>
+                  </select>
+                </label>
+                <ng-template #ownerPaymentStatusInfo>
+                  <label>
+                    <span class="required-label">حالة السداد</span>
+                    <input type="text" value="مسدد" disabled />
+                  </label>
+                  <small class="optional-label">
+                    يتم إرسال حالة السداد تلقائيًا كـ "مسدد" عند تسجيل السداد.
+                  </small>
+                </ng-template>
                 <label>
                   <span class="required-label">تاريخ ووقت السداد</span>
-                  <input type="datetime-local" step="3600" formControlName="paidAtLocal" />
+                  <input type="datetime-local" step="1" formControlName="paidAtLocal" [attr.max]="getPaymentMaxDateTimeLocal()" />
                 </label>
+                <p class="warn" *ngIf="hasPaymentInFutureError()">{{ paymentInFutureMessage }}</p>
                 <label>
                   <span class="optional-label">ملاحظات السداد</span>
                   <textarea rows="3" formControlName="notes" placeholder="ملاحظات السداد"></textarea>
@@ -228,7 +321,7 @@
                 </button>
               </form>
 
-              <form [formGroup]="transferForm" class="workflow-card" (ngSubmit)="submitTransfer()">
+              <form *ngIf="showTransferWorkflowCard" [formGroup]="transferForm" class="workflow-card" (ngSubmit)="submitTransfer()">
                 <h4>التحويل (مرة واحدة)</h4>
                 <small *ngIf="transferCapacityLoading">جاري تحديث السعة...</small>
                 <div class="mini-capacity-grid" *ngIf="transferCapacitySummary.length > 0">
@@ -240,7 +333,7 @@
                   <span class="required-label">المصيف المستهدف</span>
                   <select formControlName="toCategoryId">
                     <option [ngValue]="null">اختر</option>
-                    <option *ngFor="let destination of destinations; trackBy: destinationTrackBy" [ngValue]="destination.categoryId">
+                    <option *ngFor="let destination of transferDestinationOptions; trackBy: destinationTrackBy" [ngValue]="destination.categoryId">
                       {{ destination.name }}
                     </option>
                   </select>
@@ -289,9 +382,12 @@
                 </button>
               </form>
 
-                            <form [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
+              <form *ngIf="showCancelWorkflowCard" [formGroup]="cancelForm" class="workflow-card" (ngSubmit)="submitCancel()">
                 <h4>الاعتذار عن الحجز</h4>
                 <p class="warn" *ngIf="!isCancelActionClosed(request)">{{ getCancelWindowNote() }}</p>
+                <p class="warn" *ngIf="getCancelDeductionMessage(request) as cancelDeductionMessage">
+                  <ng-container *ngIf="cancelDeductionMessage.length > 0">{{ cancelDeductionMessage }}</ng-container>
+                </p>
                 <label>
                   <span class="optional-label">سبب الاعتذار</span>
                   <textarea rows="3" formControlName="reason" placeholder="سبب الاعتذار (اختياري)"></textarea>
@@ -323,7 +419,9 @@
           <ng-template #emptyRequestState>
             <div class="empty-state">
               <h3>اختر طلباً من تبويب "طلباتي" أولاً</h3>
-              <p>بعد اختيار الطلب ستظهر لك كل إجراءات الاعتذار والسداد والتحويل.</p>
+              <p>{{ isPaymentOnlyWorkflowMode
+                ? 'بعد اختيار الطلب ستظهر لك إجراءات السداد فقط.'
+                : 'بعد اختيار الطلب ستظهر لك كل إجراءات الاعتذار والسداد والتحويل.' }}</p>
             </div>
           </ng-template>
         </p-tabPanel>

@@ -58,6 +58,7 @@ export interface UserConfiguration {
 export interface DynamicFormSettings {
     applicationId?: string;
     aliases?: Record<string, string[]>;
+    traceRequests?: boolean;
 }
 
 export class ComponentConfig {
@@ -199,7 +200,8 @@ export class ComponentConfig {
             });
             this.dynamicFormSettings = {
                 applicationId: String(dfs.applicationId ?? '').trim() || undefined,
-                aliases
+                aliases,
+                traceRequests: Boolean(dfs.traceRequests)
             };
         }
         if (init && Object.prototype.hasOwnProperty.call(init, 'statusChangeOptions')) {
@@ -211,6 +213,34 @@ export class ComponentConfig {
                 : [];
         }
     }
+}
+
+export type RequestTrigger = 'onInit' | 'onCategoryChanged' | 'onDemand' | string;
+
+export interface RequestRunConditions {
+    categoryIdIn?: number[];
+    categoryIdNotIn?: number[];
+    dependsOn?: string[];
+}
+
+export interface RequestBindingMap {
+    valuePath?: string;
+    labelPath?: string;
+}
+
+export interface RequestBindingTarget {
+    type?: 'dynamicField' | 'contextPath';
+    fieldKey?: string;
+    path?: string;
+}
+
+export interface RequestBindingRule {
+    bindType?: 'options' | 'value' | string;
+    targetFieldKey?: string;
+    target?: RequestBindingTarget;
+    responsePath?: string;
+    responseMap?: RequestBindingMap;
+    clearOnEmpty?: boolean;
 }
 
 export interface RequestArrayItem {
@@ -225,6 +255,19 @@ export interface RequestArrayItem {
     populateMethod?: string;
     populateArgs?: any[];
     wrapBodyAsArray?: boolean;
+    requestId?: string;
+    enabled?: boolean;
+    trigger?: RequestTrigger | RequestTrigger[];
+    conditions?: RequestRunConditions;
+    bindings?: RequestBindingRule[];
+    trace?: boolean;
+}
+
+export interface ProcessRequestsAndPopulateOptions {
+    trigger?: RequestTrigger;
+    runtime?: Record<string, any>;
+    trace?: boolean;
+    preserveDynamicMetadata?: boolean;
 }
 
 // Helper to find a config by a route key
@@ -359,24 +402,55 @@ export function populateTreeGeneric<T>(
 }
 
 // Moved helper: make the processRequestsAndPopulate logic reusable by components
-export function processRequestsAndPopulate(context: any, genericFormService?: GenericFormsService, spinner?: SpinnerService): Observable<void> {
+export function processRequestsAndPopulate(
+    context: any,
+    genericFormService?: GenericFormsService,
+    spinner?: SpinnerService,
+    options?: ProcessRequestsAndPopulateOptions
+): Observable<void> {
     try {
         try { context.spinner?.show('جاري تحميل الإعدادات ...'); } catch (e) { /* swallow */ }
-        context.genericFormService.cdmendDto = [];
-        context.genericFormService.cdcategoryDtos = [];
-        context.genericFormService.filteredCdcategoryDtos = [];
+
+        const preserveDynamicMetadata = Boolean(options?.preserveDynamicMetadata);
+        if (!preserveDynamicMetadata && context?.genericFormService) {
+            context.genericFormService.cdmendDto = [];
+            context.genericFormService.cdcategoryDtos = [];
+            context.genericFormService.filteredCdcategoryDtos = [];
+        }
+
+        const allRequestItems: RequestArrayItem[] = Array.isArray(context?.config?.requestsarray)
+            ? context.config.requestsarray
+            : [];
+        const filteredRequestItems = filterRequestsByExecutionContext(allRequestItems, context, options);
+        traceConfigRequest(context, options, 'pipeline.start', {
+            routeKey: context?.config?.routeKey,
+            trigger: String(options?.trigger ?? 'onInit'),
+            requested: allRequestItems.length,
+            executing: filteredRequestItems.length
+        });
 
         const requestBuilder = new BuildRequestsFromConfigService();
-        const requests: any[] = requestBuilder.buildRequestsFromConfig(context.config.requestsarray, context);
-        if (!Array.isArray(requests) || requests.length === 0) { try { context.spinner?.hide(); } catch (e) { }; return of(void 0); }
+        const requests: any[] = requestBuilder.buildRequestsFromConfig(filteredRequestItems, context);
+        if (!Array.isArray(requests) || requests.length === 0) {
+            try { context.spinner?.hide(); } catch (e) { /* swallow */ }
+            try { spinner?.hide(); } catch (e) { /* swallow */ }
+            return of(void 0);
+        }
+
         const obs = getData ? getData(requests) : null;
-        if (!obs) { try { context.spinner?.hide(); } catch (e) { }; return of(void 0); }
+        if (!obs) {
+            try { context.spinner?.hide(); } catch (e) { /* swallow */ }
+            try { spinner?.hide(); } catch (e) { /* swallow */ }
+            return of(void 0);
+        }
+
         return new Observable<void>((subscriber) => {
             (obs as Observable<any[]>).subscribe({
                 next: (responses: any[]) => {
                     try {
                         if (responses.length > 0) {
                             responses.forEach((resp: any, idx: number) => {
+                                const reqConfig = filteredRequestItems[idx] ?? ({} as RequestArrayItem);
                                 responses[idx] = resp;
                                 try {
                                     const total = resp?.TotalCount ?? resp?.totalCount ?? resp?.data?.TotalCount ?? resp?.Data?.TotalCount;
@@ -385,57 +459,524 @@ export function processRequestsAndPopulate(context: any, genericFormService?: Ge
                                         if (!isNaN(parsed) && context.config.totalRecords == 0) context.config.totalRecords = parsed;
                                     }
                                 } catch (e) { /* swallow */ }
-                                if (resp.isSuccess || resp.IsSuccess) {
-                                    let respData = resp?.data ?? resp?.Data;
-                                    if (Array.isArray(respData) || respData !== undefined) {
-                                        const reqConfig = context.config.requestsarray[idx];
-                                        if (reqConfig.populateMethod) {
-                                            const invoker = requestBuilder.getPopulateInvoker(reqConfig, context);
-                                            if (invoker) {
-                                                try { invoker(respData, reqConfig.populateArgs); } catch (e) { console.warn('populate invoker failed', e); }
-                                            }
-                                        }
-                                        if (Array.isArray(reqConfig.arrValue)) {
-                                            if (Array.isArray(respData)) {
-                                                if (reqConfig.method != 'powerBiController.getGenericDataById' && respData.length > 0) {
-                                                    reqConfig.arrValue.length = 0; // clear while preserving reference
-                                                }
-                                                // context.config.requestsarray[idx].arrValue = reqConfig.arrValue;
-                                                if (reqConfig.arrValue.length == 0)
-                                                    reqConfig.arrValue.push(...respData);
-                                            }
-                                        }
-                                        reqConfig.requestsSelectionFields?.forEach((fieldName: string) => {
-                                            const selections_arr = genericFormService?.mapArrayToSelectionArray(fieldName, respData);
-                                            genericFormService?.selectionArrays.push(selections_arr as any);
-                                        });
-                                    }
+
+                                const normalized = normalizeCommonResponse(resp);
+                                const reqLabel = reqConfig?.requestId || reqConfig?.method || `request#${idx + 1}`;
+                                traceConfigRequest(context, options, 'request.response', {
+                                    request: reqLabel,
+                                    success: normalized.isSuccess,
+                                    hasData: normalized.data !== undefined && normalized.data !== null
+                                }, reqConfig);
+
+                                if (normalized.isSuccess) {
+                                    const respData = normalized.data;
+                                    applyLegacyResponseBindings(reqConfig, respData, requestBuilder, context, genericFormService, options);
+                                    applyDeclarativeBindings(reqConfig, respData, context, genericFormService, options);
                                 } else {
-                                    let errr = '';
-                                    resp.errors?.forEach((e: any) => errr += e.message + "<br>");
-                                    context.msg.msgError(errr, "هناك خطا ما", true);
+                                    const errors = Array.isArray(normalized.errors) ? normalized.errors : [];
+                                    const errText = errors.map((e: any) => String(e?.message ?? e ?? '')).filter((x: string) => x.length > 0).join('<br>');
+                                    if (errText.length > 0) {
+                                        try { context?.msg?.msgError(errText, 'هناك خطا ما', true); } catch (e) { /* swallow */ }
+                                    }
+                                    traceConfigRequest(context, options, 'request.failed', {
+                                        request: reqLabel,
+                                        errors
+                                    }, reqConfig);
                                 }
                             });
                         }
+
                         subscriber.next();
                         subscriber.complete();
                         try { spinner?.hide(); } catch (e) { /* swallow */ }
+                        try { context.spinner?.hide(); } catch (e) { /* swallow */ }
                     } catch (e) {
                         subscriber.error(e);
                     }
                 },
                 error: (error: any) => {
                     try {
-                        context.msg.msgError('Error', '<h5>' + error + '</h5>', true);
+                        context?.msg?.msgError('Error', '<h5>' + error + '</h5>', true);
                     } catch (e) { /* swallow */ }
                     try { spinner?.hide(); } catch (e) { /* swallow */ }
+                    try { context.spinner?.hide(); } catch (e) { /* swallow */ }
+                    traceConfigRequest(context, options, 'pipeline.error', { error: String(error ?? '') });
                     subscriber.error(error);
                 }
             });
         });
     } catch (e) {
         try { spinner?.hide(); } catch (err) { /* swallow */ }
+        try { context.spinner?.hide(); } catch (err) { /* swallow */ }
+        traceConfigRequest(context, options, 'pipeline.exception', { error: String(e ?? '') });
         return of(void 0);
+    }
+}
+
+function applyLegacyResponseBindings(
+    reqConfig: RequestArrayItem,
+    respData: any,
+    requestBuilder: BuildRequestsFromConfigService,
+    context: any,
+    genericFormService?: GenericFormsService,
+    options?: ProcessRequestsAndPopulateOptions
+): void {
+    if (respData === undefined) {
+        return;
+    }
+
+    if (reqConfig.populateMethod) {
+        const invoker = requestBuilder.getPopulateInvoker(reqConfig, context);
+        if (invoker) {
+            try {
+                invoker(respData, reqConfig.populateArgs);
+                if (genericFormService && isTreePopulateMethod(reqConfig.populateMethod)) {
+                    const treeTargetFields = collectTreeTargetFields(reqConfig);
+                    if (treeTargetFields.length > 0) {
+                        genericFormService.markTreeBoundFields(treeTargetFields);
+                    }
+                }
+            } catch (e) {
+                traceConfigRequest(context, options, 'legacy.populateMethod.failed', {
+                    request: reqConfig.requestId || reqConfig.method,
+                    method: reqConfig.populateMethod,
+                    error: String(e ?? '')
+                }, reqConfig);
+            }
+        } else {
+            traceConfigRequest(context, options, 'legacy.populateMethod.missing', {
+                request: reqConfig.requestId || reqConfig.method,
+                method: reqConfig.populateMethod
+            }, reqConfig);
+        }
+    }
+
+    if (Array.isArray(reqConfig.arrValue) && Array.isArray(respData)) {
+        if (reqConfig.method != 'powerBiController.getGenericDataById' && respData.length > 0) {
+            reqConfig.arrValue.length = 0;
+        }
+        if (reqConfig.arrValue.length == 0) {
+            reqConfig.arrValue.push(...respData);
+        }
+    }
+
+    (reqConfig.requestsSelectionFields ?? []).forEach((fieldName: string) => {
+        if (!genericFormService || !fieldName) {
+            return;
+        }
+
+        const selectionSource = Array.isArray(respData) ? respData : [];
+        const selectionsArr = genericFormService.mapArrayToSelectionArray(fieldName, selectionSource);
+        upsertSelectionArray(genericFormService, fieldName, selectionsArr?.items ?? []);
+        traceConfigRequest(context, options, 'legacy.selectionField.bound', {
+            request: reqConfig.requestId || reqConfig.method,
+            field: fieldName,
+            count: selectionsArr?.items?.length ?? 0
+        }, reqConfig);
+    });
+}
+
+function applyDeclarativeBindings(
+    reqConfig: RequestArrayItem,
+    respData: any,
+    context: any,
+    genericFormService?: GenericFormsService,
+    options?: ProcessRequestsAndPopulateOptions
+): void {
+    const bindings = Array.isArray(reqConfig.bindings) ? reqConfig.bindings : [];
+    if (bindings.length === 0) {
+        return;
+    }
+
+    bindings.forEach((binding, bindingIndex) => {
+        const bindType = String(binding?.bindType ?? '').trim().toLowerCase();
+        const targetFieldKey = String(binding?.targetFieldKey ?? binding?.target?.fieldKey ?? '').trim();
+        const responseChunk = binding?.responsePath
+            ? resolvePathValue(respData, binding.responsePath)
+            : respData;
+
+        if (!targetFieldKey && bindType !== 'value') {
+            traceConfigRequest(context, options, 'binding.skipped.noTarget', {
+                request: reqConfig.requestId || reqConfig.method,
+                bindingIndex
+            }, reqConfig);
+            return;
+        }
+
+        if (bindType === 'options') {
+            if (!genericFormService) {
+                traceConfigRequest(context, options, 'binding.skipped.noGenericFormService', {
+                    request: reqConfig.requestId || reqConfig.method,
+                    field: targetFieldKey
+                }, reqConfig);
+                return;
+            }
+
+            const items = coerceToArray(responseChunk);
+            const mappedItems = buildSelectionItemsFromMapping(items, binding?.responseMap);
+            if (mappedItems.length === 0 && !binding?.clearOnEmpty) {
+                traceConfigRequest(context, options, 'binding.options.emptyIgnored', {
+                    request: reqConfig.requestId || reqConfig.method,
+                    field: targetFieldKey
+                }, reqConfig);
+                return;
+            }
+
+            upsertSelectionArray(genericFormService, targetFieldKey, mappedItems);
+            traceConfigRequest(context, options, 'binding.options.success', {
+                request: reqConfig.requestId || reqConfig.method,
+                field: targetFieldKey,
+                count: mappedItems.length
+            }, reqConfig);
+            return;
+        }
+
+        if (bindType === 'value') {
+            const valuePath = String(binding?.responseMap?.valuePath ?? '').trim();
+            const value = valuePath.length > 0 ? resolvePathValue(responseChunk, valuePath) : responseChunk;
+            const patched = patchDynamicFieldValueIfExists(context, genericFormService, targetFieldKey, value);
+            traceConfigRequest(context, options, patched ? 'binding.value.success' : 'binding.value.deferred', {
+                request: reqConfig.requestId || reqConfig.method,
+                field: targetFieldKey,
+                patched
+            }, reqConfig);
+            return;
+        }
+
+        traceConfigRequest(context, options, 'binding.skipped.unsupportedType', {
+            request: reqConfig.requestId || reqConfig.method,
+            bindType,
+            field: targetFieldKey
+        }, reqConfig);
+    });
+}
+
+function filterRequestsByExecutionContext(
+    requests: RequestArrayItem[],
+    context: any,
+    options?: ProcessRequestsAndPopulateOptions
+): RequestArrayItem[] {
+    return (requests ?? []).filter((request, index) => {
+        const accepted = shouldRunRequest(request, context, options);
+        if (!accepted) {
+            traceConfigRequest(context, options, 'request.skipped', {
+                request: request?.requestId || request?.method || `request#${index + 1}`,
+                trigger: request?.trigger,
+                conditions: request?.conditions
+            }, request);
+        }
+        return accepted;
+    });
+}
+
+function shouldRunRequest(
+    request: RequestArrayItem | undefined,
+    context: any,
+    options?: ProcessRequestsAndPopulateOptions
+): boolean {
+    if (!request || typeof request !== 'object') {
+        return true;
+    }
+    if (request.enabled === false) {
+        return false;
+    }
+
+    const requestedTrigger = String(options?.trigger ?? 'onInit');
+    if (!matchesTrigger(request.trigger, requestedTrigger)) {
+        return false;
+    }
+
+    return matchesConditions(request.conditions, context, options?.runtime);
+}
+
+function matchesTrigger(
+    requestTrigger: RequestTrigger | RequestTrigger[] | undefined,
+    requestedTrigger: string
+): boolean {
+    if (requestTrigger === undefined || requestTrigger === null || requestTrigger === '') {
+        return true;
+    }
+
+    const normalize = (v: unknown): string => String(v ?? '').trim().toLowerCase();
+    const target = normalize(requestedTrigger);
+    if (target.length === 0) {
+        return true;
+    }
+
+    if (Array.isArray(requestTrigger)) {
+        return requestTrigger.map(item => normalize(item)).includes(target);
+    }
+
+    return normalize(requestTrigger) === target;
+}
+
+function matchesConditions(
+    conditions: RequestRunConditions | undefined,
+    context: any,
+    runtime?: Record<string, any>
+): boolean {
+    if (!conditions || typeof conditions !== 'object') {
+        return true;
+    }
+
+    const currentCategoryId = Number(runtime?.['categoryId'] ?? NaN);
+    const includes = parseNumberSet(conditions.categoryIdIn);
+    if (includes.length > 0) {
+        if (!Number.isFinite(currentCategoryId) || !includes.includes(currentCategoryId)) {
+            return false;
+        }
+    }
+
+    const excludes = parseNumberSet(conditions.categoryIdNotIn);
+    if (excludes.length > 0 && Number.isFinite(currentCategoryId) && excludes.includes(currentCategoryId)) {
+        return false;
+    }
+
+    const deps = Array.isArray(conditions.dependsOn) ? conditions.dependsOn : [];
+    if (deps.length > 0) {
+        const everyDependencyResolved = deps.every(dep => {
+            const resolved = resolvePathValue(
+                String(dep ?? '').trim().startsWith('runtime.')
+                    ? runtime
+                    : context,
+                String(dep ?? '').trim().replace(/^runtime\./i, '').replace(/^this\./i, '')
+            );
+            return Boolean(resolved);
+        });
+
+        if (!everyDependencyResolved) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function parseNumberSet(values: number[] | undefined): number[] {
+    return (values ?? [])
+        .map(value => Number(value))
+        .filter(value => Number.isFinite(value));
+}
+
+function isTreePopulateMethod(method: string | null | undefined): boolean {
+    const normalized = String(method ?? '').trim().toLowerCase();
+    if (!normalized) {
+        return false;
+    }
+
+    return normalized.includes('populatetreegeneric') || normalized.includes('tree');
+}
+
+function collectTreeTargetFields(reqConfig: RequestArrayItem | undefined): string[] {
+    if (!reqConfig || typeof reqConfig !== 'object') {
+        return [];
+    }
+
+    const fields = new Set<string>();
+    (reqConfig.requestsSelectionFields ?? []).forEach(field => {
+        const normalized = normalizeDynamicFieldKey(field);
+        if (normalized) {
+            fields.add(normalized);
+        }
+    });
+
+    const bindings = Array.isArray(reqConfig.bindings) ? reqConfig.bindings : [];
+    bindings.forEach(binding => {
+        const bindType = String(binding?.bindType ?? '').trim().toLowerCase();
+        if (bindType !== 'options') {
+            return;
+        }
+
+        const targetField = normalizeDynamicFieldKey(binding?.targetFieldKey ?? binding?.target?.fieldKey);
+        if (targetField) {
+            fields.add(targetField);
+        }
+    });
+
+    return Array.from(fields);
+}
+
+function normalizeCommonResponse(resp: any): { isSuccess: boolean; data: any; errors: any[] } {
+    const explicit = resp?.isSuccess ?? resp?.IsSuccess;
+    const isSuccess = explicit === undefined
+        ? resp !== null && resp !== undefined
+        : Boolean(explicit);
+    const data = resp?.data ?? resp?.Data ?? resp;
+    const errors = Array.isArray(resp?.errors)
+        ? resp.errors
+        : (Array.isArray(resp?.Errors) ? resp.Errors : []);
+
+    return { isSuccess, data, errors };
+}
+
+function resolvePathValue(source: any, path: string): any {
+    const normalizedPath = String(path ?? '').trim();
+    if (!normalizedPath) {
+        return source;
+    }
+
+    const parts = normalizedPath.replace(/^this\./, '').split('.').filter(Boolean);
+    let cursor = source;
+    for (const part of parts) {
+        if (cursor === null || cursor === undefined) {
+            return undefined;
+        }
+        cursor = cursor[part];
+    }
+    return cursor;
+}
+
+function coerceToArray(value: any): any[] {
+    if (Array.isArray(value)) {
+        return value;
+    }
+    if (value === null || value === undefined) {
+        return [];
+    }
+    return [value];
+}
+
+function buildSelectionItemsFromMapping(items: any[], map?: RequestBindingMap): Array<{ key: string; name: string }> {
+    if (!Array.isArray(items) || items.length === 0) {
+        return [];
+    }
+
+    const valuePath = String(map?.valuePath ?? '').trim();
+    const labelPath = String(map?.labelPath ?? '').trim();
+
+    return items.map((item, index) => {
+        if (!item || typeof item !== 'object') {
+            const value = String(item ?? '');
+            return { key: value, name: value };
+        }
+
+        const mappedValue = valuePath ? resolvePathValue(item, valuePath) : (item['key'] ?? item['value'] ?? item['id'] ?? item['code'] ?? index);
+        const mappedLabel = labelPath ? resolvePathValue(item, labelPath) : (item['name'] ?? item['label'] ?? item['text'] ?? mappedValue);
+        return {
+            key: String(mappedValue ?? ''),
+            name: String(mappedLabel ?? mappedValue ?? '')
+        };
+    }).filter(option => option.key.length > 0 || option.name.length > 0);
+}
+
+function normalizeDynamicFieldKey(value: unknown): string {
+    const raw = String(value ?? '').trim().toLowerCase();
+    if (!raw) {
+        return '';
+    }
+
+    return raw.split('|')[0].split('__')[0].trim();
+}
+
+function upsertSelectionArray(
+    genericFormService: GenericFormsService,
+    fieldName: string,
+    items: Array<{ key: string; name: string }>
+): void {
+    if (!genericFormService || !fieldName) {
+        return;
+    }
+
+    if (!Array.isArray(genericFormService.selectionArrays)) {
+        genericFormService.selectionArrays = [];
+    }
+
+    const normalizedField = normalizeDynamicFieldKey(fieldName);
+    if (!normalizedField) {
+        return;
+    }
+
+    const index = genericFormService.selectionArrays.findIndex(
+        arr => normalizeDynamicFieldKey(arr?.nameProp) === normalizedField
+    );
+    const normalized = { keyProp: 'key', nameProp: normalizedField, items: items ?? [] };
+    if (index >= 0) {
+        genericFormService.selectionArrays[index] = normalized;
+        return;
+    }
+
+    genericFormService.selectionArrays.push(normalized);
+}
+
+function patchDynamicFieldValueIfExists(
+    context: any,
+    genericFormService: GenericFormsService | undefined,
+    fieldKey: string,
+    value: any
+): boolean {
+    const trimmedFieldKey = String(fieldKey ?? '').trim();
+    if (trimmedFieldKey.length === 0) {
+        return false;
+    }
+
+    if (!context.__configDynamicValueBindings || typeof context.__configDynamicValueBindings !== 'object') {
+        context.__configDynamicValueBindings = {};
+    }
+    context.__configDynamicValueBindings[trimmedFieldKey] = value;
+
+    const controlMap = context?.controlMap;
+    const dynamicControls = context?.dynamicControls;
+    if (!genericFormService || !controlMap || !dynamicControls || typeof controlMap.forEach !== 'function') {
+        return false;
+    }
+
+    let patched = false;
+    controlMap.forEach((valueMeta: any, controlName: string) => {
+        if (String(valueMeta?.fieldKey ?? '').trim().toLowerCase() !== trimmedFieldKey.toLowerCase()) {
+            return;
+        }
+
+        const control = genericFormService.GetControl(dynamicControls, controlName);
+        if (!control) {
+            return;
+        }
+
+        try {
+            control.patchValue(value, { emitEvent: false });
+            patched = true;
+        } catch (e) { /* swallow */ }
+    });
+
+    return patched;
+}
+
+function shouldTraceConfigRequests(
+    context: any,
+    options?: ProcessRequestsAndPopulateOptions,
+    request?: RequestArrayItem
+): boolean {
+    if (options?.trace === true) {
+        return true;
+    }
+
+    if (request?.trace === true) {
+        return true;
+    }
+
+    return Boolean(context?.config?.dynamicFormSettings?.traceRequests);
+}
+
+function traceConfigRequest(
+    context: any,
+    options: ProcessRequestsAndPopulateOptions | undefined,
+    stage: string,
+    payload?: any,
+    request?: RequestArrayItem
+): void {
+    if (!shouldTraceConfigRequests(context, options, request)) {
+        return;
+    }
+
+    try {
+        const label = request?.requestId || request?.method || '';
+        if (payload !== undefined) {
+            console.debug('[ConfigRequestEngine]', stage, label, payload);
+            return;
+        }
+
+        console.debug('[ConfigRequestEngine]', stage, label);
+    } catch (e) {
+        // swallow tracing issues
     }
 }
 

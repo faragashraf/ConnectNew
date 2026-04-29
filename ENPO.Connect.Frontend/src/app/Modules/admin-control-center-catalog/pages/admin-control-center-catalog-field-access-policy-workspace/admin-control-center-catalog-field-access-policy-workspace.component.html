@@ -1,0 +1,779 @@
+<section class="access-workspace" dir="rtl">
+  <header class="workspace-header">
+    <div>
+      <h4>إدارة سياسة وصول الحقول والمجموعات</h4>
+      <p>
+        نوع الطلب الحالي:
+        <strong>{{ requestContextLabel }}</strong>
+      </p>
+      <small class="save-hint" *ngIf="!canSaveWorkspace && saveDisabledReason.length > 0">{{ saveDisabledReason }}</small>
+    </div>
+
+    <div class="header-actions">
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        icon="pi pi-refresh"
+        label="تحديث"
+        [disabled]="loadingWorkspace || !canManageWorkspace"
+        (click)="onRefreshWorkspace()">
+      </button>
+
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined"
+        icon="pi pi-star"
+        label="تحميل الحزمة التجريبية"
+        [disabled]="!canManageWorkspace || loadingWorkspace"
+        (click)="onApplyOverviewDemoPack()">
+      </button>
+
+      <button
+        pButton
+        type="button"
+        icon="pi pi-save"
+        label="حفظ كل التغييرات"
+        [disabled]="!canSaveWorkspace"
+        [loading]="savingWorkspace"
+        (click)="onSaveWorkspace()">
+      </button>
+    </div>
+  </header>
+
+  <div class="message" *ngIf="message.length > 0" [ngClass]="messageSeverity">
+    {{ message }}
+  </div>
+
+  <div class="dirty-banner" *ngIf="hasUnsavedChanges">
+    لديك تغييرات محلية غير محفوظة. الإضافة/التعديل داخل القواعد والأقفال لا يُطبق فعليًا إلا بعد الضغط على "حفظ كل التغييرات".
+  </div>
+
+  <section class="progress-card">
+    <div class="progress-row">
+      <span>اكتمال الإلزامي</span>
+      <strong>{{ mandatoryCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="mandatoryCompletionPercent"></p-progressBar>
+
+    <div class="progress-row">
+      <span>اكتمال الاختياري</span>
+      <strong>{{ optionalCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="optionalCompletionPercent"></p-progressBar>
+
+    <div class="progress-row overall">
+      <span>الاكتمال الكلي</span>
+      <strong>{{ overallCompletionPercent }}%</strong>
+    </div>
+    <p-progressBar [value]="overallCompletionPercent"></p-progressBar>
+  </section>
+
+  <div class="empty-state" *ngIf="!canManageWorkspace">
+    اختر نوع الطلب من شجرة الكتالوج أولًا حتى تبدأ إعداد سياسة الوصول.
+  </div>
+
+  <p-tabView *ngIf="canManageWorkspace" styleClass="access-tab-view">
+    <p-tabPanel header="نظرة عامة">
+      <section class="overview-grid" *ngIf="workspace as data; else workspaceLoading">
+        <article class="stat-card">
+          <span>عدد القواعد</span>
+          <strong>{{ rules.length }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>عدد الأقفال</span>
+          <strong>{{ locks.length }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>المجموعات</span>
+          <strong>{{ data.groups.length }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>الحقول</span>
+          <strong>{{ data.fields.length }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>آخر تعديل</span>
+          <strong>{{ lastModifiedLabel }}</strong>
+        </article>
+      </section>
+
+      <div class="overview-notes" *ngIf="workspace as data">
+        <p-tag [severity]="data.policy.isActive ? 'success' : 'danger'" [value]="data.policy.isActive ? 'السياسة مفعلة' : 'السياسة غير مفعلة'"></p-tag>
+        <p-tag severity="info" [value]="'الوضع الافتراضي: ' + data.policy.defaultAccessMode"></p-tag>
+        <p-tag [severity]="hasUnsavedChanges ? 'warning' : 'success'" [value]="hasUnsavedChanges ? 'يوجد تغييرات غير محفوظة' : 'كل التغييرات محفوظة'"></p-tag>
+      </div>
+
+      <div class="demo-card" *ngIf="workspace">
+        <h5>أمثلة جاهزة</h5>
+        <p>يمكنك تحميل أمثلة عملية في جميع التابات لتجربة البناء الجديد بسرعة.</p>
+        <button pButton type="button" icon="pi pi-bolt" label="تحميل حزمة أمثلة كاملة" (click)="onApplyOverviewDemoPack()"></button>
+      </div>
+
+      <ng-template #workspaceLoading>
+        <div class="loading-state" *ngIf="loadingWorkspace; else noWorkspaceData">
+          جاري تحميل إعدادات السياسة...
+        </div>
+      </ng-template>
+
+      <ng-template #noWorkspaceData>
+        <div class="empty-state">لا توجد بيانات متاحة لسياسة الوصول حتى الآن.</div>
+      </ng-template>
+    </p-tabPanel>
+
+    <p-tabPanel header="السياسة الافتراضية">
+      <form class="editor" [formGroup]="policyForm" novalidate>
+        <p class="required-note"><span>*</span> الحقول المعلمة إلزامية</p>
+
+        <div class="grid two-cols">
+          <div class="field span-two">
+            <label for="policyName">اسم السياسة <span class="required">*</span></label>
+            <input pInputText id="policyName" formControlName="policyName" placeholder="مثال: سياسة الوصول - التظلمات" />
+            <small class="field-error" *ngIf="getPolicyControlError('policyName') as error">{{ error }}</small>
+          </div>
+
+          <div class="field">
+            <label for="defaultAccessMode">الوضع الافتراضي <span class="required">*</span></label>
+            <p-dropdown
+              inputId="defaultAccessMode"
+              [options]="permissionTypeOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="defaultAccessMode"
+              appendTo="body">
+            </p-dropdown>
+          </div>
+
+          <div class="field toggle-field">
+            <label for="isPolicyActive">تفعيل السياسة</label>
+            <p-inputSwitch inputId="isPolicyActive" formControlName="isPolicyActive"></p-inputSwitch>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button pButton type="button" class="p-button-outlined" icon="pi pi-lightbulb" label="تعبئة مثال عملي" (click)="onApplyDefaultPolicyDemo()"></button>
+        </div>
+      </form>
+    </p-tabPanel>
+
+    <p-tabPanel header="قواعد المرحلة/الإجراء" [disabled]="!defaultPolicyReady">
+      <div class="workspace-grid">
+        <form class="editor" [formGroup]="ruleForm" novalidate>
+          <h5>{{ ruleEditorTitle }}</h5>
+          <p class="required-note"><span>*</span> لا يمكن اختيار الإجراء بدون مرحلة. معرف الجهة إلزامي فقط عند اختيار وحدة تنظيمية أو منصب أو مستخدم.</p>
+          <p class="local-note">الإضافة والتعديل هنا محليان حتى تقوم بحفظ مساحة العمل.</p>
+
+          <div class="grid two-cols">
+            <div class="field">
+              <label>مستوى الهدف <span class="required">*</span></label>
+              <p-dropdown
+                [options]="targetLevelOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="targetLevel"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>الهدف <span class="required">*</span></label>
+              <p-dropdown
+                [options]="ruleTargetOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="targetId"
+                appendTo="body"
+                [filter]="true">
+              </p-dropdown>
+              <small class="field-error" *ngIf="getRuleControlError('targetId') as error">{{ error }}</small>
+            </div>
+
+            <div class="field">
+              <label>المرحلة</label>
+              <p-dropdown
+                [options]="stageOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="stageId"
+                appendTo="body"
+                [showClear]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>الإجراء</label>
+              <p-dropdown
+                [options]="ruleActionOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="actionId"
+                appendTo="body"
+                [showClear]="true"
+                [disabled]="isRuleActionDisabled">
+              </p-dropdown>
+              <small class="field-error" *ngIf="getRuleActionError() as error">{{ error }}</small>
+            </div>
+
+            <div class="field">
+              <label>الصلاحية <span class="required">*</span></label>
+              <p-dropdown
+                [options]="permissionTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="permissionType"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>نوع الجهة <span class="required">*</span></label>
+              <p-dropdown
+                [options]="subjectTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="subjectType"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>
+                معرف الجهة
+                <span class="required" *ngIf="ruleSubjectIdRequired">*</span>
+                <span class="optional" *ngIf="!ruleSubjectIdRequired">(اختياري)</span>
+              </label>
+              <input pInputText formControlName="subjectId" placeholder="مثال: 120 أو usr123" />
+              <small class="field-error" *ngIf="getRuleControlError('subjectId') as error">{{ error }}</small>
+            </div>
+
+            <div class="field">
+              <label>الأثر <span class="required">*</span></label>
+              <p-dropdown
+                [options]="effectOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="effect"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>الأولوية <span class="required">*</span></label>
+              <input pInputText type="number" formControlName="priority" />
+              <small class="field-error" *ngIf="getRuleControlError('priority') as error">{{ error }}</small>
+            </div>
+
+            <div class="field toggle-field">
+              <label>نشط</label>
+              <p-inputSwitch formControlName="isActive"></p-inputSwitch>
+            </div>
+
+            <div class="field span-two">
+              <div class="notes-header">
+                <label>ملاحظات</label>
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-text p-button-sm"
+                  icon="pi pi-sync"
+                  label="إعادة توليد الوصف"
+                  (click)="onRegenerateRuleNotes()">
+                </button>
+              </div>
+              <textarea pInputTextarea rows="2" formControlName="notes"></textarea>
+              <small class="notes-hint" *ngIf="!ruleNotesManuallyEdited">الوصف المقترح يتحدث تلقائيًا مع تغيّر الاختيارات.</small>
+              <small class="notes-hint is-manual" *ngIf="ruleNotesManuallyEdited">تم تعديل النص يدويًا؛ لن يتم استبداله تلقائيًا.</small>
+            </div>
+          </div>
+
+          <ul class="validation-list" *ngIf="ruleValidationMessages.length > 0">
+            <li *ngFor="let issue of ruleValidationMessages; trackBy: trackByIndex">{{ issue }}</li>
+          </ul>
+
+          <div class="actions">
+            <button
+              pButton
+              type="button"
+              [icon]="isRuleEditMode ? 'pi pi-check' : 'pi pi-plus'"
+              [label]="isRuleEditMode ? 'حفظ التعديل' : 'إضافة القاعدة'"
+              [disabled]="!canSubmitRule"
+              (click)="onRulePrimaryAction()">
+            </button>
+
+            <button
+              pButton
+              type="button"
+              class="p-button-secondary p-button-outlined"
+              icon="pi pi-times"
+              label="إلغاء التعديل"
+              *ngIf="isRuleEditMode"
+              (click)="onCancelRuleEdit()">
+            </button>
+
+            <button
+              pButton
+              type="button"
+              class="p-button-outlined"
+              icon="pi pi-lightbulb"
+              label="إضافة أمثلة قواعد"
+              (click)="onSeedRuleExamples()">
+            </button>
+          </div>
+        </form>
+
+        <section class="table-card">
+          <header>
+            <h5>القواعد الحالية</h5>
+          </header>
+
+          <p-table [value]="rules" responsiveLayout="scroll" [rows]="8" [paginator]="rules.length > 8">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>المستوى/الهدف</th>
+                <th>المرحلة/الإجراء</th>
+                <th>الصلاحية</th>
+                <th>الجهة</th>
+                <th>الأولوية</th>
+                <th>نشط</th>
+                <th>إجراءات</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-rule let-rowIndex="rowIndex">
+              <tr [class.editing-row]="editingRuleIndex === rowIndex">
+                <td>{{ rule.targetLevel }} #{{ rule.targetId }}</td>
+                <td>{{ rule.stageId || '-' }} / {{ rule.actionId || '-' }}</td>
+                <td>{{ rule.permissionType }} ({{ rule.effect }})</td>
+                <td>{{ rule.subjectType }} {{ rule.subjectId ? '(' + rule.subjectId + ')' : '' }}</td>
+                <td>{{ rule.priority }}</td>
+                <td>
+                  <p-tag [value]="rule.isActive ? 'نعم' : 'لا'" [severity]="rule.isActive ? 'success' : 'danger'"></p-tag>
+                </td>
+                <td class="row-actions">
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text"
+                    icon="pi pi-pencil"
+                    (click)="onStartEditRule(rowIndex)">
+                  </button>
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-danger"
+                    icon="pi pi-trash"
+                    (click)="onRemoveRule(rowIndex)">
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="الأقفال" [disabled]="!defaultPolicyReady">
+      <div class="workspace-grid">
+        <form class="editor" [formGroup]="lockForm" novalidate>
+          <h5>{{ lockEditorTitle }}</h5>
+          <p class="required-note"><span>*</span> لا يمكن اختيار الإجراء بدون مرحلة. معرف جهة الاستثناء إلزامي فقط عند اختيار وحدة تنظيمية أو منصب أو مستخدم.</p>
+          <p class="local-note">
+            {{ isLockEditMode
+              ? 'في وضع التعديل، سيتم تحديث القفل مباشرة ثم الرجوع إلى وضع الإضافة.'
+              : 'الإضافة هنا محلية حتى تحفظ مساحة العمل.' }}
+          </p>
+
+          <div class="grid two-cols">
+            <div class="field">
+              <label>مستوى الهدف <span class="required">*</span></label>
+              <p-dropdown
+                [options]="targetLevelOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="targetLevel"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>الهدف <span class="required">*</span></label>
+              <p-dropdown
+                [options]="lockTargetOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="targetId"
+                appendTo="body"
+                [filter]="true">
+              </p-dropdown>
+              <small class="field-error" *ngIf="getLockControlError('targetId') as error">{{ error }}</small>
+            </div>
+
+            <div class="field">
+              <label>المرحلة</label>
+              <p-dropdown
+                [options]="stageOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="stageId"
+                appendTo="body"
+                [showClear]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>الإجراء</label>
+              <p-dropdown
+                [options]="lockActionOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="actionId"
+                appendTo="body"
+                [showClear]="true"
+                [disabled]="isLockActionDisabled">
+              </p-dropdown>
+              <small class="field-error" *ngIf="getLockActionError() as error">{{ error }}</small>
+            </div>
+
+            <div class="field">
+              <label>نمط القفل <span class="required">*</span></label>
+              <p-dropdown
+                [options]="lockModeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="lockMode"
+                appendTo="body">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>نوع جهة الاستثناء</label>
+              <p-dropdown
+                [options]="subjectTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="allowedOverrideSubjectType"
+                appendTo="body"
+                [showClear]="true">
+              </p-dropdown>
+            </div>
+
+            <div class="field">
+              <label>
+                معرف جهة الاستثناء
+                <span class="required" *ngIf="lockOverrideSubjectIdRequired">*</span>
+                <span class="optional" *ngIf="!lockOverrideSubjectIdRequired">(اختياري)</span>
+              </label>
+              <input pInputText formControlName="allowedOverrideSubjectId" placeholder="اختياري" />
+              <small class="field-error" *ngIf="getLockControlError('allowedOverrideSubjectId') as error">{{ error }}</small>
+            </div>
+
+            <div class="field toggle-field">
+              <label>نشط</label>
+              <p-inputSwitch formControlName="isActive"></p-inputSwitch>
+            </div>
+
+            <div class="field span-two">
+              <div class="notes-header">
+                <label>ملاحظات</label>
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-text p-button-sm"
+                  icon="pi pi-sync"
+                  label="إعادة توليد الوصف"
+                  (click)="onRegenerateLockNotes()">
+                </button>
+              </div>
+              <textarea pInputTextarea rows="2" formControlName="notes"></textarea>
+              <small class="notes-hint" *ngIf="!lockNotesManuallyEdited">الوصف المقترح يتحدث تلقائيًا مع تغيّر الاختيارات.</small>
+              <small class="notes-hint is-manual" *ngIf="lockNotesManuallyEdited">تم تعديل النص يدويًا؛ لن يتم استبداله تلقائيًا.</small>
+            </div>
+          </div>
+
+          <ul class="validation-list" *ngIf="lockValidationMessages.length > 0">
+            <li *ngFor="let issue of lockValidationMessages; trackBy: trackByIndex">{{ issue }}</li>
+          </ul>
+
+          <div class="actions">
+            <button
+              pButton
+              type="button"
+              [icon]="isLockEditMode ? 'pi pi-check' : 'pi pi-plus'"
+              [label]="isLockEditMode ? 'تحديث القفل' : 'إضافة القفل'"
+              [disabled]="!canSubmitLock"
+              [loading]="savingLockUpdate"
+              (click)="onLockPrimaryAction()">
+            </button>
+            <button
+              pButton
+              type="button"
+              class="p-button-secondary p-button-outlined"
+              icon="pi pi-times"
+              label="إلغاء التعديل"
+              *ngIf="isLockEditMode"
+              [disabled]="savingLockUpdate"
+              (click)="onCancelLockEdit()">
+            </button>
+            <button pButton type="button" class="p-button-outlined" icon="pi pi-lightbulb" label="إضافة أمثلة أقفال" (click)="onSeedLockExamples()"></button>
+          </div>
+        </form>
+
+        <section class="table-card">
+          <header>
+            <h5>الأقفال الحالية</h5>
+          </header>
+
+          <p-table [value]="locks" responsiveLayout="scroll" [rows]="8" [paginator]="locks.length > 8">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>المستوى/الهدف</th>
+                <th>المرحلة/الإجراء</th>
+                <th>نمط القفل</th>
+                <th>الاستثناء</th>
+                <th>نشط</th>
+                <th>إجراءات</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-item let-rowIndex="rowIndex">
+              <tr [class.editing-row]="editingLockIndex === rowIndex">
+                <td>{{ resolveTargetLevelLabel(item.targetLevel) }} #{{ item.targetId }}</td>
+                <td>{{ item.stageId || '-' }} / {{ item.actionId || '-' }}</td>
+                <td>{{ resolveLockModeLabel(item.lockMode) }}</td>
+                <td>{{ item.allowedOverrideSubjectType ? resolveSubjectTypeLabel(item.allowedOverrideSubjectType) : '-' }} {{ item.allowedOverrideSubjectId ? '(' + item.allowedOverrideSubjectId + ')' : '' }}</td>
+                <td>
+                  <p-tag [value]="item.isActive ? 'نعم' : 'لا'" [severity]="item.isActive ? 'success' : 'danger'"></p-tag>
+                </td>
+                <td class="row-actions">
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text"
+                    icon="pi pi-pencil"
+                    [disabled]="savingLockUpdate || savingWorkspace"
+                    (click)="onStartEditLock(rowIndex)">
+                  </button>
+                  <button
+                    pButton
+                    type="button"
+                    class="p-button-text p-button-danger"
+                    icon="pi pi-trash"
+                    [disabled]="savingLockUpdate || savingWorkspace"
+                    (click)="onRemoveLock(rowIndex)">
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="المعاينة" [disabled]="!defaultPolicyReady">
+      <form class="editor" [formGroup]="previewForm" novalidate>
+        <p class="required-note"><span>*</span> معرف الجهة مطلوب فقط إذا كان نوع الجهة وحدة تنظيمية أو منصبًا أو مستخدمًا.</p>
+        <p class="local-note">المعاينة تعتمد على آخر نسخة محفوظة من مساحة العمل.</p>
+
+        <div class="scenario-actions">
+          <button pButton type="button" class="p-button-outlined" label="سيناريو منشئ الطلب" (click)="onApplyPreviewScenario('RequestOwner')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو الحاضن الحالي" (click)="onApplyPreviewScenario('CurrentCustodian')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو مستخدم" (click)="onApplyPreviewScenario('User')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو منصب" (click)="onApplyPreviewScenario('Position')"></button>
+          <button pButton type="button" class="p-button-outlined" label="سيناريو وحدة تنظيمية" (click)="onApplyPreviewScenario('OrgUnit')"></button>
+        </div>
+
+        <div class="grid two-cols">
+          <div class="field">
+            <label>المرحلة</label>
+            <p-dropdown
+              [options]="previewStageOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="stageId"
+              appendTo="body"
+              [showClear]="true">
+            </p-dropdown>
+          </div>
+
+          <div class="field">
+            <label>الإجراء</label>
+            <p-dropdown
+              [options]="previewActionOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="actionId"
+              appendTo="body"
+              [showClear]="true"
+              [disabled]="isPreviewActionDisabled">
+            </p-dropdown>
+            <small class="field-error" *ngIf="getPreviewActionError() as error">{{ error }}</small>
+          </div>
+
+          <div class="field">
+            <label>نوع الجهة</label>
+            <p-dropdown
+              [options]="subjectTypeOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="subjectType"
+              appendTo="body"
+              [showClear]="true">
+            </p-dropdown>
+          </div>
+
+          <div class="field">
+            <label>
+              معرف الجهة
+              <span class="required" *ngIf="previewSubjectIdRequired">*</span>
+              <span class="optional" *ngIf="!previewSubjectIdRequired">(اختياري)</span>
+            </label>
+            <input pInputText formControlName="subjectId" placeholder="مثال: معرف مستخدم أو معرف منصب" />
+            <small class="field-error" *ngIf="getPreviewControlError('subjectId') as error">{{ error }}</small>
+          </div>
+
+          <div class="field">
+            <label>معرف الطلب (اختياري)</label>
+            <input pInputText type="number" formControlName="requestId" />
+          </div>
+
+          <div class="field">
+            <label>معرف مستخدم منشئ الطلب</label>
+            <input pInputText formControlName="requestOwnerUserId" />
+          </div>
+
+          <div class="field span-two">
+            <label>معرف وحدة الحاضن الحالي</label>
+            <input pInputText formControlName="currentCustodianUnitId" />
+          </div>
+        </div>
+
+        <ul class="validation-list" *ngIf="previewValidationMessages.length > 0">
+          <li *ngFor="let issue of previewValidationMessages; trackBy: trackByIndex">{{ issue }}</li>
+        </ul>
+
+        <div class="actions">
+          <button
+            pButton
+            type="button"
+            icon="pi pi-eye"
+            label="تشغيل المعاينة"
+            [disabled]="!canRunPreview"
+            [loading]="loadingPreview"
+            (click)="onRunPreview()">
+          </button>
+        </div>
+      </form>
+
+      <section class="preview-context" *ngIf="preview as data">
+        <p-tag severity="info" [value]="'المرحلة الحالية: ' + data.stageLabel"></p-tag>
+        <p-tag severity="info" [value]="'الإجراء الحالي: ' + data.actionLabel"></p-tag>
+        <p-tag severity="warning" [value]="'السياق: ' + (data.subjectType || 'المستخدم الحالي') + (data.subjectId ? ' (' + data.subjectId + ')' : '')"></p-tag>
+      </section>
+
+      <div class="context-summary" *ngIf="preview?.contextSummaryAr as contextSummary">
+        {{ contextSummary }}
+      </div>
+
+      <section class="preview-summary" *ngIf="preview as data">
+        <p-tag severity="warning" [value]="'المجموعات المخفية: ' + data.hiddenGroupsCount"></p-tag>
+        <p-tag severity="warning" [value]="'الحقول المخفية: ' + data.hiddenFieldsCount"></p-tag>
+        <p-tag severity="info" [value]="'حقول القراءة فقط: ' + data.readOnlyFieldsCount"></p-tag>
+        <p-tag severity="danger" [value]="'الحقول الإلزامية: ' + data.requiredFieldsCount"></p-tag>
+        <p-tag severity="danger" [value]="'الحقول المقفلة: ' + data.lockedFieldsCount"></p-tag>
+      </section>
+
+      <div class="preview-grid" *ngIf="preview as data">
+        <section class="table-card">
+          <header>
+            <h5>الحل الفعّال - المجموعات</h5>
+          </header>
+
+          <p-table [value]="previewGroupResolutions" responsiveLayout="scroll" [rows]="6" [paginator]="previewGroupResolutions.length > 6">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>المجموعة</th>
+                <th>الحالة النهائية</th>
+                <th>المصدر الفعال</th>
+                <th>السبب</th>
+                <th>التفاصيل</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-item>
+              <tr>
+                <td>{{ item.targetLabel }} (#{{ item.targetId }})</td>
+                <td>{{ item.finalStateAr }}</td>
+                <td>{{ item.effectiveSourceAr }}</td>
+                <td>{{ item.finalReasonAr }}</td>
+                <td>
+                  <div class="trace-list">
+                    <span class="trace-pill" *ngFor="let trace of item.appliedPolicies">{{ formatPreviewTrace(trace) }}</span>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+
+        <section class="table-card">
+          <header>
+            <h5>الحل الفعّال - الحقول</h5>
+          </header>
+
+          <p-table [value]="previewFieldResolutions" responsiveLayout="scroll" [rows]="8" [paginator]="previewFieldResolutions.length > 8">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>الحقل</th>
+                <th>المجموعة</th>
+                <th>الحالة النهائية</th>
+                <th>المصدر الفعال</th>
+                <th>السبب</th>
+                <th>التفاصيل</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-item>
+              <tr>
+                <td>{{ item.targetLabel }} (#{{ item.targetId }})</td>
+                <td>{{ item.groupLabel || '-' }}</td>
+                <td>{{ item.finalStateAr }}</td>
+                <td>{{ item.effectiveSourceAr }}</td>
+                <td>{{ item.finalReasonAr }}</td>
+                <td>
+                  <div class="trace-list">
+                    <span class="trace-pill" *ngFor="let trace of item.appliedPolicies">{{ formatPreviewTrace(trace) }}</span>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+
+        <section class="table-card">
+          <header>
+            <h5>الحقول كما يراها المستخدم</h5>
+          </header>
+          <p-table [value]="data.fields" responsiveLayout="scroll" [rows]="8" [paginator]="data.fields.length > 8">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>الحقل</th>
+                <th>المجموعة</th>
+                <th>الظهور</th>
+                <th>التعديل</th>
+                <th>مطلوب</th>
+                <th>القفل</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-field>
+              <tr>
+                <td>{{ field.fieldLabel || field.fieldKey }} (#{{ field.mendSql }})</td>
+                <td>#{{ field.mendGroup }}</td>
+                <td><span [ngClass]="statusClass(field.canView)">{{ statusLabel(field.canView, 'ظاهر', 'مخفي') }}</span></td>
+                <td><span [ngClass]="statusClass(!field.isReadOnly)">{{ statusLabel(!field.isReadOnly, 'قابل للتعديل', 'قراءة فقط') }}</span></td>
+                <td><span [ngClass]="statusClass(field.isRequired)">{{ statusLabel(field.isRequired, 'نعم', 'لا') }}</span></td>
+                <td>{{ field.isLocked ? (field.lockReason || 'مقفول') : '—' }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
+      </div>
+    </p-tabPanel>
+  </p-tabView>
+</section>

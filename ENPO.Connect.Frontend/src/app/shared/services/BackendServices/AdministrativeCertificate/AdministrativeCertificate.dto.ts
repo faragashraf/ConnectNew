@@ -159,6 +159,7 @@ export interface ReplyDto {
     message: string | undefined;
     authorId: string | undefined;
     authorName: string | undefined;
+    isAdminAction?: boolean | undefined;
     nextResponsibleSectorId: string | undefined;
     createdDate: Date;
     attchShipmentDtos: AttchShipmentDto[] | undefined;
@@ -201,4 +202,3 @@ export interface AttchShipmentDto {
     attcExt: string | undefined;
     attchSize: number | undefined;
 }
-

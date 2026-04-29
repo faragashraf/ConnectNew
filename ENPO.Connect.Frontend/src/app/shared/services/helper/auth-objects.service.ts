@@ -107,11 +107,11 @@ export class AuthObjectsService {
   _static: MegaMenuItem[] = [{
     label: 'الرئيسية', routerLink: '/Home', icon: 'pi pi-fw pi-home', "routerLinkActiveOptions": { "exact": true },
   },
-  {
-    label: 'المنشورات',
-    icon: 'pi pi-bars',
-    routerLink: '/Publications/mainLayOut'
-  },
+  // {
+  //   label: 'المنشورات',
+  //   icon: 'pi pi-bars',
+  //   routerLink: '/Publications/mainLayOut'
+  // },
   {
     label: 'طلب جديد',
     icon: 'pi pi-pencil',
@@ -445,9 +445,7 @@ export class AuthObjectsService {
     // 3. Build MegaMenu with IDs
     return parents.map(parent => {
       const parentMenus = menusByParentId.get(parent.sbId) || [];
-      const midIndex = Math.ceil(parentMenus.length / 2);
-      const column1Menus = parentMenus.slice(0, midIndex);
-      const column2Menus = parentMenus.slice(midIndex);
+      const menuColumns = this.distributeMenusAcrossColumns(parentMenus, 4, 3);
 
       const mapMenuToColumn = (menuGroup: SwbPrivilege[]) => {
         return menuGroup.map(menu => {
@@ -480,13 +478,38 @@ export class AuthObjectsService {
         id: `parent-${parent.sbId}`,
         icon: parentIconMeta.icon,
         iconStyle: parentIconMeta.iconStyle,
-        items: [
-          mapMenuToColumn(column1Menus),
-          mapMenuToColumn(column2Menus),
-        ].filter(column => column.length > 0),
+        items: menuColumns
+          .map(columnMenus => mapMenuToColumn(columnMenus))
+          .filter(column => column.length > 0),
         routerLinkActiveOptions: { exact: true }
       };
     });
+  }
+
+  private distributeMenusAcrossColumns(
+    parentMenus: SwbPrivilege[],
+    maxColumns: number,
+    maxRowsPerColumn: number
+  ): SwbPrivilege[][] {
+    if (!parentMenus.length) {
+      return [];
+    }
+
+    const normalizedMaxColumns = Math.max(1, maxColumns);
+    const normalizedMaxRows = Math.max(1, maxRowsPerColumn);
+    const columns: SwbPrivilege[][] = [[]];
+    let columnIndex = 0;
+
+    for (const menu of parentMenus) {
+      if (columns[columnIndex].length >= normalizedMaxRows && columnIndex < normalizedMaxColumns - 1) {
+        columns.push([]);
+        columnIndex += 1;
+      }
+
+      columns[columnIndex].push(menu);
+    }
+
+    return columns.filter(column => column.length > 0);
   }
 
   /**
@@ -510,6 +533,8 @@ export class AuthObjectsService {
       'Publications/FullPublication': { icon: 'pi pi-fw pi-copy', color: '#6b7280' },
       'Admin/ResetPassword': { icon: 'pi pi-fw pi-key', color: '#f97316' },
       'Admin/DynamicFiledsManager': { icon: 'pi pi-fw pi-sliders-h', color: '#8b5cf6' },
+      'Admin/DynamicSubjectTypes': { icon: 'pi pi-fw pi-sitemap', color: '#1d4ed8' },
+      'Admin/DynamicSubjectManagement': { icon: 'pi pi-fw pi-sitemap', color: '#1d4ed8' },
       'Admin/ServerMonitorManager': { icon: 'pi pi-fw pi-desktop', color: '#64748b' },
       'TopManagement/AddSubject': { icon: 'pi pi-fw pi-plus-circle', color: '#16a34a' },
       'Admin/ApplicationConfiguration': { icon: 'pi pi-fw pi-cog', color: '#2563eb' },
@@ -550,9 +575,10 @@ export class AuthObjectsService {
     this.DomainAuthenticated$.next(false);
     this.twoFactorProtected$.next(false);
     const fullUrl = (typeof window !== 'undefined' && window.location && window.location.href) ? window.location.href : this.router.url;
-    console.log('SignOut - fullUrl:', fullUrl, ' router.url:', this.router.url);
-    if (!skipNavigate && !fullUrl.includes('mainLayOut')) {
-      const currentPath = this.resolveCurrentAppPath();
+    const currentPath = this.resolveCurrentAppPath();
+    const isLoginScreen = this.isLoginPath(currentPath) || fullUrl.toLowerCase().includes('/auth/login');
+
+    if (!skipNavigate && !fullUrl.includes('mainLayOut') && !isLoginScreen) {
       this.router.navigate(['/Auth/Login'], {
         queryParams: { returnUrl: currentPath }
       });
@@ -587,6 +613,11 @@ export class AuthObjectsService {
     return '/Home';
   }
 
+  private isLoginPath(path: string): boolean {
+    const normalized = String(path ?? '').toLowerCase();
+    return normalized.startsWith('/auth/login');
+  }
+
   returnAllFunc(): any[] {
     const allFunc: string[] = this.jwtHelper.decodeToken(localStorage.getItem('ConnectToken') as string).functions
     if (allFunc != undefined)
@@ -596,27 +627,121 @@ export class AuthObjectsService {
     }
   }
   checkAuthFun(fnc: string): boolean {
-    const funcToken = localStorage.getItem('ConnectFunctions')
-    if (!funcToken) {
-      return false
+    const normalizedFunction = `${fnc ?? ''}`.trim();
+    if (!normalizedFunction) {
+      return false;
     }
 
-    const decoded: any = this.jwtHelper.decodeToken(funcToken)
-    if (!decoded) {
-      return false
+    let hasFunctionClaim = false;
+    const funcToken = localStorage.getItem('ConnectFunctions');
+    if (funcToken) {
+      try {
+        const decoded: any = this.jwtHelper.decodeToken(funcToken);
+        const fncs = decoded?.functions;
+        if (Array.isArray(fncs)) {
+          hasFunctionClaim = fncs.includes(normalizedFunction);
+        } else if (fncs !== null && fncs !== undefined) {
+          hasFunctionClaim = `${fncs}` === normalizedFunction;
+        }
+      } catch {
+        hasFunctionClaim = false;
+      }
     }
 
-    const fncs = decoded.functions
-    if (!fncs) {
-      return false
+    if (hasFunctionClaim) {
+      return true;
     }
 
-    if (Array.isArray(fncs)) {
-      // return true if the function exists in the array
-      return fncs.includes(fnc)
-    } else {
-      return fncs === fnc
+    if (normalizedFunction === 'SummerAdminFunc') {
+      return this.checkAuthRole('2020') || this.checkAuthRole('2021');
     }
+
+    if (normalizedFunction === 'SummerGeneralManagerFunc') {
+      return this.checkAuthRole('2021');
+    }
+
+    return false;
+  }
+  checkAuthRole(roleId: string): boolean {
+    const normalizedRequiredRoleId = `${roleId ?? ''}`.trim();
+    if (!normalizedRequiredRoleId) {
+      return false;
+    }
+
+    const tokens = [
+      localStorage.getItem('ConnectToken'),
+      localStorage.getItem('ConnectFunctions')
+    ];
+
+    for (const token of tokens) {
+      if (!token) {
+        continue;
+      }
+
+      try {
+        const decoded: any = this.jwtHelper.decodeToken(token);
+        if (!decoded) {
+          continue;
+        }
+
+        const claimKeys = ['RoleId', 'roleId', 'role', 'roles', 'RoleIds', 'roleIds'];
+        for (const key of claimKeys) {
+          const values = this.expandClaimValues(decoded[key]);
+          if (values.includes(normalizedRequiredRoleId)) {
+            return true;
+          }
+        }
+      } catch {
+        // Ignore malformed token and continue checking the next one.
+      }
+    }
+
+    return false;
+  }
+  private expandClaimValues(value: any): string[] {
+    if (value === null || value === undefined) {
+      return [];
+    }
+
+    if (Array.isArray(value)) {
+      return value
+        .map(item => `${item ?? ''}`.trim())
+        .filter(item => item.length > 0);
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return [`${value}`];
+    }
+
+    if (typeof value === 'object') {
+      const extracted = value?.roleId ?? value?.RoleId;
+      return extracted !== undefined && extracted !== null
+        ? [`${extracted}`.trim()].filter(item => item.length > 0)
+        : [];
+    }
+
+    const raw = `${value}`.trim();
+    if (!raw) {
+      return [];
+    }
+
+    if (raw.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(item => `${item ?? ''}`.trim())
+            .filter(item => item.length > 0);
+        }
+      } catch {
+        // Fall back to delimiter parsing.
+      }
+    }
+
+    return raw
+      .split(/[;,|]/g)
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
   }
   transformDistinct(value: any[], property: string): any[] {
     if (!value || !property) {

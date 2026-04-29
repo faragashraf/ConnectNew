@@ -12,6 +12,7 @@ import { TourService } from '../../services/tour.service';
 import { filter, timeInterval, timeout } from 'rxjs/operators';
 import { SoundService } from '../../services/helper/sound.service';
 import { ThemeService } from '../../services/theme.service';
+import { WindowsNotificationService } from '../../services/helper/windowsNotification.service';
 
 @Component({
   selector: 'app-nav-bar',
@@ -59,6 +60,18 @@ export class NavBarComponent implements OnInit, AfterViewInit {
   ];
   selectedVisualTheme: string = 'light';
 
+  get isClickSoundEnabled(): boolean {
+    return this.soundService.isSoundEnabled;
+  }
+
+  get clickSoundIconClass(): string {
+    return 'pi pi-volume-up';
+  }
+
+  get clickSoundTooltipText(): string {
+    return this.isClickSoundEnabled ? 'كتم أصوات النقر' : 'تشغيل أصوات النقر';
+  }
+
   constructor(public authService: AuthObjectsService, public signalRService: SignalRService,
     public router: Router, public broadcastService: BroadcastService,
     public msgsService: MsgsService,
@@ -68,7 +81,8 @@ export class NavBarComponent implements OnInit, AfterViewInit {
     private sanitizer: DomSanitizer,
     private fb: FormBuilder,
     private cd: ChangeDetectorRef,
-    public themeService: ThemeService
+    public themeService: ThemeService,
+    private windowsNotificationService: WindowsNotificationService
   ) {
     this.twoFactorForm = this.fb.group({
       pairingId: [null],
@@ -92,7 +106,8 @@ export class NavBarComponent implements OnInit, AfterViewInit {
     this.selectedTheme = this.themeService.mode;
     this.selectedVisualTheme = this.themeService.visualTheme;
     this.signalRService.primMsg.messageObserver.subscribe((msgs: any) => {
-      this.signalRService.primMsgList = [...this.signalRService.primMsgList, msgs];
+      const payload = Array.isArray(msgs) ? msgs : [msgs];
+      this.signalRService.primMsgList = [...payload, ...this.signalRService.primMsgList];
     });
 
     // Start tour on successful login (Auth/Login -> Home) or page refresh if logged in
@@ -122,6 +137,11 @@ export class NavBarComponent implements OnInit, AfterViewInit {
 
   ngAfterViewInit() {
 
+  }
+
+  toggleClickSound(event: MouseEvent): void {
+    event.stopPropagation();
+    this.soundService.setSoundStrategy(!this.soundService.isSoundEnabled);
   }
 
   private checkAndStartTour() {
@@ -458,6 +478,42 @@ export class NavBarComponent implements OnInit, AfterViewInit {
         this.msgsService.msgInfo('تم الإلغاء');
       }
     });
+  }
+
+  async testSystemNotification() {
+    const isSent = await this.windowsNotificationService.runManualNotificationTest();
+    if (isSent) {
+      this.msgsService.msgSuccess('تم إرسال إشعار نظام تجريبي. تحقق من Notification Center.', 4000, true);
+      return;
+    }
+
+    this.msgsService.msgInfo('تعذر إرسال الإشعار. تحقق من صلاحية الإشعارات في المتصفح والنظام.', 'اختبار إشعار النظام');
+  }
+
+  testSummerCapacityNotification() {
+    const now = new Date();
+    const payload = {
+      event: 'SUMMER_CAPACITY_UPDATED',
+      destinationId: 147,
+      destinationName: 'المصيف التجريبي',
+      waveCode: 'W3',
+      batchNumber: '3',
+      action: 'EDIT',
+      emittedAt: now.toISOString(),
+      sender: 'Connect',
+      title: 'إدارة طلبات المصايف'
+    };
+
+    this.signalRService.Notification$.next({
+      sender: 'Connect',
+      title: 'إدارة طلبات المصايف',
+      notification: JSON.stringify(payload),
+      type: 'Info',
+      category: 'Business',
+      time: now
+    } as any);
+
+    this.msgsService.msgInfo('تم إرسال إشعار سعة مصيف تجريبي عبر نفس مسار الإشعارات اللحظية.', 'اختبار سعة المصيف');
   }
 
   clearCache() {

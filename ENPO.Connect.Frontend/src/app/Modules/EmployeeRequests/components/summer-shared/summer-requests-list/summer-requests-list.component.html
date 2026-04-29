@@ -2,7 +2,7 @@
   <app-summer-skeleton
     *ngIf="loading"
     [variant]="'table'"
-    [columns]="6"
+    [columns]="isAdminVariant ? 6 : 5"
     [rows]="skeletonRowCount"
     [showTitle]="false"
     [ariaLabel]="'جاري تحميل قائمة الطلبات'">
@@ -25,7 +25,6 @@
           <th>الفوج</th>
           <th>الحالة</th>
           <th>استحقاق السداد</th>
-          <th>حالة التحويل</th>
         </tr>
       </thead>
 
@@ -55,7 +54,7 @@
               </span>
             </td>
             <td>{{ resolveDate(request.paymentDueAtUtc) }}</td>
-            <td>{{ request.paidAtUtc ? 'مسدد' : 'غير مسدد' }}</td>
+            <td>{{ request.paymentStateLabel || (request.paidAtUtc ? 'مسدد' : 'غير مسدد') }}</td>
           </ng-container>
 
           <ng-template #employeeRow>
@@ -71,16 +70,11 @@
               <div>{{ resolveDate(request.paymentDueAtUtc) }}</div>
               <small class="warn" *ngIf="isPaymentOverdue(request)">متأخر عن السداد</small>
             </td>
-            <td>
-              <span [ngClass]="resolveTransferStateClass(request)">
-                {{ resolveTransferStateLabel(request) }}
-              </span>
-            </td>
           </ng-template>
         </tr>
 
         <tr *ngIf="requests.length === 0">
-          <td [attr.colspan]="6" class="empty">{{ emptyMessage }}</td>
+          <td [attr.colspan]="isAdminVariant ? 6 : 5" class="empty">{{ emptyMessage }}</td>
         </tr>
       </tbody>
     </table>
@@ -121,4 +115,3 @@
     </div>
   </div>
 </section>
-

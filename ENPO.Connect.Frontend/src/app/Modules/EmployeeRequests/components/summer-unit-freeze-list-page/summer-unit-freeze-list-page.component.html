@@ -1,0 +1,64 @@
+<section class="freeze-page-shell">
+  <header class="head">
+    <div>
+      <h2>إدارة تجميد الوحدات</h2>
+      <p>إدارة عمليات التجميد النشطة والمفكوكة مع إمكانية العرض والفك.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="ghost" (click)="refresh()" [disabled]="loadingList">{{ loadingList ? 'جاري التحديث...' : 'تحديث' }}</button>
+      <button type="button" class="primary" (click)="openCreatePage()">إنشاء تجميد</button>
+    </div>
+  </header>
+
+  <form class="filters" [formGroup]="filtersForm" (ngSubmit)="applyFilters()">
+    <label>
+      <span>المصيف</span>
+      <select formControlName="resortId" (change)="onResortChanged()">
+        <option [ngValue]="null">الكل</option>
+        <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">{{ destination.name }}</option>
+      </select>
+    </label>
+
+    <label>
+      <span>الفوج</span>
+      <select formControlName="waveId" [disabled]="!selectedDestination">
+        <option [ngValue]="''">الكل</option>
+        <option *ngFor="let wave of filterWaves" [ngValue]="wave.code">{{ wave.code }} - {{ wave.startsAtLabel }}</option>
+      </select>
+    </label>
+
+    <label>
+      <span>السعة</span>
+      <select formControlName="capacity" [disabled]="!selectedDestination">
+        <option [ngValue]="null">الكل</option>
+        <option *ngFor="let capacity of filterCapacities" [ngValue]="capacity">{{ capacity }}</option>
+      </select>
+    </label>
+
+    <label>
+      <span>الحالة</span>
+      <select formControlName="isActive">
+        <option value="all">الكل</option>
+        <option value="active">نشط</option>
+        <option value="inactive">مفكوك</option>
+      </select>
+    </label>
+
+    <div class="filter-actions">
+      <button type="submit" class="primary" [disabled]="loadingList">بحث</button>
+      <button type="button" class="ghost" (click)="clearFilters()" [disabled]="loadingList">مسح</button>
+    </div>
+  </form>
+
+  <p class="error" *ngIf="listError.length > 0">{{ listError }}</p>
+
+  <app-freeze-table
+    [destinations]="destinations"
+    [rows]="freezes"
+    [loading]="loadingList || loadingDestinations"
+    [showActions]="true"
+    (viewDetails)="openDetails($event)"
+    (reFreeze)="openRefreezePage($event)"
+    (releaseFreeze)="releaseFreeze($event)">
+  </app-freeze-table>
+</section>

@@ -1,0 +1,2420 @@
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription, forkJoin } from 'rxjs';
+import { ComponentConfigService } from 'src/app/Modules/admins/services/component-config.service';
+import { CentralAdminPreviewFoundationService } from 'src/app/Modules/admins/services/central-admin-preview-foundation.service';
+import { GenericFormsService } from 'src/app/Modules/GenericComponents/GenericForms.service';
+import { DynamicFormController, PowerBiController } from 'src/app/shared/services/BackendServices';
+import { CdCategoryMandDto, CdmendDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
+import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
+import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
+import {
+  EnvelopeSummaryDto,
+  RequestPolicyDefinitionDto,
+  SubjectCategoryTreeNodeDto,
+  SubjectDetailDto,
+  SubjectFieldDefinitionDto,
+  SubjectFieldValueDto,
+  SubjectFormDefinitionDto,
+  SubjectGroupDefinitionDto,
+  SubjectUpsertRequest
+} from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
+import { ComponentConfig, getConfigByRoute, processRequestsAndPopulate, RequestArrayItem, routeKey } from 'src/app/shared/models/Component.Config.model';
+import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
+import { DynamicSubjectsRealtimeService } from '../../services/dynamic-subjects-realtime.service';
+import { DynamicSubjectAccessService } from '../../services/dynamic-subject-access.service';
+import {
+  AdminCatalogGroupTreeNodeDto
+} from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.dto';
+import {
+  DynamicSubjectsAdminCatalogController
+} from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminCatalog/DynamicSubjectsAdminCatalog.service';
+import {
+  normalizeRequestViewMode,
+  RequestViewMode,
+  REQUEST_VIEW_MODE_OPTIONS_AR,
+  REQUEST_VIEW_MODE_STANDARD
+} from 'src/app/shared/models/request-view-mode';
+
+interface RuntimeFieldInspectorRow {
+  fieldKey: string;
+  fieldLabel: string;
+  required: boolean;
+}
+
+interface RuntimeGroupHierarchyMeta {
+  parentGroupId: number | null;
+  displayOrder: number;
+  hierarchyOrder?: number;
+}
+
+interface RuntimeCanonicalGroupMeta extends RuntimeGroupHierarchyMeta {
+  groupName: string;
+  groupDescription?: string;
+}
+
+interface RuntimeGroupRenderNode {
+  groupId: number;
+  groupName: string;
+  groupDescription?: string;
+  formArrayName: string | null;
+  fields: CdCategoryMandDto[];
+  totalVisibleFieldsCount: number;
+  children: RuntimeGroupRenderNode[];
+}
+
+type RuntimeFormDisplayMode = RequestViewMode;
+
+@Component({
+  selector: 'app-dynamic-subject-editor',
+  templateUrl: './dynamic-subject-editor.component.html',
+  styleUrls: ['./dynamic-subject-editor.component.scss']
+})
+export class DynamicSubjectEditorComponent implements OnInit, OnDestroy {
+  private static readonly EDITOR_ROUTE_KEY = 'DynamicSubjects/SubjectEditor';
+  private static readonly DIRECTION_FIELD_KEY = 'TOPICDIRECTION';
+  readonly documentDirectionOptions: Array<{ label: string; value: string }> = [
+    { label: 'وارد', value: 'incoming' },
+    { label: 'صادر', value: 'outgoing' }
+  ];
+
+  editorForm: FormGroup;
+  dynamicControls: FormGroup;
+  stakeholdersArray: FormArray;
+  tasksArray: FormArray;
+
+  loading = false;
+  loadingCategoryOptions = false;
+  saving = false;
+  isEditMode = false;
+  isRuntimeRegistrationMvpMode = false;
+  showDiagnostics = false;
+  messageId = 0;
+  private rawFormDefinition: SubjectFormDefinitionDto | null = null;
+  formDefinition: SubjectFormDefinitionDto | null = null;
+  renderGroupTree: RuntimeGroupRenderNode[] = [];
+  readonly formDisplayModeOptions: Array<{ label: string; value: RuntimeFormDisplayMode }> = [...REQUEST_VIEW_MODE_OPTIONS_AR];
+  allowRequesterOverride = false;
+  currentDisplayMode: RuntimeFormDisplayMode = REQUEST_VIEW_MODE_STANDARD;
+  rootGroupTabIndex = 0;
+  categoryOptions: Array<{ id: number; name: string }> = [];
+  pendingFiles: FileParameter[] = [];
+  existingAttachments: Array<{ attachmentId: number; fileName: string }> = [];
+  availableEnvelopes: EnvelopeSummaryDto[] = [];
+  liveEventNotice = '';
+  submitAttempted = false;
+  config: ComponentConfig | null = null;
+  resolvedConfigRouteKey = DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
+  unitTree: any[] = [];
+  private allowedCategoryIds = new Set<number>();
+  private allConfigs: ComponentConfig[] = [];
+  private treeCapableFieldKeys = new Set<string>();
+  private activeRequestPolicy: RequestPolicyDefinitionDto | null = null;
+  private directionSelectionMode: 'fixed' | 'selectable' = 'selectable';
+  private fixedDocumentDirection: string | null = null;
+  private suppressDirectionRebuild = false;
+  private lastResolvedDirectionKey: string | null = null;
+  private canonicalGroupHierarchyCategoryId: number | null = null;
+  private canonicalGroupHierarchyRequestToken = 0;
+  private canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+  private readonly canonicalGroupHierarchyCache = new Map<number, Map<number, RuntimeCanonicalGroupMeta>>();
+
+  private controlMap = new Map<string, { fieldKey: string; instanceGroupId: number }>();
+  private readonly subscriptions: Subscription[] = [];
+
+  constructor(
+    private readonly fb: FormBuilder,
+    private readonly route: ActivatedRoute,
+    private readonly router: Router,
+    private readonly dynamicSubjectsController: DynamicSubjectsController,
+    private readonly dynamicFormController: DynamicFormController,
+    private readonly powerBiController: PowerBiController,
+    private readonly dynamicSubjectAccess: DynamicSubjectAccessService,
+    private readonly realtimeService: DynamicSubjectsRealtimeService,
+    private readonly componentConfigService: ComponentConfigService,
+    private readonly previewFoundation: CentralAdminPreviewFoundationService,
+    private readonly genericFormService: GenericFormsService,
+    private readonly appNotification: AppNotificationService,
+    private readonly adminCatalogController: DynamicSubjectsAdminCatalogController
+  ) {
+    this.editorForm = this.fb.group({
+      categoryId: [0, Validators.required],
+      documentDirection: [''],
+      subject: [''],
+      description: [''],
+      envelopeId: [null]
+    });
+
+    this.dynamicControls = this.fb.group({});
+    this.stakeholdersArray = this.fb.array([]);
+    this.tasksArray = this.fb.array([]);
+  }
+
+  ngOnInit(): void {
+    const routeId = Number(this.route.snapshot.paramMap.get('id') ?? 0);
+    this.isEditMode = routeId > 0;
+    this.messageId = routeId;
+    const routePath = String(this.route.snapshot.routeConfig?.path ?? '').trim().toLowerCase();
+    this.isRuntimeRegistrationMvpMode = Boolean(this.route.snapshot.data?.['runtimeRegistrationMvp']) || routePath === 'runtime-registration';
+
+    this.initializeScreenConfig();
+    this.loadCategoryOptions();
+    this.loadEnvelopeOptions();
+    this.subscriptions.push(
+      this.editorForm.get('documentDirection')!.valueChanges.subscribe(() => {
+        if (this.suppressDirectionRebuild || this.directionSelectionMode !== 'selectable') {
+          return;
+        }
+
+        this.reloadFormDefinitionForDirectionChange();
+      })
+    );
+
+    if (this.isEditMode) {
+      this.realtimeService.joinSubjectGroup(routeId);
+      this.loadSubject(routeId);
+    } else {
+      this.subscriptions.push(
+        this.route.queryParamMap.subscribe(params => {
+          const categoryIdFromQuery = Number(params.get('categoryId') ?? 0);
+          const categoryId = categoryIdFromQuery;
+          const requestedDirection = this.normalizeDocumentDirection(params.get('documentDirection'));
+
+          if (requestedDirection) {
+            this.editorForm.patchValue({ documentDirection: requestedDirection }, { emitEvent: false });
+          }
+
+          if (categoryId > 0) {
+            this.editorForm.patchValue({ categoryId }, { emitEvent: false });
+            this.loadFormDefinition(categoryId);
+            this.executeConfigRequests('onCategoryChanged', { categoryId });
+          }
+        })
+      );
+    }
+
+    this.subscriptions.push(
+      this.realtimeService.events$().subscribe(eventItem => {
+        if (Number(eventItem.messageId ?? 0) !== this.messageId || !this.messageId) {
+          return;
+        }
+
+        const formattedTime = new Date(eventItem.timestampUtc).toLocaleTimeString('ar-EG');
+        this.liveEventNotice = `تم استلام تحديث مباشر: ${this.toArabicEventType(eventItem.eventType)} - ${formattedTime}`;
+      })
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.forEach(subscription => subscription.unsubscribe());
+  }
+
+  get stakeholdersControls(): FormGroup[] {
+    return this.stakeholdersArray.controls as FormGroup[];
+  }
+
+  get tasksControls(): FormGroup[] {
+    return this.tasksArray.controls as FormGroup[];
+  }
+
+  get showDocumentDirectionSelector(): boolean {
+    return this.hasDirectionCapability && this.directionSelectionMode === 'selectable';
+  }
+
+  get showDocumentDirectionReadonly(): boolean {
+    return this.hasDirectionCapability && this.directionSelectionMode === 'fixed';
+  }
+
+  get currentDocumentDirectionLabel(): string {
+    const value = this.resolveDocumentDirectionForForm();
+    if (value === 'incoming') {
+      return 'وارد';
+    }
+    if (value === 'outgoing') {
+      return 'صادر';
+    }
+
+    return 'غير محدد';
+  }
+
+  get directionReadOnlyValue(): string {
+    return this.currentDocumentDirectionLabel;
+  }
+
+  get selectedCategoryId(): number {
+    return Number(this.editorForm.get('categoryId')?.value ?? 0);
+  }
+
+  get selectedCategoryDisplayName(): string {
+    const categoryId = this.selectedCategoryId;
+    if (categoryId <= 0) {
+      return '';
+    }
+
+    return this.categoryOptions.find(item => Number(item.id) === categoryId)?.name ?? `#${categoryId}`;
+  }
+
+  get hasAvailableRequestTypes(): boolean {
+    return this.categoryOptions.length > 0;
+  }
+
+  get showRequestTypesEmptyState(): boolean {
+    return this.isRuntimeRegistrationMvpMode
+      && !this.loadingCategoryOptions
+      && !this.isEditMode
+      && !this.hasAvailableRequestTypes;
+  }
+
+  get canShowRuntimeFieldInspector(): boolean {
+    return this.isRuntimeRegistrationMvpMode && !this.isEditMode && this.selectedCategoryId > 0;
+  }
+
+  get shouldRenderRuntimeDiagnostics(): boolean {
+    return this.canShowRuntimeFieldInspector && this.showDiagnostics;
+  }
+
+  get shouldShowDisplayModeSelector(): boolean {
+    return this.allowRequesterOverride;
+  }
+
+  get isTabbedDisplayModeActive(): boolean {
+    return this.currentDisplayMode === 'tabbed' && this.renderGroupTree.length > 0;
+  }
+
+  get runtimeVisibleFieldRows(): RuntimeFieldInspectorRow[] {
+    return this.buildRuntimeFieldInspectorRows(true);
+  }
+
+  get runtimeHiddenFieldRows(): RuntimeFieldInspectorRow[] {
+    return this.buildRuntimeFieldInspectorRows(false);
+  }
+
+  trackByGroupNode = (_index: number, groupNode: RuntimeGroupRenderNode): number => groupNode.groupId;
+
+  toggleDiagnostics(): void {
+    if (!this.canShowRuntimeFieldInspector) {
+      return;
+    }
+
+    this.showDiagnostics = !this.showDiagnostics;
+  }
+
+  onDisplayModeChanged(mode: RuntimeFormDisplayMode | null | undefined): void {
+    this.currentDisplayMode = this.normalizeRuntimeDisplayMode(mode);
+    this.rootGroupTabIndex = 0;
+  }
+
+  onRootGroupTabChange(nextIndex: number | null | undefined): void {
+    const normalized = Number(nextIndex ?? 0);
+    this.rootGroupTabIndex = Number.isFinite(normalized) && normalized >= 0
+      ? Math.trunc(normalized)
+      : 0;
+  }
+
+  getFormArrayControls(formArrayName: string): AbstractControl[] {
+    const formArray = this.getFormArrayInstance(formArrayName);
+    return formArray?.controls ?? [];
+  }
+
+  getFormArrayInstance(formArrayName: string): FormArray | null {
+    const control = this.dynamicControls?.get(formArrayName);
+    return control instanceof FormArray ? control : null;
+  }
+
+  getControlNamesFromGroup(groupControl: AbstractControl): string[] {
+    if (groupControl instanceof FormGroup) {
+      return Object.keys(groupControl.controls);
+    }
+
+    return [];
+  }
+
+  onDynamicFieldGenericEvent(_event: unknown): void {
+    // reserved for future cross-field interactions
+  }
+
+  reloadRequestTypes(): void {
+    this.loadCategoryOptions();
+  }
+
+  private initializeScreenConfig(): void {
+    this.resolvedConfigRouteKey = this.resolveConfigRouteKey();
+    this.componentConfigService.getAll().subscribe({
+      next: items => {
+        this.allConfigs = items || [];
+        const cfg = getConfigByRoute(this.resolvedConfigRouteKey, items || []);
+        if (!cfg) {
+          this.config = null;
+          this.treeCapableFieldKeys.clear();
+          return;
+        }
+
+        this.config = cfg;
+        const currentCategoryId = Number(this.editorForm.get('categoryId')?.value ?? 0);
+        this.refreshTreeRuntimeMetadata(currentCategoryId);
+        this.executeConfigRequests('onInit', {
+          categoryId: currentCategoryId
+        });
+      },
+      error: () => {
+        this.config = null;
+        this.treeCapableFieldKeys.clear();
+      }
+    });
+  }
+
+  private resolveConfigRouteKey(): string {
+    const routeDataKey = String(this.route.snapshot.data?.['configRouteKey'] ?? '').trim();
+    if (routeDataKey.length > 0) {
+      return routeDataKey;
+    }
+
+    const routePath = String(this.route.snapshot.routeConfig?.path ?? '').trim().toLowerCase();
+    if (routePath === 'subjects/new' || routePath === 'subjects/:id/edit' || routePath === 'runtime-registration') {
+      return DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
+    }
+
+    const derivedKey = String(routeKey(this.router.url) ?? '').trim();
+    if (derivedKey.length === 0) {
+      return DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
+    }
+
+    const normalized = derivedKey
+      .replace(/^dynamicsubjects\//i, 'DynamicSubjects/')
+      .replace(/^dynamic-subjects\//i, 'DynamicSubjects/');
+    return normalized || DynamicSubjectEditorComponent.EDITOR_ROUTE_KEY;
+  }
+
+  private executeConfigRequests(trigger: 'onInit' | 'onCategoryChanged', runtime: Record<string, any>): void {
+    if (!this.config) {
+      return;
+    }
+
+    const categoryId = Number(runtime?.['categoryId'] ?? this.editorForm.get('categoryId')?.value ?? 0);
+    this.refreshTreeRuntimeMetadata(categoryId);
+
+    const runtimeConfig = this.buildRuntimeConfigWithSupplementalTreeRequests(categoryId);
+    if (!runtimeConfig) {
+      return;
+    }
+
+    this.config = runtimeConfig;
+    if (trigger === 'onCategoryChanged') {
+      this.unitTree = [];
+    }
+
+    processRequestsAndPopulate(this, this.genericFormService, undefined, {
+      trigger,
+      runtime: {
+        ...runtime,
+        categoryId
+      },
+      preserveDynamicMetadata: true,
+      trace: Boolean(runtimeConfig.dynamicFormSettings?.traceRequests)
+    }).subscribe({
+      next: () => {
+        this.applyPendingDynamicFieldValueBindings();
+      },
+      error: () => {
+        // defensive fallback: request pipeline issues should not block editor rendering.
+      }
+    });
+  }
+
+  onCategoryChanged(): void {
+    const categoryId = Number(this.editorForm.get('categoryId')?.value ?? 0);
+    if (categoryId <= 0) {
+      this.clearLoadedDefinitionState();
+      return;
+    }
+
+    this.loadFormDefinition(categoryId);
+    this.realtimeService.joinCategoryGroup(categoryId);
+    this.executeConfigRequests('onCategoryChanged', { categoryId });
+  }
+
+  addStakeholder(): void {
+    this.stakeholdersArray.push(this.fb.group({
+      stockholderId: [0, Validators.required],
+      partyType: ['Viewer'],
+      requiredResponse: [false],
+      status: [null],
+      dueDate: [null],
+      notes: ['']
+    }));
+  }
+
+  removeStakeholder(index: number): void {
+    this.stakeholdersArray.removeAt(index);
+  }
+
+  addTask(): void {
+    this.tasksArray.push(this.fb.group({
+      actionTitle: ['', Validators.required],
+      actionDescription: [''],
+      assignedToUserId: [''],
+      assignedUnitId: [''],
+      dueDateUtc: [null],
+      status: [0]
+    }));
+  }
+
+  removeTask(index: number): void {
+    this.tasksArray.removeAt(index);
+  }
+
+  onFilesChanged(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const selected = Array.from(input.files ?? []);
+    this.pendingFiles = selected.map(file => ({ data: file, fileName: file.name }));
+  }
+
+  removeExistingAttachment(attachmentId: number): void {
+    if (!this.messageId || attachmentId <= 0) {
+      return;
+    }
+
+    this.dynamicSubjectsController.removeAttachment(this.messageId, attachmentId).subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.appNotification.showApiErrors(response.errors, 'تعذر حذف المرفق.');
+          return;
+        }
+
+        this.existingAttachments = this.existingAttachments.filter(item => item.attachmentId !== attachmentId);
+        this.appNotification.success('تم حذف المرفق بنجاح.');
+      },
+      error: () => {
+        this.appNotification.error('حدث خطأ أثناء حذف المرفق.');
+      }
+    });
+  }
+
+  saveDraft(): void {
+    this.save(false);
+  }
+
+  submitSubject(): void {
+    this.save(true);
+  }
+
+  private save(submit: boolean): void {
+    this.submitAttempted = true;
+    const categoryId = Number(this.editorForm.get('categoryId')?.value ?? 0);
+    if (categoryId <= 0) {
+      this.editorForm.get('categoryId')?.markAsTouched();
+      this.appNotification.warning('يرجى اختيار نوع الموضوع/الطلب.');
+      return;
+    }
+
+    if (this.dynamicControls.invalid) {
+      this.dynamicControls.markAllAsTouched();
+      this.focusFirstInvalidDynamicControl();
+      this.appNotification.warning('يرجى استكمال الحقول الديناميكية المطلوبة.');
+      return;
+    }
+
+    const dynamicFields = this.buildDynamicFieldValues();
+    const documentDirection = this.resolveDocumentDirectionForSave(dynamicFields);
+
+    if (this.categoryRequiresDocumentDirection() && !documentDirection) {
+      this.editorForm.get('documentDirection')?.markAsTouched();
+      this.appNotification.warning('يرجى تحديد اتجاه الطلب (وارد/صادر).');
+      return;
+    }
+
+    const request: SubjectUpsertRequest = {
+      categoryId,
+      documentDirection: documentDirection ?? undefined,
+      subject: this.editorForm.get('subject')?.value ?? '',
+      description: this.editorForm.get('description')?.value ?? '',
+      envelopeId: Number(this.editorForm.get('envelopeId')?.value ?? 0) || undefined,
+      saveAsDraft: !submit,
+      submit,
+      dynamicFields,
+      stakeholders: this.buildStakeholdersPayload(),
+      tasks: this.buildTasksPayload()
+    };
+
+    this.saving = true;
+    const request$ = this.isEditMode
+      ? this.dynamicSubjectsController.updateSubject(this.messageId, request, this.pendingFiles)
+      : this.dynamicSubjectsController.createSubject(request, this.pendingFiles);
+
+    request$.subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.appNotification.showApiErrors(response.errors, 'تعذر حفظ الموضوع/الطلب.');
+          return;
+        }
+
+        const createdId = Number(response?.data?.messageId ?? this.messageId ?? 0);
+        if (createdId > 0) {
+          this.appNotification.success(submit ? 'تم إرسال الموضوع/الطلب بنجاح.' : 'تم حفظ الموضوع/الطلب كمسودة.');
+          this.router.navigate(['/DynamicSubjects/subjects', createdId]);
+        }
+      },
+      error: () => {
+        this.appNotification.error('حدث خطأ أثناء حفظ الموضوع/الطلب.');
+      },
+      complete: () => {
+        this.saving = false;
+      }
+    });
+  }
+
+  private loadSubject(messageId: number): void {
+    this.loading = true;
+    this.dynamicSubjectsController.getSubject(messageId).subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.appNotification.showApiErrors(response.errors, 'تعذر تحميل بيانات الموضوع/الطلب.');
+          return;
+        }
+
+        const detail = response?.data;
+        if (!detail) {
+          return;
+        }
+
+        this.editorForm.patchValue({
+          categoryId: detail.categoryId,
+          documentDirection: this.normalizeDocumentDirection(detail.documentDirection) ?? '',
+          subject: detail.subject ?? '',
+          description: detail.description ?? '',
+          envelopeId: detail.linkedEnvelopes?.[0]?.envelopeId ?? null
+        });
+        this.existingAttachments = (detail.attachments ?? []).map(item => ({
+          attachmentId: item.attachmentId,
+          fileName: item.fileName
+        }));
+
+        this.loadFormDefinition(detail.categoryId, detail);
+        this.executeConfigRequests('onCategoryChanged', { categoryId: Number(detail.categoryId ?? 0) });
+      },
+      error: () => {
+        this.appNotification.error('حدث خطأ أثناء تحميل بيانات الموضوع/الطلب.');
+      },
+      complete: () => {
+        this.loading = false;
+      }
+    });
+  }
+
+  private loadFormDefinition(
+    categoryId: number,
+    detail?: SubjectDetailDto,
+    initialValues?: SubjectFieldValueDto[]
+  ): void {
+    this.refreshTreeRuntimeMetadata(categoryId);
+    this.loadCanonicalGroupHierarchy(categoryId);
+
+    if (!this.isEditMode && this.allowedCategoryIds.size > 0 && !this.allowedCategoryIds.has(categoryId)) {
+      this.appNotification.error('غير مسموح بعرض هذا النوع.');
+      this.clearLoadedDefinitionState();
+      return;
+    }
+
+    const appId = this.dynamicSubjectAccess.getApplicationId();
+    const documentDirection = this.resolveDocumentDirectionForForm() ?? undefined;
+    const requestContext = { documentDirection };
+
+    this.dynamicSubjectsController.getFormDefinition(categoryId, appId, requestContext).subscribe({
+      next: response => {
+        const hasErrors = Boolean(response?.errors?.length);
+        const hasAnyField = Number(response?.data?.fields?.length ?? 0) > 0;
+        const shouldRetryWithoutAppScope = hasErrors || !hasAnyField;
+
+        if (shouldRetryWithoutAppScope) {
+          this.dynamicSubjectsController.getFormDefinition(categoryId, undefined, requestContext).subscribe({
+            next: fallbackResponse => {
+              if (fallbackResponse?.errors?.length) {
+                this.loadLegacyFormDefinition(categoryId, detail);
+                return;
+              }
+
+              const fallbackDefinition = fallbackResponse?.data ?? null;
+              if (!this.hasRenderableDefinition(fallbackDefinition)) {
+                this.loadLegacyFormDefinition(categoryId, detail);
+                return;
+              }
+
+              this.applyLoadedDefinition(fallbackDefinition, detail, initialValues);
+            },
+            error: () => {
+              this.loadLegacyFormDefinition(categoryId, detail);
+            }
+          });
+          return;
+        }
+
+        const definition = response?.data ?? null;
+        if (!this.hasRenderableDefinition(definition)) {
+          this.loadLegacyFormDefinition(categoryId, detail);
+          return;
+        }
+
+        this.applyLoadedDefinition(definition, detail, initialValues);
+      },
+      error: () => {
+        this.loadLegacyFormDefinition(categoryId, detail);
+      }
+    });
+  }
+
+  private hasRenderableDefinition(definition: SubjectFormDefinitionDto | null | undefined): boolean {
+    return Boolean(definition && Array.isArray(definition.fields) && definition.fields.length > 0);
+  }
+
+  private applyLoadedDefinition(
+    definition: SubjectFormDefinitionDto | null,
+    detail?: SubjectDetailDto,
+    initialValues?: SubjectFieldValueDto[]
+  ): void {
+    this.rawFormDefinition = definition ?? null;
+    this.activeRequestPolicy = this.rawFormDefinition?.requestPolicy ?? null;
+    this.applyPresentationSettingsFromDefinition(this.rawFormDefinition);
+    this.applyDirectionPolicyFromDefinition(this.resolveInitialDirectionCandidate(detail));
+    const seedValues = (initialValues && initialValues.length > 0)
+      ? initialValues
+      : (detail?.dynamicFields ?? []);
+    this.rebuildResolvedDynamicDefinition(seedValues, false);
+    this.applyPendingDynamicFieldValueBindings();
+    this.populateStakeholders(detail);
+    this.populateTasks(detail);
+  }
+
+  private applyPresentationSettingsFromDefinition(definition: SubjectFormDefinitionDto | null): void {
+    const defaultDisplayMode = this.normalizeRuntimeDisplayMode(
+      definition?.defaultViewMode ?? definition?.defaultDisplayMode
+    );
+    this.allowRequesterOverride = (definition?.allowRequesterOverride ?? definition?.allowUserToChangeDisplayMode) === true;
+    this.currentDisplayMode = defaultDisplayMode;
+    this.rootGroupTabIndex = 0;
+  }
+
+  private normalizeRuntimeDisplayMode(value: unknown): RuntimeFormDisplayMode {
+    return normalizeRequestViewMode(value);
+  }
+
+  private get hasDirectionCapability(): boolean {
+    const hasDirectionField = (this.rawFormDefinition?.fields ?? []).some(field =>
+      String(field.fieldKey ?? '').trim().toUpperCase() === DynamicSubjectEditorComponent.DIRECTION_FIELD_KEY);
+    return hasDirectionField || this.fixedDocumentDirection != null;
+  }
+
+  private resolveInitialDirectionCandidate(detail?: SubjectDetailDto): string | null {
+    const detailDirection = this.normalizeDocumentDirection(detail?.documentDirection);
+    if (detailDirection) {
+      return detailDirection;
+    }
+
+    const directionFieldValue = (detail?.dynamicFields ?? [])
+      .find(field => String(field.fieldKey ?? '').trim().toUpperCase() === DynamicSubjectEditorComponent.DIRECTION_FIELD_KEY)
+      ?.value;
+    const fromDynamicField = this.normalizeDocumentDirection(directionFieldValue);
+    if (fromDynamicField) {
+      return fromDynamicField;
+    }
+
+    return this.normalizeDocumentDirection(this.editorForm.get('documentDirection')?.value);
+  }
+
+  private applyDirectionPolicyFromDefinition(initialDirection: string | null): void {
+    const workflow = this.activeRequestPolicy?.workflowPolicy;
+    const directionMode = String(workflow?.directionMode ?? 'selectable').trim().toLowerCase() === 'fixed'
+      ? 'fixed'
+      : 'selectable';
+    const fixedDirection = directionMode === 'fixed'
+      ? this.normalizeDocumentDirection(workflow?.fixedDirection)
+      : null;
+
+    this.directionSelectionMode = directionMode === 'fixed' && fixedDirection
+      ? 'fixed'
+      : 'selectable';
+    this.fixedDocumentDirection = fixedDirection;
+
+    const directionControl = this.editorForm.get('documentDirection');
+    if (!directionControl) {
+      return;
+    }
+
+    const preferredDirection = this.fixedDocumentDirection
+      ?? initialDirection
+      ?? this.normalizeDocumentDirection(directionControl.value)
+      ?? null;
+
+    this.suppressDirectionRebuild = true;
+    directionControl.patchValue(preferredDirection ?? '', { emitEvent: false });
+    if (this.directionSelectionMode === 'fixed') {
+      directionControl.disable({ emitEvent: false });
+    } else {
+      directionControl.enable({ emitEvent: false });
+    }
+    const requiresDirectionSelection = this.hasDirectionCapability && this.directionSelectionMode === 'selectable';
+    directionControl.setValidators(requiresDirectionSelection ? [Validators.required] : []);
+    directionControl.updateValueAndValidity({ emitEvent: false });
+    this.suppressDirectionRebuild = false;
+    this.lastResolvedDirectionKey = preferredDirection;
+  }
+
+  private reloadFormDefinitionForDirectionChange(): void {
+    const categoryId = Number(this.editorForm.get('categoryId')?.value ?? 0);
+    if (categoryId <= 0 || this.loading || this.saving) {
+      return;
+    }
+
+    this.loadFormDefinition(categoryId, undefined, this.buildDynamicFieldValues());
+  }
+
+  private rebuildResolvedDynamicDefinition(
+    initialValues: SubjectFieldValueDto[],
+    preserveCurrentValues: boolean,
+    forceRebuild: boolean = false
+  ): void {
+    if (!this.rawFormDefinition) {
+      this.clearLoadedDefinitionState();
+      return;
+    }
+
+    const direction = this.resolveDocumentDirectionForForm();
+    if (!forceRebuild && preserveCurrentValues && this.lastResolvedDirectionKey === direction) {
+      return;
+    }
+
+    const values = preserveCurrentValues
+      ? this.buildDynamicFieldValues()
+      : (initialValues ?? []);
+    const resolvedDefinition = this.resolveDefinitionByPolicy(this.rawFormDefinition, direction);
+    this.formDefinition = resolvedDefinition;
+    this.rebuildDynamicControls(resolvedDefinition, values);
+    this.applyPendingDynamicFieldValueBindings();
+    this.lastResolvedDirectionKey = direction;
+  }
+
+  private loadCanonicalGroupHierarchy(categoryId: number): void {
+    const normalizedCategoryId = this.normalizePositiveInt(categoryId);
+    if (!normalizedCategoryId) {
+      this.canonicalGroupHierarchyCategoryId = null;
+      this.canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+      return;
+    }
+
+    this.canonicalGroupHierarchyCategoryId = normalizedCategoryId;
+    const cached = this.canonicalGroupHierarchyCache.get(normalizedCategoryId);
+    if (cached) {
+      this.canonicalGroupHierarchyByGroupId = this.cloneCanonicalGroupHierarchyMap(cached);
+      return;
+    }
+
+    this.canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+    const requestToken = ++this.canonicalGroupHierarchyRequestToken;
+    this.adminCatalogController.getGroupsByCategory(normalizedCategoryId).subscribe({
+      next: response => {
+        if (requestToken !== this.canonicalGroupHierarchyRequestToken
+          || this.canonicalGroupHierarchyCategoryId !== normalizedCategoryId) {
+          return;
+        }
+
+        const hierarchyMap = this.buildCanonicalGroupHierarchyMap(response?.data ?? []);
+        this.canonicalGroupHierarchyByGroupId = hierarchyMap;
+        this.canonicalGroupHierarchyCache.set(normalizedCategoryId, this.cloneCanonicalGroupHierarchyMap(hierarchyMap));
+        this.rebuildDynamicDefinitionFromCanonicalHierarchy(normalizedCategoryId);
+      },
+      error: () => {
+        if (requestToken !== this.canonicalGroupHierarchyRequestToken
+          || this.canonicalGroupHierarchyCategoryId !== normalizedCategoryId) {
+          return;
+        }
+
+        this.canonicalGroupHierarchyByGroupId = new Map<number, RuntimeCanonicalGroupMeta>();
+      }
+    });
+  }
+
+  private rebuildDynamicDefinitionFromCanonicalHierarchy(categoryId: number): void {
+    if (!this.rawFormDefinition || Number(this.rawFormDefinition.categoryId ?? 0) !== Number(categoryId ?? 0)) {
+      return;
+    }
+
+    if (Number(this.rawFormDefinition.fields?.length ?? 0) === 0) {
+      return;
+    }
+
+    this.rebuildResolvedDynamicDefinition(this.buildDynamicFieldValues(), true, true);
+  }
+
+  private buildCanonicalGroupHierarchyMap(nodes: ReadonlyArray<AdminCatalogGroupTreeNodeDto>): Map<number, RuntimeCanonicalGroupMeta> {
+    const result = new Map<number, RuntimeCanonicalGroupMeta>();
+    let sequence = 0;
+
+    const walk = (items: ReadonlyArray<AdminCatalogGroupTreeNodeDto>, parentGroupId: number | null): void => {
+      const sorted = [...(items ?? [])]
+        .sort((left, right) => {
+          const orderDiff = Number(left.displayOrder ?? 0) - Number(right.displayOrder ?? 0);
+          if (orderDiff !== 0) {
+            return orderDiff;
+          }
+
+          return Number(left.groupId ?? 0) - Number(right.groupId ?? 0);
+        });
+
+      sorted.forEach(item => {
+        const groupId = Number(item.groupId ?? 0);
+        if (!Number.isFinite(groupId) || groupId <= 0) {
+          return;
+        }
+
+        sequence++;
+        const parentCandidate = this.normalizePositiveInt(item.parentGroupId) ?? parentGroupId ?? null;
+        result.set(groupId, {
+          parentGroupId: parentCandidate && parentCandidate !== groupId ? parentCandidate : null,
+          displayOrder: Number(item.displayOrder ?? sequence) || sequence,
+          hierarchyOrder: sequence,
+          groupName: String(item.groupName ?? '').trim(),
+          groupDescription: String(item.groupDescription ?? '').trim() || undefined
+        });
+
+        walk(item.children ?? [], groupId);
+      });
+    };
+
+    walk(nodes ?? [], null);
+    return result;
+  }
+
+  private cloneCanonicalGroupHierarchyMap(source: Map<number, RuntimeCanonicalGroupMeta>): Map<number, RuntimeCanonicalGroupMeta> {
+    const cloned = new Map<number, RuntimeCanonicalGroupMeta>();
+    source.forEach((value, key) => {
+      cloned.set(key, { ...value });
+    });
+    return cloned;
+  }
+
+  private getActiveCanonicalGroupHierarchyMap(categoryId: number): Map<number, RuntimeCanonicalGroupMeta> {
+    if (!categoryId || this.canonicalGroupHierarchyCategoryId !== categoryId) {
+      return new Map<number, RuntimeCanonicalGroupMeta>();
+    }
+
+    return this.canonicalGroupHierarchyByGroupId;
+  }
+
+  private resolveDefinitionByPolicy(
+    source: SubjectFormDefinitionDto,
+    _documentDirection: string | null
+  ): SubjectFormDefinitionDto {
+    const policyResolved: SubjectFormDefinitionDto = {
+      ...source,
+      groups: (source.groups ?? []).map(group => ({ ...group })),
+      fields: (source.fields ?? []).map(field => ({
+        ...field,
+        group: field.group ? { ...field.group } : undefined
+      })),
+      requestPolicy: this.activeRequestPolicy ?? source.requestPolicy
+    };
+
+    return policyResolved;
+  }
+
+  private resolveDocumentDirectionForForm(): string | null {
+    if (this.directionSelectionMode === 'fixed' && this.fixedDocumentDirection) {
+      return this.fixedDocumentDirection;
+    }
+
+    return this.normalizeDocumentDirection(this.editorForm.get('documentDirection')?.value);
+  }
+
+  private loadLegacyFormDefinition(categoryId: number, detail?: SubjectDetailDto): void {
+    const tryLoad = (appScope?: string, hasRetried = false) => {
+      forkJoin({
+        linksResponse: this.dynamicFormController.getMandatoryAll(appScope),
+        mendsResponse: this.dynamicFormController.getMandatoryMetaDate(appScope)
+      }).subscribe({
+        next: ({ linksResponse, mendsResponse }) => {
+          const links = linksResponse?.data ?? [];
+          const mends = mendsResponse?.data ?? [];
+          const definition = this.buildLegacyDefinition(categoryId, links, mends);
+
+          if (!this.hasRenderableDefinition(definition)) {
+            if (!hasRetried) {
+              tryLoad(undefined, true);
+              return;
+            }
+
+            if (this.tryApplyDetailBasedFallbackDefinition(categoryId, detail)) {
+              return;
+            }
+
+            this.clearLoadedDefinitionState();
+            this.populateStakeholders(detail);
+            this.populateTasks(detail);
+            this.appNotification.warning('لا توجد حقول ديناميكية مهيأة لهذا النوع.');
+            return;
+          }
+
+          this.applyLoadedDefinition(definition, detail);
+        },
+        error: () => {
+          if (!hasRetried) {
+            tryLoad(undefined, true);
+            return;
+          }
+
+          if (this.tryApplyDetailBasedFallbackDefinition(categoryId, detail)) {
+            return;
+          }
+
+          this.clearLoadedDefinitionState();
+          this.populateStakeholders(detail);
+          this.populateTasks(detail);
+          this.appNotification.error('تعذر تحميل إعدادات الحقول الديناميكية.');
+        }
+      });
+    };
+
+    tryLoad(this.dynamicSubjectAccess.getApplicationId());
+  }
+
+  private tryApplyDetailBasedFallbackDefinition(categoryId: number, detail?: SubjectDetailDto): boolean {
+    if (!this.isEditMode) {
+      return false;
+    }
+
+    const fallbackDefinition = this.buildDefinitionFromSavedValues(categoryId, detail);
+    if (!this.hasRenderableDefinition(fallbackDefinition)) {
+      return false;
+    }
+
+    this.applyLoadedDefinition(fallbackDefinition, detail);
+    this.appNotification.info('تم تحميل الحقول المحفوظة للطلب في وضع التعديل.');
+    return true;
+  }
+
+  private buildDefinitionFromSavedValues(categoryId: number, detail?: SubjectDetailDto): SubjectFormDefinitionDto | null {
+    const savedFields = (detail?.dynamicFields ?? [])
+      .map(field => ({
+        fieldKey: String(field.fieldKey ?? '').trim(),
+        value: String(field.value ?? '')
+      }))
+      .filter(field => field.fieldKey.length > 0);
+    if (savedFields.length === 0) {
+      return null;
+    }
+
+    const group: SubjectGroupDefinitionDto = {
+      groupId: 1,
+      groupName: 'الحقول المحفوظة',
+      groupDescription: 'تم توليد هذا العرض من القيم المحفوظة للطلب.',
+      isExtendable: false,
+      groupWithInRow: 12
+    };
+
+    const fields: SubjectFieldDefinitionDto[] = savedFields.map((field, index) => ({
+      mendSql: index + 1,
+      categoryId,
+      mendGroup: group.groupId,
+      fieldKey: field.fieldKey,
+      fieldType: this.inferFieldTypeFromSavedValue(field.value),
+      fieldLabel: field.fieldKey,
+      placeholder: '',
+      defaultValue: field.value,
+      optionsPayload: '',
+      dataType: 'string',
+      required: false,
+      requiredTrue: false,
+      email: false,
+      pattern: false,
+      minValue: '',
+      maxValue: '',
+      mask: '',
+      isDisabledInit: false,
+      isSearchable: false,
+      width: 0,
+      height: 0,
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      displayOrder: index + 1,
+      isVisible: true,
+      displaySettingsJson: undefined,
+      group
+    }));
+
+    return {
+      categoryId,
+      categoryName: this.categoryOptions.find(option => Number(option.id) === categoryId)?.name ?? '',
+      parentCategoryId: 0,
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      groups: [group],
+      fields
+    };
+  }
+
+  private inferFieldTypeFromSavedValue(value: string): string {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) {
+      return 'InputText';
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}(?:[tT ].*)?$/.test(normalized)) {
+      return 'Date';
+    }
+
+    if (['true', 'false', 'yes', 'no', 'on', 'off', '0', '1'].includes(normalized.toLowerCase())) {
+      return 'ToggleSwitch';
+    }
+
+    return 'InputText';
+  }
+
+  private buildLegacyDefinition(categoryId: number, links: CdCategoryMandDto[], mends: CdmendDto[]): SubjectFormDefinitionDto | null {
+    const categoryLinks = (links ?? [])
+      .filter(link => Number(link.mendCategory ?? 0) === categoryId && !Boolean(link.mendStat))
+      .sort((left, right) => {
+        const byGroup = Number(left.mendGroup ?? 0) - Number(right.mendGroup ?? 0);
+        if (byGroup !== 0) {
+          return byGroup;
+        }
+
+        return Number(left.mendSql ?? 0) - Number(right.mendSql ?? 0);
+      });
+    if (categoryLinks.length === 0) {
+      return null;
+    }
+
+    const requestedAppId = this.normalizeLegacyAppId(this.dynamicSubjectAccess.getApplicationId());
+    const categoryAppId = this.normalizeLegacyAppId(
+      categoryLinks.find(link => String(link.applicationId ?? '').trim().length > 0)?.applicationId
+    );
+    const mendMap = new Map<string, CdmendDto[]>();
+    (mends ?? []).forEach(mend => {
+      const key = this.normalizeLegacyFieldKey(mend.cdmendTxt);
+      if (!key) {
+        return;
+      }
+
+      const existing = mendMap.get(key) ?? [];
+      existing.push(mend);
+      mendMap.set(key, existing);
+    });
+
+    const groupsMap = new Map<number, SubjectGroupDefinitionDto>();
+    const fields: SubjectFieldDefinitionDto[] = [];
+
+    categoryLinks.forEach((link, index) => {
+      const fieldKey = String(link.mendField ?? '').trim();
+      if (!fieldKey) {
+        return;
+      }
+
+      const mend = this.selectLegacyMend(
+        mendMap.get(this.normalizeLegacyFieldKey(fieldKey)) ?? [],
+        requestedAppId,
+        categoryAppId
+      );
+      if (!mend) {
+        return;
+      }
+
+      const groupId = Number(link.mendGroup ?? 0);
+      if (!groupsMap.has(groupId)) {
+        groupsMap.set(groupId, {
+          groupId,
+          groupName: String(link.groupName ?? '').trim(),
+          groupDescription: '',
+          isExtendable: Boolean(link.isExtendable),
+          groupWithInRow: Number(link.groupWithInRow ?? 12)
+        });
+      }
+
+      const group = groupsMap.get(groupId)!;
+      fields.push({
+        mendSql: Number(link.mendSql ?? 0),
+        categoryId,
+        mendGroup: groupId,
+        fieldKey,
+        fieldType: String(mend.cdmendType ?? ''),
+        fieldLabel: mend.cdMendLbl ?? fieldKey,
+        placeholder: mend.placeholder ?? '',
+        defaultValue: mend.defaultValue ?? '',
+        optionsPayload: mend.cdmendTbl ?? '',
+        dataType: mend.cdmendDatatype ?? '',
+        required: Boolean(mend.required),
+        requiredTrue: Boolean(mend.requiredTrue),
+        email: Boolean(mend.email),
+        pattern: Boolean(mend.pattern),
+        minValue: mend.minValue ?? '',
+        maxValue: mend.maxValue ?? '',
+        mask: mend.cdmendmask ?? '',
+        isDisabledInit: Boolean(mend.isDisabledInit),
+        isSearchable: Boolean(mend.isSearchable),
+        width: Number(mend.width ?? 0),
+        height: Number(mend.height ?? 0),
+        applicationId: mend.applicationId ?? undefined,
+        displayOrder: index + 1,
+        isVisible: true,
+        displaySettingsJson: undefined,
+        group
+      });
+    });
+
+    if (fields.length === 0) {
+      return null;
+    }
+
+    const categoryOption = this.categoryOptions.find(option => Number(option.id) === categoryId);
+    return {
+      categoryId,
+      categoryName: categoryOption?.name ?? '',
+      parentCategoryId: 0,
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      groups: Array.from(groupsMap.values()).sort((left, right) => left.groupId - right.groupId),
+      fields
+    };
+  }
+
+  private normalizeLegacyFieldKey(value: string | undefined): string {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  private normalizeLegacyAppId(value: string | undefined): string {
+    return String(value ?? '').trim();
+  }
+
+  private getLegacyMendAppRank(mend: CdmendDto, requestedAppId: string, categoryAppId: string): number {
+    const mendAppId = this.normalizeLegacyAppId(mend.applicationId);
+    if (requestedAppId.length > 0 && mendAppId.toLowerCase() === requestedAppId.toLowerCase()) {
+      return 0;
+    }
+
+    if (categoryAppId.length > 0 && mendAppId.toLowerCase() === categoryAppId.toLowerCase()) {
+      return 1;
+    }
+
+    if (mendAppId.length === 0) {
+      return 2;
+    }
+
+    return 3;
+  }
+
+  private selectLegacyMend(candidates: CdmendDto[], requestedAppId: string, categoryAppId: string): CdmendDto | null {
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      return null;
+    }
+
+    const ranked = [...candidates]
+      .sort((left, right) => {
+        const rankDiff = this.getLegacyMendAppRank(left, requestedAppId, categoryAppId)
+          - this.getLegacyMendAppRank(right, requestedAppId, categoryAppId);
+        if (rankDiff !== 0) {
+          return rankDiff;
+        }
+
+        return Number(left.cdmendSql ?? 0) - Number(right.cdmendSql ?? 0);
+      });
+    const bestRank = this.getLegacyMendAppRank(ranked[0], requestedAppId, categoryAppId);
+    const sameRank = ranked.filter(item => this.getLegacyMendAppRank(item, requestedAppId, categoryAppId) === bestRank);
+    if (sameRank.length === 0) {
+      return null;
+    }
+
+    const activeMends = sameRank
+      .filter(item => !Boolean(item.cdmendStat))
+      .sort((left, right) => Number(left.cdmendSql ?? 0) - Number(right.cdmendSql ?? 0));
+    if (activeMends.length > 0) {
+      return activeMends[0];
+    }
+
+    return sameRank
+      .sort((left, right) => Number(left.cdmendSql ?? 0) - Number(right.cdmendSql ?? 0))[0] ?? null;
+  }
+
+  private rebuildDynamicControls(definition: SubjectFormDefinitionDto | null, values: SubjectFieldValueDto[]): void {
+    this.resetDynamicFormState();
+
+    const allFields = (definition?.fields ?? [])
+      .sort((left, right) => this.compareFieldsByDisplayOrder(left, right));
+    const fieldsToRender = allFields.filter(field => field.isVisible !== false);
+
+    if (!definition || fieldsToRender.length === 0) {
+      return;
+    }
+
+    const canonicalHierarchyMap = this.getActiveCanonicalGroupHierarchyMap(Number(definition.categoryId ?? 0));
+    const definitionGroups = definition.groups ?? [];
+    const definitionGroupById = new Map<number, SubjectGroupDefinitionDto>();
+    definitionGroups.forEach(group => {
+      const groupId = Number(group.groupId ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      definitionGroupById.set(groupId, group);
+    });
+
+    canonicalHierarchyMap.forEach((groupMeta, groupId) => {
+      const current = definitionGroupById.get(groupId);
+      if (!current) {
+        definitionGroupById.set(groupId, {
+          groupId,
+          groupName: groupMeta.groupName,
+          groupDescription: groupMeta.groupDescription,
+          isExtendable: false,
+          groupWithInRow: 12
+        });
+        return;
+      }
+
+      if (!String(current.groupName ?? '').trim() && String(groupMeta.groupName ?? '').trim()) {
+        current.groupName = groupMeta.groupName;
+      }
+      if (!String(current.groupDescription ?? '').trim() && String(groupMeta.groupDescription ?? '').trim()) {
+        current.groupDescription = groupMeta.groupDescription;
+      }
+    });
+
+    fieldsToRender.forEach(field => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0 || definitionGroupById.has(groupId)) {
+        return;
+      }
+
+      definitionGroupById.set(groupId, {
+        groupId,
+        groupName: String(field.group?.groupName ?? '').trim(),
+        groupDescription: String(field.group?.groupDescription ?? '').trim(),
+        isExtendable: Boolean(field.group?.isExtendable),
+        groupWithInRow: Number(field.group?.groupWithInRow ?? 12)
+      });
+    });
+
+    const fieldsByGroup = new Map<number, SubjectFieldDefinitionDto[]>();
+    fieldsToRender.forEach(field => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      if (!fieldsByGroup.has(groupId)) {
+        fieldsByGroup.set(groupId, []);
+      }
+
+      fieldsByGroup.get(groupId)?.push(field);
+    });
+
+    const groupHierarchyMap = this.buildRuntimeGroupHierarchy(
+      Array.from(definitionGroupById.values()),
+      fieldsToRender
+    );
+    const groupIdsToRender = new Set<number>(Array.from(fieldsByGroup.keys()));
+    Array.from(fieldsByGroup.keys()).forEach(groupId => {
+      const visited = new Set<number>([groupId]);
+      let parentGroupId = groupHierarchyMap.get(groupId)?.parentGroupId ?? null;
+      while (parentGroupId && !visited.has(parentGroupId)) {
+        if (!groupHierarchyMap.has(parentGroupId)) {
+          break;
+        }
+
+        groupIdsToRender.add(parentGroupId);
+        visited.add(parentGroupId);
+        parentGroupId = groupHierarchyMap.get(parentGroupId)?.parentGroupId ?? null;
+      }
+    });
+
+    const safeParentByGroupId = this.buildSanitizedParentGroupMap(groupIdsToRender, groupHierarchyMap);
+    const orderedGroupIds = Array.from(groupIdsToRender.values())
+      .sort((left, right) => this.compareGroupsByDisplayOrder(left, right, groupHierarchyMap));
+
+    const mappedMendDefinitions: CdmendDto[] = [];
+    const mappedCategoryMandDefinitions: CdCategoryMandDto[] = [];
+    const renderNodesByGroupId = new Map<number, RuntimeGroupRenderNode>();
+    let nextControlIndex = 0;
+
+    orderedGroupIds.forEach(groupId => {
+      const groupFields = [...(fieldsByGroup.get(groupId) ?? [])]
+        .sort((left, right) => this.compareFieldsByDisplayOrder(left, right));
+      const groupDefinition = definitionGroupById.get(groupId) ?? groupFields[0]?.group;
+      const groupName = this.resolveRuntimeGroupDisplayName(groupId, groupDefinition, groupFields[0]);
+      const canonicalDescription = canonicalHierarchyMap.get(groupId)?.groupDescription;
+      const groupDescription = String(canonicalDescription ?? groupDefinition?.groupDescription ?? groupFields[0]?.group?.groupDescription ?? '').trim() || undefined;
+      const formArrayName = groupFields.length > 0 ? `dynamic_subject_group_${groupId}` : null;
+      const mappedGroupFields: CdCategoryMandDto[] = [];
+
+      if (formArrayName) {
+        const formArray = this.fb.array([]);
+        groupFields.forEach(field => {
+          const controlIndex = nextControlIndex++;
+          const controlName = `${field.fieldKey}|${controlIndex}`;
+          const cdmendType = this.mapFieldTypeToGenericType(field.fieldType, field.fieldKey);
+          const cdmendDatatype = this.mapFieldDataType(field, cdmendType);
+          const usesSelectionTable = cdmendType === 'Dropdown' || cdmendType === 'DropdownTree' || cdmendType === 'RadioButton';
+          const cdmendTbl = usesSelectionTable
+            ? this.parseFieldOptionsAsSelectionJson(field.optionsPayload)
+            : this.resolvePatternExpression(field.optionsPayload);
+          const hasPattern = Boolean(field.pattern) && cdmendTbl.length > 0;
+
+          const mappedMendDefinition: CdmendDto = {
+            cdmendSql: Number(field.mendSql ?? 0),
+            cdmendType,
+            cdmendTxt: field.fieldKey,
+            cdMendLbl: field.fieldLabel ?? field.fieldKey,
+            placeholder: field.placeholder ?? '',
+            defaultValue: field.defaultValue ?? '',
+            cdmendTbl,
+            cdmendDatatype,
+            required: Boolean(field.required || field.requiredTrue),
+            requiredTrue: Boolean(field.requiredTrue),
+            email: Boolean(field.email),
+            pattern: hasPattern,
+            min: Number.isFinite(Number(field.minValue)) ? Number(field.minValue) : undefined,
+            max: Number.isFinite(Number(field.maxValue)) ? Number(field.maxValue) : undefined,
+            minxLenght: undefined,
+            maxLenght: undefined,
+            cdmendmask: field.mask ?? '',
+            cdmendStat: true,
+            maxValue: field.maxValue ?? '',
+            minValue: field.minValue ?? '',
+            width: Number(field.width ?? 0),
+            height: Number(field.height ?? 0),
+            isDisabledInit: Boolean(field.isDisabledInit),
+            isSearchable: Boolean(field.isSearchable),
+            applicationId: field.applicationId
+          };
+
+          mappedMendDefinitions.push(mappedMendDefinition);
+          this.genericFormService.cdmendDto = mappedMendDefinitions;
+
+          const mappedGroupField: CdCategoryMandDto = {
+            mendSql: Number(field.mendSql ?? 0),
+            mendCategory: Number(field.categoryId ?? definition.categoryId),
+            mendField: field.fieldKey,
+            mendStat: true,
+            mendGroup: groupId,
+            applicationId: field.applicationId ?? definition.applicationId,
+            groupName,
+            isExtendable: Boolean(groupDefinition?.isExtendable ?? field.group?.isExtendable),
+            groupWithInRow: Number(groupDefinition?.groupWithInRow ?? field.group?.groupWithInRow ?? 12)
+          };
+
+          mappedGroupFields.push(mappedGroupField);
+          mappedCategoryMandDefinitions.push(mappedGroupField);
+
+          this.genericFormService.addFormArrayWithValidators(controlName, formArray);
+
+          const matchedValue = values.find(valueItem =>
+            String(valueItem.fieldKey ?? '').toLowerCase() === String(field.fieldKey ?? '').toLowerCase()
+            && Number(valueItem.instanceGroupId ?? 1) === 1);
+          const initialValue = this.normalizeInitialDynamicValue(field, cdmendType, matchedValue?.value ?? field.defaultValue);
+          const control = this.genericFormService.GetControl(formArray, controlName);
+          control?.patchValue(initialValue, { emitEvent: false });
+
+          if (field.isDisabledInit) {
+            control?.disable({ emitEvent: false });
+          }
+
+          this.controlMap.set(controlName, { fieldKey: field.fieldKey, instanceGroupId: 1 });
+        });
+
+        this.dynamicControls.addControl(formArrayName, formArray);
+      }
+
+      renderNodesByGroupId.set(groupId, {
+        groupId,
+        groupName,
+        formArrayName,
+        groupDescription,
+        fields: mappedGroupFields,
+        totalVisibleFieldsCount: mappedGroupFields.length,
+        children: []
+      });
+    });
+
+    const rootNodes: RuntimeGroupRenderNode[] = [];
+    orderedGroupIds.forEach(groupId => {
+      const currentNode = renderNodesByGroupId.get(groupId);
+      if (!currentNode) {
+        return;
+      }
+
+      const parentGroupId = safeParentByGroupId.get(groupId) ?? null;
+      const parentNode = parentGroupId ? renderNodesByGroupId.get(parentGroupId) : null;
+      if (parentNode) {
+        parentNode.children.push(currentNode);
+        return;
+      }
+
+      rootNodes.push(currentNode);
+    });
+
+    rootNodes.forEach(node => this.recomputeGroupTreeFieldCounts(node));
+    this.renderGroupTree = rootNodes;
+    if (this.rootGroupTabIndex >= this.renderGroupTree.length) {
+      this.rootGroupTabIndex = 0;
+    }
+    this.genericFormService.cdmendDto = mappedMendDefinitions;
+    this.genericFormService.cdCategoryMandDto = mappedCategoryMandDefinitions;
+  }
+
+  private compareFieldsByDisplayOrder(left: SubjectFieldDefinitionDto, right: SubjectFieldDefinitionDto): number {
+    const leftOrder = Number(left.displayOrder ?? 0);
+    const rightOrder = Number(right.displayOrder ?? 0);
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    return Number(left.mendSql ?? 0) - Number(right.mendSql ?? 0);
+  }
+
+  private compareGroupsByDisplayOrder(
+    leftGroupId: number,
+    rightGroupId: number,
+    hierarchy: Map<number, RuntimeGroupHierarchyMeta>
+  ): number {
+    const leftOrder = Number(hierarchy.get(leftGroupId)?.displayOrder ?? leftGroupId);
+    const rightOrder = Number(hierarchy.get(rightGroupId)?.displayOrder ?? rightGroupId);
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    const leftHierarchyOrder = Number(hierarchy.get(leftGroupId)?.hierarchyOrder ?? Number.MAX_SAFE_INTEGER);
+    const rightHierarchyOrder = Number(hierarchy.get(rightGroupId)?.hierarchyOrder ?? Number.MAX_SAFE_INTEGER);
+    if (leftHierarchyOrder !== rightHierarchyOrder) {
+      return leftHierarchyOrder - rightHierarchyOrder;
+    }
+
+    return leftGroupId - rightGroupId;
+  }
+
+  private buildRuntimeGroupHierarchy(
+    definitionGroups: SubjectGroupDefinitionDto[],
+    fields: SubjectFieldDefinitionDto[]
+  ): Map<number, RuntimeGroupHierarchyMeta> {
+    const hierarchy = new Map<number, RuntimeGroupHierarchyMeta>();
+    const categoryId = Number(this.rawFormDefinition?.categoryId ?? 0);
+    const canonicalHierarchy = this.getActiveCanonicalGroupHierarchyMap(categoryId);
+
+    canonicalHierarchy.forEach((canonicalItem, groupId) => {
+      hierarchy.set(groupId, {
+        parentGroupId: canonicalItem.parentGroupId,
+        displayOrder: canonicalItem.displayOrder,
+        hierarchyOrder: canonicalItem.hierarchyOrder
+      });
+    });
+
+    definitionGroups.forEach((group, index) => {
+      const groupId = Number(group.groupId ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      const current = hierarchy.get(groupId);
+      const parentFromMetadata = this.readParentGroupIdFromGroupMetadata(group);
+      hierarchy.set(groupId, {
+        parentGroupId: current?.parentGroupId ?? parentFromMetadata,
+        displayOrder: current?.displayOrder ?? this.resolveRuntimeGroupDisplayOrder(group, index + 1),
+        hierarchyOrder: current?.hierarchyOrder
+      });
+    });
+
+    fields.forEach((field, index) => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      const current = hierarchy.get(groupId) ?? {
+        parentGroupId: null,
+        displayOrder: Number(field.displayOrder ?? 0) || (index + 1)
+      };
+
+      const parentFromField = this.readParentGroupIdFromGroupMetadata(field.group)
+        ?? this.readParentGroupIdFromDisplaySettings(field.displaySettingsJson);
+      if (!current.parentGroupId && parentFromField && parentFromField !== groupId) {
+        current.parentGroupId = parentFromField;
+      }
+
+      const fieldDisplayOrder = Number(field.displayOrder ?? 0);
+      if (Number.isFinite(fieldDisplayOrder) && fieldDisplayOrder > 0) {
+        current.displayOrder = Math.min(current.displayOrder, fieldDisplayOrder);
+      }
+
+      hierarchy.set(groupId, current);
+    });
+
+    this.enrichHierarchyFromGroupNamePath(hierarchy, definitionGroups, fields);
+
+    hierarchy.forEach((meta, groupId) => {
+      if (!Number.isFinite(meta.displayOrder) || meta.displayOrder <= 0) {
+        meta.displayOrder = groupId;
+      }
+
+      if (!meta.parentGroupId || meta.parentGroupId === groupId || !hierarchy.has(meta.parentGroupId)) {
+        meta.parentGroupId = null;
+      }
+    });
+
+    return hierarchy;
+  }
+
+  private enrichHierarchyFromGroupNamePath(
+    hierarchy: Map<number, RuntimeGroupHierarchyMeta>,
+    definitionGroups: SubjectGroupDefinitionDto[],
+    fields: SubjectFieldDefinitionDto[]
+  ): void {
+    const knownNameByGroupId = new Map<number, string>();
+
+    definitionGroups.forEach(group => {
+      const groupId = Number(group.groupId ?? 0);
+      if (groupId <= 0) {
+        return;
+      }
+
+      const groupName = String(group.groupName ?? '').trim();
+      if (groupName.length > 0) {
+        knownNameByGroupId.set(groupId, groupName);
+      }
+    });
+
+    fields.forEach(field => {
+      const groupId = Number(field.mendGroup ?? 0);
+      if (groupId <= 0 || knownNameByGroupId.has(groupId)) {
+        return;
+      }
+
+      const groupName = String(field.group?.groupName ?? '').trim();
+      if (groupName.length > 0) {
+        knownNameByGroupId.set(groupId, groupName);
+      }
+    });
+
+    const fullNameLookup = new Map<string, number>();
+    const segmentLookup = new Map<string, number[]>();
+    knownNameByGroupId.forEach((groupName, groupId) => {
+      const segments = this.splitGroupPathSegments(groupName);
+      const normalizedFullName = this.normalizeGroupPathKey(segments.length > 0 ? segments.join(' / ') : groupName);
+      if (normalizedFullName.length > 0 && !fullNameLookup.has(normalizedFullName)) {
+        fullNameLookup.set(normalizedFullName, groupId);
+      }
+
+      const leafSegment = this.normalizeGroupPathKey(segments.length > 0 ? segments[segments.length - 1] : groupName);
+      if (leafSegment.length > 0) {
+        const existing = segmentLookup.get(leafSegment) ?? [];
+        existing.push(groupId);
+        segmentLookup.set(leafSegment, existing);
+      }
+    });
+
+    hierarchy.forEach((meta, groupId) => {
+      if (meta.parentGroupId) {
+        return;
+      }
+
+      const groupName = knownNameByGroupId.get(groupId);
+      if (!groupName) {
+        return;
+      }
+
+      const segments = this.splitGroupPathSegments(groupName);
+      if (segments.length < 2) {
+        return;
+      }
+
+      const parentPath = this.normalizeGroupPathKey(segments.slice(0, -1).join(' / '));
+      const parentLeaf = this.normalizeGroupPathKey(segments[segments.length - 2]);
+
+      const parentFromPath = fullNameLookup.get(parentPath);
+      if (parentFromPath && parentFromPath !== groupId) {
+        meta.parentGroupId = parentFromPath;
+        return;
+      }
+
+      const sameLeafCandidates = segmentLookup.get(parentLeaf) ?? [];
+      const parentFromLeaf = sameLeafCandidates.find(candidate => candidate !== groupId);
+      if (parentFromLeaf && parentFromLeaf !== groupId) {
+        meta.parentGroupId = parentFromLeaf;
+      }
+    });
+  }
+
+  private buildSanitizedParentGroupMap(
+    groupIds: Set<number>,
+    hierarchy: Map<number, RuntimeGroupHierarchyMeta>
+  ): Map<number, number | null> {
+    const safeParentByGroupId = new Map<number, number | null>();
+
+    groupIds.forEach(groupId => {
+      const candidateParent = hierarchy.get(groupId)?.parentGroupId ?? null;
+      if (!candidateParent || !groupIds.has(candidateParent) || candidateParent === groupId) {
+        safeParentByGroupId.set(groupId, null);
+        return;
+      }
+
+      const visited = new Set<number>([groupId]);
+      let hasCycle = false;
+      let cursor: number | null = candidateParent;
+      while (cursor && groupIds.has(cursor)) {
+        if (visited.has(cursor)) {
+          hasCycle = true;
+          break;
+        }
+
+        visited.add(cursor);
+        cursor = hierarchy.get(cursor)?.parentGroupId ?? null;
+      }
+
+      safeParentByGroupId.set(groupId, hasCycle ? null : candidateParent);
+    });
+
+    return safeParentByGroupId;
+  }
+
+  private resolveRuntimeGroupDisplayName(
+    groupId: number,
+    groupDefinition?: SubjectGroupDefinitionDto,
+    fallbackField?: SubjectFieldDefinitionDto
+  ): string {
+    const categoryId = Number(this.rawFormDefinition?.categoryId ?? 0);
+    const canonicalName = this.getActiveCanonicalGroupHierarchyMap(categoryId).get(groupId)?.groupName;
+    const resolvedName = String(canonicalName ?? groupDefinition?.groupName ?? fallbackField?.group?.groupName ?? '').trim();
+    if (!resolvedName) {
+      return `مجموعة ${groupId}`;
+    }
+
+    const segments = this.splitGroupPathSegments(resolvedName);
+    return segments.length > 0 ? segments[segments.length - 1] : resolvedName;
+  }
+
+  private recomputeGroupTreeFieldCounts(node: RuntimeGroupRenderNode): number {
+    const childrenFieldsCount = node.children
+      .map(child => this.recomputeGroupTreeFieldCounts(child))
+      .reduce((sum, value) => sum + value, 0);
+    node.totalVisibleFieldsCount = node.fields.length + childrenFieldsCount;
+    return node.totalVisibleFieldsCount;
+  }
+
+  private resolveRuntimeGroupDisplayOrder(group: SubjectGroupDefinitionDto | undefined, fallback: number): number {
+    const candidate = Number((group as Record<string, unknown> | undefined)?.['displayOrder'] ?? fallback);
+    if (!Number.isFinite(candidate) || candidate <= 0) {
+      return fallback;
+    }
+
+    return Math.trunc(candidate);
+  }
+
+  private readParentGroupIdFromGroupMetadata(group: unknown): number | null {
+    if (!group || typeof group !== 'object') {
+      return null;
+    }
+
+    const payload = group as Record<string, unknown>;
+    const directCandidate = this.normalizePositiveInt(payload['parentGroupId'])
+      ?? this.normalizePositiveInt(payload['parentId'])
+      ?? this.normalizePositiveInt(payload['groupParentId'])
+      ?? this.normalizePositiveInt(payload['parent_group_id'])
+      ?? this.normalizePositiveInt(payload['parentGroupID']);
+    return directCandidate ?? null;
+  }
+
+  private readParentGroupIdFromDisplaySettings(displaySettingsJson?: string): number | null {
+    const parsed = this.parseJsonObject(displaySettingsJson);
+    if (!parsed) {
+      return null;
+    }
+
+    const directCandidate = this.normalizePositiveInt(parsed['parentGroupId'])
+      ?? this.normalizePositiveInt(parsed['groupParentId'])
+      ?? this.normalizePositiveInt(parsed['parentId'])
+      ?? this.normalizePositiveInt(parsed['parent_group_id']);
+    if (directCandidate) {
+      return directCandidate;
+    }
+
+    const adminControlCenter = parsed['adminControlCenter'];
+    if (adminControlCenter && typeof adminControlCenter === 'object' && !Array.isArray(adminControlCenter)) {
+      const adminPayload = adminControlCenter as Record<string, unknown>;
+      const nestedCandidate = this.normalizePositiveInt(adminPayload['parentGroupId'])
+        ?? this.normalizePositiveInt(adminPayload['groupParentId'])
+        ?? this.normalizePositiveInt(adminPayload['parentId']);
+      if (nestedCandidate) {
+        return nestedCandidate;
+      }
+    }
+
+    const pathCandidateKeys = ['groupPathIds', 'groupPath', 'hierarchyPath', 'parents'];
+    for (const key of pathCandidateKeys) {
+      const parentFromPath = this.readParentGroupIdFromPathCandidate(parsed[key]);
+      if (parentFromPath) {
+        return parentFromPath;
+      }
+    }
+
+    return null;
+  }
+
+  private readParentGroupIdFromPathCandidate(candidate: unknown): number | null {
+    if (!Array.isArray(candidate)) {
+      return null;
+    }
+
+    const resolvedIds = candidate
+      .map(item => this.normalizePositiveInt(item))
+      .filter((item): item is number => item !== null);
+    if (resolvedIds.length < 2) {
+      return null;
+    }
+
+    return resolvedIds[resolvedIds.length - 2];
+  }
+
+  private parseJsonObject(raw: unknown): Record<string, unknown> | null {
+    const payload = String(raw ?? '').trim();
+    if (!payload) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(payload);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  private splitGroupPathSegments(groupName: string): string[] {
+    const normalizedName = String(groupName ?? '').trim();
+    if (!normalizedName) {
+      return [];
+    }
+
+    const unified = normalizedName
+      .replace(/\s*::\s*/g, '/')
+      .replace(/[>›»\\|]+/g, '/')
+      .replace(/\s*\/\s*/g, '/');
+
+    return unified
+      .split('/')
+      .map(segment => segment.trim())
+      .filter(segment => segment.length > 0);
+  }
+
+  private normalizeGroupPathKey(value: string): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/\s*\/\s*/g, '/');
+  }
+
+  private normalizePositiveInt(value: unknown): number | null {
+    const normalized = Number(value ?? 0);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      return null;
+    }
+
+    return Math.trunc(normalized);
+  }
+
+  private applyPendingDynamicFieldValueBindings(): void {
+    const pendingMap = (this as any).__configDynamicValueBindings as Record<string, any> | undefined;
+    if (!pendingMap || typeof pendingMap !== 'object') {
+      return;
+    }
+
+    Object.keys(pendingMap).forEach(fieldKey => {
+      const value = pendingMap[fieldKey];
+      this.controlMap.forEach((meta, controlName) => {
+        if (String(meta?.fieldKey ?? '').trim().toLowerCase() !== String(fieldKey).trim().toLowerCase()) {
+          return;
+        }
+
+        const control = this.genericFormService.GetControl(this.dynamicControls, controlName);
+        if (control) {
+          control.patchValue(value, { emitEvent: false });
+        }
+      });
+    });
+  }
+
+  private populateStakeholders(detail?: SubjectDetailDto): void {
+    this.stakeholdersArray.clear();
+    (detail?.stakeholders ?? []).forEach(item => {
+      this.stakeholdersArray.push(this.fb.group({
+        stockholderId: [item.stockholderId, Validators.required],
+        partyType: [item.partyType || 'Viewer'],
+        requiredResponse: [Boolean(item.requiredResponse)],
+        status: [item.status ?? null],
+        dueDate: [item.dueDate ?? null],
+        notes: [item.notes ?? '']
+      }));
+    });
+
+    if (this.stakeholdersArray.length === 0) {
+      this.addStakeholder();
+    }
+  }
+
+  private populateTasks(detail?: SubjectDetailDto): void {
+    this.tasksArray.clear();
+    (detail?.tasks ?? []).forEach(item => {
+      this.tasksArray.push(this.fb.group({
+        actionTitle: [item.actionTitle, Validators.required],
+        actionDescription: [item.actionDescription ?? ''],
+        assignedToUserId: [item.assignedToUserId ?? ''],
+        assignedUnitId: [item.assignedUnitId ?? ''],
+        dueDateUtc: [item.dueDateUtc ?? null],
+        status: [item.status ?? 0]
+      }));
+    });
+
+    if (this.tasksArray.length === 0) {
+      this.addTask();
+    }
+  }
+
+  private buildDynamicFieldValues(): SubjectFieldValueDto[] {
+    return Array.from(this.controlMap.entries()).map(([controlName, key]) => ({
+      fieldKey: key.fieldKey,
+      value: this.normalizeOutgoingDynamicValue(this.genericFormService.GetControl(this.dynamicControls, controlName)?.value),
+      instanceGroupId: key.instanceGroupId
+    }));
+  }
+
+  private categoryRequiresDocumentDirection(): boolean {
+    return this.hasDirectionCapability;
+  }
+
+  private resolveDocumentDirectionForSave(dynamicFields: SubjectFieldValueDto[]): string | null {
+    const fixedDirection = this.directionSelectionMode === 'fixed'
+      ? this.normalizeDocumentDirection(this.fixedDocumentDirection)
+      : null;
+    if (fixedDirection) {
+      return fixedDirection;
+    }
+
+    const explicitDirection = this.resolveDocumentDirectionForForm();
+    if (explicitDirection) {
+      return explicitDirection;
+    }
+
+    const directionFieldValue = (dynamicFields ?? [])
+      .find(field => String(field.fieldKey ?? '').trim().toUpperCase() === DynamicSubjectEditorComponent.DIRECTION_FIELD_KEY)
+      ?.value;
+    return this.normalizeDocumentDirection(directionFieldValue);
+  }
+
+  private normalizeDocumentDirection(value: unknown): string | null {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === 'incoming' || normalized === 'inbound' || normalized === 'in' || normalized === '2' || normalized === 'وارد') {
+      return 'incoming';
+    }
+
+    if (normalized === 'outgoing' || normalized === 'outbound' || normalized === 'out' || normalized === '1' || normalized === 'صادر') {
+      return 'outgoing';
+    }
+
+    return null;
+  }
+
+  private loadEnvelopeOptions(): void {
+    this.dynamicSubjectsController.listEnvelopes({ pageNumber: 1, pageSize: 200 }).subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.availableEnvelopes = [];
+          return;
+        }
+
+        this.availableEnvelopes = response?.data?.items ?? [];
+      },
+      error: () => {
+        this.availableEnvelopes = [];
+      }
+    });
+  }
+
+  private loadCategoryOptions(): void {
+    this.loadingCategoryOptions = true;
+    this.dynamicSubjectsController.getCategoryTree(this.dynamicSubjectAccess.getApplicationId()).subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.categoryOptions = [];
+          this.allowedCategoryIds = new Set<number>();
+          this.appNotification.showApiErrors(response.errors, 'تعذر تحميل أنواع الموضوعات والطلبات.');
+          return;
+        }
+
+        const scopedTree = this.dynamicSubjectAccess.filterByTopParent(response?.data ?? []);
+        this.allowedCategoryIds = this.dynamicSubjectAccess.collectCategoryIds(scopedTree);
+        this.categoryOptions = this.flattenCategoryTree(scopedTree);
+
+        const selectedCategoryId = this.selectedCategoryId;
+        if (!this.isEditMode && selectedCategoryId > 0 && !this.allowedCategoryIds.has(selectedCategoryId)) {
+          this.editorForm.patchValue({ categoryId: 0 }, { emitEvent: false });
+          this.clearLoadedDefinitionState();
+        }
+      },
+      error: () => {
+        this.categoryOptions = [];
+        this.allowedCategoryIds = new Set<number>();
+        this.loadingCategoryOptions = false;
+        this.appNotification.error('حدث خطأ أثناء تحميل أنواع الموضوعات والطلبات.');
+      },
+      complete: () => {
+        this.loadingCategoryOptions = false;
+      }
+    });
+  }
+
+  private flattenCategoryTree(tree: SubjectCategoryTreeNodeDto[], prefix = ''): Array<{ id: number; name: string }> {
+    const result: Array<{ id: number; name: string }> = [];
+    (tree ?? []).forEach(node => {
+      const name = prefix ? `${prefix} / ${node.categoryName}` : node.categoryName;
+      if (node.canCreate) {
+        result.push({ id: node.categoryId, name });
+      }
+
+      result.push(...this.flattenCategoryTree(node.children ?? [], name));
+    });
+
+    return result;
+  }
+
+  shouldShowEditorError(controlName: string): boolean {
+    const control = this.editorForm.get(controlName);
+    if (!control) {
+      return false;
+    }
+
+    return control.invalid && (control.touched || this.submitAttempted);
+  }
+
+  getEditorErrorMessage(controlName: string): string {
+    const control = this.editorForm.get(controlName);
+    if (!control || !control.errors) {
+      return '';
+    }
+
+    if (control.errors['required']) {
+      return 'هذا الحقل مطلوب.';
+    }
+
+    return 'القيمة المدخلة غير صحيحة.';
+  }
+
+  private clearLoadedDefinitionState(): void {
+    this.rawFormDefinition = null;
+    this.formDefinition = null;
+    this.activeRequestPolicy = null;
+    this.allowRequesterOverride = false;
+    this.currentDisplayMode = REQUEST_VIEW_MODE_STANDARD;
+    this.rootGroupTabIndex = 0;
+    this.directionSelectionMode = 'selectable';
+    this.fixedDocumentDirection = null;
+    this.lastResolvedDirectionKey = null;
+
+    const directionControl = this.editorForm.get('documentDirection');
+    this.suppressDirectionRebuild = true;
+    directionControl?.enable({ emitEvent: false });
+    directionControl?.setValidators([]);
+    directionControl?.updateValueAndValidity({ emitEvent: false });
+    directionControl?.patchValue('', { emitEvent: false });
+    this.suppressDirectionRebuild = false;
+    this.resetDynamicFormState();
+  }
+
+  private focusFirstInvalidDynamicControl(): void {
+    const host = this.findFirstInvalidDynamicControlElement();
+    if (!host) {
+      return;
+    }
+
+    host.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    host.focus?.();
+  }
+
+  private findFirstInvalidDynamicControlElement(): HTMLElement | null {
+    const candidates = [
+      '.groups-wrap [formcontrolname].ng-invalid',
+      '.groups-wrap .ng-invalid [formcontrolname]',
+      '.groups-wrap .ng-invalid'
+    ];
+    for (const selector of candidates) {
+      const element = document.querySelector(selector) as HTMLElement | null;
+      if (element) {
+        return element;
+      }
+    }
+
+    return null;
+  }
+
+  private resetDynamicFormState(): void {
+    this.dynamicControls = this.fb.group({});
+    this.renderGroupTree = [];
+    this.showDiagnostics = false;
+    this.controlMap.clear();
+    this.genericFormService.resetDynamicRuntimeState();
+    this.genericFormService.cdmendDto = [];
+    this.genericFormService.cdCategoryMandDto = [];
+  }
+
+  private mapFieldTypeToGenericType(fieldType?: string, fieldKey?: string): string {
+    const normalized = String(fieldType ?? '').trim().toLowerCase();
+
+    if (this.isTreeCapableField(fieldKey, normalized)) {
+      return 'DropdownTree';
+    }
+    if (normalized.includes('label')) {
+      return 'LABLE';
+    }
+    if (normalized.includes('textarea')) {
+      return 'Textarea';
+    }
+    if (normalized.includes('radio')) {
+      return 'RadioButton';
+    }
+    if (normalized.includes('tree')) {
+      return 'DropdownTree';
+    }
+    if (normalized.includes('select') || normalized.includes('drop') || normalized.includes('combo')) {
+      return 'Dropdown';
+    }
+    if (normalized.includes('toggle') || normalized.includes('bool') || normalized.includes('check') || normalized.includes('switch')) {
+      return 'ToggleSwitch';
+    }
+    if (normalized.includes('datetime') || (normalized.includes('date') && normalized.includes('time'))) {
+      return 'DateTime';
+    }
+    if (normalized.includes('date') || normalized.includes('calendar')) {
+      return 'Date';
+    }
+    if (normalized.includes('file')) {
+      return 'FileUpload';
+    }
+    if (normalized.includes('int')) {
+      return 'InputText-integeronly';
+    }
+
+    return 'InputText';
+  }
+
+  private mapFieldDataType(field: SubjectFieldDefinitionDto, cdmendType: string): string {
+    const normalizedDataType = String(field.dataType ?? '').trim().toLowerCase();
+    const normalizedFieldType = String(field.fieldType ?? '').trim().toLowerCase();
+    if (normalizedDataType.includes('date') || normalizedDataType.includes('time')) {
+      return 'date';
+    }
+    if (normalizedDataType.includes('number') || normalizedDataType.includes('int') || normalizedDataType.includes('decimal')) {
+      return 'number';
+    }
+    if (normalizedDataType.includes('bool')) {
+      return 'boolean';
+    }
+
+    if (cdmendType === 'Date' || cdmendType === 'DateTime') {
+      return 'date';
+    }
+    if (cdmendType === 'ToggleSwitch') {
+      return 'boolean';
+    }
+    if (cdmendType === 'InputText-integeronly') {
+      return 'number';
+    }
+    if (normalizedFieldType.includes('number') || normalizedFieldType.includes('int') || normalizedFieldType.includes('decimal')) {
+      return 'number';
+    }
+
+    return 'string';
+  }
+
+  private normalizeInitialDynamicValue(field: SubjectFieldDefinitionDto, cdmendType: string, value: unknown): unknown {
+    if (value === null || value === undefined || value === '') {
+      return cdmendType === 'ToggleSwitch' ? false : (cdmendType === 'Date' || cdmendType === 'DateTime' ? null : '');
+    }
+
+    if (cdmendType === 'ToggleSwitch') {
+      if (typeof value === 'boolean') {
+        return value;
+      }
+
+      const normalized = String(value).trim().toLowerCase();
+      return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+    }
+
+    if (cdmendType === 'Date' || cdmendType === 'DateTime') {
+      const parsedDate = value instanceof Date ? value : new Date(String(value));
+      return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+    }
+
+    if (cdmendType === 'Dropdown' || cdmendType === 'DropdownTree' || cdmendType === 'RadioButton') {
+      return String(value);
+    }
+
+    const looksNumeric = String(field.dataType ?? '').toLowerCase().includes('number')
+      || String(field.dataType ?? '').toLowerCase().includes('int')
+      || String(field.dataType ?? '').toLowerCase().includes('decimal');
+    if (looksNumeric) {
+      const numericValue = Number(value);
+      if (Number.isFinite(numericValue)) {
+        return numericValue;
+      }
+    }
+
+    return value;
+  }
+
+  private isTreeCapableField(fieldKey: string | undefined, normalizedFieldType: string): boolean {
+    if (String(normalizedFieldType ?? '').includes('tree')) {
+      return true;
+    }
+
+    const normalizedKey = this.normalizeDynamicFieldKey(fieldKey);
+    if (!normalizedKey) {
+      return false;
+    }
+
+    return this.treeCapableFieldKeys.has(normalizedKey);
+  }
+
+  private refreshTreeRuntimeMetadata(categoryId: number): void {
+    const normalizedCategoryId = Number(categoryId ?? 0);
+    if (!this.config || normalizedCategoryId <= 0 || this.allConfigs.length === 0) {
+      this.treeCapableFieldKeys.clear();
+      return;
+    }
+
+    const matchedConfigs = this.previewFoundation.filterConfigs(this.allConfigs, {
+      routeKeyPrefix: 'DynamicSubjects',
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      categoryId: normalizedCategoryId
+    });
+    const treeBindings = this.previewFoundation.resolveTreeBindingsFromConfigs(matchedConfigs, normalizedCategoryId);
+    this.treeCapableFieldKeys = new Set<string>(
+      Array.from(treeBindings.keys()).map(fieldKey => this.normalizeDynamicFieldKey(fieldKey)).filter(Boolean)
+    );
+  }
+
+  private buildRuntimeConfigWithSupplementalTreeRequests(categoryId: number): ComponentConfig | null {
+    if (!this.config) {
+      return null;
+    }
+
+    const normalizedCategoryId = Number(categoryId ?? 0);
+    if (normalizedCategoryId <= 0 || this.allConfigs.length === 0) {
+      return this.config;
+    }
+
+    const matchedConfigs = this.previewFoundation.filterConfigs(this.allConfigs, {
+      routeKeyPrefix: 'DynamicSubjects',
+      applicationId: this.dynamicSubjectAccess.getApplicationId(),
+      categoryId: normalizedCategoryId
+    });
+    const treeRequests = this.previewFoundation.extractTreePopulateRequests(matchedConfigs, normalizedCategoryId);
+    const baseRequests = Array.isArray(this.config.requestsarray) ? this.config.requestsarray : [];
+    const mergedRequests = this.mergeRequestArrays(baseRequests, treeRequests);
+    if (mergedRequests.length === baseRequests.length) {
+      return this.config;
+    }
+
+    return new ComponentConfig({
+      ...this.config,
+      requestsarray: mergedRequests
+    });
+  }
+
+  private mergeRequestArrays(primary: RequestArrayItem[], secondary: RequestArrayItem[]): RequestArrayItem[] {
+    const merged: RequestArrayItem[] = [];
+    const seen = new Set<string>();
+
+    const pushUnique = (items: RequestArrayItem[]) => {
+      (items ?? []).forEach(item => {
+        const signature = this.buildRequestSignature(item);
+        if (seen.has(signature)) {
+          return;
+        }
+
+        seen.add(signature);
+        merged.push({
+          ...item,
+          args: Array.isArray(item?.args) ? [...item.args] : [],
+          requestsSelectionFields: Array.isArray(item?.requestsSelectionFields) ? [...item.requestsSelectionFields] : [],
+          populateArgs: Array.isArray(item?.populateArgs) ? [...item.populateArgs] : []
+        });
+      });
+    };
+
+    pushUnique(primary ?? []);
+    pushUnique(secondary ?? []);
+    return merged;
+  }
+
+  private buildRequestSignature(request: RequestArrayItem | undefined): string {
+    return [
+      String(request?.method ?? '').trim().toLowerCase(),
+      JSON.stringify(request?.args ?? []),
+      String(request?.populateMethod ?? '').trim().toLowerCase(),
+      JSON.stringify(request?.populateArgs ?? []),
+      JSON.stringify(request?.conditions ?? {}),
+      JSON.stringify(request?.requestsSelectionFields ?? []),
+      JSON.stringify(request?.bindings ?? [])
+    ].join('|');
+  }
+
+  private normalizeDynamicFieldKey(value: unknown): string {
+    const raw = String(value ?? '').trim().toLowerCase();
+    if (!raw) {
+      return '';
+    }
+
+    return raw.split('|')[0].split('__')[0].trim();
+  }
+
+  private normalizeOutgoingDynamicValue(value: unknown): string {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? '' : value.toISOString();
+    }
+
+    return String(value);
+  }
+
+  private parseFieldOptionsAsSelectionJson(optionsPayload?: string): string {
+    const options = this.parseFieldOptions(optionsPayload);
+    return JSON.stringify(options.map(option => ({
+      key: option.value,
+      name: option.label
+    })));
+  }
+
+  private parseFieldOptions(optionsPayload?: string): Array<{ label: string; value: string }> {
+    const payload = String(optionsPayload ?? '').trim();
+    if (!payload) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(payload);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(item => this.mapOptionItem(item))
+          .filter((item): item is { label: string; value: string } => item !== null);
+      }
+    } catch {
+      // no-op and fallback to delimited parsing
+    }
+
+    return payload
+      .split(/[|,;\n]+/g)
+      .map(item => item.trim())
+      .filter(item => item.length > 0)
+      .map(item => ({ label: item, value: item }));
+  }
+
+  private mapOptionItem(item: unknown): { label: string; value: string } | null {
+    if (item === null || item === undefined) {
+      return null;
+    }
+    if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+      const value = String(item);
+      return { label: value, value };
+    }
+
+    const asObject = item as Record<string, unknown>;
+    const value = String(asObject['value'] ?? asObject['id'] ?? asObject['key'] ?? asObject['label'] ?? asObject['name'] ?? '');
+    const label = String(asObject['label'] ?? asObject['name'] ?? asObject['text'] ?? value);
+    if (!value && !label) {
+      return null;
+    }
+
+    return { label: label || value, value: value || label };
+  }
+
+  private resolvePatternExpression(optionsPayload?: string): string {
+    const payload = String(optionsPayload ?? '').trim();
+    if (!payload) {
+      return '';
+    }
+    if (payload.startsWith('[') || payload.startsWith('{')) {
+      return '';
+    }
+
+    return payload;
+  }
+
+  private buildRuntimeFieldInspectorRows(visible: boolean): RuntimeFieldInspectorRow[] {
+    const fields = [...(this.formDefinition?.fields ?? [])]
+      .sort((left, right) => {
+        const orderDiff = Number(left.displayOrder ?? 0) - Number(right.displayOrder ?? 0);
+        if (orderDiff !== 0) {
+          return orderDiff;
+        }
+
+        return Number(left.mendSql ?? 0) - Number(right.mendSql ?? 0);
+      });
+
+    return fields
+      .filter(field => (field.isVisible !== false) === visible)
+      .map(field => {
+        const fieldKey = String(field.fieldKey ?? '').trim();
+        const fieldLabel = String(field.fieldLabel ?? '').trim() || fieldKey;
+
+        return {
+          fieldKey,
+          fieldLabel,
+          required: Boolean(field.required || field.requiredTrue)
+        };
+      });
+  }
+
+  private buildStakeholdersPayload(): Array<{ stockholderId: number; partyType: string; requiredResponse: boolean; status?: number; dueDate?: string; notes?: string }> {
+    return (this.stakeholdersArray.value ?? [])
+      .map((item: any) => ({
+        stockholderId: Number(item?.stockholderId ?? 0),
+        partyType: String(item?.partyType ?? 'Viewer') || 'Viewer',
+        requiredResponse: Boolean(item?.requiredResponse),
+        status: item?.status ?? undefined,
+        dueDate: item?.dueDate ?? undefined,
+        notes: String(item?.notes ?? '').trim() || undefined
+      }))
+      .filter((item: any) => item.stockholderId > 0);
+  }
+
+  private buildTasksPayload(): Array<{ actionTitle: string; actionDescription?: string; assignedToUserId?: string; assignedUnitId?: string; dueDateUtc?: string; status: number }> {
+    return (this.tasksArray.value ?? [])
+      .map((item: any) => ({
+        actionTitle: String(item?.actionTitle ?? '').trim(),
+        actionDescription: String(item?.actionDescription ?? '').trim() || undefined,
+        assignedToUserId: String(item?.assignedToUserId ?? '').trim() || undefined,
+        assignedUnitId: String(item?.assignedUnitId ?? '').trim() || undefined,
+        dueDateUtc: item?.dueDateUtc ?? undefined,
+        status: Number(item?.status ?? 0)
+      }))
+      .filter((item: any) => item.actionTitle.length > 0);
+  }
+
+  private toArabicEventType(eventType?: string): string {
+    switch (String(eventType ?? '').trim()) {
+      case 'SubjectCreated': return 'إنشاء موضوع/طلب';
+      case 'SubjectUpdated': return 'تحديث موضوع/طلب';
+      case 'SubjectStatusChanged': return 'تغيير حالة الموضوع/الطلب';
+      case 'AttachmentAdded': return 'إضافة مرفق';
+      case 'AttachmentRemoved': return 'حذف مرفق';
+      case 'StakeholderAssigned': return 'إسناد جهة معنية';
+      case 'TaskUpdated': return 'تحديث مهمة';
+      case 'EnvelopeLinked': return 'ربط ظرف وارد';
+      case 'EnvelopeUnlinked': return 'فك ارتباط الظرف';
+      case 'EnvelopeCreated': return 'إنشاء ظرف وارد';
+      case 'EnvelopeUpdated': return 'تحديث ظرف وارد';
+      default: return 'تحديث';
+    }
+  }
+}

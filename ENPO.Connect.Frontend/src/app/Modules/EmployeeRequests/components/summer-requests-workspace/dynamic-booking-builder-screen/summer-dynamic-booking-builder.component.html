@@ -15,15 +15,43 @@
         (ngModelChange)="onDestinationChanged($event)"
         [disabled]="loadingMetadata || submitting || isEditMode">
         <option [ngValue]="null">اختر</option>
-        <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">
+        <option *ngFor="let destination of destinationSelectionOptions" [ngValue]="destination.categoryId">
           {{ destination.name }}
         </option>
       </select>
+    </label>
+    <small class="meta-error" *ngIf="!isEditMode && !loadingMetadata && destinationSelectionOptions.length === 0">
+      {{ destinationAccessDeniedMessage }}
+    </small>
+    <label *ngIf="canSelectMembershipType" class="membership-select">
+      <span class="required-label">نوع العضوية</span>
+      <p-dropdown
+        [options]="membershipTypeOptions"
+        optionLabel="label"
+        optionValue="value"
+        [appendTo]="'body'"
+        [placeholder]="'اختر نوع العضوية'"
+        [disabled]="loadingMetadata || loadingEditRequest || submitting"
+        [ngModel]="selectedMembershipType"
+        [ngModelOptions]="{ standalone: true }"
+        (onChange)="onMembershipTypeChanged($event.value)">
+      </p-dropdown>
     </label>
     <small class="meta-error" *ngIf="metadataError.length > 0">{{ metadataError }}</small>
     <small class="meta-error" *ngIf="editRequestError.length > 0">{{ editRequestError }}</small>
     <small class="mode-note" *ngIf="isEditMode && editRequestError.length === 0 && !loadingEditRequest">
       يتم تعديل الطلب رقم #{{ editRequestId }}.
+    </small>
+    <label class="toggle-row" *ngIf="canUseFrozenUnitsToggle">
+      <input
+        type="checkbox"
+        [checked]="includeFrozenUnitsInBooking"
+        (change)="onIncludeFrozenUnitsChanged($any($event.target).checked)"
+        [disabled]="loadingMetadata || loadingEditRequest || submitting" />
+      <span>تضمين الوحدات المجمدة (للحجز الإداري)</span>
+    </label>
+    <small class="mode-note" *ngIf="canUseFrozenUnitsToggle && includeFrozenUnitsForApi">
+      الوضع الإداري مفعل: الإتاحة تشمل الوحدات المجمدة وسيتم تمييزها بوضوح.
     </small>
   </div>
 
@@ -38,14 +66,139 @@
     <h4>الإتاحة اللحظية للفوج المختار</h4>
     <small class="loading-note" *ngIf="bookingCapacityLoading">جاري تحديث الإتاحة...</small>
     <div class="capacity-grid" *ngIf="bookingCapacitySummary.length > 0">
-      <article class="capacity-card" *ngFor="let row of bookingCapacitySummary">
+      <article class="capacity-card" *ngFor="let row of bookingCapacitySummary" [class.frozen-highlight]="hasFrozenUnits(row)">
         <span>سعة {{ row.familyCount }}</span>
-        <strong>{{ row.availableUnits }}</strong>
-        <small>متاح من {{ row.totalUnits }} (المستخدم {{ row.usedUnits }})</small>
+        <strong>{{ getCapacityDisplayedAvailableUnits(row) }}</strong>
+        <div class="capacity-breakdown" *ngIf="canUseFrozenUnitsToggle && includeFrozenUnitsForApi">
+          <span>متاح عام: {{ getCapacityPublicAvailableUnits(row) }}</span>
+          <span>متاح مجمد: {{ getCapacityFrozenAvailableUnits(row) }}</span>
+          <span>مجمد مستخدم: {{ getCapacityFrozenAssignedUnits(row) }}</span>
+        </div>
+        <small>{{ getCapacityNote(row) }}</small>
+        <small class="frozen-tag" *ngIf="hasFrozenUnits(row)">
+          يتضمن وحدات مجمدة
+        </small>
       </article>
     </div>
     <p class="muted" *ngIf="!bookingCapacityLoading && bookingCapacitySummary.length === 0">
       اختر فوجًا لعرض الإتاحة.
+    </p>
+  </section>
+
+  <section class="pricing-summary" *ngIf="selectedDestination">
+    <h4>ملخص التسعير</h4>
+    <small class="loading-note" *ngIf="pricingQuoteLoading">جاري تحديث التسعير...</small>
+    <p class="warn" *ngIf="!pricingQuoteLoading && pricingQuoteError.length > 0">{{ pricingQuoteError }}</p>
+
+    <div class="pricing-grid" *ngIf="!pricingQuoteLoading && pricingQuote as quote">
+      <article class="pricing-item">
+        <span>سعر الإقامة للفرد</span>
+        <strong>{{ formatPriceValue(quote.accommodationPricePerPerson) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>سعر الانتقالات للفرد</span>
+        <strong>{{ formatPriceValue(quote.transportationPricePerPerson) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>عدد الأفراد</span>
+        <strong>{{ quote.personsCount }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>نوع الحجز المعتمد</span>
+        <strong>{{ resolveStayModeLabel(quote.normalizedStayMode) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>نوع العضوية</span>
+        <strong>{{ quote.membershipTypeLabel || '-' }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>إجمالي الإقامة</span>
+        <strong>{{ formatPriceValue(quote.accommodationTotal) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>إجمالي الانتقالات</span>
+        <strong>{{ formatPriceValue(quote.transportationTotal) }}</strong>
+      </article>
+      <article class="pricing-item">
+        <span>قيمة التأمين</span>
+        <strong>{{ formatPriceValue(quote.appliedInsuranceAmount) }}</strong>
+      </article>
+      <article class="pricing-item total">
+        <span>الإجمالي النهائي</span>
+        <strong>{{ formatPriceValue(quote.grandTotal) }}</strong>
+      </article>
+    </div>
+
+    <section class="payment-plan-shell" *ngIf="!pricingQuoteLoading && pricingQuote as quote">
+      <div class="payment-mode-row">
+        <label>
+          <span class="required-label">أسلوب السداد</span>
+          <select
+            [ngModel]="selectedPaymentMode"
+            [ngModelOptions]="{ standalone: true }"
+            (ngModelChange)="onPaymentModeChanged($event)"
+            [disabled]="submitting || loadingMetadata || loadingEditRequest || !canEditPaymentPlanSettings">
+            <option *ngFor="let option of paymentModeOptions" [ngValue]="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <small class="mode-note" *ngIf="isInstallmentMode">
+          يتم إنشاء 7 مبالغ تلقائيًا من إجمالي الحجز: مقدم حجز + 6 أقساط متساوية.
+        </small>
+      </div>
+
+      <div class="installment-grid" *ngIf="isInstallmentMode">
+        <article class="installment-card" *ngFor="let installment of installmentPlan">
+          <header>
+            <strong>{{ resolveInstallmentTitle(installment.installmentNo) }}</strong>
+          </header>
+          <label>
+            <span>{{ resolveInstallmentAmountLabel(installment.installmentNo) }}</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              [ngModel]="installment.amount"
+              [ngModelOptions]="{ standalone: true }"
+              [disabled]="!canEditInstallmentPlanManually || submitting"
+              (ngModelChange)="onInstallmentAmountChanged(installment.installmentNo, $event)" />
+          </label>
+          <label class="installment-paid-toggle">
+            <input
+              type="checkbox"
+              [checked]="installment.isPaid"
+              [disabled]="!canManageInstallmentPaymentState || submitting"
+              (change)="onInstallmentPaidChanged(installment.installmentNo, $any($event.target).checked)" />
+            <span>تم السداد</span>
+          </label>
+          <label>
+            <span>تاريخ السداد</span>
+            <input
+              type="datetime-local"
+              [ngModel]="installment.paidAtLocal"
+              [ngModelOptions]="{ standalone: true }"
+              [disabled]="!canManageInstallmentPaymentState || !installment.isPaid || submitting"
+              (ngModelChange)="onInstallmentPaidAtChanged(installment.installmentNo, $event)" />
+          </label>
+        </article>
+      </div>
+
+      <div class="installment-summary" *ngIf="isInstallmentMode">
+        <span>إجمالي الأقساط</span>
+        <strong>{{ formatPriceValue(installmentPlanTotalAmount) }}</strong>
+        <span>/</span>
+        <span>إجمالي الحجز</span>
+        <strong>{{ formatPriceValue(quote.grandTotal) }}</strong>
+      </div>
+      <p class="warn" *ngIf="isInstallmentMode && installmentPlanError.length > 0">{{ installmentPlanError }}</p>
+    </section>
+
+    <p class="pricing-note" *ngIf="!pricingQuoteLoading && pricingQuote as quote">
+      <ng-container *ngIf="quote.transportationMandatory || isTransportIncludedMode">
+        الانتقالات إلزامية لهذا المصيف
+        <ng-container *ngIf="isTransportIncludedMode"> ومضمنة في السعر</ng-container>.
+      </ng-container>
     </p>
   </section>
 
@@ -70,6 +223,7 @@
     [unitTree]="[]"
     [fileParameters]="fileParameters"
     [submitDisabled]="submitDisabled"
+    [allowGroupInstanceActions]="canUseProxyRegistration"
     [isCurrentUser]="true"
     (ticketFormChange)="onTicketFormChange($event)"
     (submitFormChange)="submitDynamicBooking($event)"

@@ -1,0 +1,1200 @@
+<section class="workspace" [class.management-mode]="managementMode" dir="rtl">
+  <header class="workspace-header">
+    <div>
+      <h2>إدارة أنواع الطلبات الديناميكية</h2>
+      <p>اختيار النوع من الشجرة ثم إدارة البيانات الأساسية والجروبات والحقول المرتبطة والمعاينة النهائية من شاشة واحدة.</p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        pButton
+        *ngIf="managementMode"
+        type="button"
+        label="إضافة جروب"
+        icon="pi pi-plus"
+        class="p-button-outlined"
+        (click)="openCreateGroupDialog()"></button>
+      <button
+        pButton
+        *ngIf="managementMode"
+        type="button"
+        label="حفظ الربط"
+        icon="pi pi-save"
+        [loading]="savingLinks"
+        [disabled]="savingLinks || loadingLinks || !selectedCategory"
+        (click)="saveLinks()"></button>
+      <button pButton type="button" label="تحديث" icon="pi pi-refresh" class="p-button-outlined" (click)="loadWorkspace()"></button>
+      <button pButton type="button" label="نوع جديد" icon="pi pi-plus" (click)="openCreateCategoryDialog(null)"></button>
+    </div>
+  </header>
+
+  <p-progressSpinner *ngIf="loading" styleClass="global-spinner"></p-progressSpinner>
+
+  <p-splitter
+    *ngIf="!loading && !managementMode"
+    [panelSizes]="[30, 70]"
+    [minSizes]="[22, 40]"
+    [style]="{ height: '100%' }"
+    styleClass="workspace-splitter">
+
+    <ng-template pTemplate>
+      <div class="tree-panel">
+        <div class="panel-head">
+          <div>
+            <h3>شجرة أنواع الطلبات</h3>
+            <small>يدعم السحب والإفلات، وكليك يمين للإضافة/التعديل/الحذف.</small>
+          </div>
+          <button pButton type="button" icon="pi pi-plus" class="p-button-rounded p-button-text" (click)="openCreateCategoryDialog(selectedCategoryNode)"></button>
+        </div>
+
+        <p-contextMenu #treeMenu [model]="treeContextMenuItems" appendTo="body" styleClass="rtl-overlay-menu"></p-contextMenu>
+
+        <div class="tree-scroll">
+          <p-tree
+            [value]="categoryTree"
+            selectionMode="single"
+            [(selection)]="selectedCategoryNode"
+            [draggableNodes]="true"
+            [droppableNodes]="true"
+            [contextMenu]="treeMenu"
+            (onNodeSelect)="onCategoryNodeSelect($event)"
+            (onNodeContextMenuSelect)="onCategoryNodeContextMenu($event)"
+            (onNodeExpand)="onTreeNodeExpand($event)"
+            (onNodeCollapse)="onTreeNodeCollapse($event)"
+            (onNodeDrop)="onCategoryTreeDrop($event)">
+            <ng-template let-node pTemplate="default">
+              <div class="tree-node-row">
+                <span class="node-title">{{ node.label }}</span>
+                <span class="node-status" [class.inactive]="!node.data?.isActive">{{ node.data?.isActive ? 'مفعل' : 'غير مفعل' }}</span>
+              </div>
+            </ng-template>
+          </p-tree>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template pTemplate>
+      <div class="content-panel" *ngIf="selectedCategory as category; else noSelection">
+        <div class="selected-title">
+          <div>
+            <h3>{{ category.categoryName }}</h3>
+            <span>المعرف: {{ category.categoryId }} | التطبيق: {{ category.applicationId || '-' }}</span>
+          </div>
+          <button pButton type="button" icon="pi pi-plus" label="إضافة طلب ابن" class="p-button-outlined p-button-sm" (click)="openCreateCategoryDialog(selectedCategoryNode)"></button>
+        </div>
+
+        <p-tabView [(activeIndex)]="activeTabIndex" (onChange)="onMainTabChange($event)" styleClass="admin-tabs">
+          <p-tabPanel header="الإدارة الأساسية">
+            <div #overviewScroll class="tab-scroll tab-scroll--overview" tabindex="0">
+              <div class="scroll-tools">
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(overviewScroll)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(overviewScroll, -480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(overviewScroll, 480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(overviewScroll)"></button>
+              </div>
+              <section class="overview-grid">
+                <article class="info-card">
+                  <h4>ملخص النوع الحالي</h4>
+                  <div class="kv-grid">
+                    <div>
+                      <span>اسم النوع</span>
+                      <strong>{{ category.categoryName }}</strong>
+                    </div>
+                    <div>
+                      <span>الأب</span>
+                      <strong>{{ selectedParentName }}</strong>
+                    </div>
+                    <div>
+                      <span>الحالة</span>
+                      <strong>{{ category.isActive ? 'مفعل' : 'غير مفعل' }}</strong>
+                    </div>
+                    <div>
+                      <span>رقم مسار العمل</span>
+                      <strong>{{ category.catWorkFlow }}</strong>
+                    </div>
+                    <div>
+                      <span>إجمالي الجروبات المرتبطة</span>
+                      <strong>{{ linkedGroups.length }}</strong>
+                    </div>
+                    <div>
+                      <span>إجمالي الحقول المرتبطة</span>
+                      <strong>{{ editableLinks.length }}</strong>
+                    </div>
+                    <div>
+                      <span>حقول غير مرتبطة</span>
+                      <strong>{{ unlinkedFieldsCount }}</strong>
+                    </div>
+                    <div>
+                      <span>آخر سياسة ترقيم</span>
+                      <strong>{{ category.referencePrefix || '-' }}</strong>
+                    </div>
+                    <div>
+                      <span>مصدر تحديد الاتجاه</span>
+                      <strong>{{ directionSourceSummary }}</strong>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="info-card">
+                  <h4>إجراءات سريعة</h4>
+                  <p>نفّذ الإجراءات الشائعة بدون التنقل بين الشاشات.</p>
+                  <div class="actions-row compact">
+                    <button pButton type="button" label="تعديل البيانات" icon="pi pi-pencil" class="p-button-outlined" (click)="activeTabIndex = tabEditIndex"></button>
+                    <button pButton type="button" label="إدارة الجروبات" icon="pi pi-th-large" class="p-button-outlined" (click)="activeTabIndex = tabGroupsIndex"></button>
+                    <button pButton type="button" label="ربط الحقول" icon="pi pi-link" class="p-button-outlined" (click)="openRelationsDialog()"></button>
+                    <button pButton type="button" label="فتح المعاينة" icon="pi pi-eye" class="p-button-outlined" (click)="activeTabIndex = tabPreviewIndex"></button>
+                    <button pButton type="button" label="إضافة طلب ابن" icon="pi pi-plus" (click)="openCreateCategoryDialog(selectedCategoryNode)"></button>
+                    <button pButton type="button" label="حذف النوع" icon="pi pi-trash" class="p-button-danger p-button-outlined" (click)="deleteCategory()"></button>
+                  </div>
+                </article>
+              </section>
+            </div>
+          </p-tabPanel>
+
+          <p-tabPanel header="بيانات الطلب وإعداداته">
+            <div #editScroll class="tab-scroll tab-scroll--edit" tabindex="0">
+              <div class="scroll-tools">
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(editScroll)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(editScroll, -480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(editScroll, 480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(editScroll)"></button>
+              </div>
+              <section class="form-section">
+                <header>
+                  <h4>البيانات الأساسية للطلب</h4>
+                  <p>تحديث اسم النوع وربطه بالتطبيق ومسار العمل وقنوات الإشعار.</p>
+                </header>
+
+                <form class="form-grid" [formGroup]="categoryForm">
+                  <div class="field">
+                    <label>اسم النوع *</label>
+                    <input pInputText type="text" formControlName="categoryName" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'categoryName')">
+                      {{ getValidationMessage(categoryForm, 'categoryName', 'اسم النوع') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>معرف التطبيق</label>
+                    <input pInputText type="text" formControlName="applicationId" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'applicationId')">
+                      {{ getValidationMessage(categoryForm, 'applicationId', 'معرف التطبيق') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>بيانات وصفية</label>
+                    <input pInputText type="text" formControlName="catMend" />
+                  </div>
+
+                  <div class="field">
+                    <label>رقم مسار العمل</label>
+                    <input pInputText type="number" formControlName="catWorkFlow" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'catWorkFlow')">
+                      {{ getValidationMessage(categoryForm, 'catWorkFlow', 'رقم مسار العمل') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>إلى</label>
+                    <input pInputText type="text" formControlName="to" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'to')">
+                      {{ getValidationMessage(categoryForm, 'to', 'حقل إلى') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>نسخة</label>
+                    <input pInputText type="text" formControlName="cc" />
+                    <small class="field-error" *ngIf="isInvalid(categoryForm, 'cc')">
+                      {{ getValidationMessage(categoryForm, 'cc', 'حقل نسخة') }}
+                    </small>
+                  </div>
+
+                  <div class="switches">
+                    <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
+                    <label><span>إشعارات الرسائل النصية</span><p-inputSwitch formControlName="catSms"></p-inputSwitch></label>
+                    <label><span>إشعارات البريد الإلكتروني</span><p-inputSwitch formControlName="catMailNotification"></p-inputSwitch></label>
+                  </div>
+                </form>
+
+                <div class="actions-row">
+                  <button pButton type="button" label="حفظ البيانات الأساسية" icon="pi pi-save" [loading]="savingCategory" [disabled]="savingCategory || categoryForm.invalid" (click)="saveCategory()"></button>
+                </div>
+              </section>
+
+              <section class="form-section">
+                <header>
+                  <h4>إعدادات النوع والسياسات</h4>
+                  <p>إدارة سياسة الترقيم المرجعي وإعدادات المصدر والتسلسل.</p>
+                  <p>اتجاه الطلب يُدار صراحة عبر {{ directionSourceSummary }}.</p>
+                </header>
+
+                <form class="form-grid" [formGroup]="settingsForm">
+                  <div class="field switch-field">
+                    <label>تفعيل سياسة الترقيم</label>
+                    <p-inputSwitch formControlName="referencePolicyEnabled"></p-inputSwitch>
+                  </div>
+
+                  <div class="field">
+                    <label>بادئة المرجع *</label>
+                    <input pInputText type="text" formControlName="referencePrefix" />
+                    <small class="field-error" *ngIf="isInvalid(settingsForm, 'referencePrefix') || hasRequiredError(settingsForm, 'referencePrefix')">
+                      {{ getValidationMessage(settingsForm, 'referencePrefix', 'بادئة المرجع') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>فاصل المرجع</label>
+                    <input pInputText type="text" formControlName="referenceSeparator" />
+                    <small class="field-error" *ngIf="isInvalid(settingsForm, 'referenceSeparator')">
+                      {{ getValidationMessage(settingsForm, 'referenceSeparator', 'فاصل المرجع') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>حقول المصدر (مفصولة بفاصلة)</label>
+                    <input pInputText type="text" formControlName="sourceFieldKeys" />
+                    <small class="field-error" *ngIf="isInvalid(settingsForm, 'sourceFieldKeys')">
+                      {{ getValidationMessage(settingsForm, 'sourceFieldKeys', 'حقول المصدر') }}
+                    </small>
+                  </div>
+
+                  <div class="field">
+                    <label>اسم التسلسل</label>
+                    <input pInputText type="text" formControlName="sequenceName" />
+                    <small class="field-error" *ngIf="isInvalid(settingsForm, 'sequenceName') || hasRequiredError(settingsForm, 'sequenceName')">
+                      {{ getValidationMessage(settingsForm, 'sequenceName', 'اسم التسلسل') }}
+                    </small>
+                  </div>
+
+                  <div class="switches">
+                    <label><span>تضمين السنة</span><p-inputSwitch formControlName="includeYear"></p-inputSwitch></label>
+                    <label><span>استخدام تسلسل رقمي</span><p-inputSwitch formControlName="useSequence"></p-inputSwitch></label>
+                  </div>
+                </form>
+
+                <div class="actions-row">
+                  <button pButton type="button" label="حفظ الإعدادات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid" (click)="saveCategorySettings({ includePolicy: false })"></button>
+                </div>
+              </section>
+
+              <section class="form-section" [formGroup]="policyForm">
+                <header>
+                  <h4>Policy Authoring Studio</h4>
+                  <p>تأليف وإدارة سياسات العرض والصلاحيات والـ Workflow من محرر إداري موحد داخل Central Admin Shell.</p>
+                </header>
+
+                <div class="policy-errors-box" *ngIf="policyValidationErrors.length > 0">
+                  <strong>ملاحظات التحقق قبل الحفظ:</strong>
+                  <ul>
+                    <li *ngFor="let error of policyValidationErrors">{{ error }}</li>
+                  </ul>
+                </div>
+
+                <p-tabView styleClass="policy-studio-tabs">
+                  <p-tabPanel header="Presentation Rules">
+                    <div class="policy-head-actions">
+                      <span>عدد القواعد الحالية: {{ policyRuleFormGroups.length }}</span>
+                      <button pButton type="button" icon="pi pi-plus" label="إضافة Rule" (click)="addPresentationRule()"></button>
+                    </div>
+
+                    <div class="policy-rules-list">
+                      <article class="policy-rule-card" *ngFor="let rule of policyRuleFormGroups; let ruleIndex = index" [formGroup]="rule">
+                        <header class="policy-rule-head">
+                          <h5>Rule #{{ ruleIndex + 1 }}</h5>
+                          <div class="policy-rule-actions">
+                            <label class="inline-switch">
+                              <span>Enabled</span>
+                              <p-inputSwitch formControlName="isEnabled"></p-inputSwitch>
+                            </label>
+                            <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="removePresentationRule(ruleIndex)"></button>
+                          </div>
+                        </header>
+
+                        <div class="form-grid">
+                          <div class="field">
+                            <label>Rule Id</label>
+                            <input pInputText type="text" formControlName="ruleId" placeholder="direction-incoming" />
+                          </div>
+                          <div class="field">
+                            <label>Priority</label>
+                            <input pInputText type="number" formControlName="priority" />
+                          </div>
+                        </div>
+
+                        <section class="policy-subsection">
+                          <header>
+                            <h6>Condition Builder</h6>
+                            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة شرط" (click)="addRuleCondition(ruleIndex)"></button>
+                          </header>
+
+                          <div class="condition-list">
+                            <div class="condition-row" *ngFor="let condition of getRuleConditions(ruleIndex); let conditionIndex = index" [formGroup]="condition">
+                              <div class="field">
+                                <label>Variable</label>
+                                <input pInputText type="text" formControlName="variable" placeholder="documentDirection أو أي متغير سياقي" />
+                                <div class="variable-suggestions">
+                                  <button
+                                    pButton
+                                    type="button"
+                                    class="p-button-text p-button-sm"
+                                    *ngFor="let variable of variableSuggestions"
+                                    [label]="variable"
+                                    (click)="applySuggestedVariable(ruleIndex, conditionIndex, variable)"></button>
+                                </div>
+                              </div>
+
+                              <div class="field">
+                                <label>Operator</label>
+                                <p-dropdown
+                                  [options]="conditionOperatorOptions"
+                                  optionLabel="label"
+                                  optionValue="value"
+                                  formControlName="operator">
+                                </p-dropdown>
+                              </div>
+
+                              <div class="field" *ngIf="!isMultiValueOperator(condition.get('operator')?.value)">
+                                <label>Value</label>
+                                <input pInputText type="text" formControlName="value" placeholder="incoming" />
+                              </div>
+
+                              <div class="field" *ngIf="isMultiValueOperator(condition.get('operator')?.value)">
+                                <label>Values (CSV)</label>
+                                <input pInputText type="text" formControlName="valuesCsv" placeholder="incoming, outgoing" />
+                              </div>
+
+                              <div class="field condition-delete">
+                                <label>&nbsp;</label>
+                                <button pButton type="button" icon="pi pi-times" class="p-button-rounded p-button-text p-button-danger" (click)="removeRuleCondition(ruleIndex, conditionIndex)"></button>
+                              </div>
+                            </div>
+                          </div>
+                        </section>
+
+                        <section class="policy-subsection">
+                          <header>
+                            <h6>Field Patches</h6>
+                            <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-plus" label="إضافة Patch" (click)="addRuleFieldPatch(ruleIndex)"></button>
+                          </header>
+
+                          <div class="patch-list">
+                            <div class="patch-row" *ngFor="let patch of getRuleFieldPatches(ruleIndex); let patchIndex = index" [formGroup]="patch">
+                              <div class="form-grid">
+                                <div class="field">
+                                  <label>Target Field</label>
+                                  <p-dropdown
+                                    [options]="policyFieldOptions"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    formControlName="fieldKey"
+                                    placeholder="اختر الحقل المستهدف">
+                                  </p-dropdown>
+                                </div>
+                                <div class="field">
+                                  <label>Label</label>
+                                  <input pInputText type="text" formControlName="label" placeholder="تعديل عنوان الحقل" />
+                                </div>
+                                <div class="field">
+                                  <label>Placeholder</label>
+                                  <input pInputText type="text" formControlName="placeholder" />
+                                </div>
+                                <div class="field">
+                                  <label>Help Text</label>
+                                  <input pInputText type="text" formControlName="helpText" />
+                                </div>
+                                <div class="field">
+                                  <label>Visible</label>
+                                  <p-dropdown
+                                    [options]="[{ label: 'بدون تغيير', value: '' }, { label: 'إظهار', value: 'true' }, { label: 'إخفاء', value: 'false' }]"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    formControlName="visibleMode">
+                                  </p-dropdown>
+                                </div>
+                                <div class="field">
+                                  <label>Required</label>
+                                  <p-dropdown
+                                    [options]="[{ label: 'بدون تغيير', value: '' }, { label: 'إلزامي', value: 'true' }, { label: 'غير إلزامي', value: 'false' }]"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    formControlName="requiredMode">
+                                  </p-dropdown>
+                                </div>
+                                <div class="field">
+                                  <label>Readonly</label>
+                                  <p-dropdown
+                                    [options]="[{ label: 'بدون تغيير', value: '' }, { label: 'للقراءة فقط', value: 'true' }, { label: 'قابل للتعديل', value: 'false' }]"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    formControlName="readonlyMode">
+                                  </p-dropdown>
+                                </div>
+                                <div class="field condition-delete">
+                                  <label>&nbsp;</label>
+                                  <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="removeRuleFieldPatch(ruleIndex, patchIndex)"></button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </section>
+                      </article>
+                      <p class="empty-state" *ngIf="policyRuleFormGroups.length === 0">
+                        لا توجد قواعد Presentation حاليًا. أضف Rule جديدة عند الحاجة.
+                      </p>
+                    </div>
+                  </p-tabPanel>
+
+                  <p-tabPanel header="Access Policy">
+                    <form class="form-grid">
+                      <div class="field">
+                        <label>Create Mode</label>
+                        <p-dropdown
+                          [options]="createModeOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="createMode">
+                        </p-dropdown>
+                      </div>
+
+                      <div class="field">
+                        <label>Create Scope Units (CSV)</label>
+                        <input pInputText type="text" formControlName="createScopeUnits" placeholder="60, 124, 200" />
+                      </div>
+
+                      <div class="field">
+                        <label>Read Scope Units (CSV)</label>
+                        <input pInputText type="text" formControlName="readScopeUnits" placeholder="60, 124, 200" />
+                      </div>
+
+                      <div class="field">
+                        <label>Work Scope Units (CSV)</label>
+                        <input pInputText type="text" formControlName="workScopeUnits" placeholder="60, 124, 200" />
+                      </div>
+
+                      <div class="switches">
+                        <label><span>Inherit Legacy Access</span><p-inputSwitch formControlName="inheritLegacyAccess"></p-inputSwitch></label>
+                      </div>
+                    </form>
+                  </p-tabPanel>
+
+                  <p-tabPanel header="Workflow Policy">
+                    <form class="form-grid">
+                      <div class="field">
+                        <label>وضع التوجيه</label>
+                        <p-dropdown
+                          [options]="workflowModeOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="workflowMode">
+                        </p-dropdown>
+                        <small class="field-helper">
+                          اختر نوع التوجيه: يدوي (اختيار من المستخدم) أو ثابت (جهة محددة مسبقًا) أو هجين.
+                        </small>
+                      </div>
+
+                      <div class="field">
+                        <label>وضع اتجاه الطلب</label>
+                        <p-dropdown
+                          [options]="directionModeOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="workflowDirectionMode">
+                        </p-dropdown>
+                        <small class="field-helper">
+                          حدد هل الاتجاه ثابت (وارد أو صادر) أم مرن ويمكن للمستخدم اختياره أثناء التسجيل.
+                        </small>
+                      </div>
+
+                      <div class="field" *ngIf="showWorkflowFixedDirectionField">
+                        <label>الاتجاه الثابت<span class="required-mark">*</span></label>
+                        <p-dropdown
+                          [options]="directionValueOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="workflowFixedDirection"
+                          placeholder="اختر الاتجاه الثابت">
+                        </p-dropdown>
+                        <small class="field-helper">
+                          عند اختيار وضع ثابت سيتم فرض هذا الاتجاه runtime ولن يتمكن المستخدم من تغييره.
+                        </small>
+                      </div>
+
+                      <div class="field" *ngIf="showWorkflowStaticTargetsField">
+                        <label>الجهات الثابتة (CSV)<span class="required-mark" *ngIf="workflowModeValue === 'static'">*</span></label>
+                        <input pInputText type="text" formControlName="workflowStaticTargets" placeholder="60, 124" />
+                        <small class="field-helper">
+                          في التوجيه الثابت يتم توجيه الطلب مباشرة لهذه الجهات.
+                        </small>
+                      </div>
+
+                      <div class="field" *ngIf="showWorkflowManualTargetField">
+                        <label>حقل اختيار جهة التوجيه<span class="required-mark" *ngIf="isWorkflowManualTargetFieldRequired">*</span></label>
+                        <p-dropdown
+                          [options]="workflowManualTargetFieldOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          formControlName="workflowManualTargetFieldKey"
+                          [disabled]="workflowManualTargetFieldOptions.length === 0"
+                          placeholder="الحقل الذي سيختار منه المستخدم جهة التوجيه">
+                        </p-dropdown>
+                        <small class="field-helper">{{ workflowManualTargetFieldHelpText }}</small>
+                        <small class="field-error" *ngIf="workflowManualTargetFieldWarning">{{ workflowManualTargetFieldWarning }}</small>
+                      </div>
+
+                      <div class="field" *ngIf="showWorkflowDefaultTargetField">
+                        <label>الجهة الافتراضية<span class="required-mark" *ngIf="workflowModeValue === 'manual' && !workflowManualSelectionRequiredValue">*</span></label>
+                        <input pInputText type="text" formControlName="workflowDefaultTargetUnitId" placeholder="اختياري" />
+                        <small class="field-helper">
+                          تستخدم كمسار بديل عندما لا يختار المستخدم جهة التوجيه يدويًا.
+                        </small>
+                      </div>
+
+                      <div class="switches" *ngIf="showWorkflowManualSelectionToggles">
+                        <div class="switch-field" *ngIf="showWorkflowAllowManualSelectionToggle">
+                          <label>
+                            <span>السماح بالاختيار اليدوي</span>
+                            <p-inputSwitch formControlName="workflowAllowManualSelection" [disabled]="isWorkflowAllowManualSelectionLocked"></p-inputSwitch>
+                          </label>
+                          <small class="field-helper">{{ workflowAllowManualSelectionHelpText }}</small>
+                        </div>
+
+                        <div class="switch-field" *ngIf="showWorkflowManualSelectionRequiredToggle">
+                          <label>
+                            <span>الاختيار اليدوي إلزامي</span>
+                            <p-inputSwitch formControlName="workflowManualSelectionRequired"></p-inputSwitch>
+                          </label>
+                          <small class="field-helper">{{ workflowManualSelectionRequiredHelpText }}</small>
+                        </div>
+                      </div>
+                    </form>
+                  </p-tabPanel>
+
+                  <p-tabPanel header="Live Preview">
+                    <section class="policy-live-preview">
+                      <header>
+                        <h5>Runtime Context المستخدم الآن</h5>
+                        <p>المعاينة التالية تعتمد على context الحالي من Central Admin Shell.</p>
+                      </header>
+                      <div class="kv-grid preview-kv-grid">
+                        <div><span>Application</span><strong>{{ policyStudioSnapshot.runtimeContext.applicationId || '-' }}</strong></div>
+                        <div><span>Category</span><strong>{{ policyStudioSnapshot.runtimeContext.categoryId || '-' }}</strong></div>
+                        <div><span>Direction</span><strong>{{ policyStudioSnapshot.runtimeContext.documentDirection || '-' }}</strong></div>
+                        <div><span>Mode</span><strong>{{ policyStudioSnapshot.runtimeContext.requestMode || '-' }}</strong></div>
+                        <div><span>Creator Unit</span><strong>{{ policyStudioSnapshot.runtimeContext.creatorUnitId || '-' }}</strong></div>
+                        <div><span>Target Unit</span><strong>{{ policyStudioSnapshot.runtimeContext.targetUnitId || '-' }}</strong></div>
+                      </div>
+                    </section>
+
+                    <section class="policy-live-preview" *ngIf="policyStudioSnapshot.resolvedAccessPolicy as access">
+                      <header>
+                        <h5>Resolved Access Policy</h5>
+                      </header>
+                      <div class="kv-grid preview-kv-grid">
+                        <div><span>Create Mode</span><strong>{{ access.createMode }}</strong></div>
+                        <div><span>Create Units</span><strong>{{ access.createUnitIds.length }}</strong></div>
+                        <div><span>Read Units</span><strong>{{ access.readUnitIds.length }}</strong></div>
+                        <div><span>Work Units</span><strong>{{ access.workUnitIds.length }}</strong></div>
+                        <div><span>Can Create</span><strong>{{ access.canCreate ? 'نعم' : 'لا' }}</strong></div>
+                        <div><span>Can Read</span><strong>{{ access.canRead ? 'نعم' : 'لا' }}</strong></div>
+                      </div>
+                    </section>
+
+                    <section class="policy-live-preview" *ngIf="policyStudioSnapshot.resolvedWorkflowPolicy as workflow">
+                      <header>
+                        <h5>Resolved Workflow Policy</h5>
+                      </header>
+                      <div class="kv-grid preview-kv-grid">
+                        <div><span>Mode</span><strong>{{ workflow.mode }}</strong></div>
+                        <div><span>Direction Mode</span><strong>{{ workflow.directionMode === 'fixed' ? 'ثابت' : 'مرن' }}</strong></div>
+                        <div><span>Fixed Direction</span><strong>{{ workflow.fixedDirection || '-' }}</strong></div>
+                        <div><span>Manual Target Field</span><strong>{{ workflow.manualTargetFieldKey || '-' }}</strong></div>
+                        <div><span>Allow Manual</span><strong>{{ workflow.allowManualSelection ? 'نعم' : 'لا' }}</strong></div>
+                        <div><span>Required Manual</span><strong>{{ workflow.manualSelectionRequired ? 'نعم' : 'لا' }}</strong></div>
+                        <div><span>Resolved Target</span><strong>{{ workflow.resolvedTargetUnitId || '-' }}</strong></div>
+                        <div><span>Static Targets</span><strong>{{ workflow.staticTargetUnitIds.length }}</strong></div>
+                      </div>
+                    </section>
+
+                    <section class="policy-live-preview">
+                      <header>
+                        <h5>Field Metadata Impact</h5>
+                        <p>عدد الحقول التي تغيّر سلوكها بعد حل القواعد: {{ policyStudioSnapshot.changedFields.length }}</p>
+                      </header>
+                      <div class="table-wrap preview-audit-table-wrap" *ngIf="policyStudioSnapshot.changedFields.length > 0; else noPolicyFieldChanges">
+                        <table class="links-table preview-audit-table">
+                          <thead>
+                            <tr>
+                              <th>Field Key</th>
+                              <th>Label</th>
+                              <th>Visible</th>
+                              <th>Required</th>
+                              <th>Readonly</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr *ngFor="let item of policyStudioSnapshot.changedFields">
+                              <td>{{ item.fieldKey }}</td>
+                              <td>{{ item.beforeLabel }} → {{ item.afterLabel }}</td>
+                              <td>{{ item.beforeVisible ? 'نعم' : 'لا' }} → {{ item.afterVisible ? 'نعم' : 'لا' }}</td>
+                              <td>{{ item.beforeRequired ? 'نعم' : 'لا' }} → {{ item.afterRequired ? 'نعم' : 'لا' }}</td>
+                              <td>{{ item.beforeReadonly ? 'نعم' : 'لا' }} → {{ item.afterReadonly ? 'نعم' : 'لا' }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <ng-template #noPolicyFieldChanges>
+                        <p class="empty-state">لا توجد تغييرات Presentation Metadata ظاهرة على الحقول في سياق المعاينة الحالي.</p>
+                      </ng-template>
+                    </section>
+                  </p-tabPanel>
+                </p-tabView>
+
+                <div class="actions-row">
+                  <button pButton type="button" label="حفظ السياسات" icon="pi pi-save" [loading]="savingSettings" [disabled]="savingSettings || settingsForm.invalid || policyValidationErrors.length > 0" (click)="saveCategorySettings({ includePolicy: true })"></button>
+                </div>
+              </section>
+            </div>
+          </p-tabPanel>
+
+          <p-tabPanel header="الجروبات المرتبطة بالطلب">
+            <div #groupsScroll class="tab-scroll tab-scroll--groups" tabindex="0">
+              <div class="scroll-tools">
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(groupsScroll)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(groupsScroll, -480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(groupsScroll, 480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(groupsScroll)"></button>
+              </div>
+              <div class="tab-head-actions">
+                <button pButton type="button" icon="pi pi-plus" label="إضافة جروب" (click)="openCreateGroupDialog()"></button>
+                <button pButton type="button" icon="pi pi-sitemap" class="p-button-outlined" label="فتح نافذة ربط الحقول" (click)="openRelationsDialog()"></button>
+              </div>
+
+              <div class="table-wrap" *ngIf="linkedGroups.length > 0; else noLinkedGroups">
+                <p-table
+                  [value]="linkedGroups"
+                  [scrollable]="true"
+                  scrollHeight="flex"
+                  responsiveLayout="scroll"
+                  styleClass="p-datatable-sm rtl-table">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th>المعرف</th>
+                      <th>اسم الجروب</th>
+                      <th>الوصف</th>
+                      <th>قابل للتكرار</th>
+                      <th>عدد الحقول داخل الطلب</th>
+                      <th>إجراءات</th>
+                    </tr>
+                  </ng-template>
+
+                  <ng-template pTemplate="body" let-group>
+                    <tr>
+                      <td>{{ group.groupId }}</td>
+                      <td>{{ group.groupName || '-' }}</td>
+                      <td>{{ group.groupDescription || '-' }}</td>
+                      <td>{{ group.isExtendable ? 'نعم' : 'لا' }}</td>
+                      <td>{{ getGroupLinkedFieldsCount(group.groupId) }}</td>
+                      <td class="actions-col">
+                        <button pButton type="button" icon="pi pi-link" class="p-button-rounded p-button-text" (click)="focusGroup(group.groupId, { activateRelationsTab: true, scroll: true })"></button>
+                        <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text" (click)="openEditGroupDialog(group)"></button>
+                        <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="deleteGroup(group)"></button>
+                      </td>
+                    </tr>
+                  </ng-template>
+                </p-table>
+              </div>
+
+              <ng-template #noLinkedGroups>
+                <p class="empty-state">لا توجد جروبات مرتبطة بهذا الطلب حاليًا. أنشئ جروبًا ثم اربط به الحقول من نافذة الربط.</p>
+              </ng-template>
+            </div>
+          </p-tabPanel>
+
+          <p-tabPanel header="المعاينة">
+            <div #previewScroll class="tab-scroll tab-scroll--preview" tabindex="0">
+              <div class="scroll-tools">
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(previewScroll)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(previewScroll, -480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(previewScroll, 480)"></button>
+                <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(previewScroll)"></button>
+              </div>
+              <div class="tab-head-actions">
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-search"
+                  class="p-button-outlined p-button-sm"
+                  [label]="previewDiagnosticsVisible ? 'إخفاء فحص المعاينة' : 'إظهار فحص المعاينة'"
+                  (click)="previewDiagnosticsVisible = !previewDiagnosticsVisible"></button>
+              </div>
+              <div class="preview-loading" *ngIf="loadingPreview">
+                <p-progressSpinner></p-progressSpinner>
+              </div>
+
+              <div *ngIf="!loadingPreview" class="preview-container">
+                <ng-container *ngIf="previewCategoryMand.length > 0; else emptyPreview">
+                  <div class="preview-form-details-shell">
+                    <app-form-details
+                      [previewOnly]="true"
+                      [config]="previewFormConfig"
+                      [messageDto]="previewMessageDto"
+                      [isCurrentUser]="false"
+                      [tree]="previewEmptyTree"
+                      [categoryTree]="previewEmptyCategoryTree"
+                      [unitTree]="previewEmptyTree"
+                      [formSubmited]="false"
+                      [fileParameters]="previewEmptyFiles"
+                      [customFilteredCategoryMand]="previewCategoryMand">
+                    </app-form-details>
+                  </div>
+                </ng-container>
+
+                <ng-template #emptyPreview>
+                  <p class="empty-state">لا توجد حقول مهيأة للمعاينة لهذا النوع.</p>
+                </ng-template>
+              </div>
+
+              <section class="preview-diagnostics" *ngIf="previewDiagnosticsVisible && !loadingPreview && !managementMode && selectedCategory && previewInspection as audit">
+                <header>
+                  <h4>فحص المعاينة لهذا النوع</h4>
+                  <p>تشخيص مباشر يوضح سبب ظهور أو استبعاد كل حقل في المعاينة.</p>
+                </header>
+                <div class="kv-grid preview-kv-grid">
+                  <div><span>إجمالي الحقول المرتبطة</span><strong>{{ audit.totalLinked }}</strong></div>
+                  <div><span>حقول مرئية</span><strong>{{ audit.visibleLinked }}</strong></div>
+                  <div><span>حقول مخفية</span><strong>{{ audit.hiddenLinked }}</strong></div>
+                  <div><span>تعريفات حقول غير مفعلة</span><strong>{{ audit.inactiveDefinitions }}</strong></div>
+                  <div><span>تعريفات مفقودة</span><strong>{{ audit.missingDefinitions }}</strong></div>
+                  <div><span>مدرجة فعليًا في المعاينة</span><strong>{{ audit.includedInPreview }}</strong></div>
+                  <div><span>مستبعدة من المعاينة</span><strong>{{ audit.excludedFromPreview }}</strong></div>
+                </div>
+
+                <div class="table-wrap preview-audit-table-wrap" *ngIf="audit.items.length > 0">
+                  <table class="links-table preview-audit-table">
+                    <thead>
+                      <tr>
+                        <th>المجموعة</th>
+                        <th>الحقل</th>
+                        <th>مرئي</th>
+                        <th>تعريف الحقل مفعل</th>
+                        <th>ظهر في المعاينة</th>
+                        <th>السبب</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let item of audit.items; trackBy: trackByPreviewInspection">
+                        <td>{{ item.groupName }}</td>
+                        <td>
+                          <div class="field-meta">
+                            <strong>{{ item.fieldLabel }}</strong>
+                            <small>{{ item.fieldKey }}</small>
+                          </div>
+                        </td>
+                        <td>{{ item.isVisible ? 'نعم' : 'لا' }}</td>
+                        <td>{{ item.isFieldActive ? 'نعم' : 'لا' }}</td>
+                        <td>{{ item.inPreview ? 'نعم' : 'لا' }}</td>
+                        <td>{{ item.reason }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </p-tabPanel>
+        </p-tabView>
+      </div>
+    </ng-template>
+  </p-splitter>
+
+  <div class="management-content" *ngIf="!loading && managementMode">
+    <div *ngIf="selectedCategory as category; else noSelection">
+      <div class="scroll-tools scroll-tools--management">
+        <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(null)"></button>
+        <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(null, -480)"></button>
+        <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(null, 480)"></button>
+        <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(null)"></button>
+      </div>
+      <div class="groups-relations">
+        <article
+          class="group-card"
+          *ngFor="let group of managementGroupsForRelations; trackBy: trackByGroupId"
+          [id]="'group-card-' + group.groupId"
+          [class.focused]="focusedGroupId === group.groupId">
+          <header class="group-card-head">
+            <div>
+              <h4>{{ group.groupName || ('جروب #' + group.groupId) }}</h4>
+              <p>{{ getGroupLinkedFieldsCount(group.groupId) }} حقل داخل هذا الجروب ضمن الطلب الحالي</p>
+            </div>
+            <div class="group-head-actions">
+              <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text" (click)="openEditGroupDialog(group)"></button>
+              <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="deleteGroup(group)"></button>
+            </div>
+          </header>
+
+          <div class="group-add-row">
+            <p-dropdown
+              [options]="toAvailableFieldOptions(group.groupId)"
+              [(ngModel)]="groupFieldDraft[group.groupId]"
+              [ngModelOptions]="{ standalone: true }"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="اختر حقلًا لإضافته"
+              [showClear]="true"
+              appendTo="body"
+              panelStyleClass="rtl-overlay-panel">
+            </p-dropdown>
+            <button
+              pButton
+              type="button"
+              icon="pi pi-plus"
+              label="إضافة الحقل"
+              [disabled]="toAvailableFieldOptions(group.groupId).length === 0"
+              (click)="addFieldToGroup(group.groupId)"></button>
+          </div>
+
+          <div class="links-table-wrap" *ngIf="getGroupLinks(group.groupId).length > 0; else emptyManagementGroupLinks">
+            <table class="links-table">
+              <thead>
+                <tr>
+                  <th>الترتيب</th>
+                  <th>الحقل</th>
+                  <th>النوع</th>
+                  <th>مفعل</th>
+                  <th>مرئي</th>
+                  <th>إعدادات عرض</th>
+                  <th>إزالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let link of getGroupLinks(group.groupId); trackBy: trackByLink">
+                  <td class="order-cell">
+                    <button pButton type="button" icon="pi pi-chevron-up" class="p-button-rounded p-button-text p-button-sm" (click)="moveLinkWithinGroup(group.groupId, link, -1)"></button>
+                    <button pButton type="button" icon="pi pi-chevron-down" class="p-button-rounded p-button-text p-button-sm" (click)="moveLinkWithinGroup(group.groupId, link, 1)"></button>
+                    <input
+                      pInputText
+                      type="number"
+                      [(ngModel)]="link.displayOrder"
+                      [ngModelOptions]="{ standalone: true }"
+                      (blur)="onDisplayOrderInput(group.groupId)" />
+                  </td>
+                  <td>
+                    <div class="field-meta">
+                      <strong>{{ getFieldDisplayName(link.fieldKey) }}</strong>
+                      <small>{{ link.fieldKey }}</small>
+                    </div>
+                  </td>
+                  <td>{{ getFieldTypeDisplay(link.fieldType) }}</td>
+                  <td>
+                    <p-inputSwitch [(ngModel)]="link.isActive" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+                  </td>
+                  <td>
+                    <p-inputSwitch [(ngModel)]="link.isVisible" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+                  </td>
+                  <td>
+                    <input pInputText type="text" [(ngModel)]="link.displaySettingsJson" [ngModelOptions]="{ standalone: true }" placeholder="JSON أو إعدادات عرض" />
+                  </td>
+                  <td class="actions-col">
+                    <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="removeLinkFromGroup(link)"></button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <ng-template #emptyManagementGroupLinks>
+            <p class="group-empty">لا توجد حقول داخل هذا الجروب حتى الآن.</p>
+          </ng-template>
+        </article>
+
+        <p class="empty-state" *ngIf="managementGroupsForRelations.length === 0">لا توجد جروبات معرفة بعد. أضف جروبًا ثم ابدأ الربط.</p>
+      </div>
+    </div>
+  </div>
+
+  <ng-template #noSelection>
+    <div class="no-selection">{{ managementMode ? 'لا توجد أنواع طلبات متاحة حاليًا.' : 'اختر نوعًا من الشجرة للبدء.' }}</div>
+  </ng-template>
+</section>
+
+<p-dialog
+  [(visible)]="relationsDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(1280px, 97vw)' }"
+  [contentStyle]="{ 'max-height': '82vh', overflow: 'hidden', padding: '0' }"
+  header="الحقول داخل الجروبات"
+  appendTo="body"
+  styleClass="rtl-dialog dynamic-admin-dialog dynamic-relations-dialog">
+  <div #relationsDialogScroll class="tab-scroll tab-scroll--relations tab-scroll--dialog" tabindex="0" (wheel)="onTabWheel($event, relationsDialogScroll)">
+    <div class="scroll-tools">
+      <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-up" label="البداية" (click)="scrollContainerToTop(relationsDialogScroll)"></button>
+      <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-up" label="أعلى" (click)="scrollContainerBy(relationsDialogScroll, -480)"></button>
+      <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-down" label="أسفل" (click)="scrollContainerBy(relationsDialogScroll, 480)"></button>
+      <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-angle-double-down" label="النهاية" (click)="scrollContainerToBottom(relationsDialogScroll)"></button>
+    </div>
+    <div class="tab-head-actions">
+      <button pButton type="button" icon="pi pi-save" label="حفظ الربط" [loading]="savingLinks" [disabled]="savingLinks" (click)="saveLinks()"></button>
+      <button pButton type="button" icon="pi pi-database" class="p-button-outlined" [label]="showFieldLibrary ? 'إخفاء مكتبة الحقول' : 'إظهار مكتبة الحقول'" (click)="toggleFieldLibrary()"></button>
+      <span class="muted-text">الحقول غير المرتبطة: {{ unlinkedFieldsCount }}</span>
+    </div>
+
+    <div class="unlinked-box" *ngIf="unlinkedSelectableFields.length > 0">
+      <h5>حقول متاحة للربط</h5>
+      <div class="unlinked-list">
+        <span class="unlinked-item" *ngFor="let field of unlinkedSelectableFields">
+          <strong>{{ field.fieldLabel || field.fieldKey }}</strong>
+          <small>{{ field.fieldKey }}</small>
+        </span>
+      </div>
+    </div>
+
+    <div class="relations-loading" *ngIf="loadingLinks">
+      <p-progressSpinner></p-progressSpinner>
+    </div>
+
+    <div class="groups-relations" *ngIf="!loadingLinks">
+      <article
+        class="group-card"
+        *ngFor="let group of groupsForRelations; trackBy: trackByGroupId"
+        [id]="'group-card-' + group.groupId"
+        [class.focused]="focusedGroupId === group.groupId">
+        <header class="group-card-head">
+          <div>
+            <h4>{{ group.groupName || ('جروب #' + group.groupId) }}</h4>
+            <p>{{ getGroupLinkedFieldsCount(group.groupId) }} حقل داخل هذا الجروب ضمن الطلب الحالي</p>
+          </div>
+          <div class="group-head-actions">
+            <button pButton type="button" icon="pi pi-pencil" class="p-button-rounded p-button-text" (click)="openEditGroupDialog(group)"></button>
+            <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="deleteGroup(group)"></button>
+          </div>
+        </header>
+
+        <div class="group-add-row">
+          <p-dropdown
+            [options]="toAvailableFieldOptions(group.groupId)"
+            [(ngModel)]="groupFieldDraft[group.groupId]"
+            [ngModelOptions]="{ standalone: true }"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="اختر حقلًا لإضافته"
+            [showClear]="true"
+            appendTo="body"
+            panelStyleClass="rtl-overlay-panel">
+          </p-dropdown>
+          <button
+            pButton
+            type="button"
+            icon="pi pi-plus"
+            label="إضافة الحقل"
+            [disabled]="toAvailableFieldOptions(group.groupId).length === 0"
+            (click)="addFieldToGroup(group.groupId)"></button>
+        </div>
+
+        <div class="links-table-wrap" *ngIf="getGroupLinks(group.groupId).length > 0; else emptyDialogGroupLinks">
+          <table class="links-table">
+            <thead>
+              <tr>
+                <th>الترتيب</th>
+                <th>الحقل</th>
+                <th>النوع</th>
+                <th>مفعل</th>
+                <th>مرئي</th>
+                <th>إعدادات عرض</th>
+                <th>إزالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let link of getGroupLinks(group.groupId); trackBy: trackByLink">
+                <td class="order-cell">
+                  <button pButton type="button" icon="pi pi-chevron-up" class="p-button-rounded p-button-text p-button-sm" (click)="moveLinkWithinGroup(group.groupId, link, -1)"></button>
+                  <button pButton type="button" icon="pi pi-chevron-down" class="p-button-rounded p-button-text p-button-sm" (click)="moveLinkWithinGroup(group.groupId, link, 1)"></button>
+                  <input
+                    pInputText
+                    type="number"
+                    [(ngModel)]="link.displayOrder"
+                    [ngModelOptions]="{ standalone: true }"
+                    (blur)="onDisplayOrderInput(group.groupId)" />
+                </td>
+                <td>
+                  <div class="field-meta">
+                    <strong>{{ getFieldDisplayName(link.fieldKey) }}</strong>
+                    <small>{{ link.fieldKey }}</small>
+                  </div>
+                </td>
+                <td>{{ getFieldTypeDisplay(link.fieldType) }}</td>
+                <td>
+                  <p-inputSwitch [(ngModel)]="link.isActive" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+                </td>
+                <td>
+                  <p-inputSwitch [(ngModel)]="link.isVisible" [ngModelOptions]="{ standalone: true }"></p-inputSwitch>
+                </td>
+                <td>
+                  <input pInputText type="text" [(ngModel)]="link.displaySettingsJson" [ngModelOptions]="{ standalone: true }" placeholder="JSON أو إعدادات عرض" />
+                </td>
+                <td class="actions-col">
+                  <button pButton type="button" icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" (click)="removeLinkFromGroup(link)"></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <ng-template #emptyDialogGroupLinks>
+          <p class="group-empty">لا توجد حقول داخل هذا الجروب حتى الآن.</p>
+        </ng-template>
+      </article>
+
+      <p class="empty-state" *ngIf="groupsForRelations.length === 0">لا توجد جروبات معرفة بعد. أضف جروبًا أولًا من تبويب الجروبات.</p>
+    </div>
+
+    <section class="field-library-panel" *ngIf="showFieldLibrary">
+      <header>
+        <h4>مكتبة الحقول الديناميكية</h4>
+        <p>إدارة تعريف الحقول (إضافة/تعديل/حذف) دون مغادرة شاشة إدارة الأنواع.</p>
+      </header>
+
+      <app-dynamic-fields-manager
+        [embeddedMode]="true"
+        [selectedCategoryId]="selectedCategory?.categoryId || null"
+        [selectedApplicationId]="selectedCategory?.applicationId || null"
+        (fieldsChanged)="onFieldsChanged()">
+      </app-dynamic-fields-manager>
+    </section>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="إغلاق" class="p-button-text" (click)="relationsDialogVisible = false"></button>
+    <button pButton type="button" label="حفظ الربط" icon="pi pi-save" [loading]="savingLinks" [disabled]="savingLinks || !selectedCategory" (click)="saveLinks()"></button>
+  </ng-template>
+</p-dialog>
+
+<p-dialog
+  [(visible)]="groupDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(560px, 95vw)' }"
+  [contentStyle]="{ 'max-height': '75vh', overflow: 'auto' }"
+  [header]="editingGroupId ? 'تعديل جروب' : 'إضافة جروب'"
+  appendTo="body"
+  styleClass="rtl-dialog dynamic-admin-dialog">
+  <div dir="rtl">
+    <form class="form-grid single-col" [formGroup]="groupForm">
+      <div class="field">
+        <label>اسم الجروب *</label>
+        <input pInputText type="text" formControlName="groupName" />
+        <small class="field-error" *ngIf="isInvalid(groupForm, 'groupName')">
+          {{ getValidationMessage(groupForm, 'groupName', 'اسم الجروب') }}
+        </small>
+      </div>
+
+      <div class="field">
+        <label>الوصف</label>
+        <input pInputText type="text" formControlName="groupDescription" />
+        <small class="field-error" *ngIf="isInvalid(groupForm, 'groupDescription')">
+          {{ getValidationMessage(groupForm, 'groupDescription', 'وصف الجروب') }}
+        </small>
+      </div>
+
+      <div class="field">
+        <label>عدد العناصر في الصف</label>
+        <input pInputText type="number" formControlName="groupWithInRow" />
+        <small class="field-error" *ngIf="isInvalid(groupForm, 'groupWithInRow')">
+          {{ getValidationMessage(groupForm, 'groupWithInRow', 'عدد العناصر في الصف') }}
+        </small>
+      </div>
+
+      <div class="field switch-inline">
+        <label>قابل للتكرار</label>
+        <p-inputSwitch formControlName="isExtendable"></p-inputSwitch>
+      </div>
+    </form>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="إلغاء" class="p-button-text" (click)="groupDialogVisible = false"></button>
+    <button pButton type="button" label="حفظ" icon="pi pi-save" [disabled]="groupForm.invalid" (click)="saveGroup()"></button>
+  </ng-template>
+</p-dialog>
+
+<p-dialog
+  [(visible)]="createCategoryDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: 'min(760px, 95vw)' }"
+  [contentStyle]="{ 'max-height': '75vh', overflow: 'auto' }"
+  header="إضافة نوع جديد"
+  appendTo="body"
+  styleClass="rtl-dialog dynamic-admin-dialog">
+  <div dir="rtl">
+    <form class="form-grid" [formGroup]="createCategoryForm">
+      <div class="field">
+        <label>المعرف الأب</label>
+        <input pInputText type="number" formControlName="parentCategoryId" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'parentCategoryId')">
+          {{ getValidationMessage(createCategoryForm, 'parentCategoryId', 'المعرف الأب') }}
+        </small>
+      </div>
+
+      <div class="field">
+        <label>اسم النوع *</label>
+        <input pInputText type="text" formControlName="categoryName" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'categoryName')">
+          {{ getValidationMessage(createCategoryForm, 'categoryName', 'اسم النوع') }}
+        </small>
+      </div>
+
+      <div class="field">
+        <label>معرف التطبيق</label>
+        <input pInputText type="text" formControlName="applicationId" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'applicationId')">
+          {{ getValidationMessage(createCategoryForm, 'applicationId', 'معرف التطبيق') }}
+        </small>
+      </div>
+
+      <div class="field">
+        <label>رقم مسار العمل</label>
+        <input pInputText type="number" formControlName="catWorkFlow" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'catWorkFlow')">
+          {{ getValidationMessage(createCategoryForm, 'catWorkFlow', 'رقم مسار العمل') }}
+        </small>
+      </div>
+
+      <div class="field">
+        <label>بيانات وصفية</label>
+        <input pInputText type="text" formControlName="catMend" />
+      </div>
+
+      <div class="field">
+        <label>إلى</label>
+        <input pInputText type="text" formControlName="to" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'to')">
+          {{ getValidationMessage(createCategoryForm, 'to', 'حقل إلى') }}
+        </small>
+      </div>
+
+      <div class="field">
+        <label>نسخة</label>
+        <input pInputText type="text" formControlName="cc" />
+        <small class="field-error" *ngIf="isInvalid(createCategoryForm, 'cc')">
+          {{ getValidationMessage(createCategoryForm, 'cc', 'حقل نسخة') }}
+        </small>
+      </div>
+
+      <div class="switches">
+        <label><span>مفعل</span><p-inputSwitch formControlName="isActive"></p-inputSwitch></label>
+        <label><span>إشعارات الرسائل النصية</span><p-inputSwitch formControlName="catSms"></p-inputSwitch></label>
+        <label><span>إشعارات البريد الإلكتروني</span><p-inputSwitch formControlName="catMailNotification"></p-inputSwitch></label>
+      </div>
+    </form>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="إلغاء" class="p-button-text" (click)="createCategoryDialogVisible = false"></button>
+    <button pButton type="button" label="إنشاء" icon="pi pi-check" [loading]="savingCategory" [disabled]="savingCategory || createCategoryForm.invalid" (click)="createCategory()"></button>
+  </ng-template>
+</p-dialog>

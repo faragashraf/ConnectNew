@@ -46,6 +46,7 @@ namespace Models.DTO.Common
         public string EventSMSAccepted { get; set; }
         public string EventSMSARejected { get; set; }
         public List<string> LtraExcelColumns { get; set; }
+        public int SummerCapacitySignalRTimeoutMs { get; set; } = 4000;
     }
 
     public class NotificationChannelsOptions
@@ -71,6 +72,9 @@ namespace Models.DTO.Common
 
         public string AutoCancelSmsTemplate { get; set; } =
             "السيد/ة {FirstName}، نحيطكم علماً بأنه تم إلغاء طلب المصيف رقم {RequestRef} تلقائياً لعدم السداد قبل الموعد النهائي {PaymentDueAtUtc}. يمكنكم تقديم طلب جديد وفق الإتاحة الحالية.";
+
+        public string PaymentUnderReviewSmsTemplate { get; set; } =
+            "السيد/ة {FirstName}، تم استلام سداد طلب المصيف رقم {RequestRef} بنجاح، وحالة الطلب الآن قيد المراجعة. سيتم إفادتكم بعد مراجعة الطلب (لتأكيد حجز الوحدة المصيفية).";
 
         public string AdminActionSignalRTemplate { get; set; } =
             "تم تنفيذ إجراء إداري ({ActionLabel}) على طلب المصيف رقم {RequestRef}. {AdminCommentLine}";

@@ -5,8 +5,10 @@ import { GenericFormsIsolationProvider, GenericFormsService, GroupInfo } from 's
 import { GenericDynamicFormDetailsComponent } from '../../generic-dynamic-form-details/generic-dynamic-form-details.component';
 import { CdCategoryMandDto, ListRequestModel, MessageDto, RequestedData, SearchKind, TkmendField } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
-import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
+import { ApiException, FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import {
+  SummerPricingQuoteDto,
+  SummerPricingQuoteRequest,
   SummerRequestSummaryDto,
   SummerWaveCapacityDto
 } from 'src/app/shared/services/BackendServices/SummerWorkflow/SummerWorkflow.dto';
@@ -23,8 +25,20 @@ import {
   SUMMER_DYNAMIC_APPLICATION_ID
 } from '../../summer-shared/core/summer-feature.config';
 import { SUMMER_CANONICAL_FIELD_KEYS } from '../../summer-shared/core/summer-field-aliases';
+import { SUMMER_UI_TEXTS_AR } from '../../summer-shared/core/summer-ui-texts.ar';
+import {
+  isValidSummerCompanionName,
+  normalizeSummerCompanionName
+} from '../../summer-shared/core/summer-companion-name.policy';
+import { deriveStayModeControlPolicy } from '../../summer-shared/core/summer-pricing-ui-rules';
 import { SummerRequestsRealtimeService } from '../../summer-shared/core/summer-requests-realtime.service';
 import { SummerCapacityRealtimeEvent } from '../../summer-shared/core/summer-realtime-event.models';
+import {
+  canRegisterForSummerDestination,
+  filterSummerDestinationsForBooking,
+  SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE
+} from '../../summer-shared/core/summer-destination-access.policy';
+import Swal from 'sweetalert2';
 
 type OwnerDefaults = {
   name: string;
@@ -33,6 +47,46 @@ type OwnerDefaults = {
   phone: string;
   extraPhone: string;
 };
+
+type SummerPaymentMode = 'CASH' | 'INSTALLMENT';
+
+type SummerInstallmentPlanItem = {
+  installmentNo: number;
+  amount: number;
+  isPaid: boolean;
+  paidAtLocal: string;
+};
+
+const SUMMER_PAYMENT_MODE_CASH: SummerPaymentMode = 'CASH';
+const SUMMER_PAYMENT_MODE_INSTALLMENT: SummerPaymentMode = 'INSTALLMENT';
+const SUMMER_INSTALLMENTS_MIN_COUNT = 2;
+const SUMMER_INSTALLMENTS_MAX_COUNT = 7;
+const SUMMER_INSTALLMENTS_DEFAULT_COUNT = 7;
+const SUMMER_WAVE_STARTS_AT_ISO_FIELD_KEYS = ['SummerWaveStartsAtIso', 'SUM2026_WaveStartsAtIso', 'WaveStartsAtIso'] as const;
+const SUMMER_PAYMENT_MODE_FIELD_KEYS = ['Summer_PaymentMode', 'SUM2026_PaymentMode', 'PaymentMode'] as const;
+const SUMMER_INSTALLMENT_COUNT_FIELD_KEYS = ['Summer_PaymentInstallmentCount', 'SUM2026_PaymentInstallmentCount'] as const;
+const SUMMER_INSTALLMENTS_TOTAL_FIELD_KEYS = ['Summer_PaymentInstallmentsTotal', 'SUM2026_PaymentInstallmentsTotal'] as const;
+
+function resolveInstallmentAmountFieldKeys(installmentNo: number): string[] {
+  return [
+    `Summer_PaymentInstallment${installmentNo}Amount`,
+    `SUM2026_PaymentInstallment${installmentNo}Amount`
+  ];
+}
+
+function resolveInstallmentPaidFieldKeys(installmentNo: number): string[] {
+  return [
+    `Summer_PaymentInstallment${installmentNo}Paid`,
+    `SUM2026_PaymentInstallment${installmentNo}Paid`
+  ];
+}
+
+function resolveInstallmentPaidAtFieldKeys(installmentNo: number): string[] {
+  return [
+    `Summer_PaymentInstallment${installmentNo}PaidAtUtc`,
+    `SUM2026_PaymentInstallment${installmentNo}PaidAtUtc`
+  ];
+}
 
 @Component({
   selector: 'app-summer-dynamic-booking-builder',
@@ -68,10 +122,31 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   editRequestError = '';
   hasEditChanges = false;
   canUseProxyRegistration = false;
+  canSelectMembershipType = false;
+  canUseFrozenUnitsInCurrentFlow = false;
+  hasSummerGeneralManagerPermission = false;
 
   bookingCapacityLoading = false;
   bookingWaveCapacities: SummerWaveCapacityDto[] = [];
+  includeFrozenUnitsInBooking = false;
+  membershipTypeValue = 'WORKER_MEMBER';
+  paymentModeValue: SummerPaymentMode = SUMMER_PAYMENT_MODE_CASH;
+  installmentCountValue = SUMMER_INSTALLMENTS_DEFAULT_COUNT;
+  installmentPlan: SummerInstallmentPlanItem[] = [];
+  installmentPlanError = '';
+  pricingQuoteLoading = false;
+  pricingQuoteError = '';
+  pricingQuote: SummerPricingQuoteDto | null = null;
   myRequests: SummerRequestSummaryDto[] = [];
+  readonly destinationAccessDeniedMessage = SUMMER_DESTINATION_ACCESS_DENIED_MESSAGE;
+  readonly membershipTypeOptions: Array<{ label: string; value: string }> = [
+    { label: 'عضو عامل', value: 'WORKER_MEMBER' },
+    { label: 'عضو غير عامل', value: 'NON_WORKER_MEMBER' }
+  ];
+  readonly paymentModeOptions: Array<{ label: string; value: SummerPaymentMode }> = [
+    { label: 'كاش', value: SUMMER_PAYMENT_MODE_CASH },
+    { label: 'تقسيط', value: SUMMER_PAYMENT_MODE_INSTALLMENT }
+  ];
 
   private readonly subscriptions = new Subscription();
   private baseFormConfig: ComponentConfig;
@@ -79,6 +154,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private loadedEditRequestId: number | null = null;
   private initialEditSignature = '';
   private lastProxyEnabled = false;
+  private lastPricingQuoteKey = '';
+  private installmentPlanAutoGenerated = true;
+  private activeCompanionRelationLimitAlerts = new Set<string>();
 
   constructor(
     private readonly fb: FormBuilder,
@@ -97,10 +175,15 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       ...this.baseFormConfig
     });
     this.ticketForm = this.fb.group({});
+    this.installmentPlan = this.createInstallmentPlanWithEqualDistribution(
+      0,
+      this.installmentCountValue
+    );
   }
 
   ngOnInit(): void {
     this.refreshProxyModeAccess();
+    this.syncMembershipTypeAccessAndDefaults();
     this.resolvedApplicationId = this.applicationId;
     this.resolveEditMode();
     this.applyFormModeConfig();
@@ -134,22 +217,199 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return this.destinations.find(item => item.categoryId === this.selectedDestinationId);
   }
 
+  get destinationSelectionOptions(): SummerDestinationConfig[] {
+    if (this.isEditMode) {
+      return this.destinations;
+    }
+
+    return filterSummerDestinationsForBooking(this.destinations, this.canUseProxyRegistration);
+  }
+
   get bookingCapacitySummary(): SummerWaveCapacityDto[] {
     return [...this.bookingWaveCapacities].sort((a, b) => a.familyCount - b.familyCount);
   }
 
+  get canUseFrozenUnitsToggle(): boolean {
+    return this.canUseFrozenUnitsInCurrentFlow;
+  }
+
+  get includeFrozenUnitsForApi(): boolean {
+    return this.canUseFrozenUnitsToggle && this.includeFrozenUnitsInBooking;
+  }
+
+  get selectedMembershipType(): string {
+    return this.membershipTypeValue;
+  }
+
+  get selectedPaymentMode(): SummerPaymentMode {
+    return this.paymentModeValue;
+  }
+
+  get isInstallmentMode(): boolean {
+    return this.paymentModeValue === SUMMER_PAYMENT_MODE_INSTALLMENT;
+  }
+
+  get selectedInstallmentCount(): number {
+    return this.normalizeInstallmentCount(this.installmentCountValue);
+  }
+
+  get canEditInstallmentPlanManually(): boolean {
+    return this.hasSummerGeneralManagerPermission;
+  }
+
+  get canEditPaymentPlanSettings(): boolean {
+    return !this.isEditMode || this.hasSummerGeneralManagerPermission;
+  }
+
+  get canManageInstallmentPaymentState(): boolean {
+    return this.hasSummerGeneralManagerPermission;
+  }
+
+  get installmentPlanTotalAmount(): number {
+    return this.roundToTwoDecimals(
+      this.installmentPlan.reduce((sum, installment) => sum + this.normalizeInstallmentAmount(installment.amount), 0)
+    );
+  }
+
   get submitDisabled(): boolean {
-    return this.isEditMode && !this.hasEditChanges;
+    if (this.isEditMode && !this.hasEditChanges) {
+      return true;
+    }
+
+    if (this.canSelectMembershipType && !this.hasValidMembershipSelection()) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private get isAdminEditOverrideActive(): boolean {
+    return this.isEditMode && this.canUseProxyRegistration;
+  }
+
+  onMembershipTypeChanged(value: string | null | undefined): void {
+    if (!this.canSelectMembershipType) {
+      this.membershipTypeValue = 'WORKER_MEMBER';
+      return;
+    }
+
+    const normalized = this.normalizeMembershipType(String(value ?? ''));
+    this.membershipTypeValue = normalized;
+    this.loadPricingQuote();
+    this.updateEditChangeState();
+  }
+
+  onPaymentModeChanged(value: string | null | undefined): void {
+    if (!this.canEditPaymentPlanSettings) {
+      return;
+    }
+
+    const normalized = this.normalizePaymentMode(String(value ?? ''));
+    if (normalized === this.paymentModeValue) {
+      return;
+    }
+
+    this.paymentModeValue = normalized;
+    this.installmentPlanError = '';
+
+    if (this.paymentModeValue === SUMMER_PAYMENT_MODE_INSTALLMENT) {
+      this.installmentCountValue = SUMMER_INSTALLMENTS_DEFAULT_COUNT;
+      this.installmentPlan = this.createInstallmentPlanWithEqualDistribution(
+        this.getPricingGrandTotal(),
+        this.installmentCountValue
+      );
+      this.installmentPlanAutoGenerated = true;
+      this.validateInstallmentPlan(false);
+    } else {
+      this.resetInstallmentPlanValues(false);
+    }
+
+    this.updateEditChangeState();
+  }
+
+  onInstallmentCountChanged(value: number | string | null | undefined): void {
+    if (!this.canEditPaymentPlanSettings) {
+      return;
+    }
+
+    const normalizedCount = this.normalizeInstallmentCount(value);
+    if (normalizedCount === this.installmentCountValue) {
+      return;
+    }
+
+    this.installmentCountValue = normalizedCount;
+    if (this.isInstallmentMode) {
+      this.installmentPlan = this.createInstallmentPlanWithEqualDistribution(
+        this.getPricingGrandTotal(),
+        normalizedCount
+      );
+      this.installmentPlanAutoGenerated = true;
+      this.validateInstallmentPlan(false);
+    }
+
+    this.updateEditChangeState();
+  }
+
+  onInstallmentAmountChanged(installmentNo: number, rawValue: string | number | null | undefined): void {
+    if (!this.canEditInstallmentPlanManually) {
+      return;
+    }
+
+    const target = this.installmentPlan.find(item => item.installmentNo === installmentNo);
+    if (!target) {
+      return;
+    }
+
+    target.amount = this.normalizeInstallmentAmount(rawValue);
+    this.installmentPlanAutoGenerated = false;
+    this.validateInstallmentPlan();
+    this.updateEditChangeState();
+  }
+
+  onInstallmentPaidChanged(installmentNo: number, value: boolean): void {
+    if (!this.canManageInstallmentPaymentState) {
+      return;
+    }
+
+    const target = this.installmentPlan.find(item => item.installmentNo === installmentNo);
+    if (!target) {
+      return;
+    }
+
+    target.isPaid = Boolean(value);
+    if (!target.isPaid) {
+      target.paidAtLocal = '';
+    }
+    this.updateEditChangeState();
+  }
+
+  onInstallmentPaidAtChanged(installmentNo: number, localDateTime: string | null | undefined): void {
+    if (!this.canManageInstallmentPaymentState) {
+      return;
+    }
+
+    const target = this.installmentPlan.find(item => item.installmentNo === installmentNo);
+    if (!target) {
+      return;
+    }
+
+    target.paidAtLocal = String(localDateTime ?? '').trim();
+    this.updateEditChangeState();
   }
 
   onDestinationChanged(
     value: string | number | null,
-    options?: { preserveMessageFields?: boolean; resetFiles?: boolean }
+    options?: { preserveMessageFields?: boolean; resetFiles?: boolean; preservePaymentPlan?: boolean }
   ): void {
     const categoryId = Number(value);
     this.selectedDestinationId = Number.isFinite(categoryId) && categoryId > 0 ? categoryId : null;
     this.bookingValidationAlerts = [];
+    this.activeCompanionRelationLimitAlerts.clear();
     this.bookingWaveCapacities = [];
+    this.pricingQuote = null;
+    this.pricingQuoteError = '';
+    this.pricingQuoteLoading = false;
+    this.lastPricingQuoteKey = '';
     if (options?.resetFiles !== false) {
       this.fileParameters = [];
     }
@@ -157,6 +417,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.genericFormService.dynamicGroups = [];
     this.lastProxyEnabled = false;
     this.editRequestError = '';
+    if (options?.preservePaymentPlan !== true) {
+      this.resetPaymentPlanState();
+    }
     if (!this.isEditMode) {
       this.hasEditChanges = false;
       this.initialEditSignature = '';
@@ -165,6 +428,16 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     const destination = this.selectedDestination;
     if (!destination) {
       this.customFilteredCategoryMand = [];
+      if (!this.isEditMode && this.selectedDestinationId) {
+        this.resetUnavailableDestinationSelection();
+        this.showDestinationAccessDeniedMessage();
+      }
+      return;
+    }
+
+    if (!this.isEditMode && !this.canRegisterForDestination(destination)) {
+      this.resetUnavailableDestinationSelection();
+      this.showDestinationAccessDeniedMessage();
       return;
     }
 
@@ -214,6 +487,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     const preserveMessageFields = options?.preserveMessageFields === true;
+    if (!preserveMessageFields) {
+      this.membershipTypeValue = 'WORKER_MEMBER';
+    }
     this.messageDto = {
       ...(this.messageDto ?? {}),
       fields: preserveMessageFields ? [...(this.messageDto?.fields ?? [])] : [],
@@ -227,7 +503,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.ticketForm = form;
     this.applyDestinationFieldDefaults();
     this.applyOwnerDefaultMode(this.isEditMode);
+    this.syncMembershipTypeAccessAndDefaults();
     this.applySummerBusinessRules();
+    this.refreshCompanionRelationLimitAlertsInUi();
     this.updateEditChangeState();
   }
 
@@ -242,12 +520,25 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     if (this.matchesAlias(baseName, this.engine.aliases.familyCount) || this.matchesAlias(baseName, this.engine.aliases.extraCount)) {
       this.applySummerBusinessRules();
       this.syncCompanionInstances();
+      this.refreshCompanionRelationLimitAlertsInUi();
       return;
     }
 
     if (this.matchesAlias(baseName, this.engine.aliases.companionRelation)) {
       this.engine.ensureAgeRule(this.ticketForm, this.genericFormService, controlFullName);
       this.engine.ensureRelationOtherRule(this.ticketForm, this.genericFormService, controlFullName);
+      this.refreshCompanionRelationLimitAlertsInUi();
+      const clearedInvalidRelation = this.clearCompanionRelationSelectionIfLimitExceeded(controlFullName);
+      if (clearedInvalidRelation) {
+        this.engine.ensureAgeRule(this.ticketForm, this.genericFormService, controlFullName);
+        this.engine.ensureRelationOtherRule(this.ticketForm, this.genericFormService, controlFullName);
+        this.refreshCompanionRelationLimitAlertsInUi();
+      }
+      return;
+    }
+
+    if (this.matchesAlias(baseName, this.engine.aliases.companionRelationOther)) {
+      this.refreshCompanionRelationLimitAlertsInUi();
       return;
     }
 
@@ -256,15 +547,90 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return;
     }
 
+    if (this.matchesAlias(baseName, this.engine.aliases.stayMode)) {
+      this.loadPricingQuote(true);
+      return;
+    }
+
+    if (this.matchesAlias(baseName, this.engine.aliases.membershipType)) {
+      this.syncMembershipTypeAccessAndDefaults();
+      this.loadPricingQuote();
+      return;
+    }
+
     if (this.matchesAlias(baseName, this.engine.aliases.waveCode)) {
       this.syncWaveLabel();
       this.loadBookingCapacity();
+      this.loadPricingQuote();
     }
   }
 
   onFileUpload(files: FileParameter[]): void {
     this.fileParameters = [...(files ?? [])];
     this.updateEditChangeState();
+  }
+
+  onIncludeFrozenUnitsChanged(value: boolean): void {
+    this.includeFrozenUnitsInBooking = this.canUseFrozenUnitsToggle ? Boolean(value) : false;
+    this.loadBookingCapacity();
+  }
+
+  getCapacityDisplayedAvailableUnits(row: SummerWaveCapacityDto): number {
+    const publicAvailableUnits = Number(row?.availableUnits ?? 0) || 0;
+    const frozenAvailableUnits = Number(row?.frozenAvailableUnits ?? 0) || 0;
+    return this.includeFrozenUnitsForApi
+      ? Math.max(0, publicAvailableUnits + frozenAvailableUnits)
+      : Math.max(0, publicAvailableUnits);
+  }
+
+  getCapacityPublicAvailableUnits(row: SummerWaveCapacityDto): number {
+    const exposedAvailableUnits = Number(row?.availableUnits ?? 0) || 0;
+    const frozenAvailableUnits = Number(row?.frozenAvailableUnits ?? 0) || 0;
+    if (!this.includeFrozenUnitsForApi) {
+      return Math.max(0, exposedAvailableUnits);
+    }
+
+    return Math.max(0, exposedAvailableUnits - frozenAvailableUnits);
+  }
+
+  getCapacityFrozenAvailableUnits(row: SummerWaveCapacityDto): number {
+    if (!this.includeFrozenUnitsForApi || !this.canUseFrozenUnitsToggle) {
+      return 0;
+    }
+
+    return Math.max(0, Number(row?.frozenAvailableUnits ?? 0) || 0);
+  }
+
+  getCapacityFrozenAssignedUnits(row: SummerWaveCapacityDto): number {
+    if (!this.includeFrozenUnitsForApi || !this.canUseFrozenUnitsToggle) {
+      return 0;
+    }
+
+    return Math.max(0, Number(row?.frozenAssignedUnits ?? 0) || 0);
+  }
+
+  getCapacityNote(row: SummerWaveCapacityDto): string {
+    const totalUnits = Number(row?.totalUnits ?? 0) || 0;
+    const usedUnits = Number(row?.usedUnits ?? 0) || 0;
+    const frozenAvailableUnits = Number(row?.frozenAvailableUnits ?? 0) || 0;
+    const frozenAssignedUnits = Number(row?.frozenAssignedUnits ?? 0) || 0;
+    const publicAvailableUnits = Number(row?.availableUnits ?? 0) || 0;
+
+    if (this.canUseFrozenUnitsToggle && this.includeFrozenUnitsForApi) {
+      return `الإجمالي ${totalUnits} | المستخدم ${usedUnits} | المتاح العام ${publicAvailableUnits} | المجمد ${frozenAvailableUnits} | المجمد المستخدم ${frozenAssignedUnits}`;
+    }
+
+    return `المتاح ${publicAvailableUnits} من ${totalUnits} (غير المتاح ${Math.max(0, totalUnits - publicAvailableUnits)})`;
+  }
+
+  hasFrozenUnits(row: SummerWaveCapacityDto): boolean {
+    if (!this.canUseFrozenUnitsToggle) {
+      return false;
+    }
+
+    const frozenAvailableUnits = Number(row?.frozenAvailableUnits ?? 0) || 0;
+    const frozenAssignedUnits = Number(row?.frozenAssignedUnits ?? 0) || 0;
+    return frozenAvailableUnits > 0 || frozenAssignedUnits > 0;
   }
 
   submitDynamicBooking(form: FormGroup): void {
@@ -276,6 +642,12 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     if (!destination) {
       this.bookingValidationAlerts = ['يرجى اختيار المصيف أولاً.'];
       this.msg.msgError('خطأ', '<h5>يرجى اختيار المصيف أولاً.</h5>', true);
+      return;
+    }
+
+    if (!this.isEditMode && !this.canRegisterForDestination(destination)) {
+      this.resetUnavailableDestinationSelection();
+      this.showDestinationAccessDeniedMessage();
       return;
     }
 
@@ -302,12 +674,14 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     const validationAlerts = this.validateBookingRules(destination);
     if (this.ticketForm.invalid || validationAlerts.length > 0) {
       this.bookingValidationAlerts = validationAlerts.length > 0 ? validationAlerts : ['يرجى استكمال الحقول الإلزامية بشكل صحيح.'];
-      this.msg.msgError('خطأ', '<h5>يرجى مراجعة قواعد التحقق وإكمال البيانات.</h5>', true);
+      this.msg.msgError('خطأ', '<h5>يرجى مراجعة قواعد التحقق اعلي الصفحة وإكمال البيانات</h5>', true);
       return;
     }
 
     const waveCode = this.getStringValue(this.engine.aliases.waveCode);
-    const waveLabel = destination.waves.find(w => w.code === waveCode)?.startsAtLabel ?? waveCode;
+    const selectedWave = destination.waves.find(w => w.code === waveCode);
+    const waveLabel = selectedWave?.startsAtLabel ?? waveCode;
+    const waveStartsAtIso = String(selectedWave?.startsAtIso ?? '').trim();
     const notes = this.getStringValue(this.engine.aliases.notes);
     const employeeFileNumber = this.getStringValue(this.engine.aliases.ownerFileNumber) || 'EMP';
     const employeeName = this.getStringValue(this.engine.aliases.ownerName);
@@ -320,6 +694,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     const proxyMode = this.canUseProxyRegistration
       ? this.getStringValue(this.engine.aliases.proxyMode)
       : 'false';
+    const membershipType = this.resolveMembershipTypeForSubmission();
     const destinationSlug = String(destination.slug ?? '').trim() || `CAT${destination.categoryId}`;
     const generatedRequestRef = `SUMMER-${destinationSlug}-${employeeFileNumber}-${Date.now()}`;
     const requestRef = this.isEditMode
@@ -359,6 +734,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.ensureKeyField(fields, 'SummerDestinationName', destination.name, destination.categoryId);
     this.ensureKeyField(fields, 'SummerCamp', waveCode, destination.categoryId);
     this.ensureKeyField(fields, 'SummerCampLabel', waveLabel, destination.categoryId);
+    this.ensureKeyFieldRange(fields, SUMMER_WAVE_STARTS_AT_ISO_FIELD_KEYS, waveStartsAtIso, destination.categoryId);
     this.ensureKeyField(fields, 'Emp_Name', employeeName, destination.categoryId);
     this.ensureKeyField(fields, 'Emp_Id', employeeFileNumber, destination.categoryId);
     this.ensureKeyField(fields, 'NationalId', nationalId, destination.categoryId);
@@ -368,7 +744,16 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.ensureKeyField(fields, 'Over_Count', extraCount, destination.categoryId);
     this.ensureKeyField(fields, 'SummerStayMode', stayMode, destination.categoryId);
     this.ensureKeyField(fields, 'SummerProxyMode', proxyMode, destination.categoryId);
+    this.ensureKeyField(fields, 'SummerMembershipType', membershipType, destination.categoryId);
+    this.ensureKeyField(fields, 'SUM2026_MembershipType', membershipType, destination.categoryId);
+    this.ensureKeyField(fields, 'Summer_UseFrozenUnit', this.includeFrozenUnitsForApi ? 'true' : 'false', destination.categoryId);
+    this.ensureKeyField(fields, 'SUM2026_UseFrozenUnit', this.includeFrozenUnitsForApi ? 'true' : 'false', destination.categoryId);
     this.ensureKeyField(fields, 'Description', notes, destination.categoryId);
+    if (!this.applyPaymentPlanFields(fields, destination.categoryId)) {
+      this.bookingValidationAlerts = [this.installmentPlanError || 'تعذر اعتماد خطة السداد الحالية.'];
+      this.msg.msgError('خطأ', '<h5>يرجى مراجعة خطة السداد قبل الحفظ.</h5>', true);
+      return;
+    }
 
     const unitIds = this.resolveUnitIds();
 
@@ -393,10 +778,17 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       next: response => {
         if (response?.isSuccess) {
           const savedMessageId = Number(response?.data?.messageId ?? currentMessageId);
-          this.msg.msgSuccess(this.isEditMode
-            ? 'تم حفظ تعديلات الطلب بنجاح'
-            : 'تم تسجيل الطلب بنجاح');
+          const pricingDisplayText = this.extractPricingDisplayText(response?.data?.fields);
+          const successMessage = this.isEditMode
+            ? (pricingDisplayText.length > 0
+              ? `تم حفظ تعديلات الطلب بنجاح.\n${pricingDisplayText}`
+              : 'تم حفظ تعديلات الطلب بنجاح')
+            : (pricingDisplayText.length > 0
+              ? `تم تسجيل الطلب بنجاح.\n${pricingDisplayText}`
+              : 'تم تسجيل الطلب بنجاح');
+          this.msg.msgSuccess(successMessage, 6500);
           this.bookingValidationAlerts = [];
+          this.activeCompanionRelationLimitAlerts.clear();
           this.fileParameters = [];
           this.hasEditChanges = false;
           this.loadMyRequests();
@@ -410,6 +802,11 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
             this.onDestinationChanged(selected);
           }
         } else {
+          if (this.hasBlacklistErrorCode(response?.errors as Array<{ code?: string; message?: string }> | undefined)) {
+            this.showBlacklistBlockedModal();
+            return;
+          }
+
           const errors = (response?.errors ?? [])
             .map(item => String(item?.message ?? '').trim())
             .filter(item => item.length > 0)
@@ -417,7 +814,17 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
           this.msg.msgError('خطأ', `<h5>${errors || (this.isEditMode ? 'تعذر حفظ التعديلات.' : 'تعذر تسجيل الطلب.')}</h5>`, true);
         }
       },
-      error: () => {
+      error: (error: unknown) => {
+        if (this.resolveHttpStatus(error) === 403) {
+          this.showBlacklistBlockedModal();
+          return;
+        }
+
+        if (this.hasBlacklistErrorCode(this.extractErrorsFromException(error))) {
+          this.showBlacklistBlockedModal();
+          return;
+        }
+
         this.msg.msgError('خطأ', `<h5>${this.isEditMode ? 'تعذر حفظ تعديلات الطلب حاليًا.' : 'تعذر تسجيل طلب المصيف حاليًا.'}</h5>`, true);
       },
       complete: () => {
@@ -504,10 +911,19 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.setControlValue(this.engine.aliases.seasonYear, String(this.seasonYear));
 
     const stayModeCtrl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.stayMode);
-    if (stayModeCtrl && destination.stayModes.length === 1) {
+    if (!stayModeCtrl) {
+      return;
+    }
+
+    if (destination.stayModes.length === 1) {
       stayModeCtrl.setValue(destination.stayModes[0].code, { emitEvent: false });
       stayModeCtrl.disable({ emitEvent: false });
+      stayModeCtrl.updateValueAndValidity({ emitEvent: false });
+      return;
     }
+
+    stayModeCtrl.enable({ emitEvent: false });
+    stayModeCtrl.updateValueAndValidity({ emitEvent: false });
   }
 
   private applyOwnerDefaultMode(preserveExistingValues = false): void {
@@ -577,11 +993,74 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return;
     }
 
-    this.engine.ensureExtraCountRule(this.ticketForm, this.genericFormService, destination);
+    this.engine.ensureExtraCountRule(
+      this.ticketForm,
+      this.genericFormService,
+      destination,
+      this.canUseProxyRegistration,
+      this.isAdminEditOverrideActive
+    );
+    this.applyAdminEditCapacityOverride();
+    this.syncExtraCountValidationMessage(destination);
     this.syncCompanionInstances();
     this.applyCompanionAgeRules();
     this.syncWaveLabel();
     this.loadBookingCapacity();
+    this.loadPricingQuote();
+  }
+
+  private applyAdminEditCapacityOverride(): void {
+    if (!this.isAdminEditOverrideActive || !this.ticketForm) {
+      return;
+    }
+
+    const familyControl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.familyCount);
+    if (familyControl) {
+      familyControl.enable({ emitEvent: false });
+      familyControl.updateValueAndValidity({ emitEvent: false });
+    }
+
+    const extraControl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.extraCount);
+    if (extraControl) {
+      extraControl.enable({ emitEvent: false });
+      extraControl.setValidators([Validators.min(0)]);
+      extraControl.updateValueAndValidity({ emitEvent: false });
+    }
+  }
+
+  private syncExtraCountValidationMessage(destination: SummerDestinationConfig): void {
+    if (!this.ticketForm) {
+      return;
+    }
+
+    const controlName = this.engine.resolveControlName(this.ticketForm, this.engine.aliases.extraCount);
+    if (!controlName) {
+      return;
+    }
+
+    const maxMessage = `أفراد إضافيون يجب ألا يزيد عن ${destination.maxExtraMembers}`;
+    const targetKeys = new Set<string>([
+      controlName,
+      ...this.engine.aliases.extraCount
+    ]);
+
+    this.genericFormService.validationMessages.forEach(item => {
+      if (!targetKeys.has(String(item?.key ?? ''))) {
+        return;
+      }
+
+      const validators = Array.isArray(item.validators) ? item.validators : [];
+      const withoutMax = validators.filter(v => String(v?.key ?? '') !== 'max');
+      if (!this.canUseProxyRegistration) {
+        withoutMax.push({ key: 'max', value: maxMessage });
+      }
+      item.validators = withoutMax as any;
+    });
+
+    const extraCtrl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.extraCount);
+    if (extraCtrl) {
+      extraCtrl.updateValueAndValidity({ emitEvent: false });
+    }
   }
 
   private syncCompanionInstances(): void {
@@ -673,7 +1152,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     this.bookingCapacityLoading = true;
-    this.summerWorkflowController.getWaveCapacity(destination.categoryId, waveCode).subscribe({
+    this.summerWorkflowController.getWaveCapacity(destination.categoryId, waveCode, this.includeFrozenUnitsForApi).subscribe({
       next: response => {
         this.bookingWaveCapacities = response?.isSuccess && Array.isArray(response.data) ? response.data : [];
       },
@@ -684,6 +1163,148 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         this.bookingCapacityLoading = false;
       }
     });
+  }
+
+  private loadPricingQuote(forceRegenerateInstallmentPlan = false): void {
+    const destination = this.selectedDestination;
+    if (!destination || !this.ticketForm) {
+      this.clearPricingQuote(true);
+      return;
+    }
+
+    const waveCode = this.getStringValue(this.engine.aliases.waveCode);
+    const familyCount = Number(this.getStringValue(this.engine.aliases.familyCount) || 0) || 0;
+    const extraCount = Math.max(0, Number(this.getStringValue(this.engine.aliases.extraCount) || 0) || 0);
+    const personsCount = familyCount + extraCount;
+
+    if (!waveCode || familyCount <= 0 || personsCount <= 0) {
+      this.clearPricingQuote(true);
+      return;
+    }
+
+    const selectedWave = destination.waves.find(wave => wave.code === waveCode);
+    const stayModeControl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.stayMode);
+    const stayModeValue = this.getStringValue(this.engine.aliases.stayMode);
+    const fallbackStayMode = destination.stayModes.length > 0 ? destination.stayModes[0].code : '';
+    const requestedStayMode = stayModeValue || fallbackStayMode;
+    const isProxyBooking = this.toBoolean(this.getStringValue(this.engine.aliases.proxyMode));
+    const membershipType = this.resolveMembershipTypeForSubmission();
+
+    const quoteRequest: SummerPricingQuoteRequest = {
+      categoryId: destination.categoryId,
+      seasonYear: Number(this.seasonYear) || 0,
+      waveCode,
+      waveLabel: selectedWave?.startsAtLabel ?? '',
+      waveStartsAtIso: selectedWave?.startsAtIso ?? '',
+      personsCount,
+      familyCount,
+      extraCount,
+      stayMode: requestedStayMode,
+      isProxyBooking,
+      membershipType,
+      destinationName: destination.name
+    };
+
+    const quoteKey = [
+      quoteRequest.categoryId,
+      quoteRequest.seasonYear,
+      quoteRequest.waveCode,
+      quoteRequest.waveLabel,
+      quoteRequest.personsCount,
+      quoteRequest.stayMode,
+      quoteRequest.isProxyBooking ? '1' : '0',
+      quoteRequest.membershipType ?? ''
+    ].join('|');
+
+    if (quoteKey === this.lastPricingQuoteKey && (this.pricingQuoteLoading || !!this.pricingQuote)) {
+      return;
+    }
+
+    this.lastPricingQuoteKey = quoteKey;
+    this.pricingQuoteLoading = true;
+    this.pricingQuoteError = '';
+
+    this.summerWorkflowController.getPricingQuote(quoteRequest).subscribe({
+      next: response => {
+        if (response?.isSuccess && response.data) {
+          this.pricingQuote = response.data;
+          this.pricingQuoteError = '';
+          this.applyPricingQuoteToStayModeControl(response.data, stayModeControl);
+          this.syncInstallmentPlanWithPricingQuote(forceRegenerateInstallmentPlan);
+          return;
+        }
+
+        const errors = (response?.errors ?? [])
+          .map(item => String(item?.message ?? '').trim())
+          .filter(item => item.length > 0)
+          .join(' ');
+        this.pricingQuote = null;
+        this.pricingQuoteError = errors || 'تعذر حساب التسعير لهذا الاختيار.';
+        this.syncInstallmentPlanWithPricingQuote(forceRegenerateInstallmentPlan);
+      },
+      error: () => {
+        this.pricingQuote = null;
+        this.pricingQuoteError = 'تعذر حساب التسعير حاليًا. حاول مرة أخرى.';
+        this.syncInstallmentPlanWithPricingQuote(forceRegenerateInstallmentPlan);
+      },
+      complete: () => {
+        this.pricingQuoteLoading = false;
+      }
+    });
+  }
+
+  private applyPricingQuoteToStayModeControl(
+    quote: SummerPricingQuoteDto,
+    stayModeControl: AbstractControl | null
+  ): void {
+    if (!stayModeControl || !quote) {
+      return;
+    }
+
+    const stayModesCount = this.selectedDestination?.stayModes?.length ?? 0;
+    const policy = deriveStayModeControlPolicy({
+      pricingMode: quote.pricingMode,
+      transportationMandatory: quote.transportationMandatory,
+      normalizedStayMode: quote.normalizedStayMode
+    }, stayModesCount);
+
+    if (policy.normalizedStayMode.length > 0 && String(stayModeControl.value ?? '').trim() !== policy.normalizedStayMode) {
+      stayModeControl.setValue(policy.normalizedStayMode, { emitEvent: false });
+    }
+
+    if (policy.disableControl) {
+      stayModeControl.disable({ emitEvent: false });
+    } else {
+      stayModeControl.enable({ emitEvent: false });
+    }
+
+    stayModeControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private clearPricingQuote(resetStayModeControl: boolean): void {
+    this.pricingQuote = null;
+    this.pricingQuoteError = '';
+    this.pricingQuoteLoading = false;
+    this.lastPricingQuoteKey = '';
+    this.syncInstallmentPlanWithPricingQuote();
+
+    if (!resetStayModeControl || !this.ticketForm) {
+      return;
+    }
+
+    const destination = this.selectedDestination;
+    const stayModeControl = this.engine.resolveControl(this.ticketForm, this.genericFormService, this.engine.aliases.stayMode);
+    if (!stayModeControl || !destination) {
+      return;
+    }
+
+    if (destination.stayModes.length === 1) {
+      stayModeControl.setValue(destination.stayModes[0].code, { emitEvent: false });
+      stayModeControl.disable({ emitEvent: false });
+    } else {
+      stayModeControl.enable({ emitEvent: false });
+    }
+    stayModeControl.updateValueAndValidity({ emitEvent: false });
   }
 
   private bindSignalRefresh(): void {
@@ -733,13 +1354,32 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       alerts.push('يرجى اختيار نوع الحجز.');
     }
 
+    if (this.canSelectMembershipType && !this.hasValidMembershipSelection()) {
+      alerts.push('يرجى اختيار نوع العضوية.');
+    }
+
     const maxFamily = destination.familyOptions.length > 0 ? Math.max(...destination.familyOptions) : 0;
-    if (maxFamily > 0 && familyCount !== maxFamily && extraCount > 0) {
+    const bypassCapacityRulesForAdminEdit = this.isAdminEditOverrideActive;
+    const isAdminExceedingDestinationLimit =
+      this.canUseProxyRegistration && extraCount > Number(destination.maxExtraMembers ?? 0);
+
+    if (maxFamily > 0 && familyCount !== maxFamily && extraCount > 0 && !isAdminExceedingDestinationLimit && !bypassCapacityRulesForAdminEdit) {
       alerts.push(`الأفراد الإضافيون متاحون فقط عند اختيار السعة القصوى (${maxFamily}).`);
     }
 
-    if (extraCount > destination.maxExtraMembers) {
+    if (!this.canUseProxyRegistration && extraCount > destination.maxExtraMembers) {
       alerts.push(`الحد الأقصى للأفراد الإضافيين في ${destination.name} هو ${destination.maxExtraMembers}.`);
+    }
+
+    if (this.isInstallmentMode) {
+      if (!this.pricingQuote) {
+        alerts.push('يجب حساب التسعير قبل استخدام خيار التقسيط.');
+      } else {
+        const installmentPlanValidation = this.validateInstallmentPlan(false);
+        if (installmentPlanValidation.length > 0) {
+          alerts.push(installmentPlanValidation);
+        }
+      }
     }
 
     const duplicateActive = this.myRequests.some(request =>
@@ -765,11 +1405,21 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         let relation = '';
         let relationOther = '';
         let age = '';
+        let companionName = '';
         formArray.controls.forEach(control => {
           const row = control as FormGroup;
           const name = Object.keys(row.controls)[0];
           const base = this.engine.parseControlName(name).base.toLowerCase();
-          const value = String(row.get(name)?.value ?? '').trim();
+          const controlRef = row.get(name);
+          const rawValue = String(controlRef?.value ?? '');
+          const value = String(rawValue ?? '').trim();
+          if (this.matchesAlias(base, this.engine.aliases.companionName)) {
+            const normalizedName = normalizeSummerCompanionName(rawValue);
+            companionName = normalizedName;
+            if (controlRef && rawValue !== normalizedName) {
+              controlRef.setValue(normalizedName, { emitEvent: false });
+            }
+          }
           if (this.matchesAlias(base, this.engine.aliases.companionRelation)) {
             relation = value;
           }
@@ -788,10 +1438,233 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         if (this.engine.isChildRelation(relation) && age.length === 0) {
           alerts.push(`سن المرافق رقم ${index + 1} مطلوب عند اختيار درجة القرابة ابن/ابنة.`);
         }
+
+        if (companionName.length > 0 && !isValidSummerCompanionName(companionName)) {
+          alerts.push(`${SUMMER_UI_TEXTS_AR.errors.companionNameMinimumThreeParts} (المرافق رقم ${index + 1}).`);
+        }
       });
     }
 
+    this.resolveCompanionRelationLimitAlerts()
+      .forEach(message => this.pushUniqueValidationAlert(alerts, message));
+
     return alerts;
+  }
+
+  private refreshCompanionRelationLimitAlertsInUi(): void {
+    const relationAlerts = this.resolveCompanionRelationLimitAlerts();
+    this.notifyNewCompanionRelationLimitAlerts(relationAlerts);
+    const relationAlertMessages = new Set(this.getCompanionRelationLimitMessagesList());
+    const nonRelationAlerts = (this.bookingValidationAlerts ?? [])
+      .filter(alert => !relationAlertMessages.has(String(alert ?? '').trim()));
+
+    this.bookingValidationAlerts = [...nonRelationAlerts, ...relationAlerts];
+  }
+
+  private notifyNewCompanionRelationLimitAlerts(relationAlerts: string[]): void {
+    const normalizedCurrentAlerts = relationAlerts
+      .map(message => String(message ?? '').trim())
+      .filter(message => message.length > 0);
+
+    const nextAlertsSet = new Set(normalizedCurrentAlerts);
+    normalizedCurrentAlerts.forEach(message => {
+      if (!this.activeCompanionRelationLimitAlerts.has(message)) {
+        this.msg.msgInfo(message, 'تنبيه', 'warning');
+      }
+    });
+
+    this.activeCompanionRelationLimitAlerts = nextAlertsSet;
+  }
+
+  private clearCompanionRelationSelectionIfLimitExceeded(controlFullName: string): boolean {
+    const relationControl = this.genericFormService.GetControl(this.ticketForm, controlFullName);
+    if (!relationControl) {
+      return false;
+    }
+
+    const relation = String(relationControl.value ?? '').trim();
+    if (relation.length === 0) {
+      return false;
+    }
+
+    const relationOther = this.resolveCompanionRelationOtherValueFromSameRow(controlFullName);
+    const relationLimitKey = this.resolveCompanionRelationLimitKey(relation, relationOther);
+    if (!relationLimitKey) {
+      return false;
+    }
+
+    const counters = this.resolveCompanionRelationCounters();
+    const maxAllowedByRelation: Record<'father' | 'mother' | 'wife', number> = {
+      father: 1,
+      mother: 1,
+      wife: 4
+    };
+
+    if ((counters[relationLimitKey] ?? 0) <= maxAllowedByRelation[relationLimitKey]) {
+      return false;
+    }
+
+    relationControl.setValue(null, { emitEvent: false });
+    relationControl.markAsDirty();
+    relationControl.markAsTouched();
+    relationControl.updateValueAndValidity({ emitEvent: false });
+    return true;
+  }
+
+  private resolveCompanionRelationOtherValueFromSameRow(controlFullName: string): string {
+    if (!this.ticketForm) {
+      return '';
+    }
+
+    for (const control of Object.values(this.ticketForm.controls)) {
+      if (!(control instanceof FormArray)) {
+        continue;
+      }
+
+      for (const rowControl of control.controls) {
+        const row = rowControl as FormGroup;
+        if (!row.contains(controlFullName)) {
+          continue;
+        }
+
+        const relationOtherControlName = Object.keys(row.controls).find(name => {
+          const base = this.engine.parseControlName(name).base.toLowerCase();
+          return this.matchesAlias(base, this.engine.aliases.companionRelationOther);
+        });
+
+        if (!relationOtherControlName) {
+          return '';
+        }
+
+        return String(row.get(relationOtherControlName)?.value ?? '').trim();
+      }
+    }
+
+    return '';
+  }
+
+  private resolveCompanionRelationLimitAlerts(): string[] {
+    const counters = this.resolveCompanionRelationCounters();
+    const alerts: string[] = [];
+    this.pushCompanionRelationLimitAlerts(alerts, counters);
+    return alerts;
+  }
+
+  private resolveCompanionRelationCounters(): Record<'father' | 'mother' | 'wife', number> {
+    const counters: Record<'father' | 'mother' | 'wife', number> = {
+      father: 0,
+      mother: 0,
+      wife: 0
+    };
+
+    const companionGroup = this.engine.findCompanionGroup(this.genericFormService.dynamicGroups);
+    if (!companionGroup || !this.ticketForm) {
+      return counters;
+    }
+
+    const groupsToInspect: GroupInfo[] = [companionGroup, ...(companionGroup.instances ?? [])];
+    groupsToInspect.forEach(group => {
+      const formArray = this.genericFormService.getFormArray(group.formArrayName, this.ticketForm);
+      if (!formArray) {
+        return;
+      }
+
+      let relation = '';
+      let relationOther = '';
+      formArray.controls.forEach(control => {
+        const row = control as FormGroup;
+        const name = Object.keys(row.controls)[0];
+        if (!name) {
+          return;
+        }
+
+        const base = this.engine.parseControlName(name).base.toLowerCase();
+        const value = String((row.get(name)?.value ?? '')).trim();
+        if (this.matchesAlias(base, this.engine.aliases.companionRelation)) {
+          relation = value;
+        }
+        if (this.matchesAlias(base, this.engine.aliases.companionRelationOther)) {
+          relationOther = value;
+        }
+      });
+
+      const relationLimitKey = this.resolveCompanionRelationLimitKey(relation, relationOther);
+      if (relationLimitKey) {
+        counters[relationLimitKey] += 1;
+      }
+    });
+
+    return counters;
+  }
+
+  private getCompanionRelationLimitMessages(): Record<'father' | 'mother' | 'wife', string> {
+    return {
+      father: 'لا يمكن تكرار قرابة الأب أكثر من مرة واحدة.',
+      mother: 'لا يمكن تكرار قرابة الأم أكثر من مرة واحدة.',
+      wife: 'الحد الأقصى لقرابة الزوجة هو 4 مرافقين.'
+    };
+  }
+
+  private getCompanionRelationLimitMessagesList(): string[] {
+    const messages = this.getCompanionRelationLimitMessages();
+    return [messages.father, messages.mother, messages.wife];
+  }
+
+  private pushCompanionRelationLimitAlerts(
+    alerts: string[],
+    counters: Record<'father' | 'mother' | 'wife', number>
+  ): void {
+    const messages = this.getCompanionRelationLimitMessages();
+
+    if (counters.father > 1) {
+      this.pushUniqueValidationAlert(alerts, messages.father);
+    }
+
+    if (counters.mother > 1) {
+      this.pushUniqueValidationAlert(alerts, messages.mother);
+    }
+
+    if (counters.wife > 4) {
+      this.pushUniqueValidationAlert(alerts, messages.wife);
+    }
+  }
+
+  private resolveCompanionRelationLimitKey(
+    relation: string,
+    relationOther: string
+  ): 'father' | 'mother' | 'wife' | '' {
+    const effectiveRelation = this.engine.isOtherRelation(relation) ? relationOther : relation;
+    const normalized = String(effectiveRelation ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/\s+/g, '')
+      .replace(/[-_]/g, '');
+
+    if (normalized.length === 0) {
+      return '';
+    }
+
+    if (normalized === 'اب' || normalized === 'الاب' || normalized === 'father' || normalized === 'dad') {
+      return 'father';
+    }
+
+    if (normalized === 'ام' || normalized === 'الام' || normalized === 'mother' || normalized === 'mom') {
+      return 'mother';
+    }
+
+    if (normalized === 'زوجه' || normalized === 'الزوجه' || normalized === 'wife') {
+      return 'wife';
+    }
+
+    return '';
+  }
+
+  private pushUniqueValidationAlert(alerts: string[], message: string): void {
+    if (!alerts.includes(message)) {
+      alerts.push(message);
+    }
   }
 
   private extractOwnerDefaults(): OwnerDefaults {
@@ -823,11 +1696,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         profile['phone'],
         localStorage.getItem('MobileNumber')
       ),
-      extraPhone: this.coalesceText(
-        profile['PhoneWhats'],
-        profile['SecondaryPhone'],
-        localStorage.getItem('ExtraPhoneNumber')
-      )
+      extraPhone: ''
     };
   }
 
@@ -875,6 +1744,391 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     });
   }
 
+  private ensureKeyFieldRange(fields: TkmendField[], keys: readonly string[], value: string, categoryId: number): void {
+    keys.forEach(key => this.ensureKeyField(fields, key, value, categoryId));
+  }
+
+  private applyPaymentPlanFields(fields: TkmendField[], categoryId: number): boolean {
+    const normalizedMode = this.normalizePaymentMode(this.paymentModeValue);
+    this.ensureKeyFieldRange(fields, SUMMER_PAYMENT_MODE_FIELD_KEYS, normalizedMode, categoryId);
+
+    if (normalizedMode !== SUMMER_PAYMENT_MODE_INSTALLMENT) {
+      this.resetInstallmentPlanValues(false);
+      this.ensureKeyFieldRange(fields, SUMMER_INSTALLMENT_COUNT_FIELD_KEYS, '0', categoryId);
+      this.ensureKeyFieldRange(fields, SUMMER_INSTALLMENTS_TOTAL_FIELD_KEYS, '0', categoryId);
+      for (let installmentNo = 1; installmentNo <= SUMMER_INSTALLMENTS_MAX_COUNT; installmentNo += 1) {
+        this.ensureKeyFieldRange(fields, resolveInstallmentAmountFieldKeys(installmentNo), '0', categoryId);
+        this.ensureKeyFieldRange(fields, resolveInstallmentPaidFieldKeys(installmentNo), 'false', categoryId);
+        this.ensureKeyFieldRange(fields, resolveInstallmentPaidAtFieldKeys(installmentNo), '', categoryId);
+      }
+      return true;
+    }
+
+    const validationError = this.validateInstallmentPlan();
+    if (validationError.length > 0) {
+      return false;
+    }
+
+    const activeInstallmentCount = this.normalizeInstallmentCount(this.installmentCountValue);
+    const normalizedPlan = this.installmentPlan
+      .slice(0, activeInstallmentCount)
+      .map(item => ({
+        ...item,
+        amount: this.normalizeInstallmentAmount(item.amount),
+        isPaid: Boolean(item.isPaid),
+        paidAtLocal: String(item.paidAtLocal ?? '').trim()
+      }));
+
+    while (normalizedPlan.length < activeInstallmentCount) {
+      normalizedPlan.push({
+        installmentNo: normalizedPlan.length + 1,
+        amount: 0,
+        isPaid: false,
+        paidAtLocal: ''
+      });
+    }
+
+    const totalAmount = this.roundToTwoDecimals(
+      normalizedPlan.reduce((sum, installment) => sum + installment.amount, 0)
+    );
+
+    this.ensureKeyFieldRange(fields, SUMMER_INSTALLMENT_COUNT_FIELD_KEYS, String(activeInstallmentCount), categoryId);
+    this.ensureKeyFieldRange(
+      fields,
+      SUMMER_INSTALLMENTS_TOTAL_FIELD_KEYS,
+      this.formatInstallmentAmountForStorage(totalAmount),
+      categoryId
+    );
+
+    normalizedPlan.forEach(item => {
+      const amountValue = this.formatInstallmentAmountForStorage(item.amount);
+      this.ensureKeyFieldRange(fields, resolveInstallmentAmountFieldKeys(item.installmentNo), amountValue, categoryId);
+      this.ensureKeyFieldRange(fields, resolveInstallmentPaidFieldKeys(item.installmentNo), item.isPaid ? 'true' : 'false', categoryId);
+      const paidAtIso = item.isPaid ? this.convertLocalDateTimeToIso(item.paidAtLocal) : '';
+      this.ensureKeyFieldRange(fields, resolveInstallmentPaidAtFieldKeys(item.installmentNo), paidAtIso, categoryId);
+    });
+
+    for (let installmentNo = activeInstallmentCount + 1; installmentNo <= SUMMER_INSTALLMENTS_MAX_COUNT; installmentNo += 1) {
+      this.ensureKeyFieldRange(fields, resolveInstallmentAmountFieldKeys(installmentNo), '0', categoryId);
+      this.ensureKeyFieldRange(fields, resolveInstallmentPaidFieldKeys(installmentNo), 'false', categoryId);
+      this.ensureKeyFieldRange(fields, resolveInstallmentPaidAtFieldKeys(installmentNo), '', categoryId);
+    }
+
+    return true;
+  }
+
+  private normalizePaymentMode(value: string | null | undefined): SummerPaymentMode {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    return normalized === SUMMER_PAYMENT_MODE_INSTALLMENT
+      ? SUMMER_PAYMENT_MODE_INSTALLMENT
+      : SUMMER_PAYMENT_MODE_CASH;
+  }
+
+  private resetPaymentPlanState(): void {
+    this.paymentModeValue = SUMMER_PAYMENT_MODE_CASH;
+    this.installmentCountValue = SUMMER_INSTALLMENTS_DEFAULT_COUNT;
+    this.resetInstallmentPlanValues();
+  }
+
+  private resetInstallmentPlanValues(resetError = true): void {
+    const normalizedCount = this.normalizeInstallmentCount(this.installmentCountValue);
+    this.installmentCountValue = normalizedCount;
+    this.installmentPlan = this.createInstallmentPlanWithEqualDistribution(0, normalizedCount);
+    this.installmentPlanAutoGenerated = true;
+    if (resetError) {
+      this.installmentPlanError = '';
+    }
+  }
+
+  private createInstallmentPlanWithEqualDistribution(totalAmount: number, installmentsCount: number): SummerInstallmentPlanItem[] {
+    const normalizedCount = this.normalizeInstallmentCount(installmentsCount);
+    const quoteInstallments = this.getQuoteFixedInstallments();
+    if (quoteInstallments.length >= SUMMER_INSTALLMENTS_MIN_COUNT
+      && (!this.canEditInstallmentPlanManually || quoteInstallments.length === normalizedCount)) {
+      this.installmentCountValue = this.normalizeInstallmentCount(quoteInstallments.length);
+      return this.createInstallmentPlanFromAmounts(quoteInstallments);
+    }
+
+    const equalAmounts = this.buildEqualInstallmentAmounts(totalAmount, normalizedCount);
+    return this.createInstallmentPlanFromAmounts(equalAmounts);
+  }
+
+  private buildEqualInstallmentAmounts(totalAmount: number, installmentsCount: number): number[] {
+    const normalizedCount = this.normalizeInstallmentCount(installmentsCount);
+    const normalizedTotal = this.roundToTwoDecimals(Math.max(0, Number(totalAmount ?? 0) || 0));
+
+    const totalCents = Math.round(normalizedTotal * 100);
+    const baseCents = Math.floor(totalCents / normalizedCount);
+    const remainder = totalCents % normalizedCount;
+
+    return Array.from({ length: normalizedCount }, (_item, index) => {
+      const cents = baseCents + (index < remainder ? 1 : 0);
+      return cents / 100;
+    });
+  }
+
+  private syncInstallmentPlanWithPricingQuote(forceAutoGenerate = false): void {
+    if (!this.isInstallmentMode) {
+      this.installmentPlanError = '';
+      return;
+    }
+
+    const shouldAutoGenerate = forceAutoGenerate
+      || this.installmentPlanAutoGenerated
+      || !this.installmentPlan.some(item => this.normalizeInstallmentAmount(item.amount) > 0);
+
+    if (shouldAutoGenerate) {
+      const quoteInstallments = this.getQuoteFixedInstallments();
+      if (quoteInstallments.length >= SUMMER_INSTALLMENTS_MIN_COUNT && !this.canEditInstallmentPlanManually) {
+        this.installmentCountValue = this.normalizeInstallmentCount(quoteInstallments.length);
+        this.installmentPlan = this.createInstallmentPlanFromAmounts(quoteInstallments);
+      } else {
+        this.installmentCountValue = this.normalizeInstallmentCount(this.installmentCountValue);
+        this.installmentPlan = this.createInstallmentPlanWithEqualDistribution(
+          this.getPricingGrandTotal(),
+          this.installmentCountValue
+        );
+      }
+      this.installmentPlanAutoGenerated = true;
+    }
+
+    this.validateInstallmentPlan();
+    this.updateEditChangeState();
+  }
+
+  private hydratePaymentPlanFromFields(fields: TkmendField[]): void {
+    const modeFromFields = this.getFieldTextByAliases(fields, [...SUMMER_PAYMENT_MODE_FIELD_KEYS]);
+    const normalizedMode = this.normalizePaymentMode(modeFromFields);
+    this.paymentModeValue = normalizedMode;
+
+    if (normalizedMode !== SUMMER_PAYMENT_MODE_INSTALLMENT) {
+      this.installmentCountValue = SUMMER_INSTALLMENTS_DEFAULT_COUNT;
+      this.resetInstallmentPlanValues();
+      return;
+    }
+
+    const requestedCount = this.normalizeInstallmentCount(
+      this.getFieldTextByAliases(fields, [...SUMMER_INSTALLMENT_COUNT_FIELD_KEYS])
+    );
+    this.installmentCountValue = requestedCount;
+    const restoredInstallments = Array.from({ length: requestedCount }, (_item, index) => {
+      const installmentNo = index + 1;
+      const amountText = this.getFieldTextByAliases(fields, resolveInstallmentAmountFieldKeys(installmentNo));
+      const paidText = this.getFieldTextByAliases(fields, resolveInstallmentPaidFieldKeys(installmentNo));
+      const paidAtText = this.getFieldTextByAliases(fields, resolveInstallmentPaidAtFieldKeys(installmentNo));
+      const amount = this.normalizeInstallmentAmount(amountText);
+      const isPaid = this.toBoolean(paidText);
+      const paidAtLocal = isPaid ? this.convertIsoToLocalDateTimeInput(paidAtText) : '';
+
+      return {
+        installmentNo,
+        amount,
+        isPaid,
+        paidAtLocal
+      } as SummerInstallmentPlanItem;
+    });
+
+    const hasAnyAmount = restoredInstallments.some(item => item.amount > 0);
+    if (hasAnyAmount) {
+      this.installmentPlan = restoredInstallments;
+      this.installmentPlanAutoGenerated = false;
+    } else {
+      this.installmentPlan = this.createInstallmentPlanWithEqualDistribution(
+        this.getPricingGrandTotal(),
+        requestedCount
+      );
+      this.installmentPlanAutoGenerated = true;
+    }
+
+    this.validateInstallmentPlan();
+  }
+
+  private validateInstallmentPlan(updateErrorState = true): string {
+    if (!this.isInstallmentMode) {
+      if (updateErrorState) {
+        this.installmentPlanError = '';
+      }
+      return '';
+    }
+
+    const activeInstallmentCount = this.normalizeInstallmentCount(this.installmentCountValue);
+    if (activeInstallmentCount < SUMMER_INSTALLMENTS_MIN_COUNT || activeInstallmentCount > SUMMER_INSTALLMENTS_MAX_COUNT) {
+      const errorMessage = `عدد الأقساط يجب أن يكون من ${SUMMER_INSTALLMENTS_MIN_COUNT} إلى ${SUMMER_INSTALLMENTS_MAX_COUNT}.`;
+      if (updateErrorState) {
+        this.installmentPlanError = errorMessage;
+      }
+      return errorMessage;
+    }
+
+    if (this.installmentPlan.length !== activeInstallmentCount) {
+      this.installmentPlan = this.createInstallmentPlanWithEqualDistribution(
+        this.getPricingGrandTotal(),
+        activeInstallmentCount
+      );
+      this.installmentPlanAutoGenerated = true;
+    }
+
+    const totalAmount = this.getPricingGrandTotal();
+    if (totalAmount <= 0) {
+      const errorMessage = 'لا يمكن اعتماد التقسيط قبل احتساب إجمالي الحجز.';
+      if (updateErrorState) {
+        this.installmentPlanError = errorMessage;
+      }
+      return errorMessage;
+    }
+
+    const hasNegativeValue = this.installmentPlan.some(item => Number(item.amount ?? 0) < 0);
+    if (hasNegativeValue) {
+      const errorMessage = 'لا يمكن أن تكون قيمة أي قسط سالبة.';
+      if (updateErrorState) {
+        this.installmentPlanError = errorMessage;
+      }
+      return errorMessage;
+    }
+
+    const totalInstallments = this.installmentPlanTotalAmount;
+    if (totalInstallments > this.roundToTwoDecimals(totalAmount) + 0.0001) {
+      const errorMessage = `إجمالي الأقساط (${this.formatPriceValue(totalInstallments)}) لا يجب أن يتجاوز إجمالي الحجز (${this.formatPriceValue(totalAmount)}).`;
+      if (updateErrorState) {
+        this.installmentPlanError = errorMessage;
+      }
+      return errorMessage;
+    }
+
+    if (updateErrorState) {
+      this.installmentPlanError = '';
+    }
+    return '';
+  }
+
+  private normalizeInstallmentCount(value: number | string | null | undefined): number {
+    const parsed = Number(value ?? SUMMER_INSTALLMENTS_DEFAULT_COUNT);
+    if (!Number.isFinite(parsed)) {
+      return SUMMER_INSTALLMENTS_DEFAULT_COUNT;
+    }
+
+    const rounded = Math.floor(parsed);
+    if (rounded < SUMMER_INSTALLMENTS_MIN_COUNT) {
+      return SUMMER_INSTALLMENTS_MIN_COUNT;
+    }
+
+    if (rounded > SUMMER_INSTALLMENTS_MAX_COUNT) {
+      return SUMMER_INSTALLMENTS_MAX_COUNT;
+    }
+
+    return rounded;
+  }
+
+  private getPricingGrandTotal(): number {
+    const parsed = Number(this.pricingQuote?.grandTotal ?? 0);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return this.roundToTwoDecimals(parsed);
+  }
+
+  private normalizeInstallmentAmount(value: unknown): number {
+    const parsed = Number(value ?? 0);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return this.roundToTwoDecimals(parsed);
+  }
+
+  private roundToTwoDecimals(value: number): number {
+    const parsed = Number(value ?? 0);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return Math.round(parsed * 100) / 100;
+  }
+
+  resolveInstallmentTitle(installmentNo: number): string {
+    const normalizedNo = Math.max(1, Math.floor(Number(installmentNo) || 1));
+    return normalizedNo === 1 ? 'مقدم الحجز' : `القسط ${normalizedNo - 1}`;
+  }
+
+  resolveInstallmentAmountLabel(installmentNo: number): string {
+    return installmentNo === 1 ? 'قيمة مقدم الحجز' : 'قيمة القسط';
+  }
+
+  private formatInstallmentAmountForStorage(value: number): string {
+    const rounded = this.roundToTwoDecimals(value);
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+  }
+
+  private createInstallmentPlanFromAmounts(amounts: number[]): SummerInstallmentPlanItem[] {
+    return (amounts ?? []).map((amount, index) => ({
+      installmentNo: index + 1,
+      amount: this.normalizeInstallmentAmount(amount),
+      isPaid: false,
+      paidAtLocal: ''
+    }));
+  }
+
+  private getQuoteFixedInstallments(): number[] {
+    const quote = this.pricingQuote;
+    if (!quote || !Array.isArray(quote.fixedInstallmentAmounts)) {
+      return [];
+    }
+
+    const normalized = quote.fixedInstallmentAmounts
+      .map(value => this.normalizeInstallmentAmount(value))
+      .filter(value => Number.isFinite(value) && value >= 0);
+    if (normalized.length < SUMMER_INSTALLMENTS_MIN_COUNT || normalized.length > SUMMER_INSTALLMENTS_MAX_COUNT) {
+      return [];
+    }
+
+    const total = this.roundToTwoDecimals(normalized.reduce((sum, value) => sum + value, 0));
+    if (total <= 0) {
+      return [];
+    }
+
+    const grandTotal = this.getPricingGrandTotal();
+    if (grandTotal > 0) {
+      const delta = this.roundToTwoDecimals(grandTotal - total);
+      if (Math.abs(delta) > 0.0001) {
+        normalized[0] = this.roundToTwoDecimals(Math.max(0, normalized[0] + delta));
+      }
+    }
+
+    return normalized;
+  }
+
+  private convertIsoToLocalDateTimeInput(isoText: string | null | undefined): string {
+    const normalized = String(isoText ?? '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    const pad = (part: number): string => String(part).padStart(2, '0');
+    const year = parsed.getFullYear();
+    const month = pad(parsed.getMonth() + 1);
+    const day = pad(parsed.getDate());
+    const hour = pad(parsed.getHours());
+    const minute = pad(parsed.getMinutes());
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+  }
+
+  private convertLocalDateTimeToIso(localText: string | null | undefined): string {
+    const normalized = String(localText ?? '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    return parsed.toISOString();
+  }
+
   private setControlValue(aliases: readonly string[], value: string): void {
     const control = this.engine.resolveControl(this.ticketForm, this.genericFormService, aliases);
     if (!control) {
@@ -891,9 +2145,126 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return String(control?.value ?? '').trim();
   }
 
+  formatPriceValue(value: number | string | null | undefined): string {
+    const parsed = Number(value ?? 0);
+    if (!Number.isFinite(parsed)) {
+      return '0';
+    }
+    const fixed = Number.isInteger(parsed) ? parsed.toString() : parsed.toFixed(2);
+    return `${fixed} جنيه`;
+  }
+
+  resolveStayModeLabel(mode: string | null | undefined): string {
+    const normalized = String(mode ?? '').trim().toUpperCase();
+    if (normalized === 'RESIDENCE_WITH_TRANSPORT') {
+      return 'إقامة وانتقالات';
+    }
+    if (normalized === 'RESIDENCE_ONLY') {
+      return 'إقامة فقط';
+    }
+    return normalized.length > 0 ? normalized : '-';
+  }
+
+  get isTransportIncludedMode(): boolean {
+    const quote = this.pricingQuote;
+    if (!quote) {
+      return false;
+    }
+
+    return String(quote.pricingMode ?? '').trim() === 'TransportationMandatoryIncluded';
+  }
+
   private matchesAlias(name: string, aliases: readonly string[]): boolean {
     const lowered = String(name ?? '').trim().toLowerCase();
     return aliases.some(alias => alias.toLowerCase() === lowered);
+  }
+
+  private canRegisterForDestination(destination: SummerDestinationConfig | undefined): boolean {
+    return canRegisterForSummerDestination(destination, this.canUseProxyRegistration);
+  }
+
+  private resetUnavailableDestinationSelection(): void {
+    this.selectedDestinationId = null;
+    this.customFilteredCategoryMand = [];
+    this.bookingWaveCapacities = [];
+    this.fileParameters = [];
+    this.activeCompanionRelationLimitAlerts.clear();
+    this.ticketForm = this.fb.group({});
+    this.genericFormService.dynamicGroups = [];
+    this.clearPricingQuote(true);
+    this.resetPaymentPlanState();
+    this.bookingValidationAlerts = [this.destinationAccessDeniedMessage];
+  }
+
+  private showDestinationAccessDeniedMessage(): void {
+    this.msg.msgError('غير متاح', `<h5>${this.destinationAccessDeniedMessage}</h5>`, true);
+  }
+
+  private syncMembershipTypeAccessAndDefaults(): void {
+    const requested = this.normalizeMembershipType(this.membershipTypeValue);
+    const enforced = this.canSelectMembershipType ? requested : 'WORKER_MEMBER';
+    this.membershipTypeValue = enforced;
+
+    const membershipControl = this.engine.resolveControl(
+      this.ticketForm,
+      this.genericFormService,
+      this.engine.aliases.membershipType
+    );
+    if (!membershipControl) {
+      return;
+    }
+
+    membershipControl.setValue(enforced, { emitEvent: false });
+    if (this.canSelectMembershipType) {
+      membershipControl.enable({ emitEvent: false });
+      membershipControl.setValidators([Validators.required]);
+    } else {
+      membershipControl.clearValidators();
+      membershipControl.disable({ emitEvent: false });
+    }
+    membershipControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private resolveMembershipTypeForSubmission(): string {
+    if (!this.canSelectMembershipType) {
+      return 'WORKER_MEMBER';
+    }
+
+    return this.normalizeMembershipType(this.membershipTypeValue);
+  }
+
+  private hasValidMembershipSelection(): boolean {
+    if (!this.canSelectMembershipType) {
+      return true;
+    }
+
+    const normalized = this.normalizeMembershipType(this.membershipTypeValue);
+    return this.membershipTypeOptions.some(item => item.value === normalized);
+  }
+
+  private normalizeMembershipType(value: string): string {
+    const raw = String(value ?? '').trim();
+    if (raw.length === 0) {
+      return 'WORKER_MEMBER';
+    }
+
+    const token = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (token === 'NONWORKERMEMBER' || token === 'NONWORKER') {
+      return 'NON_WORKER_MEMBER';
+    }
+
+    if (token === 'WORKERMEMBER' || token === 'WORKER') {
+      return 'WORKER_MEMBER';
+    }
+
+    const normalizedArabic = raw
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/\s+/g, '');
+    if (normalizedArabic.includes('غيرعامل')) {
+      return 'NON_WORKER_MEMBER';
+    }
+
+    return 'WORKER_MEMBER';
   }
 
   private toBoolean(value: unknown): boolean {
@@ -902,6 +2273,26 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
     const normalized = String(value ?? '').trim().toLowerCase();
     return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  }
+
+  private extractPricingDisplayText(fields: TkmendField[] | undefined): string {
+    const pricingFieldKeys = [
+      'Summer_PricingDisplayText',
+      'SUM2026_PricingDisplayText',
+      'Summer_PricingSmsText',
+      'SUM2026_PricingSmsText'
+    ];
+    const messageFields = Array.isArray(fields) ? fields : [];
+
+    for (const key of pricingFieldKeys) {
+      const value = messageFields.find(field => String(field?.fildKind ?? '').trim().toLowerCase() === key.toLowerCase());
+      const text = String(value?.fildTxt ?? '').trim();
+      if (text.length > 0) {
+        return text;
+      }
+    }
+
+    return '';
   }
 
   private initializeFromComponentConfig(): void {
@@ -917,6 +2308,8 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
         const authSub = this.authObjectsService.authObject$.subscribe(() => {
           this.refreshProxyModeAccess();
           this.applyOwnerDefaultMode(this.isEditMode);
+          this.syncMembershipTypeAccessAndDefaults();
+          this.validateInstallmentPlan();
         });
         this.subscriptions.add(authSub);
       },
@@ -953,20 +2346,45 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
 
   private refreshProxyModeAccess(): void {
     try {
-      this.canUseProxyRegistration = this.authObjectsService.checkAuthFun('ConnectAdminFunc');
+      const hasSummerGeneralManagerPermission =
+        this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc')
+        || this.authObjectsService.checkAuthRole('2021');
+      const hasSummerAdminPermission =
+        this.authObjectsService.checkAuthFun('SummerAdminFunc')
+        || this.authObjectsService.checkAuthRole('2020');
+
+      this.hasSummerGeneralManagerPermission = hasSummerGeneralManagerPermission;
+      this.canUseProxyRegistration = hasSummerAdminPermission;
+      this.canSelectMembershipType = hasSummerAdminPermission;
+      this.canUseFrozenUnitsInCurrentFlow = hasSummerAdminPermission;
+      if (!this.canUseFrozenUnitsInCurrentFlow) {
+        this.includeFrozenUnitsInBooking = false;
+      }
     } catch {
+      this.hasSummerGeneralManagerPermission = false;
       this.canUseProxyRegistration = false;
+      this.canSelectMembershipType = false;
+      this.canUseFrozenUnitsInCurrentFlow = false;
+      this.includeFrozenUnitsInBooking = false;
+    }
+
+    if (!this.isEditMode && this.selectedDestination && !this.canRegisterForDestination(this.selectedDestination)) {
+      this.resetUnavailableDestinationSelection();
     }
   }
 
   private filterRestrictedFields(fields: CdCategoryMandDto[]): CdCategoryMandDto[] {
-    if (this.canUseProxyRegistration) {
-      return [...(fields ?? [])];
-    }
-
     return (fields ?? []).filter(field => {
       const key = String(field?.mendField ?? '').trim();
-      return !this.matchesAlias(key, this.engine.aliases.proxyMode);
+      if (this.matchesAlias(key, this.engine.aliases.membershipType)) {
+        return false;
+      }
+
+      if (!this.canUseProxyRegistration && this.matchesAlias(key, this.engine.aliases.proxyMode)) {
+        return false;
+      }
+
+      return true;
     });
   }
 
@@ -1000,6 +2418,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     if (!this.isEditMode) {
       this.loadedEditRequestId = null;
       this.initialEditSignature = '';
+      this.resetPaymentPlanState();
       if (wasEditMode) {
         this.messageDto = {} as MessageDto;
         if (this.selectedDestinationId) {
@@ -1164,6 +2583,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       categoryCd: destinationId,
       fields: [...(message?.fields ?? [])]
     } as MessageDto;
+    this.membershipTypeValue = this.normalizeMembershipType(
+      this.getFieldTextByAliases(this.messageDto.fields ?? [], this.engine.aliases.membershipType)
+    );
+    this.hydratePaymentPlanFromFields(this.messageDto.fields ?? []);
 
     this.loadedEditRequestId = messageId;
     this.initialEditSignature = '';
@@ -1171,7 +2594,8 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.selectedDestinationId = destinationId;
     this.onDestinationChanged(destinationId, {
       preserveMessageFields: true,
-      resetFiles: true
+      resetFiles: true,
+      preservePaymentPlan: true
     });
     setTimeout(() => this.updateEditChangeState(), 0);
   }
@@ -1214,6 +2638,15 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     try {
       return JSON.stringify({
         form: rawFormValue,
+        membershipType: this.resolveMembershipTypeForSubmission(),
+        paymentMode: this.selectedPaymentMode,
+        installmentCount: this.selectedInstallmentCount,
+        installments: this.installmentPlan.map(item => ({
+          installmentNo: item.installmentNo,
+          amount: this.normalizeInstallmentAmount(item.amount),
+          isPaid: Boolean(item.isPaid),
+          paidAtLocal: String(item.paidAtLocal ?? '').trim()
+        })),
         files
       });
     } catch {
@@ -1258,6 +2691,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
       return false;
     }
 
+    if (this.isAdminEditOverrideActive) {
+      return true;
+    }
+
     if (String(request.paidAtUtc ?? '').trim().length > 0) {
       return false;
     }
@@ -1273,6 +2710,10 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
   private getEditBlockedReason(request: SummerRequestSummaryDto | undefined): string {
     if (!request) {
       return 'لا يمكن تعديل الطلب.';
+    }
+
+    if (this.isAdminEditOverrideActive) {
+      return '';
     }
 
     if (String(request.paidAtUtc ?? '').trim().length > 0) {
@@ -1746,6 +3187,39 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return combined || fallback;
   }
 
+  private hasBlacklistErrorCode(errors: Array<{ code?: string; message?: string }> | undefined): boolean {
+    const values = errors ?? [];
+    return values.some(error => String(error?.code ?? '').trim().toUpperCase() === 'SUMMER_BLACKLIST_BLOCKED');
+  }
+
+  private resolveHttpStatus(error: unknown): number {
+    const status = Number((error as { status?: unknown } | null)?.status ?? 0);
+    return Number.isFinite(status) ? status : 0;
+  }
+
+  private extractErrorsFromException(error: unknown): Array<{ code?: string; message?: string }> {
+    const apiException = error as ApiException | null;
+    const responseText = String(apiException?.response ?? '').trim();
+    if (!responseText) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(responseText) as { errors?: Array<{ code?: string; message?: string }> };
+      return Array.isArray(parsed?.errors) ? parsed.errors : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private showBlacklistBlockedModal(): void {
+    Swal.fire({
+      icon: 'error',
+      title: 'غير مصرح بالحجز',
+      html: '<div style="direction:rtl">هذا المستخدم غير مصرح له بالحجز على المصايف</div>'
+    });
+  }
+
   private coalesceText(...values: unknown[]): string {
     for (const value of values) {
       const normalized = String(value ?? '').trim();
@@ -1756,5 +3230,3 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     return '';
   }
 }
-
-

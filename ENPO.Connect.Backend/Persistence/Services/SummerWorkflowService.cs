@@ -1,10 +1,13 @@
 ﻿using System.Data;
+using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ENPO.Dto.HubSync;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Models.Attachment;
 using Models.Correspondance;
@@ -26,16 +29,58 @@ namespace Persistence.Services
         private readonly helperService _helperService;
         private readonly IConnectNotificationService _notificationService;
         private readonly ApplicationConfig _applicationConfig;
+        private readonly ILogger<SummerWorkflowService> _logger;
+        private readonly SummerPricingService _summerPricingService;
+        private readonly SummerBookingBlacklistService _summerBookingBlacklistService;
+        private readonly SummerUnitFreezeService _summerUnitFreezeService;
 
         private const int CapacityLockTimeoutMs = 15000;
+        private const int AdminActionGateTimeoutMs = 10000;
+        private const int AdminActionLockTimeoutMs = 15000;
+        private const int CapacityUpdateDispatchTimeoutMs = 4000;
         private const string SummerDynamicApplicationId = SummerWorkflowDomainConstants.DynamicApplicationId;
         private const string SummerDestinationCatalogMend = SummerWorkflowDomainConstants.DestinationCatalogMend;
         private const string TransferReviewRequiredCode = SummerWorkflowDomainConstants.TransferReviewRequiredCode;
         private const string TransferReviewResolvedCode = SummerWorkflowDomainConstants.TransferReviewResolvedCode;
+        private const string PendingReviewRequiredCode = SummerWorkflowDomainConstants.PendingReviewRequiredCode;
+        private const string PendingReviewResolvedCode = SummerWorkflowDomainConstants.PendingReviewResolvedCode;
+        private const string RequestCreatedAtUtcFieldKind = SummerWorkflowDomainConstants.RequestCreatedAtUtcFieldKind;
+        private const string PaymentDueAtUtcFieldKind = SummerWorkflowDomainConstants.PaymentDueAtUtcFieldKind;
+        private const string PaidAtUtcFieldKind = SummerWorkflowDomainConstants.PaidAtUtcFieldKind;
+        private const string PaymentStatusFieldKind = SummerWorkflowDomainConstants.PaymentStatusFieldKind;
+        private const string ActionTypeFieldKind = SummerWorkflowDomainConstants.ActionTypeFieldKind;
+        private const string RequestPaymentStatePaidCode = "PAID";
+        private const string RequestPaymentStateUnpaidCode = "UNPAID";
+        private const string RequestPaymentStatePartialPaidCode = "PARTIAL_PAID";
+        private const string RequestPaymentStateAdminPaidLabel = "سداد إداري";
+        private const string PaymentStatusAdminPaidCode = "PAID_ADMIN";
+        private const string AutoCancelPaymentTimeoutActionCode = "AUTO_CANCEL_PAYMENT_TIMEOUT";
+        private const int AdminActionCommentMaxLength = 300;
+        private const int InternalAdminActionCommentMaxLength = 2000;
         private static readonly string[] WaveCodeFieldKinds = SummerWorkflowDomainConstants.WaveCodeFieldKinds;
         private static readonly string[] WaveLabelFieldKinds = SummerWorkflowDomainConstants.WaveLabelFieldKinds;
         private static readonly string[] FamilyCountFieldKinds = SummerWorkflowDomainConstants.FamilyCountFieldKinds;
         private static readonly string[] ExtraCountFieldKinds = SummerWorkflowDomainConstants.ExtraCountFieldKinds;
+        private static readonly string[] PaymentModeFieldKinds = SummerWorkflowDomainConstants.PaymentModeFieldKinds;
+        private static readonly string[] InstallmentCountFieldKinds = SummerWorkflowDomainConstants.InstallmentCountFieldKinds;
+        private static readonly string[] PaymentStatusFieldKinds =
+        {
+            PaymentStatusFieldKind,
+            "SUM2026_PaymentStatus",
+            "PaymentStatus"
+        };
+        private static readonly string[] AutoCancelPrecheckFieldKinds =
+            new[]
+            {
+                PaidAtUtcFieldKind,
+                PaymentDueAtUtcFieldKind,
+                RequestCreatedAtUtcFieldKind
+            }
+            .Concat(PaymentStatusFieldKinds)
+            .Concat(SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(1))
+            .Concat(SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(1))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         private static readonly string[] DestinationIdFieldKinds = SummerWorkflowDomainConstants.DestinationIdFieldKinds;
         private static readonly string[] DestinationNameFieldKinds = SummerWorkflowDomainConstants.DestinationNameFieldKinds;
         private static readonly string[] EmployeeIdFieldKinds = SummerWorkflowDomainConstants.EmployeeIdFieldKinds;
@@ -43,11 +88,70 @@ namespace Persistence.Services
         private static readonly string[] EmployeeNationalIdFieldKinds = SummerWorkflowDomainConstants.EmployeeNationalIdFieldKinds;
         private static readonly string[] EmployeePhoneFieldKinds = SummerWorkflowDomainConstants.EmployeePhoneFieldKinds;
         private static readonly string[] EmployeeExtraPhoneFieldKinds = SummerWorkflowDomainConstants.EmployeeExtraPhoneFieldKinds;
+        private static readonly string[] WorkEntityFieldKinds =
+        {
+            "Department",
+            "SUM2026_Department",
+            "CurrPlace",
+            "CurrentPlace",
+            "OrgUnitName",
+            "OrganizationName",
+            "UnitName",
+            "EntityName",
+            "Job",
+            "SUM2026_Job"
+        };
+        private static readonly string[] UnitNumberFieldKinds =
+        {
+            "Summer_UnitNumber",
+            "SUM2026_UnitNumber",
+            "UnitNumber",
+            "RoomNumber",
+            "ApartmentNumber",
+            "ChaletNumber"
+        };
+        private static readonly string[] NotesFieldKinds =
+        {
+            "Description",
+            "Notes",
+            "Remark",
+            "Remarks",
+            "Summer_AdminComment",
+            "Summer_PaymentNotes"
+        };
+        private static readonly string[] PricingAccommodationTotalFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.AccommodationTotal
+        };
+        private static readonly string[] PricingTransportationTotalFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.TransportationTotal
+        };
+        private static readonly string[] PricingInsuranceAmountFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.InsuranceAmount
+        };
+        private static readonly string[] PricingMembershipTypeFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.MembershipType
+        };
+        private static readonly string[] PricingAppliedInsuranceAmountFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.AppliedInsuranceAmount
+        };
+        private static readonly string[] PricingGrandTotalFieldKinds =
+        {
+            SummerWorkflowDomainConstants.PricingFieldKinds.GrandTotal
+        };
         private static readonly string[] SummerNotificationGroups = { "CONNECT", "CONNECT - TEST" };
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"
         };
+        private static readonly TimeZoneInfo SummerBusinessTimeZone = ResolveSummerBusinessTimeZone();
+        private static readonly SummerAdminActionExecutionGate AdminActionExecutionGate = new();
+        private static readonly SummerRequestWorkflowEngine AdminActionWorkflowEngine = new();
+        private const string DefaultRequestUpdateSource = "SUMMER_WORKFLOW";
 
         public SummerWorkflowService(
             ConnectContext connectContext,
@@ -55,7 +159,9 @@ namespace Persistence.Services
             GPAContext gpaContext,
             helperService helperService,
             IConnectNotificationService notificationService,
-            IOptions<ApplicationConfig> options)
+            IOptions<ApplicationConfig> options,
+            IOptionsMonitor<ResortBookingBlacklistOptions> resortBookingBlacklistOptions,
+            ILogger<SummerWorkflowService> logger)
         {
             _connectContext = connectContext;
             _attachHeldContext = attachHeldContext;
@@ -63,6 +169,10 @@ namespace Persistence.Services
             _helperService = helperService;
             _notificationService = notificationService;
             _applicationConfig = options?.Value ?? new ApplicationConfig();
+            _logger = logger;
+            _summerPricingService = new SummerPricingService(_connectContext);
+            _summerBookingBlacklistService = new SummerBookingBlacklistService(resortBookingBlacklistOptions);
+            _summerUnitFreezeService = new SummerUnitFreezeService(_connectContext, _logger);
         }
 
         public async Task<CommonResponse<IEnumerable<SummerRequestSummaryDto>>> GetMyRequestsAsync(string userId, int seasonYear, int? messageId = null)
@@ -126,6 +236,12 @@ namespace Persistence.Services
                         continue;
                     }
 
+                    var isProxyBooking = ParseBooleanLike(GetFirstFieldValue(messageFields, SummerWorkflowDomainConstants.ProxyModeFieldKinds));
+                    if (isProxyBooking == true)
+                    {
+                        continue;
+                    }
+
                     var seasonFromField = ParseInt(GetFieldValue(messageFields, "SummerSeasonYear"), 0);
                     if (seasonFromField > 0 && seasonFromField != seasonYear)
                     {
@@ -138,6 +254,7 @@ namespace Persistence.Services
                         workflowStateCode,
                         TransferReviewRequiredCode,
                         StringComparison.OrdinalIgnoreCase);
+                    var paymentState = ResolveRequestPaymentStateSnapshot(messageFields);
 
                     summaries.Add(new SummerRequestSummaryDto
                     {
@@ -152,18 +269,304 @@ namespace Persistence.Services
                         EmployeePhone = GetFirstFieldValue(messageFields, EmployeePhoneFieldKinds),
                         EmployeeExtraPhone = GetFirstFieldValue(messageFields, EmployeeExtraPhoneFieldKinds),
                         Status = message.Status.ToString(),
-                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
+                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, IsWorkflowStateLabelPreferred(workflowStateCode), workflowStateLabel),
                         WorkflowStateCode = workflowStateCode,
                         WorkflowStateLabel = workflowStateLabel,
                         NeedsTransferReview = needsTransferReview,
-                        CreatedAt = message.CreatedDate,
-                        PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaymentDueAtUtc")),
-                        PaidAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaidAtUtc")),
+                        CreatedAt = ResolveRequestCreatedAtUtc(message, messageFields),
+                        PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, PaymentDueAtUtcFieldKind)),
+                        PaidAtUtc = paymentState.PaidAtUtc,
+                        PaymentStateCode = paymentState.PaymentStateCode,
+                        PaymentStateLabel = paymentState.PaymentStateLabel,
+                        PaidInstallmentsCount = paymentState.PaidInstallmentsCount,
+                        TotalInstallmentsCount = paymentState.TotalInstallmentsCount,
                         TransferUsed = ParseInt(GetFieldValue(messageFields, "Summer_TransferCount"), 0) > 0
                     });
                 }
 
                 response.Data = summaries;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<string>> CreateEditTokenAsync(
+            SummerCreateEditTokenRequest request,
+            string userId,
+            string ip,
+            bool hasSummerAdminPermission = false)
+        {
+            var response = new CommonResponse<string>();
+            request ??= new SummerCreateEditTokenRequest();
+            try
+            {
+                var normalizedUserId = (userId ?? string.Empty).Trim();
+                if (request.MessageId <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم الطلب مطلوب." });
+                    return response;
+                }
+
+                if (string.IsNullOrWhiteSpace(normalizedUserId))
+                {
+                    response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح." });
+                    return response;
+                }
+
+                var message = await _connectContext.Messages
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.MessageId == request.MessageId);
+                if (message == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
+                    return response;
+                }
+
+                var summerRules = await GetSummerRulesAsync();
+                if (!summerRules.ContainsKey(message.CategoryCd))
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    return response;
+                }
+
+                if (!await CanUserEditSummerMessageAsync(normalizedUserId, message))
+                {
+                    _logger.LogWarning(
+                        "Summer edit token creation denied due to missing authorization. MessageId={MessageId}, UserId={UserId}, IP={IP}",
+                        request.MessageId,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    return response;
+                }
+
+                var messageFields = await _connectContext.TkmendFields
+                    .AsNoTracking()
+                    .Where(field => field.FildRelted == message.MessageId)
+                    .ToListAsync();
+                var paymentState = ResolveRequestPaymentStateSnapshot(messageFields);
+                if (!hasSummerAdminPermission && (message.Status == MessageStatus.Rejected || paymentState.PaidAtUtc.HasValue))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن إنشاء رابط تعديل لهذا الطلب في حالته الحالية." });
+                    return response;
+                }
+
+                var now = DateTime.UtcNow;
+                var lifetimeMinutes = NormalizeEditTokenLifetimeMinutes(request.ExpireMinutes);
+                var purpose = SummerWorkflowDomainConstants.RequestTokenPurposes.SummerEdit;
+
+                var previouslyActiveTokens = await _connectContext.RequestTokens
+                    .Where(tokenRow =>
+                        tokenRow.MessageId == request.MessageId
+                        && tokenRow.TokenPurpose == purpose
+                        && tokenRow.RevokedAt == null
+                        && (!tokenRow.ExpiresAt.HasValue || tokenRow.ExpiresAt > now)
+                        && (!tokenRow.IsOneTimeUse || !tokenRow.IsUsed)
+                        && (tokenRow.UserId == null || tokenRow.UserId == normalizedUserId))
+                    .ToListAsync();
+                if (previouslyActiveTokens.Count > 0)
+                {
+                    foreach (var activeToken in previouslyActiveTokens)
+                    {
+                        activeToken.RevokedAt = now;
+                        activeToken.RevokedBy = normalizedUserId;
+                    }
+                }
+
+                var rawToken = GenerateSecureToken();
+                var tokenHash = ComputeTokenHash(rawToken);
+                var entity = new RequestToken
+                {
+                    Token = Guid.NewGuid().ToString("N"),
+                    TokenHash = tokenHash,
+                    MessageId = request.MessageId,
+                    TokenPurpose = purpose,
+                    IsUsed = false,
+                    IsOneTimeUse = request.OneTimeUse,
+                    UsedAt = null,
+                    CreatedAt = now,
+                    CreatedBy = normalizedUserId,
+                    UserId = normalizedUserId,
+                    ExpiresAt = now.AddMinutes(lifetimeMinutes),
+                    RevokedAt = null,
+                    RevokedBy = null
+                };
+
+                await _connectContext.RequestTokens.AddAsync(entity);
+                await _connectContext.SaveChangesAsync();
+
+                response.Data = rawToken;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerEditTokenResolutionDto>> ResolveEditTokenAsync(
+            string token,
+            string userId,
+            string ip,
+            bool hasSummerAdminPermission = false)
+        {
+            var response = new CommonResponse<SummerEditTokenResolutionDto>();
+            try
+            {
+                var normalizedToken = (token ?? string.Empty).Trim();
+                var normalizedUserId = (userId ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(normalizedToken))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "رمز الرابط مطلوب." });
+                    return response;
+                }
+
+                if (string.IsNullOrWhiteSpace(normalizedUserId))
+                {
+                    response.Errors.Add(new Error { Code = "401", Message = "المستخدم غير مصرح." });
+                    return response;
+                }
+
+                var tokenHash = ComputeTokenHash(normalizedToken);
+                var tokenRow = await _connectContext.RequestTokens
+                    .OrderByDescending(item => item.CreatedAt)
+                    .FirstOrDefaultAsync(item =>
+                        (item.TokenHash != null && item.TokenHash == tokenHash)
+                        || (item.TokenHash == null && item.Token == normalizedToken));
+                if (tokenRow == null)
+                {
+                    _logger.LogWarning(
+                        "Summer edit token lookup failed (not found). UserId={UserId}, IP={IP}, TokenPrefix={TokenPrefix}",
+                        normalizedUserId,
+                        ip,
+                        normalizedToken.Length > 8 ? normalizedToken[..8] : normalizedToken);
+                    response.Errors.Add(new Error { Code = "404", Message = "رابط التعديل غير صالح." });
+                    return response;
+                }
+
+                var tokenPurpose = (tokenRow.TokenPurpose ?? string.Empty).Trim();
+                if (!string.Equals(tokenPurpose, SummerWorkflowDomainConstants.RequestTokenPurposes.SummerEdit, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected due to invalid purpose. TokenId={TokenId}, Purpose={Purpose}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenPurpose,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "404", Message = "رابط التعديل غير صالح." });
+                    return response;
+                }
+
+                var now = DateTime.UtcNow;
+                if (tokenRow.RevokedAt.HasValue)
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected (revoked). TokenId={TokenId}, MessageId={MessageId}, RevokedAt={RevokedAt}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        tokenRow.RevokedAt,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "410", Message = "انتهت صلاحية رابط التعديل." });
+                    return response;
+                }
+
+                if (tokenRow.ExpiresAt.HasValue && tokenRow.ExpiresAt.Value <= now)
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected (expired). TokenId={TokenId}, MessageId={MessageId}, ExpiresAt={ExpiresAt}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        tokenRow.ExpiresAt,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "410", Message = "انتهت صلاحية رابط التعديل." });
+                    return response;
+                }
+
+                if (tokenRow.IsOneTimeUse && tokenRow.IsUsed)
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected (already used). TokenId={TokenId}, MessageId={MessageId}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "410", Message = "تم استخدام رابط التعديل مسبقاً." });
+                    return response;
+                }
+
+                if (!string.IsNullOrWhiteSpace(tokenRow.UserId)
+                    && !string.Equals(tokenRow.UserId.Trim(), normalizedUserId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected (user mismatch). TokenId={TokenId}, MessageId={MessageId}, TokenUserId={TokenUserId}, CurrentUserId={CurrentUserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        tokenRow.UserId,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "404", Message = "رابط التعديل غير صالح." });
+                    return response;
+                }
+
+                var message = await _connectContext.Messages
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.MessageId == tokenRow.MessageId);
+                if (message == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
+                    return response;
+                }
+
+                var summerRules = await GetSummerRulesAsync();
+                if (!summerRules.ContainsKey(message.CategoryCd))
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    return response;
+                }
+
+                if (!await CanUserEditSummerMessageAsync(normalizedUserId, message))
+                {
+                    _logger.LogWarning(
+                        "Summer edit token rejected due to access check. TokenId={TokenId}, MessageId={MessageId}, UserId={UserId}, IP={IP}",
+                        tokenRow.Id,
+                        tokenRow.MessageId,
+                        normalizedUserId,
+                        ip);
+                    response.Errors.Add(new Error { Code = "404", Message = "رابط التعديل غير صالح." });
+                    return response;
+                }
+
+                var messageFields = await _connectContext.TkmendFields
+                    .AsNoTracking()
+                    .Where(field => field.FildRelted == message.MessageId)
+                    .ToListAsync();
+                var paymentState = ResolveRequestPaymentStateSnapshot(messageFields);
+                if (!hasSummerAdminPermission && (message.Status == MessageStatus.Rejected || paymentState.PaidAtUtc.HasValue))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تعديل الطلب في حالته الحالية." });
+                    return response;
+                }
+
+                if (tokenRow.IsOneTimeUse && !tokenRow.IsUsed)
+                {
+                    tokenRow.IsUsed = true;
+                    tokenRow.UsedAt = now;
+                    await _connectContext.SaveChangesAsync();
+                }
+
+                response.Data = new SummerEditTokenResolutionDto
+                {
+                    MessageId = tokenRow.MessageId,
+                    ExpiresAtUtc = tokenRow.ExpiresAt,
+                    IsOneTimeUse = tokenRow.IsOneTimeUse
+                };
             }
             catch (Exception ex)
             {
@@ -258,6 +661,7 @@ namespace Persistence.Services
                         workflowStateCode,
                         TransferReviewRequiredCode,
                         StringComparison.OrdinalIgnoreCase);
+                    var paymentState = ResolveRequestPaymentStateSnapshot(messageFields);
 
                     summaries.Add(new SummerRequestSummaryDto
                     {
@@ -272,21 +676,28 @@ namespace Persistence.Services
                         EmployeePhone = GetFirstFieldValue(messageFields, EmployeePhoneFieldKinds),
                         EmployeeExtraPhone = GetFirstFieldValue(messageFields, EmployeeExtraPhoneFieldKinds),
                         Status = message.Status.ToString(),
-                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, needsTransferReview, workflowStateLabel),
+                        StatusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, IsWorkflowStateLabelPreferred(workflowStateCode), workflowStateLabel),
                         WorkflowStateCode = workflowStateCode,
                         WorkflowStateLabel = workflowStateLabel,
                         NeedsTransferReview = needsTransferReview,
-                        CreatedAt = message.CreatedDate,
-                        PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaymentDueAtUtc")),
-                        PaidAtUtc = ParseDate(GetFieldValue(messageFields, "Summer_PaidAtUtc")),
+                        CreatedAt = ResolveRequestCreatedAtUtc(message, messageFields),
+                        PaymentDueAtUtc = ParseDate(GetFieldValue(messageFields, PaymentDueAtUtcFieldKind)),
+                        PaidAtUtc = paymentState.PaidAtUtc,
+                        PaymentStateCode = paymentState.PaymentStateCode,
+                        PaymentStateLabel = paymentState.PaymentStateLabel,
+                        PaidInstallmentsCount = paymentState.PaidInstallmentsCount,
+                        TotalInstallmentsCount = paymentState.TotalInstallmentsCount,
                         TransferUsed = ParseInt(GetFieldValue(messageFields, "Summer_TransferCount"), 0) > 0
                     });
                 }
 
                 var normalizedWaveCode = (query.WaveCode ?? string.Empty).Trim();
                 var normalizedEmployeeId = (query.EmployeeId ?? string.Empty).Trim();
+                var requestedStatusRaw = (query.Status ?? string.Empty).Trim();
                 var normalizedStatus = NormalizeSearchToken(query.Status);
-                var normalizedPaymentState = NormalizeSearchToken(query.PaymentState);
+                var requestedMessageStatus = ResolveRequestedStatusMessageStatus(requestedStatusRaw);
+                var requestedStatusCode = ResolveDashboardStatusCode(requestedStatusRaw);
+                var requestedPaymentState = ResolveRequestedPaymentStateFilter(query.PaymentState);
                 var normalizedSearch = NormalizeSearchToken(query.Search);
                 var nowUtc = DateTime.UtcNow;
 
@@ -311,7 +722,7 @@ namespace Persistence.Services
 
                     if (!string.IsNullOrWhiteSpace(normalizedStatus))
                     {
-                        if (byte.TryParse(query.Status, out var statusByte))
+                        if (byte.TryParse(requestedStatusRaw, out var statusByte))
                         {
                             if ((byte)ResolveMessageStatus(item.Status) != statusByte)
                             {
@@ -320,47 +731,57 @@ namespace Persistence.Services
                         }
                         else
                         {
-                            var statusToken = NormalizeSearchToken(item.Status);
-                            var statusLabelToken = NormalizeSearchToken(item.StatusLabel);
-                            var workflowStateToken = NormalizeSearchToken(item.WorkflowStateCode);
-                            var workflowStateLabelToken = NormalizeSearchToken(item.WorkflowStateLabel);
-                            if (!statusToken.Contains(normalizedStatus)
-                                && !statusLabelToken.Contains(normalizedStatus)
-                                && !workflowStateToken.Contains(normalizedStatus)
-                                && !workflowStateLabelToken.Contains(normalizedStatus))
+                            var itemMessageStatus = ResolveMessageStatus(item.Status);
+                            var itemStatusCode = ResolveDashboardStatusCode(ResolveDashboardStatusLabel(item));
+                            var matchedByCanonicalStatus =
+                                (requestedMessageStatus.HasValue && itemMessageStatus == requestedMessageStatus.Value)
+                                || (!string.IsNullOrWhiteSpace(requestedStatusCode)
+                                    && string.Equals(itemStatusCode, requestedStatusCode, StringComparison.OrdinalIgnoreCase));
+
+                            if (!matchedByCanonicalStatus)
                             {
-                                return false;
+                                var statusToken = NormalizeSearchToken(item.Status);
+                                var statusLabelToken = NormalizeSearchToken(item.StatusLabel);
+                                var workflowStateToken = NormalizeSearchToken(item.WorkflowStateCode);
+                                var workflowStateLabelToken = NormalizeSearchToken(item.WorkflowStateLabel);
+                                if (!statusToken.Contains(normalizedStatus)
+                                    && !statusLabelToken.Contains(normalizedStatus)
+                                    && !workflowStateToken.Contains(normalizedStatus)
+                                    && !workflowStateLabelToken.Contains(normalizedStatus))
+                                {
+                                    return false;
+                                }
                             }
                         }
                     }
 
-                    if (!string.IsNullOrWhiteSpace(normalizedPaymentState))
+                    if (requestedPaymentState != PaymentStateFilterKind.Any)
                     {
-                        var isPaid = item.PaidAtUtc.HasValue;
+                        var paymentStateCode = NormalizeSearchToken(item.PaymentStateCode);
+                        var isPaid = paymentStateCode == NormalizeSearchToken(RequestPaymentStatePaidCode);
+                        var isPartialPaid = paymentStateCode == NormalizeSearchToken(RequestPaymentStatePartialPaidCode);
+                        var isUnpaid = paymentStateCode == NormalizeSearchToken(RequestPaymentStateUnpaidCode);
                         var isOverdueUnpaid = !isPaid
+                            && !isPartialPaid
                             && item.PaymentDueAtUtc.HasValue
-                            && item.PaymentDueAtUtc.Value < nowUtc
-                            && ResolveMessageStatus(item.Status) != MessageStatus.Rejected;
+                            && item.PaymentDueAtUtc.Value < nowUtc;
 
-                        var isPaidFilter = normalizedPaymentState is "paid" or "مسدد";
-                        var isUnpaidFilter = normalizedPaymentState is "unpaid" or "غيرمسدد";
-                        var isOverdueUnpaidFilter = normalizedPaymentState is
-                            "overdue"
-                            or "overdueunpaid"
-                            or "متاخرغيرمسدد"
-                            or "متأخرغيرمسدد";
-
-                        if (isPaidFilter && !isPaid)
+                        if (requestedPaymentState == PaymentStateFilterKind.Paid && !isPaid)
                         {
                             return false;
                         }
 
-                        if (isUnpaidFilter && isPaid)
+                        if (requestedPaymentState == PaymentStateFilterKind.Unpaid && !isUnpaid)
                         {
                             return false;
                         }
 
-                        if (isOverdueUnpaidFilter && !isOverdueUnpaid)
+                        if (requestedPaymentState == PaymentStateFilterKind.PartialPaid && !isPartialPaid)
+                        {
+                            return false;
+                        }
+
+                        if (requestedPaymentState == PaymentStateFilterKind.OverdueUnpaid && !isOverdueUnpaid)
                         {
                             return false;
                         }
@@ -450,6 +871,9 @@ namespace Persistence.Services
 
                 var requests = listResponse.Data?.ToList() ?? new List<SummerRequestSummaryDto>();
                 var nowUtc = DateTime.UtcNow;
+                var paidStateToken = NormalizeSearchToken(RequestPaymentStatePaidCode);
+                var partialPaidStateToken = NormalizeSearchToken(RequestPaymentStatePartialPaidCode);
+                var unpaidStateToken = NormalizeSearchToken(RequestPaymentStateUnpaidCode);
                 var scopeCategoryName = requests
                     .Where(r => !string.IsNullOrWhiteSpace(r.CategoryName))
                     .Select(r => r.CategoryName)
@@ -477,14 +901,18 @@ namespace Persistence.Services
                     NewCount = requests.Count(r => ResolveMessageStatus(r.Status) == MessageStatus.New),
                     InProgressCount = requests.Count(r => ResolveMessageStatus(r.Status) == MessageStatus.InProgress),
                     RepliedCount = requests.Count(r => ResolveMessageStatus(r.Status) == MessageStatus.Replied),
-                    RejectedCount = requests.Count(r => ResolveMessageStatus(r.Status) == MessageStatus.Rejected),
-                    PaidCount = requests.Count(r => r.PaidAtUtc.HasValue),
-                    UnpaidCount = requests.Count(r => !r.PaidAtUtc.HasValue),
+                    RejectedCount = requests.Count(r =>
+                        string.Equals(
+                            ResolveDashboardStatusCode(ResolveDashboardStatusLabel(r)),
+                            "REJECTED",
+                            StringComparison.OrdinalIgnoreCase)),
+                    PaidCount = requests.Count(r => NormalizeSearchToken(r.PaymentStateCode) == paidStateToken),
+                    PartialPaidCount = requests.Count(r => NormalizeSearchToken(r.PaymentStateCode) == partialPaidStateToken),
+                    UnpaidCount = requests.Count(r => NormalizeSearchToken(r.PaymentStateCode) == unpaidStateToken),
                     OverdueUnpaidCount = requests.Count(r =>
-                        !r.PaidAtUtc.HasValue
+                        NormalizeSearchToken(r.PaymentStateCode) == unpaidStateToken
                         && r.PaymentDueAtUtc.HasValue
-                        && r.PaymentDueAtUtc.Value < nowUtc
-                        && ResolveMessageStatus(r.Status) != MessageStatus.Rejected),
+                        && r.PaymentDueAtUtc.Value < nowUtc),
                     ByDestination = requests
                         .GroupBy(r => new
                         {
@@ -516,7 +944,456 @@ namespace Persistence.Services
                         .ToList()
                 };
 
+                _logger.LogInformation(
+                    "Summer admin dashboard computed. UserId={UserId}, SeasonYear={SeasonYear}, ScopeCategoryId={ScopeCategoryId}, ScopeWaveCode={ScopeWaveCode}, Total={Total}, Unpaid={Unpaid}, OverdueUnpaid={OverdueUnpaid}",
+                    userId,
+                    seasonYear,
+                    categoryId,
+                    normalizedWaveCode,
+                    dashboard.TotalRequests,
+                    dashboard.UnpaidCount,
+                    dashboard.OverdueUnpaidCount);
+
                 response.Data = dashboard;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<IEnumerable<SummerUnitFreezeDto>>> GetUnitFreezesAsync(
+            SummerUnitFreezeQuery query,
+            string userId,
+            bool hasSummerPricingPermission = false)
+        {
+            var response = new CommonResponse<IEnumerable<SummerUnitFreezeDto>>();
+            query ??= new SummerUnitFreezeQuery();
+            try
+            {
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض عمليات تجميد الوحدات. يتطلب دور المدير العام (RoleId 2021)."
+                    });
+                    return response;
+                }
+
+                var manageableCategoryIds = await GetManageableSummerCategoryIdsAsync(userId);
+                if (manageableCategoryIds.Count == 0)
+                {
+                    var summerRules = await GetSummerRulesAsync();
+                    manageableCategoryIds = summerRules.Keys.ToHashSet();
+                }
+
+                if (manageableCategoryIds.Count == 0)
+                {
+                    response.Data = Array.Empty<SummerUnitFreezeDto>();
+                    return response;
+                }
+
+                var normalizedWaveCode = (query.WaveCode ?? string.Empty).Trim();
+                var freezeQuery = _summerUnitFreezeService.BuildFreezeBatchesQuery()
+                    .AsNoTracking()
+                    .Where(batch => manageableCategoryIds.Contains(batch.CategoryId));
+
+                if (query.CategoryId.HasValue && query.CategoryId.Value > 0)
+                {
+                    freezeQuery = freezeQuery.Where(batch => batch.CategoryId == query.CategoryId.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(normalizedWaveCode))
+                {
+                    freezeQuery = freezeQuery.Where(batch => batch.WaveCode == normalizedWaveCode);
+                }
+
+                if (query.FamilyCount.HasValue && query.FamilyCount.Value > 0)
+                {
+                    freezeQuery = freezeQuery.Where(batch => batch.FamilyCount == query.FamilyCount.Value);
+                }
+
+                if (query.IsActive.HasValue)
+                {
+                    freezeQuery = freezeQuery.Where(batch => batch.IsActive == query.IsActive.Value);
+                }
+
+                var batches = await freezeQuery
+                    .OrderByDescending(batch => batch.CreatedAtUtc)
+                    .ToListAsync();
+                if (batches.Count == 0)
+                {
+                    response.Data = Array.Empty<SummerUnitFreezeDto>();
+                    return response;
+                }
+
+                var freezeIds = batches.Select(batch => batch.FreezeId).ToList();
+                var detailCounters = await _connectContext.SummerUnitFreezeDetails
+                    .AsNoTracking()
+                    .Where(detail => freezeIds.Contains(detail.FreezeId))
+                    .GroupBy(detail => new { detail.FreezeId, detail.Status })
+                    .Select(group => new
+                    {
+                        group.Key.FreezeId,
+                        group.Key.Status,
+                        Count = group.Count()
+                    })
+                    .ToListAsync();
+
+                var availableByFreeze = detailCounters
+                    .Where(item => item.Status == SummerUnitFreezeStatuses.FrozenAvailable)
+                    .ToDictionary(item => item.FreezeId, item => item.Count);
+                var assignedByFreeze = detailCounters
+                    .Where(item => item.Status == SummerUnitFreezeStatuses.Booked)
+                    .ToDictionary(item => item.FreezeId, item => item.Count);
+
+                response.Data = batches
+                    .Select(batch => MapFreezeBatchToDto(
+                        batch,
+                        availableByFreeze.TryGetValue(batch.FreezeId, out var frozenAvailableUnits) ? frozenAvailableUnits : 0,
+                        assignedByFreeze.TryGetValue(batch.FreezeId, out var frozenAssignedUnits) ? frozenAssignedUnits : 0))
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerUnitFreezeDto>> CreateUnitFreezeAsync(
+            SummerUnitFreezeCreateRequest request,
+            string userId,
+            bool hasSummerPricingPermission = false)
+        {
+            var response = new CommonResponse<SummerUnitFreezeDto>();
+            var traceId = Guid.NewGuid().ToString("N");
+            request ??= new SummerUnitFreezeCreateRequest();
+            try
+            {
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بإنشاء تجميد وحدات. يتطلب دور المدير العام (RoleId 2021)."
+                    });
+                    return response;
+                }
+
+                _logger.LogInformation(
+                    "Unit-freeze create request started. TraceId={TraceId}, UserId={UserId}, CategoryId={CategoryId}, WaveCode={WaveCode}, FamilyCount={FamilyCount}, RequestedUnitsCount={RequestedUnitsCount}",
+                    traceId,
+                    userId,
+                    request.CategoryId,
+                    request.WaveCode,
+                    request.FamilyCount,
+                    request.RequestedUnitsCount);
+
+                if (request.CategoryId <= 0 || string.IsNullOrWhiteSpace(request.WaveCode) || request.FamilyCount <= 0 || request.RequestedUnitsCount <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "بيانات التجميد غير مكتملة." });
+                    _logger.LogWarning(
+                        "Unit-freeze create request validation failed. TraceId={TraceId}",
+                        traceId);
+                    return response;
+                }
+
+                var seasonYear = SummerWorkflowDomainConstants.DefaultSeasonYear;
+                var summerRules = await GetSummerRulesAsync(seasonYear);
+                if (!summerRules.TryGetValue(request.CategoryId, out var rule))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف غير مُعد في النظام." });
+                    _logger.LogWarning(
+                        "Unit-freeze create failed because category is not configured in summer rules. TraceId={TraceId}, CategoryId={CategoryId}",
+                        traceId,
+                        request.CategoryId);
+                    return response;
+                }
+
+                if (!rule.CapacityByFamily.TryGetValue(request.FamilyCount, out var totalUnits) || totalUnits <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "السعة المطلوبة غير متاحة في إعدادات المصيف." });
+                    _logger.LogWarning(
+                        "Unit-freeze create failed because requested family capacity is not configured. TraceId={TraceId}, CategoryId={CategoryId}, FamilyCount={FamilyCount}",
+                        traceId,
+                        request.CategoryId,
+                        request.FamilyCount);
+                    return response;
+                }
+
+                _logger.LogInformation(
+                    "Before creating freeze batch. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, FamilyCount={FamilyCount}, RequestedUnitsCount={RequestedUnitsCount}, TotalUnits={TotalUnits}",
+                    traceId,
+                    request.CategoryId,
+                    request.WaveCode,
+                    request.FamilyCount,
+                    request.RequestedUnitsCount,
+                    totalUnits);
+
+                var createResult = await _summerUnitFreezeService.CreateFreezeBatchAsync(
+                    request.CategoryId,
+                    request.WaveCode,
+                    request.FamilyCount,
+                    request.RequestedUnitsCount,
+                    totalUnits,
+                    request.FreezeType ?? "GENERAL",
+                    request.Reason,
+                    request.Notes,
+                    userId,
+                    requestTraceId: traceId);
+
+                if (!createResult.Success || createResult.Batch == null)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = string.IsNullOrWhiteSpace(createResult.ErrorCode) ? "400" : createResult.ErrorCode!,
+                        Message = string.IsNullOrWhiteSpace(createResult.ErrorMessage) ? "تعذر إنشاء التجميد." : createResult.ErrorMessage!
+                    });
+                    _logger.LogWarning(
+                        "Unit-freeze create failed in freeze service result. TraceId={TraceId}, ErrorCode={ErrorCode}, ErrorMessage={ErrorMessage}",
+                        traceId,
+                        createResult.ErrorCode,
+                        createResult.ErrorMessage);
+                    return response;
+                }
+
+                _logger.LogInformation(
+                    "Before mapping freeze response DTO. TraceId={TraceId}, FreezeId={FreezeId}",
+                    traceId,
+                    createResult.Batch.FreezeId);
+                response.Data = MapFreezeBatchToDto(
+                    createResult.Batch,
+                    request.RequestedUnitsCount,
+                    0);
+
+                _logger.LogInformation(
+                    "Before secondary capacity update publish (SignalR). TraceId={TraceId}, FreezeId={FreezeId}, CategoryId={CategoryId}, WaveCode={WaveCode}",
+                    traceId,
+                    createResult.Batch.FreezeId,
+                    request.CategoryId,
+                    request.WaveCode?.Trim());
+                await PublishCapacityUpdateAsync(request.CategoryId, request.WaveCode.Trim(), "FREEZE_CREATE", traceId);
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+                _logger.LogError(
+                    ex,
+                    "Unit-freeze create request failed with unhandled exception. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, FamilyCount={FamilyCount}, RequestedUnitsCount={RequestedUnitsCount}",
+                    traceId,
+                    request.CategoryId,
+                    request.WaveCode,
+                    request.FamilyCount,
+                    request.RequestedUnitsCount);
+            }
+            finally
+            {
+                _logger.LogInformation(
+                    "Immediately before returning unit-freeze create response. TraceId={TraceId}, IsSuccess={IsSuccess}, ErrorCount={ErrorCount}, FreezeId={FreezeId}",
+                    traceId,
+                    response.IsSuccess,
+                    response.Errors.Count,
+                    response.Data?.FreezeId);
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerUnitFreezeDto>> ReleaseUnitFreezeAsync(
+            SummerUnitFreezeReleaseRequest request,
+            string userId,
+            bool hasSummerPricingPermission = false)
+        {
+            var response = new CommonResponse<SummerUnitFreezeDto>();
+            request ??= new SummerUnitFreezeReleaseRequest();
+            try
+            {
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بفك التجميد. يتطلب دور المدير العام (RoleId 2021)."
+                    });
+                    return response;
+                }
+
+                if (request.FreezeId <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم التجميد مطلوب." });
+                    return response;
+                }
+
+                var batchSnapshot = await _summerUnitFreezeService.BuildFreezeBatchesQuery()
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(batch => batch.FreezeId == request.FreezeId);
+                if (batchSnapshot == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "عملية التجميد غير موجودة." });
+                    return response;
+                }
+
+                var releaseResult = await _summerUnitFreezeService.ReleaseFreezeBatchAsync(request.FreezeId, userId);
+                if (!releaseResult.Success || releaseResult.Batch == null)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = string.IsNullOrWhiteSpace(releaseResult.ErrorCode) ? "400" : releaseResult.ErrorCode!,
+                        Message = string.IsNullOrWhiteSpace(releaseResult.ErrorMessage) ? "تعذر فك التجميد." : releaseResult.ErrorMessage!
+                    });
+                    return response;
+                }
+
+                var frozenAvailableUnits = releaseResult.Batch.Details.Count(detail => detail.Status == SummerUnitFreezeStatuses.FrozenAvailable);
+                var frozenAssignedUnits = releaseResult.Batch.Details.Count(detail => detail.Status == SummerUnitFreezeStatuses.Booked);
+                response.Data = MapFreezeBatchToDto(releaseResult.Batch, frozenAvailableUnits, frozenAssignedUnits);
+
+                await PublishCapacityUpdateAsync(releaseResult.Batch.CategoryId, releaseResult.Batch.WaveCode, "FREEZE_RELEASE");
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerUnitFreezeDetailsDto>> GetUnitFreezeDetailsAsync(
+            int freezeId,
+            string userId,
+            bool hasSummerPricingPermission = false)
+        {
+            var response = new CommonResponse<SummerUnitFreezeDetailsDto>();
+            try
+            {
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض تفاصيل التجميد. يتطلب دور المدير العام (RoleId 2021)."
+                    });
+                    return response;
+                }
+
+                if (freezeId <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "رقم التجميد مطلوب." });
+                    return response;
+                }
+
+                var batch = await _summerUnitFreezeService.BuildFreezeBatchesQuery()
+                    .AsNoTracking()
+                    .Include(item => item.Details)
+                    .FirstOrDefaultAsync(item => item.FreezeId == freezeId);
+                if (batch == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "عملية التجميد غير موجودة." });
+                    return response;
+                }
+
+                var frozenAvailableUnits = batch.Details.Count(detail => detail.Status == SummerUnitFreezeStatuses.FrozenAvailable);
+                var frozenAssignedUnits = batch.Details.Count(detail => detail.Status == SummerUnitFreezeStatuses.Booked);
+
+                response.Data = new SummerUnitFreezeDetailsDto
+                {
+                    Freeze = MapFreezeBatchToDto(batch, frozenAvailableUnits, frozenAssignedUnits),
+                    Units = batch.Details
+                        .OrderBy(detail => detail.SlotNumber)
+                        .Select(detail => new SummerUnitFreezeDetailDto
+                        {
+                            FreezeDetailId = detail.FreezeDetailId,
+                            SlotNumber = detail.SlotNumber,
+                            Status = detail.Status,
+                            AssignedMessageId = detail.AssignedMessageId,
+                            AssignedAtUtc = detail.AssignedAtUtc,
+                            ReleasedAtUtc = detail.ReleasedAtUtc,
+                            ReleasedBy = detail.ReleasedBy,
+                            LastStatusChangedAtUtc = detail.LastStatusChangedAtUtc
+                        })
+                        .ToList()
+                };
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerUnitsAvailableCountDto>> GetUnitsAvailableCountAsync(SummerUnitsAvailableCountQuery query, string userId)
+        {
+            var response = new CommonResponse<SummerUnitsAvailableCountDto>();
+            query ??= new SummerUnitsAvailableCountQuery();
+            try
+            {
+                if (query.CategoryId <= 0 || query.FamilyCount <= 0 || string.IsNullOrWhiteSpace(query.WaveCode))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "بيانات الإتاحة غير مكتملة." });
+                    return response;
+                }
+
+                if (!await CanUserManageSummerCategoryAsync(userId, query.CategoryId))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض إتاحة الوحدات لهذا المصيف."
+                    });
+                    return response;
+                }
+
+                var summerRules = await GetSummerRulesAsync();
+                if (!summerRules.TryGetValue(query.CategoryId, out var rule))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف غير مُعد في النظام." });
+                    return response;
+                }
+
+                if (!rule.CapacityByFamily.TryGetValue(query.FamilyCount, out var totalUnits) || totalUnits <= 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "السعة المطلوبة غير متاحة في إعدادات المصيف." });
+                    return response;
+                }
+
+                var normalizedWaveCode = query.WaveCode.Trim();
+                var usedUnits = await _summerUnitFreezeService.CountUsedUnitsAsync(
+                    query.CategoryId,
+                    normalizedWaveCode,
+                    query.FamilyCount);
+                var frozenAvailableUnits = await _summerUnitFreezeService.CountActiveFrozenAvailableUnitsAsync(
+                    query.CategoryId,
+                    normalizedWaveCode,
+                    query.FamilyCount);
+                var frozenAssignedUnits = await _summerUnitFreezeService.CountActiveFrozenAssignedUnitsAsync(
+                    query.CategoryId,
+                    normalizedWaveCode,
+                    query.FamilyCount);
+
+                var publicAvailableUnits = Math.Max(0, totalUnits - usedUnits - frozenAvailableUnits);
+                var availableUnits = query.IncludeFrozenUnits
+                    ? Math.Max(0, publicAvailableUnits + frozenAvailableUnits)
+                    : publicAvailableUnits;
+
+                response.Data = new SummerUnitsAvailableCountDto
+                {
+                    CategoryId = query.CategoryId,
+                    WaveCode = normalizedWaveCode,
+                    FamilyCount = query.FamilyCount,
+                    TotalUnits = totalUnits,
+                    UsedUnits = usedUnits,
+                    FrozenAvailableUnits = frozenAvailableUnits,
+                    FrozenAssignedUnits = frozenAssignedUnits,
+                    PublicAvailableUnits = publicAvailableUnits,
+                    AvailableUnits = availableUnits,
+                    IncludeFrozenUnits = query.IncludeFrozenUnits
+                };
             }
             catch (Exception ex)
             {
@@ -545,7 +1422,13 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (!_helperService.ValidateFileSizes(request.files, response))
+                _logger.LogInformation(
+                    "Summer admin action started. MessageId={MessageId}, ActionCode={ActionCode}, AdminUserId={AdminUserId}",
+                    request.MessageId,
+                    actionCode,
+                    userId);
+
+                if (!ValidateAttachmentFileSizes(request.files, response))
                 {
                     return response;
                 }
@@ -555,50 +1438,99 @@ namespace Persistence.Services
                     return response;
                 }
 
-                var comment = (request.Comment ?? string.Empty).Trim();
-                if (actionCode == SummerAdminActionCatalog.Codes.ApproveTransfer)
-                {
-                    if (!request.ToCategoryId.HasValue || string.IsNullOrWhiteSpace(request.ToWaveCode))
-                    {
-                        response.Errors.Add(new Error { Code = "400", Message = "بيانات التحويل غير مكتملة (المصيف والفوج المستهدفان مطلوبان)." });
-                        return response;
-                    }
-
-                    var transferResponse = await TransferAsync(new SummerTransferRequest
-                    {
-                        MessageId = request.MessageId,
-                        ToCategoryId = request.ToCategoryId.Value,
-                        ToWaveCode = request.ToWaveCode.Trim(),
-                        NewFamilyCount = request.NewFamilyCount,
-                        NewExtraCount = request.NewExtraCount,
-                        Notes = request.Comment,
-                        files = request.files
-                    }, userId, ip);
-
-                    if (!transferResponse.IsSuccess)
-                    {
-                        foreach (var error in transferResponse.Errors)
-                        {
-                            response.Errors.Add(error);
-                        }
-                        return response;
-                    }
-
-                    response.Data = transferResponse.Data;
-                    if (transferResponse.Data != null)
-                    {
-                        await NotifyEmployeeOnAdminActionAsync(transferResponse.Data, actionCode, comment, includeSignalR: false);
-                    }
-                    return response;
-                }
-
                 var summerRules = await GetSummerRulesAsync();
-                var message = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
+                var message = await _connectContext.Messages
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
                 if (message == null || !summerRules.ContainsKey(message.CategoryCd))
                 {
                     response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
                     return response;
                 }
+
+                if (!await CanUserManageMessageAsync(userId, message))
+                {
+                    _logger.LogWarning(
+                        "Summer admin action rejected due to missing admin scope. MessageId={MessageId}, ActionCode={ActionCode}, UserId={UserId}, AssignedSectorId={AssignedSectorId}, CurrentResponsibleSectorId={CurrentResponsibleSectorId}",
+                        message.MessageId,
+                        actionCode,
+                        userId,
+                        message.AssignedSectorId,
+                        message.CurrentResponsibleSectorId);
+                    response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بتنفيذ هذا الإجراء على الطلب." });
+                    return response;
+                }
+
+                var comment = (request.Comment ?? string.Empty).Trim();
+                if (!ValidateAdminActionComment(actionCode, comment, response))
+                {
+                    return response;
+                }
+                var attemptedAtUtc = DateTime.UtcNow;
+
+                await using var adminActionGateLease = await AdminActionExecutionGate.TryEnterAsync(request.MessageId, AdminActionGateTimeoutMs);
+                if (adminActionGateLease == null)
+                {
+                    _logger.LogWarning(
+                        "Summer admin action blocked by in-process concurrency gate. MessageId={MessageId}, UserId={UserId}, AttemptedAction={AttemptedAction}, CurrentStatus={CurrentStatus}, AttemptedAtUtc={AttemptedAtUtc}",
+                        request.MessageId,
+                        userId,
+                        actionCode,
+                        message.Status,
+                        attemptedAtUtc);
+                    response.Errors.Add(new Error
+                    {
+                        Code = "409",
+                        Message = "تعذر تنفيذ الإجراء حالياً لوجود عملية متزامنة على نفس الطلب. برجاء المحاولة بعد ثوانٍ."
+                    });
+                    return response;
+                }
+
+                if (!await AcquireAdminActionLockAsync(request.MessageId))
+                {
+                    _logger.LogWarning(
+                        "Summer admin action blocked by database lock timeout. MessageId={MessageId}, UserId={UserId}, AttemptedAction={AttemptedAction}, CurrentStatus={CurrentStatus}, AttemptedAtUtc={AttemptedAtUtc}",
+                        request.MessageId,
+                        userId,
+                        actionCode,
+                        message.Status,
+                        attemptedAtUtc);
+                    response.Errors.Add(new Error
+                    {
+                        Code = "409",
+                        Message = "تعذر تنفيذ الإجراء حالياً لوجود عملية متزامنة على نفس الطلب. برجاء المحاولة بعد ثوانٍ."
+                    });
+                    return response;
+                }
+
+                var messageToProcess = await _connectContext.Messages.FirstOrDefaultAsync(m => m.MessageId == request.MessageId);
+                if (messageToProcess == null)
+                {
+                    response.Errors.Add(new Error { Code = "404", Message = "طلب المصيف غير موجود." });
+                    return response;
+                }
+
+                var workflowResolution = AdminActionWorkflowEngine.Resolve(messageToProcess.Status, actionCode);
+                if (!workflowResolution.IsAllowed)
+                {
+                    _logger.LogWarning(
+                        "Summer admin action blocked by workflow engine. MessageId={MessageId}, UserId={UserId}, AttemptedAction={AttemptedAction}, CurrentStatus={CurrentStatus}, TargetState={TargetState}, AttemptedAtUtc={AttemptedAtUtc}, Reason={Reason}",
+                        request.MessageId,
+                        userId,
+                        actionCode,
+                        messageToProcess.Status,
+                        workflowResolution.TargetState,
+                        attemptedAtUtc,
+                        workflowResolution.ErrorMessage);
+                    response.Errors.Add(new Error
+                    {
+                        Code = "409",
+                        Message = workflowResolution.ErrorMessage
+                    });
+                    return response;
+                }
+
+                message = messageToProcess;
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
 
@@ -606,26 +1538,13 @@ namespace Persistence.Services
                 await using var attachTx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
                 try
                 {
+                    var previousState = message.Status;
                     var replyMessage = string.Empty;
                     if (actionCode == SummerAdminActionCatalog.Codes.FinalApprove)
                     {
-                        if (message.Status == MessageStatus.Rejected && !request.Force)
-                        {
-                            response.Errors.Add(new Error { Code = "400", Message = "الطلب مرفوض بالفعل. استخدم خيار القوة إذا لزم." });
-                            await attachTx.RollbackAsync();
-                            await connectTx.RollbackAsync();
-                            return response;
-                        }
+                        message.Status = workflowResolution.TargetState ?? MessageStatus.Replied;
 
-                        message.Status = MessageStatus.Replied;
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.FinalApprove);
-                        UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
-                        if (!string.IsNullOrWhiteSpace(comment))
-                        {
-                            UpsertField(fields, message.MessageId, "Summer_AdminComment", comment);
-                        }
-
-                        var paymentStatusToken = NormalizeSearchToken(GetFieldValue(fields, "Summer_PaymentStatus"));
+                        var paymentStatusToken = NormalizeSearchToken(GetFieldValue(fields, PaymentStatusFieldKind));
                         var needsRePaymentToken = NormalizeSearchToken(GetFieldValue(fields, "Summer_TransferRequiresRePayment"));
                         var shouldRestorePaidState = paymentStatusToken == "pendingpayment"
                             || needsRePaymentToken == "true"
@@ -633,9 +1552,9 @@ namespace Persistence.Services
                         var restorePaidNote = string.Empty;
                         if (shouldRestorePaidState)
                         {
-                            var paidAt = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")) ?? DateTime.UtcNow;
-                            UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PAID");
-                            UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", paidAt.ToString("o"));
+                            var paidAt = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind)) ?? DateTime.UtcNow;
+                            UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "PAID");
+                            UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, paidAt.ToString("o"));
                             UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
                             UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", "تم اعتماد الطلب نهائيًا من الإدارة، وتمت إعادة حالة السداد إلى مسدد.");
                             restorePaidNote = " وتمت إعادة حالة السداد إلى مسدد تلقائياً.";
@@ -648,18 +1567,24 @@ namespace Persistence.Services
                             UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
                         }
 
+                        if (IsPendingReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote}"
                             : $"تم اعتماد الطلب نهائياً من إدارة المصايف.{restorePaidNote} تعليق الإدارة: {comment}";
                     }
                     else if (actionCode == SummerAdminActionCatalog.Codes.ManualCancel)
                     {
-                        message.Status = MessageStatus.Rejected;
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.ManualCancel);
-                        UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
+                        message.Status = workflowResolution.TargetState ?? MessageStatus.Rejected;
                         UpsertField(fields, message.MessageId, "Summer_CancelReason", string.IsNullOrWhiteSpace(comment) ? "إلغاء يدوي من إدارة المصايف." : comment);
                         UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
-                        UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "CANCELLED_ADMIN");
+                        UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED_ADMIN");
+                        await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, userId);
                         if (IsTransferReviewRequired(fields))
                         {
                             UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
@@ -667,16 +1592,201 @@ namespace Persistence.Services
                             UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
                         }
 
+                        if (IsPendingReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? "تم إلغاء الطلب يدويًا من إدارة المصايف."
                             : $"تم إلغاء الطلب يدويًا من إدارة المصايف. السبب: {comment}";
                     }
+                    else if (actionCode == SummerAdminActionCatalog.Codes.RejectRequest)
+                    {
+                        message.Status = workflowResolution.TargetState ?? MessageStatus.Rejected;
+                        UpsertField(fields, message.MessageId, ActionTypeFieldKind, "ADMIN_REJECT");
+                        UpsertField(fields, message.MessageId, "Summer_RejectionReason", string.IsNullOrWhiteSpace(comment) ? "تم رفض الطلب من إدارة المصايف." : comment);
+                        UpsertField(fields, message.MessageId, "Summer_RejectedAtUtc", DateTime.UtcNow.ToString("o"));
+                        UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "REJECTED_ADMIN");
+                        await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, userId);
+                        if (IsTransferReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", TransferReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(TransferReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
+                        if (IsPendingReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
+                        replyMessage = string.IsNullOrWhiteSpace(comment)
+                            ? "تم رفض الطلب من إدارة المصايف."
+                            : $"تم رفض الطلب من إدارة المصايف. السبب: {comment}";
+                    }
+                    else if (actionCode == SummerAdminActionCatalog.Codes.MarkUnpaid)
+                    {
+                        if (!IsInitialPaymentMarkedPaidForAutoCancel(fields))
+                        {
+                            response.Errors.Add(new Error { Code = "409", Message = "حالة السداد مسجلة بالفعل كغير مسدد." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var reopenedDueAt = TruncateToWholeSecondUtc(DateTime.UtcNow.AddHours(24));
+                        UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "PENDING_PAYMENT");
+                        UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, string.Empty);
+                        UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, reopenedDueAt.ToString("o"));
+                        UpsertFieldRange(
+                            fields,
+                            message.MessageId,
+                            SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(1),
+                            "false");
+                        UpsertFieldRange(
+                            fields,
+                            message.MessageId,
+                            SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(1),
+                            string.Empty);
+
+                        if (IsPendingReviewRequired(fields))
+                        {
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewResolvedCode);
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewResolvedCode));
+                            UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        }
+
+                        replyMessage = string.IsNullOrWhiteSpace(comment)
+                            ? "تم تحويل حالة السداد إلى غير مسدد من إدارة المصايف. سيتم إلغاء الطلب تلقائياً بعد مرور 24 ساعة من الآن إذا لم يتم استيفاء شروط السداد."
+                            : $"تم تحويل حالة السداد إلى غير مسدد من إدارة المصايف. السبب: {comment}. سيتم إلغاء الطلب تلقائياً بعد مرور 24 ساعة من الآن إذا لم يتم استيفاء شروط السداد.";
+                    }
+                    else if (actionCode == SummerAdminActionCatalog.Codes.MarkPaidAdmin)
+                    {
+                        if (!IsAutoCancelledByPaymentTimeout(fields))
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "409",
+                                Message = "سداد إداري متاح فقط للطلبات الملغاة تلقائياً بسبب انتهاء مهلة السداد."
+                            });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        if (IsInitialPaymentMarkedPaidForAutoCancel(fields))
+                        {
+                            response.Errors.Add(new Error { Code = "409", Message = "حالة السداد مسجلة بالفعل كمسدد." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var normalizedWaveCode = GetFirstFieldValue(fields, WaveCodeFieldKinds).Trim();
+                        if (string.IsNullOrWhiteSpace(normalizedWaveCode))
+                        {
+                            response.Errors.Add(new Error { Code = "400", Message = "تعذر تحديد الفوج الحالي للطلب." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var familyCount = ParseInt(GetFirstFieldValue(fields, FamilyCountFieldKinds), 0);
+                        if (familyCount <= 0)
+                        {
+                            response.Errors.Add(new Error { Code = "400", Message = "تعذر تحديد سعة الوحدة الحالية للطلب." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var seasonYear = ParseInt(GetFieldValue(fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
+                        var actionSummerRules = await GetSummerRulesAsync(seasonYear);
+                        if (!actionSummerRules.TryGetValue(message.CategoryCd, out var actionRule))
+                        {
+                            response.Errors.Add(new Error { Code = "400", Message = "المصيف الحالي غير مُعد في النظام." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        if (!actionRule.CapacityByFamily.ContainsKey(familyCount))
+                        {
+                            response.Errors.Add(new Error { Code = "400", Message = "سعة الوحدة الحالية غير متاحة في إعدادات المصيف." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        if (!await AcquireCapacityLockAsync(message.CategoryCd, normalizedWaveCode))
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "409",
+                                Message = "تعذر حجز السعة حالياً بسبب حفظ متزامن. برجاء إعادة المحاولة بعد ثوانٍ."
+                            });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var hasCapacity = await HasCapacityAsync(
+                            message.CategoryCd,
+                            normalizedWaveCode,
+                            familyCount,
+                            actionRule,
+                            message.MessageId);
+                        if (!hasCapacity)
+                        {
+                            response.Errors.Add(new Error { Code = "429", Message = "لا توجد سعة متاحة حالياً للوحدة/المصيف لهذا الطلب." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var administrativePaidAtUtc = DateTime.UtcNow;
+                        message.Status = workflowResolution.TargetState ?? MessageStatus.InProgress;
+                        UpsertField(fields, message.MessageId, PaymentStatusFieldKind, PaymentStatusAdminPaidCode);
+                        UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, administrativePaidAtUtc.ToString("o"));
+                        UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, string.Empty);
+                        UpsertFieldRange(
+                            fields,
+                            message.MessageId,
+                            SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(1),
+                            "true");
+                        UpsertFieldRange(
+                            fields,
+                            message.MessageId,
+                            SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(1),
+                            administrativePaidAtUtc.ToString("o"));
+                        UpsertField(fields, message.MessageId, "Summer_CancelReason", string.Empty);
+                        UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", string.Empty);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewRequiredCode);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewRequiredCode));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateReason", "تم تسجيل سداد إداري بعد الإلغاء التلقائي لانتهاء مهلة السداد.");
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", administrativePaidAtUtc.ToString("o"));
+                        UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
+                        UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", string.Empty);
+
+                        replyMessage = string.IsNullOrWhiteSpace(comment)
+                            ? "تم تحويل حالة السداد إلى سداد إداري وإعادة فتح الطلب للمراجعة."
+                            : $"تم تحويل حالة السداد إلى سداد إداري وإعادة فتح الطلب للمراجعة. الملاحظات: {comment}";
+                    }
                     else if (actionCode == SummerAdminActionCatalog.Codes.Comment)
                     {
-                        UpsertField(fields, message.MessageId, "Summer_AdminLastAction", SummerAdminActionCatalog.Codes.Comment);
-                        UpsertField(fields, message.MessageId, "Summer_AdminActionAtUtc", DateTime.UtcNow.ToString("o"));
                         replyMessage = string.IsNullOrWhiteSpace(comment)
                             ? "تم تسجيل تعليق إداري على الطلب."
+                            : comment;
+                    }
+                    else if (actionCode == SummerAdminActionCatalog.Codes.InternalAdminAction)
+                    {
+                        replyMessage = string.IsNullOrWhiteSpace(comment)
+                            ? "تم تسجيل إجراء إداري داخلي على الطلب."
                             : comment;
                     }
                     else
@@ -686,6 +1796,16 @@ namespace Persistence.Services
                         await connectTx.RollbackAsync();
                         return response;
                     }
+
+                    ApplyAdminActionAuditFields(
+                        fields,
+                        message.MessageId,
+                        actionCode,
+                        previousState,
+                        message.Status,
+                        userId,
+                        DateTime.UtcNow,
+                        comment);
 
                     await AddReplyWithAttachmentsAsync(message.MessageId, replyMessage, userId, ip, request.files);
 
@@ -702,17 +1822,38 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(request.MessageId);
-                if (response.Data != null)
+                var shouldNotifyEmployeeOnAdminAction = response.Data != null
+                    && !string.Equals(actionCode, SummerAdminActionCatalog.Codes.InternalAdminAction, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(actionCode, SummerAdminActionCatalog.Codes.MarkPaidAdmin, StringComparison.OrdinalIgnoreCase);
+                if (shouldNotifyEmployeeOnAdminAction)
                 {
-                    await NotifyEmployeeOnAdminActionAsync(response.Data, actionCode, comment, includeSignalR: false);
+                    await NotifyEmployeeOnAdminActionAsync(response.Data!, actionCode, comment, includeSignalR: false);
                 }
 
-                if (actionCode == SummerAdminActionCatalog.Codes.ManualCancel && response.Data != null)
+                if ((actionCode == SummerAdminActionCatalog.Codes.ManualCancel
+                        || actionCode == SummerAdminActionCatalog.Codes.RejectRequest)
+                    && response.Data != null)
                 {
-                    await PublishCapacityUpdateAsync(response.Data.CategoryId, response.Data.WaveCode, "ADMIN_CANCEL");
+                    await PublishCapacityUpdateAsync(
+                        response.Data.CategoryId,
+                        response.Data.WaveCode,
+                        actionCode == SummerAdminActionCatalog.Codes.RejectRequest ? "ADMIN_REJECT" : "ADMIN_CANCEL");
+                }
+                else if (actionCode == SummerAdminActionCatalog.Codes.MarkPaidAdmin
+                    && response.Data != null)
+                {
+                    await PublishCapacityUpdateAsync(
+                        response.Data.CategoryId,
+                        response.Data.WaveCode,
+                        "ADMIN_MARK_PAID");
                 }
 
-                await PublishRequestUpdateAsync(request.MessageId, actionCode);
+                await PublishRequestUpdateAsync(
+                    request.MessageId,
+                    actionCode,
+                    notifyResponsibleAdmins: false,
+                    notifyOwner: actionCode != SummerAdminActionCatalog.Codes.MarkPaidAdmin,
+                    source: "ADMIN_ACTION");
             }
             catch (Exception ex)
             {
@@ -722,7 +1863,185 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<IEnumerable<SummerWaveCapacityDto>>> GetWaveCapacityAsync(int categoryId, string waveCode)
+        private async Task<bool> CanUserManageMessageAsync(string userId, Message message)
+        {
+            if (message == null)
+            {
+                return false;
+            }
+
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return false;
+            }
+
+            var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+            if (!userUnitIds.Any())
+            {
+                return false;
+            }
+
+            var assignedSectorId = (message.AssignedSectorId ?? string.Empty).Trim();
+            var currentResponsibleSectorId = (message.CurrentResponsibleSectorId ?? string.Empty).Trim();
+
+            return userUnitIds.Contains(assignedSectorId, StringComparer.OrdinalIgnoreCase)
+                || userUnitIds.Contains(currentResponsibleSectorId, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private async Task<bool> CanUserEditSummerMessageAsync(string userId, Message message)
+        {
+            if (message == null)
+            {
+                return false;
+            }
+
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return false;
+            }
+
+            if (string.Equals((message.CreatedBy ?? string.Empty).Trim(), normalizedUserId, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (await CanUserManageMessageAsync(normalizedUserId, message))
+            {
+                return true;
+            }
+
+            var ownerEmployeeId = await ResolveRequestOwnerEmployeeIdAsync(message.MessageId);
+            return string.Equals(ownerEmployeeId, normalizedUserId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static int NormalizeEditTokenLifetimeMinutes(int? requestedMinutes)
+        {
+            var fallback = SummerWorkflowDomainConstants.DefaultEditTokenLifetimeMinutes;
+            var raw = requestedMinutes ?? fallback;
+            if (raw < SummerWorkflowDomainConstants.MinEditTokenLifetimeMinutes)
+            {
+                return SummerWorkflowDomainConstants.MinEditTokenLifetimeMinutes;
+            }
+
+            if (raw > SummerWorkflowDomainConstants.MaxEditTokenLifetimeMinutes)
+            {
+                return SummerWorkflowDomainConstants.MaxEditTokenLifetimeMinutes;
+            }
+
+            return raw;
+        }
+
+        private static string GenerateSecureToken(int bytesLength = 32)
+        {
+            var bytes = RandomNumberGenerator.GetBytes(bytesLength);
+            return Convert.ToBase64String(bytes)
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+        }
+
+        private static string ComputeTokenHash(string token)
+        {
+            var normalized = (token ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var input = Encoding.UTF8.GetBytes(normalized);
+            var hash = SHA256.HashData(input);
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+
+        private async Task<bool> CanUserManageSummerCategoryAsync(string userId, int categoryId)
+        {
+            if (categoryId <= 0)
+            {
+                return false;
+            }
+
+            var manageableCategoryIds = await GetManageableSummerCategoryIdsAsync(userId);
+            return manageableCategoryIds.Contains(categoryId);
+        }
+
+        private async Task<HashSet<int>> GetManageableSummerCategoryIdsAsync(string userId)
+        {
+            var normalizedUserId = (userId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                return new HashSet<int>();
+            }
+
+            var userUnitIds = await GetActiveUserUnitIdsAsync(normalizedUserId);
+            if (userUnitIds.Count == 0)
+            {
+                return new HashSet<int>();
+            }
+
+            var summerRules = await GetSummerRulesAsync();
+            var summerCategoryIds = summerRules.Keys.ToList();
+            if (summerCategoryIds.Count == 0)
+            {
+                return new HashSet<int>();
+            }
+
+            var categories = await _connectContext.Cdcategories
+                .AsNoTracking()
+                .Where(category => summerCategoryIds.Contains(category.CatId))
+                .Select(category => new
+                {
+                    category.CatId,
+                    category.CatParent,
+                    category.Stockholder
+                })
+                .ToListAsync();
+            if (categories.Count == 0)
+            {
+                return new HashSet<int>();
+            }
+
+            var parentIds = categories
+                .Select(category => category.CatParent)
+                .Where(parentId => parentId > 0)
+                .Distinct()
+                .ToList();
+            var parentStockholders = parentIds.Count == 0
+                ? new Dictionary<int, int?>()
+                : await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .Where(parent => parentIds.Contains(parent.CatId))
+                    .Select(parent => new { parent.CatId, parent.Stockholder })
+                    .ToDictionaryAsync(parent => parent.CatId, parent => parent.Stockholder);
+
+            var manageableCategoryIds = new HashSet<int>();
+            foreach (var category in categories)
+            {
+                var categoryStockholder = category.Stockholder?.ToString();
+                var parentStockholder = parentStockholders.TryGetValue(category.CatParent, out var parentStockholderValue) && parentStockholderValue.HasValue
+                    ? parentStockholderValue.Value.ToString()
+                    : string.Empty;
+
+                var allowed = (!string.IsNullOrWhiteSpace(categoryStockholder)
+                               && userUnitIds.Contains(categoryStockholder, StringComparer.OrdinalIgnoreCase))
+                              || (!string.IsNullOrWhiteSpace(parentStockholder)
+                                  && userUnitIds.Contains(parentStockholder, StringComparer.OrdinalIgnoreCase));
+                if (allowed)
+                {
+                    manageableCategoryIds.Add(category.CatId);
+                }
+            }
+
+            return manageableCategoryIds;
+        }
+
+        public async Task<CommonResponse<IEnumerable<SummerWaveCapacityDto>>> GetWaveCapacityAsync(
+            int categoryId,
+            string waveCode,
+            string userId,
+            bool includeFrozenUnits = false,
+            bool hasSummerAdminPermission = false)
         {
             var response = new CommonResponse<IEnumerable<SummerWaveCapacityDto>>();
             try
@@ -740,38 +2059,969 @@ namespace Persistence.Services
                     return response;
                 }
 
+                var includeFrozenStock = false;
+                if (includeFrozenUnits)
+                {
+                    includeFrozenStock = hasSummerAdminPermission || await CanUserManageSummerCategoryAsync(userId, categoryId);
+                    if (!includeFrozenStock)
+                    {
+                        response.Errors.Add(new Error
+                        {
+                            Code = "403",
+                            Message = "غير مصرح لك بعرض الوحدات المجمدة في هذا المصيف."
+                        });
+                        _logger.LogWarning(
+                            "Rejected include-frozen wave capacity request for unauthorized user. UserId={UserId}, CategoryId={CategoryId}, WaveCode={WaveCode}",
+                            userId,
+                            categoryId,
+                            waveCode);
+                        return response;
+                    }
+                }
+
                 var normalizedWave = waveCode.Trim();
                 var activeMessageIds = await GetActiveMessageIdsForWaveAsync(categoryId, normalizedWave);
                 var familyFields = activeMessageIds.Count == 0
                     ? new List<TkmendField>()
                     : await _connectContext.TkmendFields
                         .AsNoTracking()
-                        .Where(f => activeMessageIds.Contains(f.FildRelted) && f.FildKind == "FamilyCount")
+                        .Where(f => activeMessageIds.Contains(f.FildRelted)
+                            && (f.FildKind == "FamilyCount" || f.FildKind == "SUM2026_FamilyCount"))
                         .ToListAsync();
+                var frozenAvailableByFamily = await _summerUnitFreezeService.CountActiveFrozenAvailableByFamilyAsync(categoryId, normalizedWave);
+                var capacityRows = new List<SummerWaveCapacityDto>();
+                foreach (var item in rule.CapacityByFamily.OrderBy(item => item.Key))
+                {
+                    var familyCount = item.Key;
+                    var totalUnits = item.Value;
+                    var usedUnits = familyFields
+                        .Where(f => ParseInt(f.FildTxt, 0) == familyCount)
+                        .Select(f => f.FildRelted)
+                        .Distinct()
+                        .Count();
+                    var frozenAvailableUnits = frozenAvailableByFamily.TryGetValue(familyCount, out var frozenCount)
+                        ? frozenCount
+                        : 0;
+                    var frozenAssignedUnits = await _summerUnitFreezeService.CountActiveFrozenAssignedUnitsAsync(
+                        categoryId,
+                        normalizedWave,
+                        familyCount);
 
-                response.Data = rule.CapacityByFamily
-                    .OrderBy(item => item.Key)
-                    .Select(item =>
+                    var publicAvailableUnits = Math.Max(0, totalUnits - usedUnits - frozenAvailableUnits);
+                    var exposedFrozenAvailableUnits = includeFrozenStock ? frozenAvailableUnits : 0;
+                    var exposedFrozenAssignedUnits = includeFrozenStock ? frozenAssignedUnits : 0;
+                    var exposedUsedUnits = includeFrozenStock
+                        ? usedUnits
+                        : Math.Max(0, totalUnits - publicAvailableUnits);
+
+                    var computedAvailableUnits = includeFrozenStock
+                        ? Math.Max(0, publicAvailableUnits + frozenAvailableUnits)
+                        : publicAvailableUnits;
+
+                    capacityRows.Add(new SummerWaveCapacityDto
                     {
-                        var familyCount = item.Key;
-                        var totalUnits = item.Value;
-                        var usedUnits = familyFields
-                            .Where(f => ParseInt(f.FildTxt, 0) == familyCount)
-                            .Select(f => f.FildRelted)
-                            .Distinct()
-                            .Count();
+                        CategoryId = categoryId,
+                        WaveCode = normalizedWave,
+                        FamilyCount = familyCount,
+                        TotalUnits = totalUnits,
+                        UsedUnits = exposedUsedUnits,
+                        AvailableUnits = computedAvailableUnits,
+                        FrozenAvailableUnits = exposedFrozenAvailableUnits,
+                        FrozenAssignedUnits = exposedFrozenAssignedUnits
+                    });
+                }
 
-                        return new SummerWaveCapacityDto
+                response.Data = capacityRows;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerWaveBookingsPrintReportDto>> GetWaveBookingsPrintReportAsync(
+            int categoryId,
+            string waveCode,
+            int seasonYear,
+            string userId,
+            bool includeFinancials = false)
+        {
+            var response = new CommonResponse<SummerWaveBookingsPrintReportDto>();
+            try
+            {
+                if (categoryId <= 0 || string.IsNullOrWhiteSpace(waveCode))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف والفوج مطلوبان." });
+                    return response;
+                }
+
+                var normalizedUserId = (userId ?? string.Empty).Trim();
+                if (normalizedUserId.Length == 0)
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "معرف المستخدم مطلوب." });
+                    return response;
+                }
+
+                var normalizedWaveCode = waveCode.Trim();
+                var normalizedSeasonYear = seasonYear > 0 ? seasonYear : DateTime.UtcNow.Year;
+                var summerRules = await GetSummerRulesAsync(normalizedSeasonYear);
+                if (!summerRules.TryGetValue(categoryId, out var categoryRule))
+                {
+                    response.Errors.Add(new Error { Code = "400", Message = "المصيف غير مُعد في النظام." });
+                    return response;
+                }
+
+                var categoryName = await _connectContext.Cdcategories
+                    .AsNoTracking()
+                    .Where(category => category.CatId == categoryId)
+                    .Select(category => category.CatName)
+                    .FirstOrDefaultAsync();
+
+                var (waveStartAtUtc, waveEndAtUtc) = ResolveWaveDateRangeUtc(
+                    categoryRule,
+                    categoryId,
+                    normalizedSeasonYear,
+                    normalizedWaveCode);
+
+                var report = new SummerWaveBookingsPrintReportDto
+                {
+                    CategoryId = categoryId,
+                    CategoryName = ResolveDisplayText(categoryName, $"مصيف {categoryId}"),
+                    WaveCode = normalizedWaveCode,
+                    WaveStartAtUtc = waveStartAtUtc,
+                    WaveEndAtUtc = waveEndAtUtc,
+                    GeneratedAtUtc = DateTime.UtcNow,
+                    GeneratedByUserId = normalizedUserId,
+                    IncludeFinancials = includeFinancials,
+                    TotalBookings = 0
+                };
+
+                var activeMessageIds = await GetActiveMessageIdsForWaveAsync(categoryId, normalizedWaveCode);
+                if (activeMessageIds.Count == 0)
+                {
+                    response.Data = report;
+                    return response;
+                }
+
+                var messages = await _connectContext.Messages
+                    .AsNoTracking()
+                    .Where(message => activeMessageIds.Contains(message.MessageId))
+                    .OrderBy(message => message.CreatedDate)
+                    .ThenBy(message => message.MessageId)
+                    .ToListAsync();
+                if (messages.Count == 0)
+                {
+                    response.Data = report;
+                    return response;
+                }
+
+                var messageIds = messages.Select(message => message.MessageId).ToList();
+                var allFields = await _connectContext.TkmendFields
+                    .AsNoTracking()
+                    .Where(field => messageIds.Contains(field.FildRelted))
+                    .ToListAsync();
+                var fieldsByMessageId = allFields
+                    .GroupBy(field => field.FildRelted)
+                    .ToDictionary(group => group.Key, group => group.ToList());
+
+                var rows = new List<(int? FamilyCount, SummerWaveBookingPrintRowDto Row)>();
+                foreach (var message in messages)
+                {
+                    var messageFields = fieldsByMessageId.TryGetValue(message.MessageId, out var resolvedFields)
+                        ? resolvedFields
+                        : new List<TkmendField>();
+
+                    var familyCountValue = ParseInt(GetFirstFieldValue(messageFields, FamilyCountFieldKinds), 0);
+                    var familyCount = familyCountValue > 0 ? familyCountValue : (int?)null;
+                    var extraCount = Math.Max(0, ParseInt(GetFirstFieldValue(messageFields, ExtraCountFieldKinds), 0));
+                    var personsCount = ResolvePersonsCount(messageFields, familyCountValue, extraCount);
+
+                    var workflowStateCode = GetFieldValue(messageFields, "Summer_WorkflowState") ?? string.Empty;
+                    var workflowStateLabel = ResolveWorkflowStateLabel(workflowStateCode);
+                    var needsTransferReview = string.Equals(
+                        workflowStateCode,
+                        TransferReviewRequiredCode,
+                        StringComparison.OrdinalIgnoreCase);
+                    var statusLabel = ResolveSummaryStatusLabel(message.Status, messageFields, IsWorkflowStateLabelPreferred(workflowStateCode), workflowStateLabel);
+
+                    var bookingTypeLabel = ResolveBookingTypeLabel(
+                        GetFirstFieldValue(messageFields, SummerWorkflowDomainConstants.StayModeFieldKinds),
+                        GetFieldValue(messageFields, SummerWorkflowDomainConstants.PricingFieldKinds.SelectedStayMode) ?? string.Empty,
+                        GetFieldValue(messageFields, SummerWorkflowDomainConstants.PricingFieldKinds.PricingMode) ?? string.Empty,
+                        GetFirstFieldValue(messageFields, SummerWorkflowDomainConstants.ProxyModeFieldKinds));
+
+                    var (bookingAmount, insuranceAmount, finalAmount) = includeFinancials
+                        ? ResolveRowFinancialAmounts(messageFields)
+                        : (0m, 0m, 0m);
+                    var paymentCollection = ResolvePaymentCollectionSnapshot(messageFields, finalAmount);
+
+                    var row = new SummerWaveBookingPrintRowDto
+                    {
+                        MessageId = message.MessageId,
+                        RequestRef = ResolveDisplayText(message.RequestRef),
+                        BookerName = ResolveDisplayText(
+                            GetFirstFieldValue(messageFields, EmployeeNameFieldKinds),
+                            $"طلب رقم {message.MessageId}"),
+                        WorkEntity = ResolveDisplayText(GetFirstFieldValue(messageFields, WorkEntityFieldKinds)),
+                        BookingTypeLabel = ResolveDisplayText(bookingTypeLabel),
+                        UnitNumber = ResolveDisplayText(GetFirstFieldValue(messageFields, UnitNumberFieldKinds)),
+                        PersonsCount = Math.Max(0, personsCount),
+                        StatusLabel = ResolveDisplayText(statusLabel),
+                        Notes = ResolveDisplayText(GetFirstFieldValue(messageFields, NotesFieldKinds)),
+                        PaymentMode = paymentCollection.PaymentModeCode,
+                        PaymentModeLabel = paymentCollection.PaymentModeLabel,
+                        CollectionStatusLabel = paymentCollection.CollectionStatusLabel,
+                        BookingAmount = bookingAmount,
+                        InsuranceAmount = insuranceAmount,
+                        FinalAmount = finalAmount,
+                        CollectedAmount = paymentCollection.CollectedAmount,
+                        UncollectedAmount = paymentCollection.UncollectedAmount,
+                        IsFullyCollected = paymentCollection.IsFullyCollected
+                    };
+
+                    rows.Add((familyCount, row));
+                }
+
+                report.Sections = rows
+                    .GroupBy(item => item.FamilyCount)
+                    .OrderBy(group => group.Key ?? int.MaxValue)
+                    .Select(group =>
+                    {
+                        var orderedRows = group
+                            .Select(item => item.Row)
+                            .OrderBy(item => item.BookerName, StringComparer.OrdinalIgnoreCase)
+                            .ThenBy(item => item.RequestRef, StringComparer.OrdinalIgnoreCase)
+                            .ThenBy(item => item.MessageId)
+                            .ToList();
+
+                        return new SummerWaveBookingsPrintSectionDto
                         {
-                            CategoryId = categoryId,
-                            WaveCode = normalizedWave,
-                            FamilyCount = familyCount,
-                            TotalUnits = totalUnits,
-                            UsedUnits = usedUnits,
-                            AvailableUnits = Math.Max(0, totalUnits - usedUnits)
+                            FamilyCount = group.Key,
+                            SectionLabel = ResolveSectionLabel(group.Key),
+                            TotalBookings = orderedRows.Count,
+                            TotalBookingAmount = includeFinancials ? orderedRows.Sum(item => item.BookingAmount) : 0m,
+                            TotalInsuranceAmount = includeFinancials ? orderedRows.Sum(item => item.InsuranceAmount) : 0m,
+                            TotalFinalAmount = includeFinancials ? orderedRows.Sum(item => item.FinalAmount) : 0m,
+                            TotalCollectedAmount = includeFinancials ? orderedRows.Sum(item => item.CollectedAmount) : 0m,
+                            TotalUncollectedAmount = includeFinancials ? orderedRows.Sum(item => item.UncollectedAmount) : 0m,
+                            CashBookingsCount = orderedRows.Count(item => IsCashPaymentMode(item.PaymentMode)),
+                            InstallmentBookingsCount = orderedRows.Count(item => IsInstallmentPaymentMode(item.PaymentMode)),
+                            CashFinalAmount = includeFinancials
+                                ? orderedRows.Where(item => IsCashPaymentMode(item.PaymentMode)).Sum(item => item.FinalAmount)
+                                : 0m,
+                            InstallmentFinalAmount = includeFinancials
+                                ? orderedRows.Where(item => IsInstallmentPaymentMode(item.PaymentMode)).Sum(item => item.FinalAmount)
+                                : 0m,
+                            Rows = orderedRows
                         };
                     })
                     .ToList();
+
+                report.TotalBookings = report.Sections.Sum(section => section.TotalBookings);
+                report.TotalBookingAmount = includeFinancials ? report.Sections.Sum(section => section.TotalBookingAmount) : 0m;
+                report.TotalInsuranceAmount = includeFinancials ? report.Sections.Sum(section => section.TotalInsuranceAmount) : 0m;
+                report.TotalFinalAmount = includeFinancials ? report.Sections.Sum(section => section.TotalFinalAmount) : 0m;
+                report.TotalCollectedAmount = includeFinancials ? report.Sections.Sum(section => section.TotalCollectedAmount) : 0m;
+                report.TotalUncollectedAmount = includeFinancials ? report.Sections.Sum(section => section.TotalUncollectedAmount) : 0m;
+                report.CashBookingsCount = report.Sections.Sum(section => section.CashBookingsCount);
+                report.InstallmentBookingsCount = report.Sections.Sum(section => section.InstallmentBookingsCount);
+                report.CashFinalAmount = includeFinancials ? report.Sections.Sum(section => section.CashFinalAmount) : 0m;
+                report.InstallmentFinalAmount = includeFinancials ? report.Sections.Sum(section => section.InstallmentFinalAmount) : 0m;
+                response.Data = report;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        private static (DateTime? WaveStartAtUtc, DateTime? WaveEndAtUtc) ResolveWaveDateRangeUtc(
+            SummerRule? categoryRule,
+            int categoryId,
+            int seasonYear,
+            string waveCode)
+        {
+            if (!TryResolveWaveStartUtc(categoryRule, categoryId, seasonYear, waveCode, null, out var waveStartAtUtc))
+            {
+                return (null, null);
+            }
+
+            DateTime? waveEndAtUtc = null;
+            if (categoryRule?.WaveStartByCode?.Count > 0)
+            {
+                var nearestNextWaveStartUtc = categoryRule.WaveStartByCode
+                    .Values
+                    .Where(value => value > waveStartAtUtc)
+                    .OrderBy(value => value)
+                    .FirstOrDefault();
+
+                if (nearestNextWaveStartUtc != default)
+                {
+                    waveEndAtUtc = nearestNextWaveStartUtc.AddDays(-1);
+                }
+            }
+
+            waveEndAtUtc ??= waveStartAtUtc.AddDays(6);
+            return (waveStartAtUtc, waveEndAtUtc);
+        }
+
+        private static int ResolvePersonsCount(IEnumerable<TkmendField> fields, int familyCount, int extraCount)
+        {
+            var pricingPersonsCount = ParseInt(GetFieldValue(fields, SummerWorkflowDomainConstants.PricingFieldKinds.PersonsCount), 0);
+            if (pricingPersonsCount > 0)
+            {
+                return pricingPersonsCount;
+            }
+
+            if (familyCount > 0)
+            {
+                return familyCount + Math.Max(0, extraCount);
+            }
+
+            return 0;
+        }
+
+        private static (decimal BookingAmount, decimal InsuranceAmount, decimal FinalAmount) ResolveRowFinancialAmounts(
+            IEnumerable<TkmendField> fields)
+        {
+            var accommodationTotal = ParseDecimal(GetFirstFieldValue(fields, PricingAccommodationTotalFieldKinds), 0m);
+            var transportationTotal = ParseDecimal(GetFirstFieldValue(fields, PricingTransportationTotalFieldKinds), 0m);
+            var explicitBookingAmount = Math.Max(0m, accommodationTotal + transportationTotal);
+
+            var appliedInsuranceAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingAppliedInsuranceAmountFieldKinds));
+            var membershipTypeRaw = GetFirstFieldValue(fields, PricingMembershipTypeFieldKinds);
+            if (string.IsNullOrWhiteSpace(membershipTypeRaw))
+            {
+                membershipTypeRaw = GetFirstFieldValue(fields, SummerWorkflowDomainConstants.MembershipTypeFieldKinds);
+            }
+            var normalizedMembershipType = SummerMembershipPolicy.NormalizeMembershipType(membershipTypeRaw);
+            var baseInsuranceAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingInsuranceAmountFieldKinds));
+            var insuranceAmount = appliedInsuranceAmount
+                ?? (IsMembershipTypeDefined(membershipTypeRaw)
+                    ? SummerMembershipPolicy.ResolveInsuranceAmount(normalizedMembershipType)
+                    : baseInsuranceAmount ?? SummerMembershipPolicy.WorkerInsuranceAmount);
+            insuranceAmount = Math.Max(0m, insuranceAmount);
+
+            var grandTotalAmount = ParseDecimalNullable(GetFirstFieldValue(fields, PricingGrandTotalFieldKinds));
+            var bookingAmount = explicitBookingAmount;
+            if (bookingAmount <= 0m && grandTotalAmount.HasValue)
+            {
+                bookingAmount = Math.Max(0m, grandTotalAmount.Value - insuranceAmount);
+            }
+
+            var finalAmount = bookingAmount + insuranceAmount;
+            if (finalAmount <= 0m && grandTotalAmount.HasValue)
+            {
+                var normalizedGrandTotal = Math.Max(0m, grandTotalAmount.Value);
+                bookingAmount = normalizedGrandTotal;
+                finalAmount = normalizedGrandTotal;
+            }
+
+            return (
+                NormalizeMoneyAmount(bookingAmount),
+                NormalizeMoneyAmount(insuranceAmount),
+                NormalizeMoneyAmount(finalAmount));
+        }
+
+        private readonly struct PaymentCollectionSnapshot
+        {
+            public PaymentCollectionSnapshot(
+                string paymentModeCode,
+                string paymentModeLabel,
+                decimal collectedAmount,
+                decimal uncollectedAmount,
+                bool isFullyCollected,
+                string collectionStatusLabel)
+            {
+                PaymentModeCode = paymentModeCode;
+                PaymentModeLabel = paymentModeLabel;
+                CollectedAmount = collectedAmount;
+                UncollectedAmount = uncollectedAmount;
+                IsFullyCollected = isFullyCollected;
+                CollectionStatusLabel = collectionStatusLabel;
+            }
+
+            public string PaymentModeCode { get; }
+            public string PaymentModeLabel { get; }
+            public decimal CollectedAmount { get; }
+            public decimal UncollectedAmount { get; }
+            public bool IsFullyCollected { get; }
+            public string CollectionStatusLabel { get; }
+        }
+
+        private readonly struct RequestPaymentStateSnapshot
+        {
+            public RequestPaymentStateSnapshot(
+                string paymentStateCode,
+                string paymentStateLabel,
+                int paidInstallmentsCount,
+                int totalInstallmentsCount,
+                DateTime? paidAtUtc,
+                bool isFullyPaid,
+                bool isPartiallyPaid)
+            {
+                PaymentStateCode = paymentStateCode;
+                PaymentStateLabel = paymentStateLabel;
+                PaidInstallmentsCount = paidInstallmentsCount;
+                TotalInstallmentsCount = totalInstallmentsCount;
+                PaidAtUtc = paidAtUtc;
+                IsFullyPaid = isFullyPaid;
+                IsPartiallyPaid = isPartiallyPaid;
+            }
+
+            public string PaymentStateCode { get; }
+            public string PaymentStateLabel { get; }
+            public int PaidInstallmentsCount { get; }
+            public int TotalInstallmentsCount { get; }
+            public DateTime? PaidAtUtc { get; }
+            public bool IsFullyPaid { get; }
+            public bool IsPartiallyPaid { get; }
+        }
+
+        private enum PaymentStateFilterKind
+        {
+            Any = 0,
+            Paid = 1,
+            Unpaid = 2,
+            PartialPaid = 3,
+            OverdueUnpaid = 4
+        }
+
+        private static RequestPaymentStateSnapshot ResolveRequestPaymentStateSnapshot(IEnumerable<TkmendField> fields)
+        {
+            var paymentModeCode = ResolvePaymentModeCode(fields);
+            var totalInstallmentsCount = ResolveTotalInstallmentsCount(fields, paymentModeCode);
+            var paidInstallmentsCount = Math.Clamp(
+                ResolvePaidInstallmentsCount(fields, totalInstallmentsCount),
+                0,
+                Math.Max(1, totalInstallmentsCount));
+            var normalizedPaymentStatus = NormalizePaymentStatusToken(GetFirstFieldValue(fields, PaymentStatusFieldKinds));
+            var isAdministrativePaid = normalizedPaymentStatus == "paidadmin";
+            if (isAdministrativePaid)
+            {
+                var administrativePaidAtUtc = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind))
+                    ?? ResolveLatestPaidInstallmentAtUtc(fields, totalInstallmentsCount);
+                return new RequestPaymentStateSnapshot(
+                    RequestPaymentStatePaidCode,
+                    RequestPaymentStateAdminPaidLabel,
+                    totalInstallmentsCount,
+                    totalInstallmentsCount,
+                    administrativePaidAtUtc,
+                    isFullyPaid: true,
+                    isPartiallyPaid: false);
+            }
+
+            var isFullyPaid = paidInstallmentsCount >= totalInstallmentsCount;
+            var isPartiallyPaid = paidInstallmentsCount > 0 && !isFullyPaid;
+
+            string paymentStateCode;
+            string paymentStateLabel;
+            if (isFullyPaid)
+            {
+                paymentStateCode = RequestPaymentStatePaidCode;
+                paymentStateLabel = "مسدد";
+            }
+            else if (isPartiallyPaid)
+            {
+                paymentStateCode = RequestPaymentStatePartialPaidCode;
+                paymentStateLabel = $"مسدد عدد {paidInstallmentsCount} من {totalInstallmentsCount}";
+            }
+            else
+            {
+                paymentStateCode = RequestPaymentStateUnpaidCode;
+                paymentStateLabel = "غير مسدد";
+            }
+
+            var paidAtUtc = isFullyPaid
+                ? ResolveLatestPaidInstallmentAtUtc(fields, totalInstallmentsCount) ?? ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind))
+                : (DateTime?)null;
+
+            return new RequestPaymentStateSnapshot(
+                paymentStateCode,
+                paymentStateLabel,
+                paidInstallmentsCount,
+                totalInstallmentsCount,
+                paidAtUtc,
+                isFullyPaid,
+                isPartiallyPaid);
+        }
+
+        private static PaymentCollectionSnapshot ResolvePaymentCollectionSnapshot(
+            IEnumerable<TkmendField> fields,
+            decimal finalAmount)
+        {
+            var normalizedFinalAmount = NormalizeMoneyAmount(finalAmount);
+            var paymentModeCode = ResolvePaymentModeCode(fields);
+            var paymentModeLabel = ResolvePaymentModeLabel(paymentModeCode);
+            var paymentState = ResolveRequestPaymentStateSnapshot(fields);
+
+            var isFullyCollected = paymentState.IsFullyPaid;
+            var collectedAmount = paymentState.IsFullyPaid
+                ? normalizedFinalAmount
+                : IsInstallmentPaymentMode(paymentModeCode)
+                    ? ResolveCollectedInstallmentsAmount(fields, paymentState.TotalInstallmentsCount)
+                    : 0m;
+
+            collectedAmount = NormalizeMoneyAmount(Math.Max(0m, collectedAmount));
+            if (normalizedFinalAmount > 0m)
+            {
+                collectedAmount = Math.Min(normalizedFinalAmount, collectedAmount);
+            }
+
+            var uncollectedAmount = NormalizeMoneyAmount(Math.Max(0m, normalizedFinalAmount - collectedAmount));
+            if (normalizedFinalAmount <= 0m)
+            {
+                collectedAmount = 0m;
+                uncollectedAmount = 0m;
+                isFullyCollected = true;
+            }
+            else if (paymentState.IsFullyPaid)
+            {
+                collectedAmount = normalizedFinalAmount;
+                uncollectedAmount = 0m;
+                isFullyCollected = true;
+            }
+            else if (uncollectedAmount <= 0m)
+            {
+                collectedAmount = normalizedFinalAmount;
+                uncollectedAmount = 0m;
+                isFullyCollected = true;
+            }
+
+            var collectionStatusLabel = isFullyCollected
+                ? "مسدد"
+                : paymentState.IsPartiallyPaid
+                    ? paymentState.PaymentStateLabel
+                    : "غير مسدد";
+
+            return new PaymentCollectionSnapshot(
+                paymentModeCode,
+                paymentModeLabel,
+                collectedAmount,
+                uncollectedAmount,
+                isFullyCollected,
+                collectionStatusLabel);
+        }
+
+        private static int ResolveTotalInstallmentsCount(IEnumerable<TkmendField> fields, string paymentModeCode)
+        {
+            if (IsCashPaymentMode(paymentModeCode))
+            {
+                return 1;
+            }
+
+            var explicitInstallmentCount = ParseInt(GetFirstFieldValue(fields, InstallmentCountFieldKinds), 0);
+            if (explicitInstallmentCount > 0)
+            {
+                return Math.Clamp(explicitInstallmentCount, 1, SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            }
+
+            var inferredInstallmentCount = ResolveInferredInstallmentsCount(fields);
+            if (inferredInstallmentCount > 0)
+            {
+                return inferredInstallmentCount;
+            }
+
+            return Math.Max(1, SummerWorkflowDomainConstants.PaymentModes.MinInstallmentCount);
+        }
+
+        private static int ResolveInferredInstallmentsCount(IEnumerable<TkmendField> fields)
+        {
+            var inferredInstallments = 0;
+            for (var installmentNo = 1; installmentNo <= SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount; installmentNo++)
+            {
+                var hasAmount = ParseDecimal(
+                    GetFirstFieldValue(fields, SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo)),
+                    0m) > 0m;
+                var hasPaidFlag = ParseBooleanLike(GetFirstFieldValue(
+                    fields,
+                    SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo))).HasValue;
+                var hasPaidAt = ResolveInstallmentPaidAtUtc(fields, installmentNo).HasValue;
+
+                if (hasAmount || hasPaidFlag || hasPaidAt)
+                {
+                    inferredInstallments = installmentNo;
+                }
+            }
+
+            return Math.Clamp(inferredInstallments, 0, SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+        }
+
+        private static int ResolvePaidInstallmentsCount(IEnumerable<TkmendField> fields, int totalInstallmentsCount)
+        {
+            var normalizedTotalInstallments = Math.Clamp(
+                totalInstallmentsCount,
+                1,
+                SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            var paidInstallmentsCount = 0;
+            for (var installmentNo = 1; installmentNo <= normalizedTotalInstallments; installmentNo++)
+            {
+                if (IsInstallmentMarkedPaid(fields, installmentNo))
+                {
+                    paidInstallmentsCount += 1;
+                }
+            }
+
+            return paidInstallmentsCount;
+        }
+
+        private static DateTime? ResolveLatestPaidInstallmentAtUtc(IEnumerable<TkmendField> fields, int totalInstallmentsCount)
+        {
+            var normalizedTotalInstallments = Math.Clamp(
+                totalInstallmentsCount,
+                1,
+                SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            DateTime? latestPaidAtUtc = null;
+            for (var installmentNo = 1; installmentNo <= normalizedTotalInstallments; installmentNo++)
+            {
+                if (!IsInstallmentMarkedPaid(fields, installmentNo))
+                {
+                    continue;
+                }
+
+                var installmentPaidAtUtc = ResolveInstallmentPaidAtUtc(fields, installmentNo);
+                if (!installmentPaidAtUtc.HasValue)
+                {
+                    continue;
+                }
+
+                if (!latestPaidAtUtc.HasValue || installmentPaidAtUtc.Value > latestPaidAtUtc.Value)
+                {
+                    latestPaidAtUtc = installmentPaidAtUtc.Value;
+                }
+            }
+
+            return latestPaidAtUtc;
+        }
+
+        private static DateTime? ResolveInstallmentPaidAtUtc(IEnumerable<TkmendField> fields, int installmentNo)
+        {
+            return ParseDate(GetFirstFieldValue(
+                fields,
+                SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(installmentNo)));
+        }
+
+        private static bool IsInstallmentMarkedPaid(IEnumerable<TkmendField> fields, int installmentNo)
+        {
+            var explicitPaidFlag = ParseBooleanLike(GetFirstFieldValue(
+                fields,
+                SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(installmentNo)));
+            if (explicitPaidFlag.HasValue)
+            {
+                return explicitPaidFlag.Value;
+            }
+
+            if (ResolveInstallmentPaidAtUtc(fields, installmentNo).HasValue)
+            {
+                return true;
+            }
+
+            if (installmentNo == 1)
+            {
+                if (ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind)).HasValue)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsInitialPaymentMarkedPaidForAutoCancel(IEnumerable<TkmendField> fields)
+        {
+            if (IsInstallmentMarkedPaid(fields, 1))
+            {
+                return true;
+            }
+
+            var normalizedPaymentStatus = NormalizePaymentStatusToken(GetFirstFieldValue(fields, PaymentStatusFieldKinds));
+
+            return normalizedPaymentStatus == "paid"
+                || normalizedPaymentStatus == "paidadmin"
+                || normalizedPaymentStatus == "مسدد"
+                || normalizedPaymentStatus == "تمالسداد";
+        }
+
+        private static bool IsAutoCancelledByPaymentTimeout(IEnumerable<TkmendField> fields)
+        {
+            var normalizedActionType = NormalizePaymentStatusToken(GetFieldValue(fields, ActionTypeFieldKind));
+            if (normalizedActionType == NormalizePaymentStatusToken(AutoCancelPaymentTimeoutActionCode))
+            {
+                return true;
+            }
+
+            var normalizedPaymentStatus = NormalizePaymentStatusToken(GetFirstFieldValue(fields, PaymentStatusFieldKinds));
+            return normalizedPaymentStatus == "cancelledauto";
+        }
+
+        private static string NormalizePaymentStatusToken(string? paymentStatusRaw)
+        {
+            return NormalizeSearchToken(paymentStatusRaw)
+                .Replace("_", string.Empty)
+                .Replace("-", string.Empty);
+        }
+
+        private static decimal ResolveCollectedInstallmentsAmount(IEnumerable<TkmendField> fields, int totalInstallmentsCount)
+        {
+            var total = 0m;
+            var normalizedTotalInstallments = Math.Clamp(
+                totalInstallmentsCount,
+                1,
+                SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount);
+            for (var installmentNo = 1; installmentNo <= normalizedTotalInstallments; installmentNo++)
+            {
+                if (!IsInstallmentMarkedPaid(fields, installmentNo))
+                {
+                    continue;
+                }
+
+                var amount = ParseDecimal(
+                    GetFirstFieldValue(fields, SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo)),
+                    0m);
+                total += Math.Max(0m, amount);
+            }
+
+            return NormalizeMoneyAmount(total);
+        }
+
+        private static string ResolvePaymentModeCode(IEnumerable<TkmendField> fields)
+        {
+            var paymentModeRaw = GetFirstFieldValue(fields, PaymentModeFieldKinds);
+            var token = NormalizeSearchToken(paymentModeRaw);
+            if (token.Contains("installment", StringComparison.Ordinal))
+            {
+                return SummerWorkflowDomainConstants.PaymentModes.Installment;
+            }
+
+            if (token.Contains("cash", StringComparison.Ordinal))
+            {
+                return SummerWorkflowDomainConstants.PaymentModes.Cash;
+            }
+
+            var installmentCount = ParseInt(GetFirstFieldValue(fields, InstallmentCountFieldKinds), 0);
+            if (installmentCount > 1)
+            {
+                return SummerWorkflowDomainConstants.PaymentModes.Installment;
+            }
+
+            for (var installmentNo = 1; installmentNo <= SummerWorkflowDomainConstants.PaymentModes.MaxInstallmentCount; installmentNo++)
+            {
+                var amount = ParseDecimal(
+                    GetFirstFieldValue(fields, SummerWorkflowDomainConstants.GetInstallmentAmountFieldKinds(installmentNo)),
+                    0m);
+                if (amount > 0m)
+                {
+                    return SummerWorkflowDomainConstants.PaymentModes.Installment;
+                }
+            }
+
+            return SummerWorkflowDomainConstants.PaymentModes.Cash;
+        }
+
+        private static string ResolvePaymentModeLabel(string paymentModeCode)
+        {
+            return IsInstallmentPaymentMode(paymentModeCode) ? "تقسيط" : "كاش";
+        }
+
+        private static bool IsInstallmentPaymentMode(string? paymentModeCode)
+        {
+            return string.Equals(
+                (paymentModeCode ?? string.Empty).Trim(),
+                SummerWorkflowDomainConstants.PaymentModes.Installment,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsCashPaymentMode(string? paymentModeCode)
+        {
+            return !IsInstallmentPaymentMode(paymentModeCode);
+        }
+
+        private static decimal NormalizeMoneyAmount(decimal value)
+        {
+            return decimal.Round(Math.Max(0m, value), 2, MidpointRounding.AwayFromZero);
+        }
+
+        private static bool IsMembershipTypeDefined(string? membershipTypeRaw)
+        {
+            return !string.IsNullOrWhiteSpace((membershipTypeRaw ?? string.Empty).Trim());
+        }
+
+        private static string ResolveBookingTypeLabel(
+            string stayMode,
+            string pricingSelectedStayMode,
+            string pricingMode,
+            string proxyMode)
+        {
+            var candidateStayMode = !string.IsNullOrWhiteSpace(pricingSelectedStayMode)
+                ? pricingSelectedStayMode
+                : stayMode;
+            var normalizedStayMode = NormalizeSearchToken(candidateStayMode);
+            var normalizedPricingMode = NormalizeSearchToken(pricingMode);
+            var isProxy = ParseBooleanLike(proxyMode);
+
+            var label = normalizedStayMode switch
+            {
+                "residenceonly" or "residence_only" => "إقامة فقط",
+                "residencewithtransport" or "residence_with_transport" => "إقامة وانتقالات",
+                _ => normalizedPricingMode switch
+                {
+                    "accommodationonlyallowed" => "إقامة فقط",
+                    "accommodationandtransportationoptional" => "إقامة وانتقالات (اختياري)",
+                    "transportationmandatoryincluded" => "إقامة وانتقالات (إلزامي)",
+                    _ => ResolveDisplayText(candidateStayMode, ResolveDisplayText(pricingMode))
+                }
+            };
+
+            if (isProxy == true)
+            {
+                label = $"{label} - بالنيابة";
+            }
+
+            return label;
+        }
+
+        private static string ResolveRequestedPaymentStatusCode(string? rawStatus)
+        {
+            var normalized = NormalizeSearchToken(rawStatus);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return "PAID";
+            }
+
+            var normalizedWithoutSeparators = normalized
+                .Replace("_", string.Empty)
+                .Replace("-", string.Empty);
+
+            var parsedBoolean = ParseBooleanLike(normalizedWithoutSeparators);
+            if (parsedBoolean.HasValue)
+            {
+                return parsedBoolean.Value ? "PAID" : "PENDING_PAYMENT";
+            }
+
+            return normalizedWithoutSeparators switch
+            {
+                "paid" or "completed" or "confirmed" or "مسدد" or "تمالسداد" => "PAID",
+                "unpaid" or "notpaid" or "pending" or "pendingpayment" or "غيرمسدد" or "غيرمدفوع" => "PENDING_PAYMENT",
+                _ => "PAID"
+            };
+        }
+
+        private static bool? ParseBooleanLike(string? value)
+        {
+            var token = NormalizeSearchToken(value);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return null;
+            }
+
+            return token switch
+            {
+                "true" or "1" or "yes" or "y" or "نعم" => true,
+                "false" or "0" or "no" or "n" or "لا" => false,
+                _ => null
+            };
+        }
+
+        private static string ResolveSectionLabel(int? familyCount)
+        {
+            if (familyCount.HasValue && familyCount.Value > 0)
+            {
+                return $"الشقة ({familyCount.Value} أفراد)";
+            }
+
+            return "وحدات غير محددة السعة";
+        }
+
+        private static string ResolveDisplayText(string? value, string fallback = "-")
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            return normalized.Length > 0 ? normalized : fallback;
+        }
+
+        public async Task<CommonResponse<SummerPricingQuoteDto>> GetPricingQuoteAsync(
+            SummerPricingQuoteRequest request,
+            string? userId = null,
+            bool hasSummerPricingPermission = false)
+        {
+            request ??= new SummerPricingQuoteRequest();
+            return await _summerPricingService.GetQuoteAsync(
+                request,
+                allowMembershipOverride: hasSummerPricingPermission);
+        }
+
+        public async Task<CommonResponse<SummerPricingCatalogDto>> GetPricingCatalogAsync(
+            int seasonYear,
+            string userId,
+            bool hasSummerPricingPermission = false)
+        {
+            var response = new CommonResponse<SummerPricingCatalogDto>();
+            try
+            {
+                _ = userId;
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بعرض إعدادات تسعير المصايف. يتطلب دور مدير النظام بالكامل (RoleId 2003)."
+                    });
+                    return response;
+                }
+
+                var catalogResponse = await _summerPricingService.GetCatalogAsync(seasonYear);
+                if (!catalogResponse.IsSuccess)
+                {
+                    foreach (var error in catalogResponse.Errors)
+                    {
+                        response.Errors.Add(error);
+                    }
+                    return response;
+                }
+
+                response.Data = catalogResponse.Data;
+            }
+            catch (Exception ex)
+            {
+                response.Errors.Add(new Error { Code = ex.HResult.ToString(), Message = ex.Message });
+            }
+
+            return response;
+        }
+
+        public async Task<CommonResponse<SummerPricingCatalogDto>> SavePricingCatalogAsync(
+            SummerPricingCatalogUpsertRequest request,
+            string userId,
+            bool hasSummerPricingPermission = false)
+        {
+            var response = new CommonResponse<SummerPricingCatalogDto>();
+            try
+            {
+                _ = userId;
+                if (!hasSummerPricingPermission)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "غير مصرح لك بتعديل إعدادات تسعير المصايف. يتطلب دور مدير النظام بالكامل (RoleId 2003)."
+                    });
+                    return response;
+                }
+
+                var saveResponse = await _summerPricingService.SaveCatalogAsync(request);
+                if (!saveResponse.IsSuccess)
+                {
+                    foreach (var error in saveResponse.Errors)
+                    {
+                        response.Errors.Add(error);
+                    }
+                    return response;
+                }
+
+                response.Data = saveResponse.Data;
             }
             catch (Exception ex)
             {
@@ -793,7 +3043,7 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (!_helperService.ValidateFileSizes(request.files, response))
+                if (!ValidateAttachmentFileSizes(request.files, response))
                 {
                     return response;
                 }
@@ -807,6 +3057,12 @@ namespace Persistence.Services
                 if (message == null)
                 {
                     response.Errors.Add(new Error { Code = "404", Message = "الطلب غير موجود." });
+                    return response;
+                }
+
+                if (!await CanUserEditSummerMessageAsync(userId, message))
+                {
+                    response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بالتعديل على هذا الطلب." });
                     return response;
                 }
 
@@ -839,10 +3095,11 @@ namespace Persistence.Services
                 try
                 {
                     message.Status = MessageStatus.Rejected;
-                    UpsertField(fields, message.MessageId, "Summer_ActionType", "CANCEL");
+                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, "CANCEL");
                     UpsertField(fields, message.MessageId, "Summer_CancelReason", (request.Reason ?? string.Empty).Trim());
                     UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
-                    UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "CANCELLED");
+                    UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED");
+                    await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, userId);
 
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
@@ -869,7 +3126,7 @@ namespace Persistence.Services
                 response.Data = summary;
 
                 await PublishCapacityUpdateAsync(summary.CategoryId, summary.WaveCode, "CANCEL");
-                await PublishRequestUpdateAsync(summary.MessageId, "CANCEL");
+                await PublishRequestUpdateAsync(summary.MessageId, "CANCEL", source: "OWNER_CANCEL");
             }
             catch (Exception ex)
             {
@@ -879,7 +3136,11 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerRequestSummaryDto>> PayAsync(SummerPayRequest request, string userId, string ip)
+        public async Task<CommonResponse<SummerRequestSummaryDto>> PayAsync(
+            SummerPayRequest request,
+            string userId,
+            string ip,
+            bool hasSummerAdminPermission = false)
         {
             var response = new CommonResponse<SummerRequestSummaryDto>();
             request ??= new SummerPayRequest();
@@ -891,13 +3152,31 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (!_helperService.ValidateFileSizes(request.files, response))
+                if (!ValidateAttachmentFileSizes(request.files, response))
                 {
                     return response;
                 }
 
                 if (!ValidateAllowedAttachmentExtensions(request.files, response))
                 {
+                    return response;
+                }
+
+                var requestedPaymentStatusCode = ResolveRequestedPaymentStatusCode(request.PaymentStatus);
+                var isPaidStatus = string.Equals(
+                    requestedPaymentStatusCode,
+                    "PAID",
+                    StringComparison.OrdinalIgnoreCase);
+
+                if (!hasSummerAdminPermission
+                    && !isPaidStatus
+                    && !string.IsNullOrWhiteSpace(request.PaymentStatus))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "تعديل حالة السداد متاح فقط لإدارة المصايف."
+                    });
                     return response;
                 }
 
@@ -920,6 +3199,12 @@ namespace Persistence.Services
                     return response;
                 }
 
+                if (!await CanUserEditSummerMessageAsync(userId, message))
+                {
+                    response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بالتعديل على هذا الطلب." });
+                    return response;
+                }
+
                 if (message.Status == MessageStatus.Rejected)
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تسجيل السداد لطلب تم الاعتذار عنه." });
@@ -927,15 +3212,61 @@ namespace Persistence.Services
                 }
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
-                var dueAt = ResolvePaymentDueAtUtc(message, fields);
-                var paidAt = request.PaidAtUtc?.ToUniversalTime() ?? DateTime.UtcNow;
+                var rawCreatedAtField = GetFieldValue(fields, RequestCreatedAtUtcFieldKind);
+                var requestCreatedAtRawUtc = ResolveRequestCreatedAtUtc(message, fields);
+                var requestCreatedAtUtc = TruncateToWholeSecondUtc(requestCreatedAtRawUtc);
+                var dueAtRawUtc = ResolvePaymentDueAtUtc(message, fields);
+                var dueAtUtc = TruncateToWholeSecondUtc(dueAtRawUtc);
+                var paidAtRawUtc = request.PaidAtUtc?.UtcDateTime ?? DateTime.UtcNow;
+                var paidAtUtc = TruncateToWholeSecondUtc(paidAtRawUtc);
+                var nowUtc = TruncateToWholeSecondUtc(DateTime.UtcNow);
+                var hasCreatedAtAnchor = ParseDate(rawCreatedAtField).HasValue;
 
-                if (paidAt > dueAt)
+                _logger.LogInformation(
+                    "Summer payment validation start. MessageId={MessageId}, PaidAtInputRaw={PaidAtInputRaw}, PaidAtRawUtc={PaidAtRawUtc:o}, PaidAtUtc={PaidAtUtc:o}, CreatedAtAnchorRaw={CreatedAtAnchorRaw}, CreatedAtAnchorFound={CreatedAtAnchorFound}, ResolvedCreatedAtRawUtc={ResolvedCreatedAtRawUtc:o}, ResolvedCreatedAtUtc={ResolvedCreatedAtUtc:o}, DueAtRawUtc={DueAtRawUtc:o}, DueAtUtc={DueAtUtc:o}, PaidAtOffset={PaidAtOffset}, PaidAtProvided={PaidAtProvided}, RequestedPaymentStatus={RequestedPaymentStatus}, EffectivePaidStatus={EffectivePaidStatus}, HasSummerAdminPermission={HasSummerAdminPermission}",
+                    message.MessageId,
+                    request.PaidAtUtc?.ToString("o"),
+                    paidAtRawUtc,
+                    paidAtUtc,
+                    rawCreatedAtField,
+                    hasCreatedAtAnchor,
+                    requestCreatedAtRawUtc,
+                    requestCreatedAtUtc,
+                    dueAtRawUtc,
+                    dueAtUtc,
+                    request.PaidAtUtc?.Offset.ToString(),
+                    request.PaidAtUtc.HasValue,
+                    request.PaymentStatus,
+                    isPaidStatus ? "PAID" : "PENDING_PAYMENT",
+                    hasSummerAdminPermission);
+
+                if (isPaidStatus && paidAtUtc > nowUtc)
                 {
+                    _logger.LogWarning(
+                        "Summer payment rejected: paid date in future. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, NowUtc={NowUtc:o}",
+                        message.MessageId,
+                        paidAtUtc,
+                        nowUtc);
                     response.Errors.Add(new Error
                     {
                         Code = "400",
-                        Message = $"انتهت مهلة السداد. كان الموعد النهائي {dueAt:yyyy-MM-dd HH:mm} (UTC)."
+                        Message = "لا يمكن إدخال تاريخ سداد في المستقبل."
+                    });
+                    return response;
+                }
+
+                if (isPaidStatus && paidAtUtc > dueAtUtc)
+                {
+                    _logger.LogWarning(
+                        "Summer payment rejected: payment window expired. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, DueAtUtc={DueAtUtc:o}, DueAtRawUtc={DueAtRawUtc:o}",
+                        message.MessageId,
+                        paidAtUtc,
+                        dueAtUtc,
+                        dueAtRawUtc);
+                    response.Errors.Add(new Error
+                    {
+                        Code = "400",
+                        Message = $"انتهت مهلة السداد. كان الموعد النهائي {dueAtUtc:yyyy-MM-dd HH:mm} (UTC)."
                     });
                     return response;
                 }
@@ -944,21 +3275,52 @@ namespace Persistence.Services
                 using var attachTx = await _attachHeldContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
                 try
                 {
-                    UpsertField(fields, message.MessageId, "Summer_ActionType", "PAY");
-                    UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PAID");
-                    UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", paidAt.ToString("o"));
-                    UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", dueAt.ToString("o"));
-                    UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
+                    var effectivePaymentStatus = isPaidStatus ? "PAID" : "PENDING_PAYMENT";
+                    var effectivePaidAtValue = isPaidStatus ? paidAtUtc.ToString("o") : string.Empty;
+
+                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, "PAY");
+                    UpsertField(fields, message.MessageId, PaymentStatusFieldKind, effectivePaymentStatus);
+                    UpsertField(fields, message.MessageId, RequestCreatedAtUtcFieldKind, requestCreatedAtUtc.ToString("o"));
+                    UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, effectivePaidAtValue);
+                    UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, dueAtUtc.ToString("o"));
+                    if (isPaidStatus)
+                    {
+                        message.Status = MessageStatus.InProgress;
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewRequiredCode);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewRequiredCode));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateReason", "تم استلام السداد والطلب قيد المراجعة.");
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                        UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
+                    }
+                    else if (IsPendingReviewRequired(fields))
+                    {
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewResolvedCode);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewResolvedCode));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", DateTime.UtcNow.ToString("o"));
+                    }
+                    UpsertFieldRange(
+                        fields,
+                        message.MessageId,
+                        SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(1),
+                        isPaidStatus ? "true" : "false");
+                    UpsertFieldRange(
+                        fields,
+                        message.MessageId,
+                        SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(1),
+                        effectivePaidAtValue);
                     if (!string.IsNullOrWhiteSpace(request.Notes))
                     {
                         UpsertField(fields, message.MessageId, "Summer_PaymentNotes", request.Notes.Trim());
                     }
 
+                    var paymentReplyMessage = isPaidStatus
+                        ? "تم تسجيل السداد بنجاح."
+                        : "تم تحديث حالة السداد إلى غير مسدد.";
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
                         string.IsNullOrWhiteSpace(request.Notes)
-                            ? "تم تسجيل السداد بنجاح."
-                            : $"تم تسجيل السداد بنجاح. الملاحظات: {request.Notes.Trim()}",
+                            ? paymentReplyMessage
+                            : $"{paymentReplyMessage} الملاحظات: {request.Notes.Trim()}",
                         userId,
                         ip,
                         request.files);
@@ -967,6 +3329,13 @@ namespace Persistence.Services
                     await _connectContext.SaveChangesAsync();
                     await attachTx.CommitAsync();
                     await connectTx.CommitAsync();
+                    _logger.LogInformation(
+                        "Summer payment accepted. MessageId={MessageId}, PaidAtUtc={PaidAtUtc:o}, CreatedAtUtc={CreatedAtUtc:o}, DueAtUtc={DueAtUtc:o}, PaymentStatus={PaymentStatus}",
+                        message.MessageId,
+                        paidAtUtc,
+                        requestCreatedAtUtc,
+                        dueAtUtc,
+                        effectivePaymentStatus);
                 }
                 catch
                 {
@@ -976,7 +3345,11 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(message.MessageId);
-                await PublishRequestUpdateAsync(message.MessageId, "PAY");
+                if (isPaidStatus && response.Data != null)
+                {
+                    await NotifyEmployeeOnPaymentUnderReviewAsync(response.Data, includeSignalR: false);
+                }
+                await PublishRequestUpdateAsync(message.MessageId, "PAY", source: "OWNER_PAY");
             }
             catch (Exception ex)
             {
@@ -986,7 +3359,18 @@ namespace Persistence.Services
             return response;
         }
 
-        public async Task<CommonResponse<SummerRequestSummaryDto>> TransferAsync(SummerTransferRequest request, string userId, string ip)
+        public async Task<CommonResponse<SummerRequestSummaryDto>> TransferAsync(
+            SummerTransferRequest request,
+            string userId,
+            string ip,
+            bool notifyResponsibleAdmins = true,
+            bool notifyOwner = true,
+            string? initiatedAdminActionCode = null,
+            string? initiatedByUserId = null,
+            MessageStatus? previousStatusForAdminAction = null,
+            string? adminActionComment = null,
+            DateTime? adminActionAtUtc = null,
+            bool hasSummerAdminPermission = false)
         {
             var response = new CommonResponse<SummerRequestSummaryDto>();
             request ??= new SummerTransferRequest();
@@ -998,7 +3382,7 @@ namespace Persistence.Services
                     return response;
                 }
 
-                if (!_helperService.ValidateFileSizes(request.files, response))
+                if (!ValidateAttachmentFileSizes(request.files, response))
                 {
                     return response;
                 }
@@ -1015,6 +3399,23 @@ namespace Persistence.Services
                     return response;
                 }
 
+                if (!await CanUserEditSummerMessageAsync(userId, message))
+                {
+                    response.Errors.Add(new Error { Code = "403", Message = "غير مصرح لك بالتعديل على هذا الطلب." });
+                    return response;
+                }
+
+                var canTransferAcrossDestinations = hasSummerAdminPermission;
+                if (!canTransferAcrossDestinations && message.CategoryCd != request.ToCategoryId)
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "403",
+                        Message = "التحويل للمستخدم متاح بين الأفواج داخل نفس المصيف فقط."
+                    });
+                    return response;
+                }
+
                 if (message.Status == MessageStatus.Rejected)
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "لا يمكن تحويل طلب تم الاعتذار عنه." });
@@ -1022,12 +3423,14 @@ namespace Persistence.Services
                 }
 
                 var normalizedTargetWave = request.ToWaveCode.Trim();
+                var normalizedAdminActionCode = NormalizeActionCode(initiatedAdminActionCode);
+                var shouldRecordAdminAction = !string.IsNullOrWhiteSpace(normalizedAdminActionCode)
+                    && !string.IsNullOrWhiteSpace(initiatedByUserId);
 
                 var fields = await _connectContext.TkmendFields.Where(f => f.FildRelted == message.MessageId).ToListAsync();
-                var paymentStatus = (GetFieldValue(fields, "Summer_PaymentStatus") ?? string.Empty).Trim();
-                var paidAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc"));
+                var paymentState = ResolveRequestPaymentStateSnapshot(fields);
                 var adminLastAction = (GetFieldValue(fields, "Summer_AdminLastAction") ?? string.Empty).Trim();
-                var wasPaid = paidAtUtc.HasValue || string.Equals(paymentStatus, "PAID", StringComparison.OrdinalIgnoreCase);
+                var wasPaid = paymentState.IsFullyPaid || paymentState.IsPartiallyPaid;
                 var wasFinalApproved = string.Equals(adminLastAction, SummerAdminActionCatalog.Codes.FinalApprove, StringComparison.OrdinalIgnoreCase)
                     || message.Status == MessageStatus.Replied;
                 var requiresTransferReview = wasPaid || wasFinalApproved;
@@ -1042,6 +3445,16 @@ namespace Persistence.Services
                 if (string.IsNullOrWhiteSpace(employeeId))
                 {
                     response.Errors.Add(new Error { Code = "400", Message = "رقم ملف الموظف مطلوب." });
+                    return response;
+                }
+
+                if (_summerBookingBlacklistService.IsBlocked(employeeId))
+                {
+                    response.Errors.Add(new Error
+                    {
+                        Code = "SUMMER_BLACKLIST_BLOCKED",
+                        Message = "تعذر إتمام الحجز: رقم الملف مدرج ضمن قائمة الممنوعين من الحجز."
+                    });
                     return response;
                 }
 
@@ -1130,6 +3543,8 @@ namespace Persistence.Services
                         return response;
                     }
 
+                    await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, userId);
+
                     var fromCategory = message.CategoryCd;
                     var fromWave = GetFirstFieldValue(fields, "SummerCamp", "SUM2026_WaveCode", "WaveCode");
 
@@ -1141,7 +3556,7 @@ namespace Persistence.Services
                     UpsertFieldRange(fields, message.MessageId, ExtraCountFieldKinds, newExtraCount.ToString());
                     UpsertFieldRange(fields, message.MessageId, DestinationIdFieldKinds, request.ToCategoryId.ToString());
                     UpsertFieldRange(fields, message.MessageId, DestinationNameFieldKinds, targetCategoryDisplayName);
-                    UpsertField(fields, message.MessageId, "Summer_ActionType", "TRANSFER");
+                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, "TRANSFER");
                     UpsertField(fields, message.MessageId, "Summer_TransferCount", "1");
                     UpsertField(fields, message.MessageId, "Summer_TransferFromCategory", fromCategory.ToString());
                     UpsertField(fields, message.MessageId, "Summer_TransferFromWave", fromWave);
@@ -1159,11 +3574,26 @@ namespace Persistence.Services
                     if (requiresRePayment)
                     {
                         var reopenedDueAt = SummerCalendarRules.CalculatePaymentDueUtc(DateTime.UtcNow);
-                        UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "PENDING_PAYMENT");
-                        UpsertField(fields, message.MessageId, "Summer_PaidAtUtc", string.Empty);
-                        UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", reopenedDueAt.ToString("o"));
+                        UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "PENDING_PAYMENT");
+                        UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, string.Empty);
+                        UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, reopenedDueAt.ToString("o"));
                         UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "true");
                         UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", "تم تغيير عدد الأفراد بعد السداد، ويلزم إعادة السداد.");
+                    }
+
+                    if (shouldRecordAdminAction)
+                    {
+                        var previousState = previousStatusForAdminAction ?? message.Status;
+                        var actorUserId = string.IsNullOrWhiteSpace(initiatedByUserId) ? userId : initiatedByUserId.Trim();
+                        ApplyAdminActionAuditFields(
+                            fields,
+                            message.MessageId,
+                            normalizedAdminActionCode,
+                            previousState,
+                            message.Status,
+                            actorUserId,
+                            adminActionAtUtc ?? DateTime.UtcNow,
+                            adminActionComment);
                     }
 
                     var rePaymentNote = requiresRePayment
@@ -1186,7 +3616,12 @@ namespace Persistence.Services
                     response.Data = await BuildSummaryAsync(message.MessageId);
                     await PublishCapacityUpdateAsync(fromCategory, fromWave, "TRANSFER_FROM");
                     await PublishCapacityUpdateAsync(request.ToCategoryId, normalizedTargetWave, "TRANSFER_TO");
-                    await PublishRequestUpdateAsync(message.MessageId, "TRANSFER");
+                    await PublishRequestUpdateAsync(
+                        message.MessageId,
+                        "TRANSFER",
+                        notifyResponsibleAdmins: notifyResponsibleAdmins,
+                        notifyOwner: notifyOwner,
+                        source: "TRANSFER");
                 }
                 catch
                 {
@@ -1217,7 +3652,12 @@ namespace Persistence.Services
             var candidateMessages = await _connectContext.Messages
                 .AsNoTracking()
                 .Where(m => summerCategoryIds.Contains(m.CategoryCd) && m.Status != MessageStatus.Rejected)
-                .Select(m => new { m.MessageId })
+                .Select(m => new
+                {
+                    m.MessageId,
+                    m.CategoryCd,
+                    m.CreatedDate
+                })
                 .ToListAsync(cancellationToken);
 
             if (!candidateMessages.Any())
@@ -1225,7 +3665,51 @@ namespace Persistence.Services
                 return 0;
             }
 
-            foreach (var item in candidateMessages)
+            var candidateIds = candidateMessages
+                .Select(item => item.MessageId)
+                .ToList();
+            var precheckFields = await _connectContext.TkmendFields
+                .AsNoTracking()
+                .Where(field =>
+                    candidateIds.Contains(field.FildRelted)
+                    && AutoCancelPrecheckFieldKinds.Contains(field.FildKind))
+                .ToListAsync(cancellationToken);
+            var precheckFieldsByMessageId = precheckFields
+                .GroupBy(field => field.FildRelted)
+                .ToDictionary(group => group.Key, group => group.ToList());
+
+            var actionableMessageIds = new List<int>();
+            foreach (var candidate in candidateMessages)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                IReadOnlyCollection<TkmendField> fields = precheckFieldsByMessageId.TryGetValue(candidate.MessageId, out var groupedFields)
+                    ? groupedFields
+                    : Array.Empty<TkmendField>();
+                if (IsInitialPaymentMarkedPaidForAutoCancel(fields))
+                {
+                    continue;
+                }
+
+                var dueAtProbe = new Message
+                {
+                    MessageId = candidate.MessageId,
+                    CategoryCd = candidate.CategoryCd,
+                    CreatedDate = candidate.CreatedDate
+                };
+                var dueAt = ResolvePaymentDueAtUtc(dueAtProbe, fields);
+                if (nowUtc > dueAt)
+                {
+                    actionableMessageIds.Add(candidate.MessageId);
+                }
+            }
+
+            if (!actionableMessageIds.Any())
+            {
+                return 0;
+            }
+
+            foreach (var messageId in actionableMessageIds)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -1240,7 +3724,7 @@ namespace Persistence.Services
                 try
                 {
                     var message = await _connectContext.Messages
-                        .FirstOrDefaultAsync(m => m.MessageId == item.MessageId, cancellationToken);
+                        .FirstOrDefaultAsync(m => m.MessageId == messageId, cancellationToken);
 
                     if (message == null || message.Status == MessageStatus.Rejected)
                     {
@@ -1252,7 +3736,7 @@ namespace Persistence.Services
                         .Where(f => f.FildRelted == message.MessageId)
                         .ToListAsync(cancellationToken);
 
-                    if (ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")).HasValue)
+                    if (IsInitialPaymentMarkedPaidForAutoCancel(fields))
                     {
                         await connectTx.RollbackAsync(cancellationToken);
                         continue;
@@ -1267,11 +3751,12 @@ namespace Persistence.Services
 
                     var autoCancelReason = "تم إلغاء الطلب تلقائياً لعدم السداد خلال مهلة يوم العمل.";
                     message.Status = MessageStatus.Rejected;
-                    UpsertField(fields, message.MessageId, "Summer_ActionType", "AUTO_CANCEL_PAYMENT_TIMEOUT");
+                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, AutoCancelPaymentTimeoutActionCode);
                     UpsertField(fields, message.MessageId, "Summer_CancelReason", autoCancelReason);
                     UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", nowUtc.ToString("o"));
-                    UpsertField(fields, message.MessageId, "Summer_PaymentStatus", "CANCELLED_AUTO");
-                    UpsertField(fields, message.MessageId, "Summer_PaymentDueAtUtc", dueAt.ToString("o"));
+                    UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED_AUTO");
+                    UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, dueAt.ToString("o"));
+                    await _summerUnitFreezeService.ReleaseAssignmentsForMessageAsync(message.MessageId, "SYSTEM", cancellationToken);
 
                     await AddReplyWithAttachmentsAsync(
                         message.MessageId,
@@ -1323,7 +3808,7 @@ namespace Persistence.Services
                 }
 
                 await PublishCapacityUpdateAsync(notifyCategoryId, notifyWaveCode, "AUTO_CANCEL");
-                await PublishRequestUpdateAsync(cancelledMessageId, "AUTO_CANCEL");
+                await PublishRequestUpdateAsync(cancelledMessageId, "AUTO_CANCEL", source: "AUTO_CANCEL");
             }
 
             return autoCancelledCount;
@@ -1340,11 +3825,64 @@ namespace Persistence.Services
                 return;
             }
 
+            if (string.Equals(actionCode, SummerAdminActionCatalog.Codes.InternalAdminAction, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(
+                    "Summer admin-action SMS skipped for internal admin action. MessageId={MessageId}, EmployeeId={EmployeeId}",
+                    summary.MessageId,
+                    summary.EmployeeId);
+                return;
+            }
+
+            if (string.Equals(actionCode, SummerAdminActionCatalog.Codes.MarkPaidAdmin, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(
+                    "Summer admin-action SMS skipped for admin-paid action. MessageId={MessageId}, EmployeeId={EmployeeId}",
+                    summary.MessageId,
+                    summary.EmployeeId);
+                return;
+            }
+
+            var normalizedComment = string.IsNullOrWhiteSpace(comment) ? string.Empty : comment.Trim();
+            if (string.Equals(actionCode, SummerAdminActionCatalog.Codes.MarkUnpaid, StringComparison.OrdinalIgnoreCase))
+            {
+                var paymentDueAtText = FormatPaymentDueAtText(summary.PaymentDueAtUtc);
+                var markUnpaidSmsMessage = string.Join(
+                    " ",
+                    new[]
+                    {
+                        $"عزيزي {ResolveFirstName(summary.EmployeeName)}، تم مراجعة طلب السداد الخاص بطلب المصيف رقم {FormatSmsValue(summary.RequestRef)}، وتم إلغاء حالة السداد إلى غير مسدد لعدم استيفائه لشروط الطلب. وعليه سيتم إلغاء الطلب تلقائياً بعد مرور 24 ساعة بدءاً من الآن.",
+                        string.IsNullOrWhiteSpace(paymentDueAtText) ? string.Empty : $"الموعد النهائي لإعادة السداد: {paymentDueAtText}.",
+                        string.IsNullOrWhiteSpace(normalizedComment) ? string.Empty : $"ملاحظات المراجعة: {normalizedComment}."
+                    }.Where(item => !string.IsNullOrWhiteSpace(item)));
+
+                var markUnpaidSignalRMessage = string.IsNullOrWhiteSpace(paymentDueAtText)
+                    ? "تمت مراجعة طلب السداد وإلغاء حالة السداد إلى غير مسدد لعدم استيفاء الشروط، وسيتم إلغاء الطلب تلقائياً بعد 24 ساعة."
+                    : $"تمت مراجعة طلب السداد وإلغاء حالة السداد إلى غير مسدد لعدم استيفاء الشروط، وسيتم إلغاء الطلب تلقائياً بعد 24 ساعة إذا لم يتم استكمال السداد قبل {paymentDueAtText}.";
+
+                _logger.LogInformation(
+                    "Summer mark-unpaid notification prepared. MessageId={MessageId}, ActionCode={ActionCode}, EmployeeId={EmployeeId}, IncludeSignalR={IncludeSignalR}",
+                    summary.MessageId,
+                    actionCode,
+                    summary.EmployeeId,
+                    includeSignalR);
+                await DispatchSummerNotificationsAsync(
+                    summary,
+                    markUnpaidSmsMessage,
+                    markUnpaidSignalRMessage,
+                    "إدارة طلبات المصايف",
+                    includeSignalR);
+                return;
+            }
+
             var templates = _applicationConfig.NotificationChannels?.Summer ?? new SummerNotificationTemplates();
+            var adminCommentLine = string.IsNullOrWhiteSpace(normalizedComment)
+                ? string.Empty
+                : $"تعليق الإدارة: {normalizedComment}";
             var placeholders = BuildNotificationPlaceholders(
                 summary,
                 ResolveAdminActionLabel(actionCode),
-                string.IsNullOrWhiteSpace(comment) ? string.Empty : $"تعليق الإدارة: {comment.Trim()}",
+                adminCommentLine,
                 null);
 
             var smsTemplate = string.IsNullOrWhiteSpace(templates.AdminActionSmsTemplate)
@@ -1355,12 +3893,27 @@ namespace Persistence.Services
                 ? "تم تحديث طلب المصيف {RequestRef} من إدارة المصايف. نوع الإجراء: {ActionLabel}."
                 : templates.AdminActionSignalRTemplate;
 
-            var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+            var renderedSmsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+            var requestDetailsLine = $"بيانات الطلب: المصيف {FormatSmsValue(summary.CategoryName)} - رقم الطلب {FormatSmsValue(summary.RequestRef)} - موعد الفوج {FormatSmsValue(summary.WaveCode)}.";
+            var smsMessage = string.Join(
+                " ",
+                new[]
+                {
+                    renderedSmsMessage?.Trim(),
+                    requestDetailsLine,
+                    adminCommentLine
+                }.Where(item => !string.IsNullOrWhiteSpace(item)));
             var signalRMessage = _notificationService.RenderTemplate(signalRTemplate, placeholders);
             var signalRTitle = string.IsNullOrWhiteSpace(templates.AdminActionSignalRTitle)
                 ? "إدارة طلبات المصايف"
                 : templates.AdminActionSignalRTitle;
 
+            _logger.LogInformation(
+                "Summer admin-action notification prepared. MessageId={MessageId}, ActionCode={ActionCode}, EmployeeId={EmployeeId}, IncludeSignalR={IncludeSignalR}",
+                summary.MessageId,
+                actionCode,
+                summary.EmployeeId,
+                includeSignalR);
             await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
         }
 
@@ -1394,6 +3947,31 @@ namespace Persistence.Services
             await DispatchSummerNotificationsAsync(summary, smsMessage, signalRMessage, signalRTitle, includeSignalR);
         }
 
+        private async Task NotifyEmployeeOnPaymentUnderReviewAsync(
+            SummerRequestSummaryDto summary,
+            bool includeSignalR = false)
+        {
+            if (summary == null)
+            {
+                return;
+            }
+
+            var templates = _applicationConfig.NotificationChannels?.Summer ?? new SummerNotificationTemplates();
+            var placeholders = BuildNotificationPlaceholders(summary, "قيد المراجعة", string.Empty, summary.PaymentDueAtUtc);
+
+            var smsTemplate = string.IsNullOrWhiteSpace(templates.PaymentUnderReviewSmsTemplate)
+                ? "السيد/ة {FirstName}، تم استلام سداد طلب المصيف رقم {RequestRef} بنجاح، وحالة الطلب الآن قيد المراجعة. سيتم إفادتكم بعد مراجعة الطلب (لتأكيد حجز الوحدة المصيفية)."
+                : templates.PaymentUnderReviewSmsTemplate;
+            var smsMessage = _notificationService.RenderTemplate(smsTemplate, placeholders);
+
+            await DispatchSummerNotificationsAsync(
+                summary,
+                smsMessage,
+                signalRMessage: string.Empty,
+                signalRTitle: string.Empty,
+                includeSignalR: includeSignalR);
+        }
+
         private async Task DispatchSummerNotificationsAsync(
             SummerRequestSummaryDto summary,
             string smsMessage,
@@ -1404,6 +3982,11 @@ namespace Persistence.Services
             var mobile = ResolvePreferredMobile(summary.EmployeePhone, summary.EmployeeExtraPhone);
             if (!string.IsNullOrWhiteSpace(mobile) && !string.IsNullOrWhiteSpace(smsMessage))
             {
+                _logger.LogInformation(
+                    "Summer SMS notification dispatch. MessageId={MessageId}, EmployeeId={EmployeeId}, Mobile={Mobile}",
+                    summary.MessageId,
+                    summary.EmployeeId,
+                    mobile);
                 await _notificationService.SendSmsAsync(new SmsDispatchRequest
                 {
                     MobileNumber = mobile,
@@ -1412,12 +3995,32 @@ namespace Persistence.Services
                     ReferenceNo = string.IsNullOrWhiteSpace(summary.RequestRef) ? $"SUMMER-{summary.MessageId}" : summary.RequestRef.Trim()
                 });
             }
+            else
+            {
+                _logger.LogInformation(
+                    "Summer SMS notification skipped. MessageId={MessageId}, EmployeeId={EmployeeId}, HasMobile={HasMobile}, HasSmsMessage={HasSmsMessage}",
+                    summary.MessageId,
+                    summary.EmployeeId,
+                    !string.IsNullOrWhiteSpace(mobile),
+                    !string.IsNullOrWhiteSpace(smsMessage));
+            }
 
             if (!includeSignalR || string.IsNullOrWhiteSpace(summary.EmployeeId) || string.IsNullOrWhiteSpace(signalRMessage))
             {
+                _logger.LogInformation(
+                    "Summer SignalR notification skipped. MessageId={MessageId}, EmployeeId={EmployeeId}, IncludeSignalR={IncludeSignalR}, HasSignalRMessage={HasSignalRMessage}",
+                    summary.MessageId,
+                    summary.EmployeeId,
+                    includeSignalR,
+                    !string.IsNullOrWhiteSpace(signalRMessage));
                 return;
             }
 
+            _logger.LogInformation(
+                "Summer SignalR notification dispatch to owner. MessageId={MessageId}, EmployeeId={EmployeeId}, Title={Title}",
+                summary.MessageId,
+                summary.EmployeeId,
+                signalRTitle);
             await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
             {
                 UserId = summary.EmployeeId.Trim(),
@@ -1448,13 +4051,31 @@ namespace Persistence.Services
                 ["WaveCode"] = summary.WaveCode,
                 ["ActionLabel"] = actionLabel,
                 ["AdminCommentLine"] = adminCommentLine,
-                ["PaymentDueAtUtc"] = paymentDueAtUtc.HasValue ? $"{paymentDueAtUtc.Value:yyyy-MM-dd HH:mm} UTC" : string.Empty
+                ["PaymentDueAtUtc"] = FormatPaymentDueAtText(paymentDueAtUtc)
             };
+        }
+
+        private static string FormatPaymentDueAtText(DateTime? paymentDueAtUtc)
+        {
+            if (!paymentDueAtUtc.HasValue)
+            {
+                return string.Empty;
+            }
+
+            var dueAtUtc = NormalizeToUtc(paymentDueAtUtc.Value);
+            var dueAtBusiness = TimeZoneInfo.ConvertTimeFromUtc(dueAtUtc, SummerBusinessTimeZone);
+            return $"{dueAtBusiness:dd/MM/yyyy HH:mm} بتوقيت القاهرة ({dueAtUtc:dd/MM/yyyy HH:mm} UTC)";
         }
 
         private static string ResolveAdminActionLabel(string actionCode)
         {
             return SummerAdminActionCatalog.ResolveLabel(actionCode);
+        }
+
+        private static string FormatSmsValue(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(normalized) ? "-" : normalized;
         }
 
         private static string ResolvePreferredMobile(string? primary, string? secondary)
@@ -1593,7 +4214,8 @@ namespace Persistence.Services
             string waveCode,
             int familyCount,
             SummerRule? rule,
-            int? excludedMessageId = null)
+            int? excludedMessageId = null,
+            bool allowFrozenReservation = false)
         {
             if (rule == null)
             {
@@ -1605,29 +4227,32 @@ namespace Persistence.Services
                 return false;
             }
 
-            var activeMessageIds = await GetActiveMessageIdsForWaveAsync(categoryId, waveCode.Trim(), excludedMessageId);
-            if (!activeMessageIds.Any())
+            var hasPublicCapacity = await _summerUnitFreezeService.HasPublicCapacityAsync(
+                categoryId,
+                waveCode.Trim(),
+                familyCount,
+                totalUnits,
+                excludedMessageId);
+            if (hasPublicCapacity)
             {
                 return true;
             }
 
-            var familyFields = await _connectContext.TkmendFields
-                .AsNoTracking()
-                .Where(f => activeMessageIds.Contains(f.FildRelted)
-                            && (f.FildKind == "FamilyCount" || f.FildKind == "SUM2026_FamilyCount"))
-                .ToListAsync();
+            if (allowFrozenReservation)
+            {
+                return await _summerUnitFreezeService.HasAssignableFrozenUnitAsync(categoryId, waveCode.Trim(), familyCount);
+            }
 
-            var usedUnits = familyFields
-                .Where(f => ParseInt(f.FildTxt, 0) == familyCount)
-                .Select(f => f.FildRelted)
-                .Distinct()
-                .Count();
-
-            return usedUnits < totalUnits;
+            return false;
         }
 
         private async Task<bool> AcquireCapacityLockAsync(int categoryId, string waveCode)
         {
+            if (!_connectContext.Database.IsSqlServer())
+            {
+                return true;
+            }
+
             var currentTransaction = _connectContext.Database.CurrentTransaction;
             if (currentTransaction == null)
             {
@@ -1667,40 +4292,234 @@ SELECT @result;
             return resultCode >= 0;
         }
 
-        private async Task PublishCapacityUpdateAsync(int categoryId, string waveCode, string action)
+        private async Task<bool> AcquireAdminActionLockAsync(int messageId)
+        {
+            if (messageId <= 0)
+            {
+                return false;
+            }
+
+            if (!_connectContext.Database.IsSqlServer())
+            {
+                return true;
+            }
+
+            var connection = _connectContext.Database.GetDbConnection();
+            if (connection.State != ConnectionState.Open)
+            {
+                await connection.OpenAsync();
+            }
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = @"
+DECLARE @result int;
+EXEC @result = sp_getapplock
+    @Resource = @resource,
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Session',
+    @LockTimeout = @timeout;
+SELECT @result;
+";
+
+            var resourceParam = command.CreateParameter();
+            resourceParam.ParameterName = "@resource";
+            resourceParam.Value = $"SUMMER_ADMIN_ACTION_{messageId}";
+            command.Parameters.Add(resourceParam);
+
+            var timeoutParam = command.CreateParameter();
+            timeoutParam.ParameterName = "@timeout";
+            timeoutParam.Value = AdminActionLockTimeoutMs;
+            command.Parameters.Add(timeoutParam);
+
+            var resultObject = await command.ExecuteScalarAsync();
+            var resultCode = Convert.ToInt32(resultObject ?? -999);
+            return resultCode >= 0;
+        }
+
+        private async Task PublishCapacityUpdateAsync(
+            int categoryId,
+            string waveCode,
+            string action,
+            string? requestTraceId = null,
+            CancellationToken cancellationToken = default)
         {
             if (categoryId <= 0 || string.IsNullOrWhiteSpace(waveCode))
             {
                 return;
             }
 
-            var messageText = $"SUMMER_CAPACITY_UPDATED|{categoryId}|{waveCode.Trim()}|{action}|{DateTime.UtcNow:o}";
-            var notification = new NotificationDto
+            var traceId = string.IsNullOrWhiteSpace(requestTraceId) ? Guid.NewGuid().ToString("N") : requestTraceId.Trim();
+            try
             {
-                Notification = messageText,
-                type = NotificationType.info,
-                Title = "تحديث سعات المصايف",
-                time = DateTime.Now,
-                sender = "Connect",
-                Category = NotificationCategory.Business
-            };
+                var normalizedWaveCode = waveCode.Trim();
+                var normalizedAction = string.IsNullOrWhiteSpace(action)
+                    ? "UPDATE"
+                    : action.Trim().ToUpperInvariant();
+                var dispatchTimeoutMs = ResolveCapacityUpdateDispatchTimeoutMs();
+                var emittedAtUtc = DateTime.UtcNow;
+                var destinationName = await ResolveSummerDestinationNameAsync(categoryId, cancellationToken);
+                var batchNumber = ResolveSummerBatchNumber(normalizedWaveCode);
 
-            await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+                var messageText = JsonSerializer.Serialize(new Dictionary<string, object?>
+                {
+                    ["event"] = "SUMMER_CAPACITY_UPDATED",
+                    ["destinationId"] = categoryId,
+                    ["destinationName"] = destinationName,
+                    ["waveCode"] = normalizedWaveCode,
+                    ["batchNumber"] = batchNumber,
+                    ["action"] = normalizedAction,
+                    ["emittedAt"] = emittedAtUtc,
+                    ["sender"] = "Connect",
+                    ["title"] = "إدارة طلبات المصايف"
+                });
+                var notification = new NotificationDto
+                {
+                    Notification = messageText,
+                    type = NotificationType.info,
+                    Title = "إدارة طلبات المصايف",
+                    time = emittedAtUtc,
+                    sender = "Connect",
+                    Category = NotificationCategory.Business
+                };
+
+                _logger.LogInformation(
+                    "Before capacity update SignalR dispatch. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, TimeoutMs={TimeoutMs}",
+                    traceId,
+                    categoryId,
+                    normalizedWaveCode,
+                    normalizedAction,
+                    dispatchTimeoutMs);
+
+                var dispatchTask = _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+                {
+                    GroupNames = SummerNotificationGroups,
+                    Notification = notification.Notification,
+                    Type = notification.type,
+                    Title = notification.Title,
+                    Time = notification.time,
+                    Sender = notification.sender,
+                    Category = notification.Category ?? NotificationCategory.Business
+                }, cancellationToken);
+
+                var timeoutTask = Task.Delay(dispatchTimeoutMs, cancellationToken);
+                var completedTask = await Task.WhenAny(dispatchTask, timeoutTask);
+                if (completedTask != dispatchTask)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException(cancellationToken);
+                    }
+
+                    _logger.LogWarning(
+                        "Capacity update publish timed out and will not block response. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, TimeoutMs={TimeoutMs}",
+                        traceId,
+                        categoryId,
+                        normalizedWaveCode,
+                        normalizedAction,
+                        dispatchTimeoutMs);
+                    return;
+                }
+
+                var dispatchResponse = await dispatchTask;
+
+                if (!dispatchResponse.IsSuccess)
+                {
+                    var errors = string.Join(" | ", dispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.LogWarning(
+                        "Summer capacity update publish encountered errors. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, Errors={Errors}",
+                        traceId,
+                        categoryId,
+                        waveCode,
+                        action,
+                        errors);
+                    return;
+                }
+
+                _logger.LogInformation(
+                    "Summer capacity update published. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}, Groups={Groups}",
+                    traceId,
+                    categoryId,
+                    waveCode,
+                    action,
+                    string.Join(",", SummerNotificationGroups));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                GroupNames = SummerNotificationGroups,
-                Notification = notification.Notification,
-                Type = notification.type,
-                Title = notification.Title,
-                Time = notification.time,
-                Sender = notification.sender,
-                Category = notification.Category ?? NotificationCategory.Business
-            });
+                _logger.LogWarning(
+                    "Capacity update publish cancelled by token. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}",
+                    traceId,
+                    categoryId,
+                    waveCode,
+                    action);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Capacity update publish failed but will not block API response. TraceId={TraceId}, CategoryId={CategoryId}, WaveCode={WaveCode}, Action={Action}",
+                    traceId,
+                    categoryId,
+                    waveCode,
+                    action);
+            }
         }
 
-        private async Task PublishRequestUpdateAsync(int messageId, string action)
+        private int ResolveCapacityUpdateDispatchTimeoutMs()
+        {
+            var configured = _applicationConfig?.ApiOptions?.SummerCapacitySignalRTimeoutMs ?? 0;
+            if (configured <= 0)
+            {
+                return CapacityUpdateDispatchTimeoutMs;
+            }
+
+            return Math.Clamp(configured, 1000, 30000);
+        }
+
+        private async Task<string> ResolveSummerDestinationNameAsync(int categoryId, CancellationToken cancellationToken = default)
+        {
+            var destinationName = await _connectContext.Cdcategories
+                .AsNoTracking()
+                .Where(category => category.CatId == categoryId)
+                .Select(category => category.CatName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            destinationName = Convert.ToString(destinationName ?? string.Empty).Trim();
+            return destinationName.Length > 0
+                ? destinationName
+                : $"المصيف رقم {categoryId}";
+        }
+
+        private static string ResolveSummerBatchNumber(string waveCode)
+        {
+            var normalized = Convert.ToString(waveCode ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return "-";
+            }
+
+            var digitsOnly = new string(normalized.Where(char.IsDigit).ToArray());
+            return digitsOnly.Length > 0 ? digitsOnly : normalized;
+        }
+
+        private async Task PublishRequestUpdateAsync(
+            int messageId,
+            string action,
+            bool notifyResponsibleAdmins = true,
+            bool notifyOwner = true,
+            string? source = null)
         {
             if (messageId <= 0)
             {
+                return;
+            }
+
+            if (!notifyResponsibleAdmins && !notifyOwner)
+            {
+                _logger.LogWarning(
+                    "Summer request update skipped because no recipients were selected. MessageId={MessageId}, Action={Action}, Source={Source}",
+                    messageId,
+                    action,
+                    source ?? DefaultRequestUpdateSource);
                 return;
             }
 
@@ -1718,10 +4537,16 @@ SELECT @result;
                 Category = NotificationCategory.Business
             };
 
-            var responsibleGroups = await ResolveResponsibleAdminGroupsAsync(messageId);
-            if (responsibleGroups.Count > 0)
+            var effectiveSource = string.IsNullOrWhiteSpace(source) ? DefaultRequestUpdateSource : source.Trim();
+            var responsibleGroups = new List<string>();
+            if (notifyResponsibleAdmins)
             {
-                await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
+                responsibleGroups = await ResolveResponsibleAdminGroupsAsync(messageId);
+            }
+
+            if (notifyResponsibleAdmins && responsibleGroups.Count > 0)
+            {
+                var groupsDispatchResponse = await _notificationService.SendSignalRToGroupsAsync(new SignalRGroupsDispatchRequest
                 {
                     GroupNames = responsibleGroups,
                     Notification = notification.Notification,
@@ -1731,12 +4556,37 @@ SELECT @result;
                     Sender = notification.sender,
                     Category = notification.Category ?? NotificationCategory.Business
                 });
+
+                if (!groupsDispatchResponse.IsSuccess)
+                {
+                    var errors = string.Join(" | ", groupsDispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.LogWarning(
+                        "Summer request update publish to admin groups failed. MessageId={MessageId}, Action={Action}, Source={Source}, Groups={Groups}, Errors={Errors}",
+                        messageId,
+                        normalizedAction,
+                        effectiveSource,
+                        string.Join(",", responsibleGroups),
+                        errors);
+                }
+            }
+            else if (notifyResponsibleAdmins)
+            {
+                _logger.LogWarning(
+                    "Summer request update publish found no responsible admin groups. MessageId={MessageId}, Action={Action}, Source={Source}",
+                    messageId,
+                    normalizedAction,
+                    effectiveSource);
             }
 
-            var ownerEmployeeId = await ResolveRequestOwnerEmployeeIdAsync(messageId);
-            if (!string.IsNullOrWhiteSpace(ownerEmployeeId))
+            var ownerEmployeeId = string.Empty;
+            if (notifyOwner)
             {
-                await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
+                ownerEmployeeId = await ResolveRequestOwnerEmployeeIdAsync(messageId);
+            }
+
+            if (notifyOwner && !string.IsNullOrWhiteSpace(ownerEmployeeId))
+            {
+                var ownerDispatchResponse = await _notificationService.SendSignalRToUserAsync(new SignalRDispatchRequest
                 {
                     UserId = ownerEmployeeId,
                     Notification = notification.Notification,
@@ -1746,7 +4596,37 @@ SELECT @result;
                     Sender = notification.sender,
                     Category = notification.Category ?? NotificationCategory.Business
                 });
+
+                if (!ownerDispatchResponse.IsSuccess)
+                {
+                    var errors = string.Join(" | ", ownerDispatchResponse.Errors.Select(error => $"{error.Code}:{error.Message}"));
+                    _logger.LogWarning(
+                        "Summer request update publish to owner failed. MessageId={MessageId}, Action={Action}, Source={Source}, OwnerEmployeeId={OwnerEmployeeId}, Errors={Errors}",
+                        messageId,
+                        normalizedAction,
+                        effectiveSource,
+                        ownerEmployeeId,
+                        errors);
+                }
             }
+            else if (notifyOwner)
+            {
+                _logger.LogWarning(
+                    "Summer request update publish skipped owner because owner employee id is missing. MessageId={MessageId}, Action={Action}, Source={Source}",
+                    messageId,
+                    normalizedAction,
+                    effectiveSource);
+            }
+
+            _logger.LogInformation(
+                "Summer request update published. MessageId={MessageId}, Action={Action}, Source={Source}, NotifyResponsibleAdmins={NotifyResponsibleAdmins}, AdminGroups={AdminGroups}, NotifyOwner={NotifyOwner}, OwnerEmployeeId={OwnerEmployeeId}",
+                messageId,
+                normalizedAction,
+                effectiveSource,
+                notifyResponsibleAdmins,
+                responsibleGroups.Count > 0 ? string.Join(",", responsibleGroups) : string.Empty,
+                notifyOwner,
+                ownerEmployeeId);
         }
 
         private async Task<List<string>> ResolveResponsibleAdminGroupsAsync(int messageId)
@@ -1791,18 +4671,79 @@ SELECT @result;
         private async Task AddReplyWithAttachmentsAsync(int messageId, string message, string userId, string ip, List<IFormFile>? files)
         {
             var normalizedMessage = NormalizePotentialMojibake(message);
-            var reply = _helperService.CreateReply(messageId, normalizedMessage, userId, userId, ip);
+            var reply = CreateReplyEntity(messageId, normalizedMessage, userId, userId, ip);
             await _connectContext.Replies.AddAsync(reply);
 
             if (files != null && files.Any())
             {
                 var attachments = new List<AttchShipment>();
-                await _helperService.SaveAttachments(files, reply.ReplyId, attachments);
+                await SaveReplyAttachmentsAsync(files, reply.ReplyId, attachments);
                 if (attachments.Any())
                 {
                     await _attachHeldContext.AttchShipments.AddRangeAsync(attachments);
                 }
             }
+        }
+
+        protected virtual bool ValidateAttachmentFileSizes<T>(List<IFormFile>? files, CommonResponse<T> response)
+        {
+            if (_helperService == null)
+            {
+                throw new InvalidOperationException("Helper service is not configured.");
+            }
+
+            return _helperService.ValidateFileSizes(files, response);
+        }
+
+        private static bool ValidateAdminActionComment<T>(string actionCode, string? comment, CommonResponse<T> response)
+        {
+            var normalizedComment = (comment ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedComment))
+            {
+                return true;
+            }
+
+            var isInternalAdminAction = string.Equals(
+                actionCode,
+                SummerAdminActionCatalog.Codes.InternalAdminAction,
+                StringComparison.OrdinalIgnoreCase);
+            var maxLength = isInternalAdminAction
+                ? InternalAdminActionCommentMaxLength
+                : AdminActionCommentMaxLength;
+
+            if (normalizedComment.Length > maxLength)
+            {
+                response.Errors.Add(new Error
+                {
+                    Code = "400",
+                    Message = isInternalAdminAction
+                        ? $"تعليق الإدارة في الإجراء الإداري الداخلي لا يجب أن يزيد عن {InternalAdminActionCommentMaxLength} حرف."
+                        : $"تعليق الإدارة لا يجب أن يزيد عن {AdminActionCommentMaxLength} حرف."
+                });
+                return false;
+            }
+
+            return true;
+        }
+
+        protected virtual Reply CreateReplyEntity(int messageId, string msg, string userId, string parentSectorId, string ip)
+        {
+            if (_helperService == null)
+            {
+                throw new InvalidOperationException("Helper service is not configured.");
+            }
+
+            return _helperService.CreateReply(messageId, msg, userId, parentSectorId, ip);
+        }
+
+        protected virtual Task SaveReplyAttachmentsAsync(List<IFormFile> files, int replyId, List<AttchShipment> attachments)
+        {
+            if (_helperService == null)
+            {
+                throw new InvalidOperationException("Helper service is not configured.");
+            }
+
+            return _helperService.SaveAttachments(files, replyId, attachments);
         }
 
         private async Task<SummerRequestSummaryDto> BuildSummaryAsync(int messageId)
@@ -1828,6 +4769,7 @@ SELECT @result;
                 workflowStateCode,
                 TransferReviewRequiredCode,
                 StringComparison.OrdinalIgnoreCase);
+            var paymentState = ResolveRequestPaymentStateSnapshot(fields);
 
             return new SummerRequestSummaryDto
             {
@@ -1842,14 +4784,40 @@ SELECT @result;
                 EmployeePhone = GetFirstFieldValue(fields, EmployeePhoneFieldKinds),
                 EmployeeExtraPhone = GetFirstFieldValue(fields, EmployeeExtraPhoneFieldKinds),
                 Status = message.Status.ToString(),
-                StatusLabel = ResolveSummaryStatusLabel(message.Status, fields, needsTransferReview, workflowStateLabel),
+                StatusLabel = ResolveSummaryStatusLabel(message.Status, fields, IsWorkflowStateLabelPreferred(workflowStateCode), workflowStateLabel),
                 WorkflowStateCode = workflowStateCode,
                 WorkflowStateLabel = workflowStateLabel,
                 NeedsTransferReview = needsTransferReview,
-                CreatedAt = message.CreatedDate,
-                PaymentDueAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaymentDueAtUtc")),
-                PaidAtUtc = ParseDate(GetFieldValue(fields, "Summer_PaidAtUtc")),
+                CreatedAt = ResolveRequestCreatedAtUtc(message, fields),
+                PaymentDueAtUtc = ParseDate(GetFieldValue(fields, PaymentDueAtUtcFieldKind)),
+                PaidAtUtc = paymentState.PaidAtUtc,
+                PaymentStateCode = paymentState.PaymentStateCode,
+                PaymentStateLabel = paymentState.PaymentStateLabel,
+                PaidInstallmentsCount = paymentState.PaidInstallmentsCount,
+                TotalInstallmentsCount = paymentState.TotalInstallmentsCount,
                 TransferUsed = ParseInt(GetFieldValue(fields, "Summer_TransferCount"), 0) > 0
+            };
+        }
+
+        private static SummerUnitFreezeDto MapFreezeBatchToDto(SummerUnitFreezeBatch batch, int frozenAvailableUnits, int frozenAssignedUnits)
+        {
+            return new SummerUnitFreezeDto
+            {
+                FreezeId = batch.FreezeId,
+                CategoryId = batch.CategoryId,
+                WaveCode = batch.WaveCode,
+                FamilyCount = batch.FamilyCount,
+                RequestedUnitsCount = batch.RequestedUnitsCount,
+                FrozenAvailableUnits = frozenAvailableUnits,
+                FrozenAssignedUnits = frozenAssignedUnits,
+                FreezeType = batch.FreezeType,
+                Reason = batch.Reason,
+                Notes = batch.Notes,
+                CreatedBy = batch.CreatedBy,
+                CreatedAtUtc = batch.CreatedAtUtc,
+                IsActive = batch.IsActive,
+                ReleasedAtUtc = batch.ReleasedAtUtc,
+                ReleasedBy = batch.ReleasedBy
             };
         }
 
@@ -2036,10 +5004,46 @@ SELECT @result;
             return int.MaxValue;
         }
 
+        private void ApplyAdminActionAuditFields(
+            List<TkmendField> fields,
+            int messageId,
+            string actionCode,
+            MessageStatus previousState,
+            MessageStatus newState,
+            string performedByUserId,
+            DateTime actionAtUtc,
+            string? comment)
+        {
+            var normalizedAction = NormalizeActionCode(actionCode);
+            if (string.IsNullOrWhiteSpace(normalizedAction))
+            {
+                return;
+            }
+
+            UpsertField(fields, messageId, ActionTypeFieldKind, normalizedAction);
+            UpsertField(fields, messageId, "Summer_AdminLastAction", normalizedAction);
+            UpsertField(fields, messageId, "Summer_AdminActionAtUtc", actionAtUtc.ToString("o"));
+            UpsertField(fields, messageId, "Summer_AdminPreviousState", previousState.ToString());
+            UpsertField(fields, messageId, "Summer_AdminNewState", newState.ToString());
+            UpsertField(fields, messageId, "Summer_AdminActionBy", (performedByUserId ?? string.Empty).Trim());
+
+            if (!string.IsNullOrWhiteSpace(comment))
+            {
+                UpsertField(fields, messageId, "Summer_AdminComment", comment.Trim());
+            }
+        }
+
         private void UpsertField(List<TkmendField> fields, int messageId, string kind, string value)
         {
             var normalizedValue = NormalizePotentialMojibake(value);
-            var existing = fields.FirstOrDefault(f => string.Equals(f.FildKind, kind, StringComparison.OrdinalIgnoreCase));
+            var matches = fields
+                .Where(field => string.Equals(field.FildKind, kind, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var existing = matches
+                .Where(item => item.FildSql > 0)
+                .OrderByDescending(item => item.FildSql)
+                .FirstOrDefault()
+                ?? matches.LastOrDefault();
             if (existing == null)
             {
                 var field = new TkmendField
@@ -2161,7 +5165,20 @@ SELECT @result;
 
         private static string? GetFieldValue(IEnumerable<TkmendField> fields, string kind)
         {
-            return fields.FirstOrDefault(f => string.Equals(f.FildKind, kind, StringComparison.OrdinalIgnoreCase))?.FildTxt?.Trim();
+            var matches = fields
+                .Where(f => string.Equals(f.FildKind, kind, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (matches.Count == 0)
+            {
+                return null;
+            }
+
+            // Prefer persisted latest row when duplicates exist; fallback to last in-memory match.
+            var persistedLatest = matches
+                .Where(item => item.FildSql > 0)
+                .OrderByDescending(item => item.FildSql)
+                .FirstOrDefault();
+            return (persistedLatest ?? matches[matches.Count - 1]).FildTxt?.Trim();
         }
 
         private static string GetFirstFieldValue(IEnumerable<TkmendField> fields, params string[] kinds)
@@ -2201,6 +5218,19 @@ SELECT @result;
             return string.Equals(workflowState, TransferReviewRequiredCode, StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsPendingReviewRequired(IEnumerable<TkmendField> fields)
+        {
+            var workflowState = GetFieldValue(fields, "Summer_WorkflowState") ?? string.Empty;
+            return string.Equals(workflowState, PendingReviewRequiredCode, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsWorkflowStateLabelPreferred(string? workflowStateCode)
+        {
+            var normalized = (workflowStateCode ?? string.Empty).Trim().ToUpperInvariant();
+            return normalized == TransferReviewRequiredCode
+                || normalized == PendingReviewRequiredCode;
+        }
+
         private static string ResolveWorkflowStateLabel(string? workflowStateCode)
         {
             var normalized = (workflowStateCode ?? string.Empty).Trim().ToUpperInvariant();
@@ -2208,6 +5238,8 @@ SELECT @result;
             {
                 TransferReviewRequiredCode => "يتطلب مراجعة بعد التحويل",
                 TransferReviewResolvedCode => "تمت مراجعة التحويل",
+                PendingReviewRequiredCode => "قيد المراجعة",
+                PendingReviewResolvedCode => "تمت مراجعة الطلب",
                 _ => string.Empty
             };
         }
@@ -2235,10 +5267,10 @@ SELECT @result;
         private static string ResolveSummaryStatusLabel(
             MessageStatus messageStatus,
             IEnumerable<TkmendField> fields,
-            bool needsTransferReview,
+            bool preferWorkflowStateLabel,
             string workflowStateLabel)
         {
-            if (needsTransferReview && !string.IsNullOrWhiteSpace(workflowStateLabel))
+            if (preferWorkflowStateLabel && !string.IsNullOrWhiteSpace(workflowStateLabel))
             {
                 return workflowStateLabel;
             }
@@ -2248,8 +5280,12 @@ SELECT @result;
             {
                 SummerAdminActionCatalog.Codes.FinalApprove => "اعتماد نهائي",
                 SummerAdminActionCatalog.Codes.Comment => "رد إداري",
+                SummerAdminActionCatalog.Codes.InternalAdminAction => "إجراء إداري داخلي",
                 SummerAdminActionCatalog.Codes.ManualCancel => "إلغاء يدوي",
+                SummerAdminActionCatalog.Codes.RejectRequest => "رفض الطلب",
                 SummerAdminActionCatalog.Codes.ApproveTransfer => "اعتماد تحويل",
+                SummerAdminActionCatalog.Codes.MarkUnpaid => "تحويل إلى غير مسدد",
+                SummerAdminActionCatalog.Codes.MarkPaidAdmin => "سداد إداري",
                 _ => messageStatus.GetDescription()
             };
         }
@@ -2266,22 +5302,79 @@ SELECT @result;
             return status.GetDescription();
         }
 
+        private static MessageStatus? ResolveRequestedStatusMessageStatus(string? requestedStatus)
+        {
+            var raw = (requestedStatus ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return null;
+            }
+
+            if (Enum.TryParse<MessageStatus>(raw, true, out var parsedStatus))
+            {
+                return parsedStatus;
+            }
+
+            if (byte.TryParse(raw, out var statusByte)
+                && Enum.IsDefined(typeof(MessageStatus), statusByte))
+            {
+                return (MessageStatus)statusByte;
+            }
+
+            var token = NormalizeSearchToken(raw);
+            return token switch
+            {
+                "new" or "جديد" => MessageStatus.New,
+                "inprogress" or "in_progress" or "جاريالتنفيذ" => MessageStatus.InProgress,
+                "replied" or "تمالرد" => MessageStatus.Replied,
+                _ => null
+            };
+        }
+
         private static string ResolveDashboardStatusCode(string label)
         {
             var token = NormalizeSearchToken(label);
             return token switch
             {
-                "جديد" => "NEW",
-                "جاريالتنفيذ" => "IN_PROGRESS",
-                "ردإداري" or "رداداري" => "ADMIN_REPLY",
-                "تمالرد" => "REPLIED",
-                "اعتمادنهائي" => SummerAdminActionCatalog.Codes.FinalApprove,
-                "اعتمادتحويل" => SummerAdminActionCatalog.Codes.ApproveTransfer,
-                "الغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
-                "مرفوض" or "ملغي" => "REJECTED",
-                "يتطلبمراجعةبعدالتحويل" => TransferReviewRequiredCode,
-                "تمتمراجعةالتحويل" => TransferReviewResolvedCode,
+                "new" or "جديد" => "NEW",
+                "inprogress" or "in_progress" or "جاريالتنفيذ" => "IN_PROGRESS",
+                "adminreply" or "admin_reply" or "reply" or "ردإداري" or "رداداري" => "ADMIN_REPLY",
+                "replied" or "تمالرد" => "REPLIED",
+                "finalapprove" or "final_approve" or "اعتمادنهائي" => SummerAdminActionCatalog.Codes.FinalApprove,
+                "internaladminaction" or "internal_admin_action" or "اجراءاداريداخلي" => SummerAdminActionCatalog.Codes.InternalAdminAction,
+                "approvetransfer" or "approve_transfer" or "اعتمادتحويل" => SummerAdminActionCatalog.Codes.ApproveTransfer,
+                "manualcancel" or "manual_cancel" or "الغاءيدوي" or "إلغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
+                "rejectrequest" or "reject_request" or "reject" or "rejection" or "رفض" => SummerAdminActionCatalog.Codes.RejectRequest,
+                "markunpaid" or "mark_unpaid" or "setunpaid" or "set_unpaid" or "غيرمسدد" or "تحويلالىغيرمسدد" or "تحويلاليغيرمسدد" or "تحويلإلىغيرمسدد" or "تحويللغيرمسدد" => SummerAdminActionCatalog.Codes.MarkUnpaid,
+                "markpaidadmin" or "mark_paid_admin" or "adminmarkpaid" or "admin_paid" or "سداداداري" or "سدادإداري" => SummerAdminActionCatalog.Codes.MarkPaidAdmin,
+                "rejected" or "مرفوض" or "ملغي" or "مرفوض/ملغي" => "REJECTED",
+                "يتطلبمراجعةبعدالتحويل" or "transferreviewrequired" or "transfer_review_required" => TransferReviewRequiredCode,
+                "تمتمراجعةالتحويل" or "transferreviewresolved" or "transfer_review_resolved" => TransferReviewResolvedCode,
+                "قيدالمراجعة" or "pendingreviewrequired" or "pending_review_required" => PendingReviewRequiredCode,
+                "تمتمراجعةالطلب" or "pendingreviewresolved" or "pending_review_resolved" => PendingReviewResolvedCode,
                 _ => token.ToUpperInvariant()
+            };
+        }
+
+        private static PaymentStateFilterKind ResolveRequestedPaymentStateFilter(string? rawPaymentState)
+        {
+            var token = NormalizeSearchToken(rawPaymentState);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return PaymentStateFilterKind.Any;
+            }
+
+            var compactToken = token
+                .Replace("_", string.Empty)
+                .Replace("-", string.Empty);
+
+            return compactToken switch
+            {
+                "paid" or "مسدد" => PaymentStateFilterKind.Paid,
+                "unpaid" or "غيرمسدد" => PaymentStateFilterKind.Unpaid,
+                "partialpaid" or "partial" or "مسددجزئي" or "مسددعدد" => PaymentStateFilterKind.PartialPaid,
+                "overdue" or "overdueunpaid" or "متاخرغيرمسدد" or "متأخرغيرمسدد" => PaymentStateFilterKind.OverdueUnpaid,
+                _ => PaymentStateFilterKind.Any
             };
         }
 
@@ -2303,18 +5396,136 @@ SELECT @result;
             return int.TryParse((value ?? string.Empty).Trim(), out var parsed) ? parsed : fallback;
         }
 
+        private static decimal ParseDecimal(string? value, decimal fallback = 0m)
+        {
+            var parsed = ParseDecimalNullable(value);
+            return parsed ?? fallback;
+        }
+
+        private static decimal? ParseDecimalNullable(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return null;
+            }
+
+            if (TryParseDecimalWithCulture(normalized, out var parsed))
+            {
+                return parsed;
+            }
+
+            var sanitized = NormalizeDecimalText(normalized);
+            if (sanitized.Length == 0)
+            {
+                return null;
+            }
+
+            if (TryParseDecimalWithCulture(sanitized, out parsed))
+            {
+                return parsed;
+            }
+
+            return null;
+        }
+
+        private static bool TryParseDecimalWithCulture(string value, out decimal parsed)
+        {
+            var styles = NumberStyles.AllowLeadingSign
+                | NumberStyles.AllowDecimalPoint
+                | NumberStyles.AllowThousands
+                | NumberStyles.AllowCurrencySymbol
+                | NumberStyles.AllowLeadingWhite
+                | NumberStyles.AllowTrailingWhite;
+
+            return decimal.TryParse(value, styles, CultureInfo.InvariantCulture, out parsed)
+                || decimal.TryParse(value, styles, CultureInfo.GetCultureInfo("ar-EG"), out parsed)
+                || decimal.TryParse(value, styles, CultureInfo.CurrentCulture, out parsed);
+        }
+
+        private static string NormalizeDecimalText(string value)
+        {
+            var text = value
+                .Replace("ج.م", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace("EGP", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Trim();
+
+            var builder = new StringBuilder(text.Length);
+            foreach (var ch in text)
+            {
+                builder.Append(ch switch
+                {
+                    '٠' => '0',
+                    '١' => '1',
+                    '٢' => '2',
+                    '٣' => '3',
+                    '٤' => '4',
+                    '٥' => '5',
+                    '٦' => '6',
+                    '٧' => '7',
+                    '٨' => '8',
+                    '٩' => '9',
+                    '٫' => '.',
+                    '،' => '.',
+                    '٬' => ',',
+                    _ => ch
+                });
+            }
+
+            return builder.ToString();
+        }
+
         private static DateTime ResolvePaymentDueAtUtc(Message message, IEnumerable<TkmendField> fields)
         {
-            var fromField = ParseDate(GetFieldValue(fields, "Summer_PaymentDueAtUtc"));
-            if (fromField.HasValue)
+            var rawDueAtValue = GetFieldValue(fields, PaymentDueAtUtcFieldKind);
+            var fromField = ParseDate(rawDueAtValue);
+            if (fromField.HasValue && HasExplicitTimeComponent(rawDueAtValue))
             {
                 return fromField.Value;
             }
 
-            var createdAtUtc = message.CreatedDate.Kind == DateTimeKind.Utc
-                ? message.CreatedDate
-                : DateTime.SpecifyKind(message.CreatedDate, DateTimeKind.Utc);
+            var createdAtUtc = ResolveRequestCreatedAtUtc(message, fields);
             return SummerCalendarRules.CalculatePaymentDueUtc(createdAtUtc);
+        }
+
+        private static DateTime ResolveRequestCreatedAtUtc(Message message, IEnumerable<TkmendField> fields)
+        {
+            var anchoredFieldValue = GetFieldValue(fields, RequestCreatedAtUtcFieldKind);
+            var anchoredCreatedAtUtc = ParseDate(anchoredFieldValue);
+            if (anchoredCreatedAtUtc.HasValue)
+            {
+                return anchoredCreatedAtUtc.Value;
+            }
+
+            return ResolveLegacyMessageCreatedAtUtc(message);
+        }
+
+        private static DateTime ResolveLegacyMessageCreatedAtUtc(Message message)
+        {
+            return NormalizeToUtc(message.CreatedDate);
+        }
+
+        private static DateTime NormalizeToUtc(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Utc)
+            {
+                return value;
+            }
+
+            if (value.Kind == DateTimeKind.Local)
+            {
+                return value.ToUniversalTime();
+            }
+
+            var unspecified = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+            return TimeZoneInfo.ConvertTimeToUtc(unspecified, SummerBusinessTimeZone);
+        }
+
+        private static DateTime TruncateToWholeSecondUtc(DateTime valueUtc)
+        {
+            var utc = NormalizeToUtc(valueUtc);
+            var ticks = utc.Ticks - (utc.Ticks % TimeSpan.TicksPerSecond);
+            return new DateTime(ticks, DateTimeKind.Utc);
         }
 
         private static DateTime? ParseDate(string? value)
@@ -2324,14 +5535,57 @@ SELECT @result;
                 return null;
             }
 
-            if (!DateTime.TryParse(value, out var parsed))
+            var normalized = value.Trim();
+            if (DateTimeOffset.TryParse(
+                normalized,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.RoundtripKind,
+                out var dto))
+            {
+                return dto.UtcDateTime;
+            }
+
+            if (!DateTime.TryParse(
+                normalized,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.RoundtripKind,
+                out var parsed))
             {
                 return null;
             }
 
-            return parsed.Kind == DateTimeKind.Utc
-                ? parsed
-                : DateTime.SpecifyKind(parsed, DateTimeKind.Utc).ToUniversalTime();
+            return NormalizeToUtc(parsed);
+        }
+
+        private static bool HasExplicitTimeComponent(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                return false;
+            }
+
+            return normalized.Contains('T', StringComparison.Ordinal)
+                || normalized.Contains(':', StringComparison.Ordinal);
+        }
+
+        private static TimeZoneInfo ResolveSummerBusinessTimeZone()
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo");
+            }
+            catch
+            {
+                try
+                {
+                    return TimeZoneInfo.FindSystemTimeZoneById("Egypt Standard Time");
+                }
+                catch
+                {
+                    return TimeZoneInfo.Utc;
+                }
+            }
         }
 
         private sealed class SummerDestinationCatalogPayload
@@ -2363,7 +5617,3 @@ SELECT @result;
         }
     }
 }
-
-
-
-

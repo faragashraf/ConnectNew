@@ -1,21 +1,251 @@
-// Dialog
-label{
-  font-size: large;
+:host {
+  --page-bg: linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+  --card-bg: #ffffff;
+  --card-border: #dce4ef;
+  --title-color: #0f172a;
+  --muted-color: #5b6472;
+  --accent-color: #0a66c2;
+}
+
+.role-hierarchy-page {
+  background: var(--page-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.page-head {
+  margin-bottom: 0.75rem;
+}
+
+.page-title {
+  color: var(--title-color);
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.page-subtitle {
+  color: var(--muted-color);
+  margin: 0;
+}
+
+.content-grid {
+  row-gap: 1rem;
+}
+
+.lookup-panel {
+  margin-top: 0.75rem;
+}
+
+.user360-panel {
+  .summary-meta {
+    color: var(--muted-color);
+    font-size: 0.9rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .nested-title {
+    margin-top: 1rem;
+  }
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.summary-card {
+  border: 1px solid #dbe6f3;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  padding: 0.75rem;
+}
+
+.summary-label {
+  color: #4a5d72;
+  font-size: 0.84rem;
+  margin-bottom: 0.25rem;
+}
+
+.summary-value {
+  color: #0f2742;
+  font-weight: 700;
+  font-size: 1rem;
+  word-break: break-word;
+}
+
+.kpi-card .summary-value {
+  color: #0a66c2;
+  font-size: 1.2rem;
+}
+
+.chips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.chip-block {
+  border: 1px solid #dbe6f3;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.65rem;
+}
+
+.chip-title {
+  color: #1e3a5f;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 0.55rem;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.chip-item {
+  background: #edf5ff;
+  color: #0b4f8a;
+  border: 1px solid #cfe3fb;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.role-insights-list {
+  margin-bottom: 1rem;
+}
+
+.role-insight {
+  font-weight: 700;
+}
+
+.role-insight.severity-critical {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #9f1239;
+}
+
+.role-insight.severity-high {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.role-insight.severity-normal {
+  background: #ecfeff;
+  border-color: #a5f3fc;
+  color: #155e75;
+}
+
+.matrix-wrapper {
+  border: 1px solid #dbe6f3;
+  border-radius: 10px;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+  background: #fff;
+}
+
+.matrix-table th,
+.matrix-table td {
+  border-bottom: 1px solid #e7eff9;
+  border-left: 1px solid #f1f5f9;
+  padding: 0.5rem 0.55rem;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-size: 0.84rem;
+}
+
+.matrix-table th {
+  background: #f8fbff;
+  color: #274466;
+  font-weight: 700;
+}
+
+.matrix-table .role-col {
+  text-align: right;
+  font-weight: 700;
+  color: #16324f;
+  position: sticky;
+  right: 0;
+  background: #ffffff;
+}
+
+.matrix-flag {
+  font-weight: 700;
+}
+
+.matrix-flag.flag-on {
+  color: #166534;
+}
+
+.matrix-flag.flag-off {
+  color: #94a3b8;
+}
+
+.lookup-row {
+  display: grid;
+  grid-template-columns: 140px minmax(220px, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.panel-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+  padding: 0.9rem;
+}
+
+.panel-title {
+  color: var(--accent-color);
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+label {
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .input-group {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .form-control {
   flex: 1;
-  min-width: 250px;
+  min-width: 230px;
+  border-radius: 8px;
 }
 
 .dialog-content {
   padding: 1rem;
+}
+
+.form-group-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.65rem 0.75rem;
+  align-items: center;
 }
 
 .text-danger {
@@ -23,17 +253,27 @@ label{
   font-size: 0.875em;
 }
 
-/* Start tree Style */
-.children{
-  color: aqua;
-}
-.parents{
-  color: rgb(255, 255, 255);
-  font-family: 'Times New Roman', Times, serif;
-  font-size: x-large;
-}
 .filter-highlight {
-  background-color: yellow;
-  font-weight: bold;
-  color: #b41d1d;
+  background-color: #fff2bf;
+  font-weight: 700;
+  color: #8a2500;
+}
+
+@media (max-width: 991px) {
+  .role-hierarchy-page {
+    padding: 0.75rem;
+  }
+
+  .lookup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .page-title {
+    font-size: 1.15rem;
+  }
+
+  .summary-grid,
+  .chips-grid {
+    grid-template-columns: 1fr;
+  }
 }

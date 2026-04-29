@@ -1,0 +1,43 @@
+<section class="envelope-list">
+  <header>
+    <h2>قائمة الأظرف الواردة</h2>
+    <button type="button" (click)="load()">تحديث</button>
+  </header>
+
+  <div class="filters">
+    <input type="text" #searchBox placeholder="ابحث برقم الظرف أو الجهة المرسلة" (keyup.enter)="applySearch(searchBox.value)" />
+    <button type="button" (click)="applySearch(searchBox.value)">بحث</button>
+  </div>
+
+  <div class="loading" *ngIf="loading">جاري تحميل الأظرف...</div>
+
+  <table *ngIf="!loading">
+    <thead>
+      <tr>
+        <th>مرجع الظرف</th>
+        <th>تاريخ الورود</th>
+        <th>الجهة الواردة</th>
+        <th>المندوب</th>
+        <th>عدد الموضوعات المرتبطة</th>
+        <th>الإجراءات</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let envelope of envelopes">
+        <td>{{ envelope.envelopeRef }}</td>
+        <td>{{ envelope.incomingDate | date:'shortDate' }}</td>
+        <td>{{ envelope.sourceEntity }}</td>
+        <td>{{ envelope.deliveryDelegate }}</td>
+        <td>{{ envelope.linkedSubjectsCount }}</td>
+        <td>
+          <a [routerLink]="['/DynamicSubjects/envelopes', envelope.envelopeId]">عرض / تعديل</a>
+        </td>
+      </tr>
+      <tr *ngIf="envelopes.length === 0">
+        <td colspan="6" class="empty-state">لا توجد أظرف واردة مطابقة للبحث.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <footer>الإجمالي: {{ totalCount }}</footer>
+</section>

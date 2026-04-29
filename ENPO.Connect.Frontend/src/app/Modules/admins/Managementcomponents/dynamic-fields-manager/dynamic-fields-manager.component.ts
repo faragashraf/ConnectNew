@@ -1,26 +1,18 @@
-import { Component, OnInit } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Subject } from 'rxjs';
-import {  takeUntil } from 'rxjs/operators';
-import { GenericFormsService, selection } from 'src/app/Modules/GenericComponents/GenericForms.service';
-import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
-import { SpinnerService } from 'src/app/shared/services/helper/spinner.service';
-import { RedisHubService } from 'src/app/shared/services/SignalRServices/Redis.service';
-import { GenerateQueryService } from 'src/app/Modules/enpopower-bi/services/generate-query.service';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
-import { forkJoin } from 'rxjs';
-import { CdcategoryDto, CdCategoryMandDto, CdmendDto } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.dto';
-import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
+import { Subscription } from 'rxjs';
+import { DynamicSubjectsController } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.service';
+import {
+  SubjectAdminFieldDto,
+  SubjectAdminFieldUpsertRequestDto
+} from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
+import { AppNotificationService } from 'src/app/shared/services/notifications/app-notification.service';
+import { CentralAdminContextService } from '../../services/central-admin-context.service';
 
-// Interface for grouped fields structure (formerly TreeNode)
-export interface FieldGroup {
-    data?: any;
-    children?: FieldGroup[];
-    leaf?: boolean;
-    expanded?: boolean;
-    label?: string;
-    level?: number;
+interface FieldOptionRow {
+  key: string;
+  value: string;
 }
 
 @Component({
@@ -28,624 +20,622 @@ export interface FieldGroup {
   templateUrl: './dynamic-fields-manager.component.html',
   styleUrls: ['./dynamic-fields-manager.component.scss']
 })
-export class DynamicFieldsManagerComponent implements OnInit {
-  private destroyed$ = new Subject<void>();
-  selectedField: CdmendDto = {} as CdmendDto;
-  fieldForm: FormGroup; // Form for creating/editing fields
-  isEditing: boolean = false; // Flag to track if editing mode is active
-  editingIndex: number | null = null; // Index of the field being edited
+export class DynamicFieldsManagerComponent implements OnInit, OnChanges, OnDestroy {
+  @Input() embeddedMode = false;
+  @Input() selectedCategoryId: number | null = null;
+  @Input() selectedApplicationId: string | null = null;
+  @Output() fieldsChanged = new EventEmitter<void>();
 
-  appName: string = ''
+  loading = false;
+  saving = false;
+  dialogVisible = false;
+  editingFieldKey: string | null = null;
 
-  constructor(public generateQueryService: GenerateQueryService, private fb: FormBuilder,
-    private dynamicFormController: DynamicFormController, private redisHubService: RedisHubService,
-    private spinner: SpinnerService, private msg: MsgsService,
-    public genericFormService: GenericFormsService) {
-    // Initialize the form
-    this.fieldForm = this.fb.group({
-      cdmendSql: [null, Validators.required],
-      cdmendType: ['', Validators.required],
-      cdmendTxt: [''],
-      cdMendLbl: ['', Validators.required],
+  fields: SubjectAdminFieldDto[] = [];
+  searchTerm = '';
+  statusFilter: 'all' | 'active' | 'inactive' = 'all';
+  appFilter: string | null = '';
+
+  form: FormGroup;
+
+  optionRows: FieldOptionRow[] = [];
+  optionRowsTouched = false;
+
+  private readonly subscriptions = new Subscription();
+  private fieldsRequestSeq = 0;
+
+  readonly fieldTypes: Array<{ label: string; value: string }> = [
+    { label: 'نص قصير', value: 'InputText' },
+    { label: 'نص طويل', value: 'Textarea' },
+    { label: 'قائمة منسدلة', value: 'Dropdown' },
+    { label: 'شجرة منسدلة', value: 'DropdownTree' },
+    { label: 'اختيار واحد', value: 'RadioButton' },
+    { label: 'تاريخ', value: 'Date' },
+    { label: 'مستخدم نطاق', value: 'DomainUser' },
+    { label: 'رقم', value: 'Number' },
+    { label: 'مربع اختيار', value: 'Checkbox' }
+  ];
+
+  constructor(
+    private readonly activatedRoute: ActivatedRoute,
+    private readonly fb: FormBuilder,
+    private readonly dynamicSubjectsController: DynamicSubjectsController,
+    private readonly appNotification: AppNotificationService,
+    private readonly centralAdminContext: CentralAdminContextService
+  ) {
+    this.form = this.fb.group({
+      cdmendSql: [null],
+      fieldKey: ['', [Validators.required, Validators.maxLength(50)]],
+      fieldType: ['InputText', [Validators.required, Validators.maxLength(50)]],
+      fieldLabel: ['', Validators.maxLength(50)],
       placeholder: [''],
       defaultValue: [''],
-      cdmendTbl: this.fb.array([]),
+      optionsPayload: [''],
+      dataType: ['', Validators.maxLength(50)],
       required: [false],
       requiredTrue: [false],
       email: [false],
       pattern: [false],
-      min: [null],
-      max: [null],
-      minxLenght: [null],
-      maxLenght: [null],
-      cdmendmask: [''],
-      cdmendStat: [true],
-      width: [0, Validators.required],
-      height: [0, Validators.required],
+      minValue: [''],
+      maxValue: [''],
+      mask: ['', Validators.maxLength(30)],
+      isActive: [true],
+      width: [0, [Validators.required, Validators.min(0)]],
+      height: [0, [Validators.required, Validators.min(0)]],
       isDisabledInit: [false],
       isSearchable: [false],
-      applicationId: ['', Validators.required]
+      applicationId: ['', Validators.maxLength(10)]
     });
   }
-  
-  groupedFields: FieldGroup[] = [];
-    disableAnimations: boolean = false;
 
-  // New properties for enhanced UI
-  searchTerm: string = '';
-  selectedAppFilter: string = '';
-  applicationFilters: any[] = [];
-  filterStatus: 'all' | 'active' | 'inactive' = 'all';
- 
-
-  // UI preference flags
-  isDarkMode: boolean = false;            // toggled by user or system (prefers-color-scheme)
-  compactMode: boolean = false;          // denser layout for admin-heavy screens
-  highContrast: boolean = false;         // stronger contrast for accessibility
-  prefersDarkMedia: MediaQueryList | null = null; // system media query reference
-
-  cdmendDto: CdmendDto = {} as CdmendDto;
-  
-  // Animation Statistics
-  stats = {
-    apps: 0,
-    types: 0,
-    fields: 0,
-    active: 0,
-    inactive: 0
-  };
-
-  recalculateStats() {
-    this.animateCount('apps', this.getApplicationsCount());
-    this.animateCount('types', this.getTypesCount());
-    this.animateCount('fields', this.getFieldsCount());
-    this.animateCount('active', this.getActiveFieldsCount());
-    this.animateCount('inactive', this.getInclusiveFieldsCount());
-  }
-
-  animateCount(prop: keyof typeof this.stats, target: number) {
-      let current = 0;
-      const duration = 1200; 
-      const startTime = performance.now();
-      const startValue = this.stats[prop];
-
-      const step = (timestamp: number) => {
-          const progress = Math.min((timestamp - startTime) / duration, 1);
-          // Ease out quart
-          const ease = 1 - Math.pow(1 - progress, 4);
-          
-          this.stats[prop] = Math.floor(startValue + (target - startValue) * ease);
-
-          if (progress < 1) {
-              requestAnimationFrame(step);
-          } else {
-              this.stats[prop] = target;
-          }
-      };
-      requestAnimationFrame(step);
-  }
-
-  get cdmendTbl(): FormArray {
-    return this.fieldForm.get('cdmendTbl') as FormArray;
-  }
-  fieldTypes = [
-    { label: 'Input Text', value: 'InputText' },
-    { label: 'Textarea', value: 'Textarea' },
-    { label: 'Dropdown', value: 'Dropdown' },
-    { label: 'Radio Button', value: 'RadioButton' },
-    { label: 'Date', value: 'Date' },
-    { label: 'Domain User', value: 'DomainUser' },
-    { label: 'Dropdown Tree', value: 'DropdownTree' },
-  ];
-
-  implementControlSelection(cdmendTbl: any): selection[] {
-    return JSON.parse(<string>cdmendTbl);
-  }
-  updateControlSelection(selectionArray: FormArray, item: CdmendDto) {
-    const json = JSON.stringify(selectionArray.value || []);
-    const current = this.selectedFieldForDialog ?? this.selectedField;
-    if (current) {
-      const idx = this.genericFormService.cdmendDto.findIndex(m => m.cdmendTxt === current.cdmendTxt || m.cdmendSql === current.cdmendSql);
-      if (idx !== -1) {
-        this.genericFormService.cdmendDto[idx].cdmendTbl = json;
-        (this.genericFormService.cdmendDto[idx] as any).tbl = this.safeParseCdmendTbl(json);
-      }
-      // also reflect on dialog selection
-      if (this.selectedFieldForDialog) {
-        this.selectedFieldForDialog.cdmendTbl = json;
-        (this.selectedFieldForDialog as any).tbl = this.safeParseCdmendTbl(json);
-      }
-      this.groupedFields = this.buildGroupedFields(this.genericFormService.cdmendDto);
-    }
-  }
-  addNewSelection() {
-    // push a new row FormGroup with expected shape { key, name }
-    this.cdmendTbl.push(this.fb.group({ key: [''], name: [''] }));
-    // After adding, persist the change back to the selected item in the service
-    const json = JSON.stringify(this.cdmendTbl.value || []);
-    const current = this.selectedFieldForDialog ?? this.selectedField;
-    if (current) {
-      const idx = this.genericFormService.cdmendDto.findIndex(m => m.cdmendTxt === current.cdmendTxt || m.cdmendSql === current.cdmendSql);
-      if (idx !== -1) {
-        this.genericFormService.cdmendDto[idx].cdmendTbl = json;
-        (this.genericFormService.cdmendDto[idx] as any).tbl = this.safeParseCdmendTbl(json);
-      }
-      // also reflect on dialog selection
-      if (this.selectedFieldForDialog) {
-        this.selectedFieldForDialog.cdmendTbl = json;
-        (this.selectedFieldForDialog as any).tbl = this.safeParseCdmendTbl(json);
-      }
-      this.groupedFields = this.buildGroupedFields(this.genericFormService.cdmendDto);
-    }
-  }
   ngOnInit(): void {
-    this.spinner.show();
-
-    const obsMandatoryAll$ = this.dynamicFormController.getMandatoryAll('');
-    const obsMandatoryMeta$ = this.dynamicFormController.getMandatoryMetaDate('');
-    const obsCategories$ = this.dynamicFormController.getAllCategories('');
-
-    forkJoin([obsMandatoryAll$, obsMandatoryMeta$, obsCategories$])
-      .pipe(
-        takeUntil(this.destroyed$),
-        // finalize(() => this.spinner.hide())
-      )
-      .subscribe({
-        next: (res: any[]) => {
-          // Defensive checks for response shapes
-          const mandatoryAll = res[0];
-          const mandatoryMeta = res[1];
-          const categories = res[2];
-
-          if (mandatoryAll?.isSuccess && mandatoryMeta?.isSuccess && categories?.isSuccess) {
-            this.genericFormService.cdCategoryMandDto = mandatoryAll.data as CdCategoryMandDto[];
-            const metaFields = (mandatoryMeta.data as CdmendDto[]) || [];
-            this.genericFormService.cdmendDto = metaFields.map(f => ({
-              ...f,
-              tbl: this.safeParseCdmendTbl(f.cdmendTbl)
-            }));
-            this.genericFormService.cdcategoryDtos = (categories.data || []).filter((f: any) => f.catId > 100 && f.catParent == 1) as CdcategoryDto[];
-            this.groupedFields = this.buildGroupedFields(this.genericFormService.cdmendDto);
-            
-            // Trigger animation
-            this.recalculateStats();
-
-            // Initialize application filters
-            this.updateApplicationFilters();
-
-            // Load UI preferences: dark mode, compact mode, high-contrast
-            const savedDark = localStorage.getItem('dfm-dark-mode');
-            if (savedDark !== null) {
-              this.isDarkMode = savedDark === 'true';
-            } else {
-              // If user hasn't chosen, follow system preference and listen for changes
-              try {
-                this.prefersDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
-                this.isDarkMode = this.prefersDarkMedia.matches;
-                const handler = (e: MediaQueryListEvent) => {
-                  // only update if user hasn't saved an explicit preference
-                  const saved = localStorage.getItem('dfm-dark-mode');
-                  if (saved === null) this.isDarkMode = e.matches;
-                };
-                this.prefersDarkMedia.addEventListener?.('change', handler);
-                (this as any)._prefersDarkHandler = handler;
-              } catch (e) {
-                // older browsers may not support addEventListener on MediaQueryList
-                try { this.prefersDarkMedia?.addListener?.(() => { this.isDarkMode = this.prefersDarkMedia?.matches ?? false; }); } catch { }
-              }
-            }
-
-            const savedCompact = localStorage.getItem('dfm-compact-mode');
-            if (savedCompact !== null) this.compactMode = savedCompact === 'true';
-
-            const savedHC = localStorage.getItem('dfm-high-contrast');
-            if (savedHC !== null) this.highContrast = savedHC === 'true';
-          } else {
-            // collect and show errors if present
-            let errors = '';
-            [mandatoryAll, mandatoryMeta, categories].forEach(r => {
-              if (r && Array.isArray(r.errors)) {
-                r.errors.forEach((e: any) => errors += (e?.message || e) + '\n');
-              }
-            });
-            this.msg.msgError('Error', '<h5>' + (errors || 'Unknown error') + '</h5>', true);
-          }
-        },
-        error: (error) => {
-          this.msg.msgError('Error', '<h5>' + (error?.message || String(error)) + '</h5>', true);
+    this.subscriptions.add(
+      this.centralAdminContext.state$.subscribe(state => {
+        if (this.embeddedMode) {
+          return;
         }
-      });
 
-    // this.getLogCaseAsync();
-  }
+        const appIdFromContext = String(state.selectedApplicationId ?? '').trim();
+        if (appIdFromContext === this.normalizeText(this.appFilter)) {
+          return;
+        }
 
-  safeParseCdmendTbl(cdmendTblValue: any): any[] {
-    if (!cdmendTblValue) return [];
-    if (Array.isArray(cdmendTblValue)) return cdmendTblValue;
-    if (typeof cdmendTblValue === 'string') {
-      try {
-        const parsed = JSON.parse(cdmendTblValue);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch (e) {
-        console.warn('Failed to parse cdmendTbl JSON', e);
-        return [];
-      }
-    }
-    return [];
-  }
+        this.appFilter = appIdFromContext;
+        this.loadFields();
+      })
+    );
 
-  private buildGroupedFields(fields: CdmendDto[] | null | undefined): FieldGroup[] {
-    if (!fields || !fields.length) return [];
+    if (!this.embeddedMode) {
+      this.subscriptions.add(
+        this.activatedRoute.queryParamMap.subscribe(params => {
+          const applicationId = String(params.get('applicationId') ?? '').trim();
+          const categoryId = Number(params.get('categoryId') ?? 0);
+          const patch: { selectedApplicationId?: string; selectedCategoryId?: number } = {};
 
-    const appMap = new Map<string, Map<string, CdmendDto[]>>();
+          if (applicationId.length > 0) {
+            patch['selectedApplicationId'] = applicationId;
+          }
 
-    for (const f of fields) {
-      const app = (f.applicationId || 'DEFAULT') as string;
-      const type = (f.cdmendType || 'Unknown') as string;
+          if (Number.isFinite(categoryId) && categoryId > 0) {
+            patch['selectedCategoryId'] = categoryId;
+          }
 
-      if (!appMap.has(app)) appMap.set(app, new Map<string, CdmendDto[]>());
-      const typeMap = appMap.get(app)!;
-      if (!typeMap.has(type)) typeMap.set(type, []);
-      typeMap.get(type)!.push(f);
-    }
+          if (Object.keys(patch).length === 0) {
+            return;
+          }
 
-    const apps = Array.from(appMap.keys()).sort();
-
-    return apps.map(app => {
-      const typeMap = appMap.get(app)!;
-      const types = Array.from(typeMap.keys()).sort();
-
-      const typeNodes: FieldGroup[] = types.map(t => {
-        const fieldsForType = (typeMap.get(t) || []).map(f => ({
-          label: f.cdMendLbl || f.cdmendTxt || String(f.cdmendSql),
-          data: f,
-          leaf: true
-        } as FieldGroup));
-
-        return {
-          label: t,
-          data: { applicationId: app, cdmendType: t },
-          expanded: false,
-          children: fieldsForType
-        } as FieldGroup;
-      });
-
-      return {
-        label: app,
-        data: { applicationId: app },
-        expanded: false,
-        children: typeNodes
-      } as FieldGroup;
-    });
-  }
-
-  ngOnDestroy(): void {
-    this.destroyed$.next();
-    this.destroyed$.complete();
-
-    // Remove prefers-color-scheme listener if attached
-    if (this.prefersDarkMedia && (this as any)._prefersDarkHandler) {
-      this.prefersDarkMedia.removeEventListener?.('change', (this as any)._prefersDarkHandler);
-    }
-  }
-
-
-  // Dialog state to show field details in a modal
-  displayFieldDialog: boolean = false;
-  selectedFieldForDialog: CdmendDto = {} as CdmendDto;
-  filtered_1_CategoryMand: CdCategoryMandDto[] = []
-  /**
-   * Open the dialog and populate the form with the provided field data.
-   */
-  openFieldDialog(field: CdmendDto): void {
-    if (!field) return;
-    this.selectedFieldForDialog = field;
-    this.displayFieldDialog = true;
-  }
-
-  onDialogVisibleChange(visible: boolean) {
-    this.displayFieldDialog = visible;
-    if (!visible) {
-      this.closeFieldDialog();
-    }
-  }
-
-  closeFieldDialog(): void {
-    this.displayFieldDialog = false;
-    this.selectedFieldForDialog = {} as CdmendDto;
-  }
-
-  /**
-   * Safely derive a label for an option entry in cdmendTbl.
-   */
-  optionLabel(opt: any): string {
-    if (!opt) return '';
-    if (typeof opt === 'string') return opt;
-    const name = typeof opt.name === 'string' ? opt.name.trim() : '';
-    if (name) return name;
-    const key = typeof opt.key === 'string' ? opt.key.trim() : '';
-    if (key) return key;
-    const label = typeof opt.label === 'string' ? opt.label.trim() : '';
-    if (label) return label;
-    if (opt.value !== undefined && opt.value !== null) return String(opt.value);
-    try { return JSON.stringify(opt); } catch { return String(opt); }
-  }
-
-  // Add a new field
-  addField(): void {
-    if (this.fieldForm.valid) {
-      const newField: CdmendDto = this.fieldForm.value;
-
-      const tblArray = this.safeParseCdmendTbl(this.fieldForm.get('cdmendTbl')?.value ?? newField.cdmendTbl ?? []);
-      (newField as any).cdmendTbl = JSON.stringify(tblArray);
-      (newField as any).tbl = tblArray;
-      // push into service list
-      this.genericFormService.cdmendDto.push(newField);
-
-      // Also update any existing selected item matching this field (by cdmendTxt or cdmendSql)
-      const matchIdx = this.genericFormService.cdmendDto.findIndex(f => f.cdmendTxt === newField.cdmendTxt || f.cdmendSql === newField.cdmendSql);
-      if (matchIdx !== -1) {
-        this.genericFormService.cdmendDto[matchIdx].cdmendTbl = (newField as any).cdmendTbl;
-        (this.genericFormService.cdmendDto[matchIdx] as any).tbl = tblArray;
-      }
-      // refresh the tree view
-      this.fieldForm.reset(); // Clear the form
-    } else {
-      console.log("this.fieldForm.valid", this.fieldForm.valid)
-    }
-  }
-
-
-  /** Remove a selection row by index from the current cdmendTbl FormArray and persist */
-  removeSelection(index: any) {
-    if (index == null || index < 0 || index >= this.cdmendTbl.length) return;
-    this.cdmendTbl.removeAt(index);
-    // Persist updated array to service and selection
-    const json = JSON.stringify(this.cdmendTbl.value || []);
-    const current = this.selectedFieldForDialog ?? this.selectedField;
-    if (current) {
-      const idx = this.genericFormService.cdmendDto.findIndex(m => m.cdmendTxt === current.cdmendTxt || m.cdmendSql === current.cdmendSql);
-      if (idx !== -1) {
-        this.genericFormService.cdmendDto[idx].cdmendTbl = json;
-        (this.genericFormService.cdmendDto[idx] as any).tbl = this.safeParseCdmendTbl(json);
-      }
-      if (this.selectedFieldForDialog) {
-        this.selectedFieldForDialog.cdmendTbl = json;
-        (this.selectedFieldForDialog as any).tbl = this.safeParseCdmendTbl(json);
-      }
-    }
-  }
-
-  // Edit an existing field
-  editField(CdmendDto: CdmendDto): void {
-    this.isEditing = true;
-    // store the actual index in the current array so saveField can update the correct element
-    const idx = this.genericFormService.cdmendDto.findIndex(f => f.cdmendSql === CdmendDto.cdmendSql || f.cdmendTxt === CdmendDto.cdmendTxt);
-    this.editingIndex = idx >= 0 ? idx : null;
-
-    this.fieldForm.patchValue(CdmendDto as CdmendDto); // Populate the form with the field's data
-    this.displayFieldDialog = true;
-  }
-
-  // Save logic has been moved into GenericElementDetailsComponent; tree updates are handled via the (tree) event
-
-  // Delete a field
-  deleteField(index: number): void {
-    this.genericFormService.cdmendDto = this.genericFormService.cdmendDto.filter(f => f.cdmendSql !== index)
-    // this.genericFormService.cdmendDto.splice(index, 1); // Remove the field from the list
-  }
-  rebuildTree() {
-   this.groupedFields =  this.buildGroupedFields(this.genericFormService.cdmendDto);
-  }
-
-  refreshTree() {
-    this.groupedFields = this.buildGroupedFields(this.genericFormService.cdmendDto);
-    this.recalculateStats();
-    this.updateApplicationFilters();
-  }
-
-  // Statistics methods
-  getApplicationsCount(): number {
-    if (!this.groupedFields || !this.groupedFields.length) return 0;
-    return this.groupedFields.length;
-  }
-
-  getTypesCount(): number {
-    if (!this.groupedFields || !this.groupedFields.length) return 0;
-    return this.groupedFields.reduce((count, app) => count + (app.children?.length || 0), 0);
-  }
-
-  getFieldsCount(): number {
-    if (!this.genericFormService.cdmendDto) return 0;
-    return this.genericFormService.cdmendDto.length;
-  }
-
-  getActiveFieldsCount(): number {
-    if (!this.genericFormService.cdmendDto) return 0;
-    return this.genericFormService.cdmendDto.filter(f => f.cdmendStat).length;
-  }
-
-  getInclusiveFieldsCount(): number {
-    if (!this.genericFormService.cdmendDto) return 0;
-    return this.genericFormService.cdmendDto.filter(f => !f.cdmendStat).length;
-  }
-
-  expandAll(): void {
-    if (!this.groupedFields) return;
-    this.groupedFields.forEach(app => {
-      app.expanded = true;
-      if (app.children) {
-        app.children.forEach(type => type.expanded = true);
-      }
-    });
-  }
-
-  collapseAll(): void {
-    if (!this.groupedFields) return;
-    this.groupedFields.forEach(app => {
-      app.expanded = false;
-      if (app.children) {
-        app.children.forEach(type => type.expanded = false);
-      }
-    });
-  }
-
-  // Enhanced UI methods
-  showAddFieldDialog(): void {
-    this.isEditing = false;
-    this.editingIndex = null;
-    this.fieldForm.reset();
-    this.displayFieldDialog = true;
-  }
-
-  onSearch(event: any): void {
-    // searchTerm is two-way bound, but we can also use event
-    this.applyFilters();
-  }
-
-  onApplicationFilter(event: any): void {
-    // selectedAppFilter is two-way bound
-    this.applyFilters();
-  }
-
-  filterByStatus(status: 'active' | 'inactive'): void {
-    // toggle off if already selected
-    if (this.filterStatus === status) {
-      this.filterStatus = 'all';
-    } else {
-      this.filterStatus = status;
-    }
-    this.applyFilters();
-  }
-
-  applyFilters(): void {
-    if (!this.genericFormService.cdmendDto) return;
-
-    let filtered = this.genericFormService.cdmendDto;
-
-    // 1. App Filter
-    if (this.selectedAppFilter && this.selectedAppFilter !== 'all') {
-      filtered = filtered.filter(f => f.applicationId === this.selectedAppFilter);
-    }
-
-    // 2. Status Filter
-    if (this.filterStatus === 'active') {
-      filtered = filtered.filter(f => f.cdmendStat);
-    } else if (this.filterStatus === 'inactive') {
-      filtered = filtered.filter(f => !f.cdmendStat);
-    }
-
-    // 3. Search Filter
-    const term = (this.searchTerm || '').trim().toLowerCase();
-    if (term) {
-      filtered = filtered.filter(field => 
-        field.cdMendLbl?.toLowerCase().includes(term) ||
-        field.cdmendTxt?.toLowerCase().includes(term) ||
-        field.cdmendType?.toLowerCase().includes(term) ||
-        String(field.applicationId ?? '').toLowerCase().includes(term)
+          this.centralAdminContext.patchContext(patch);
+        })
       );
     }
 
-    this.groupedFields = this.buildGroupedFields(filtered);
-    
-    // Auto expand if filtering drastically reduces results
-    // if (term || this.filterStatus !== 'all') {
-    //   this.expandAll();
-    // }
+    if (this.selectedApplicationId) {
+      this.appFilter = this.selectedApplicationId;
+    }
+
+    const fieldTypeControl = this.form.get('fieldType');
+    if (fieldTypeControl) {
+      this.subscriptions.add(
+        fieldTypeControl.valueChanges.subscribe(() => {
+          this.onFieldTypeChanged();
+        })
+      );
+    }
+
+    this.onFieldTypeChanged();
+    this.loadFields();
   }
 
-  exportData(): void {
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['selectedApplicationId'] && !changes['selectedApplicationId'].firstChange) {
+      const currentApp = String(changes['selectedApplicationId'].currentValue ?? '').trim();
+      const previousApp = String(changes['selectedApplicationId'].previousValue ?? '').trim();
+      if (currentApp === previousApp) {
+        return;
+      }
+
+      this.appFilter = this.selectedApplicationId || '';
+      this.loadFields();
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  get appOptions(): Array<{ label: string; value: string }> {
+    const apps = [...new Set((this.fields ?? []).map(item => this.normalizeText(item.applicationId)).filter(item => item.length > 0))]
+      .sort((a, b) => a.localeCompare(b));
+
+    return apps.map(app => ({ label: app, value: app }));
+  }
+
+  get filteredFields(): SubjectAdminFieldDto[] {
+    let rows = [...(this.fields ?? [])];
+
+    const effectiveAppFilter = this.embeddedMode
+      ? this.normalizeText(this.selectedApplicationId)
+      : this.normalizeText(this.appFilter);
+
+    if (effectiveAppFilter.length > 0) {
+      rows = rows.filter(item => String(item.applicationId ?? '').trim().toLowerCase() === effectiveAppFilter.toLowerCase());
+    }
+
+    if (this.statusFilter === 'active') {
+      rows = rows.filter(item => item.isActive);
+    } else if (this.statusFilter === 'inactive') {
+      rows = rows.filter(item => !item.isActive);
+    }
+
+    const term = this.normalizeText(this.searchTerm).toLowerCase();
+    if (term.length > 0) {
+      rows = rows.filter(item =>
+        String(item.fieldKey ?? '').toLowerCase().includes(term)
+        || String(item.fieldLabel ?? '').toLowerCase().includes(term)
+        || String(item.fieldType ?? '').toLowerCase().includes(term)
+        || String(item.applicationId ?? '').toLowerCase().includes(term)
+      );
+    }
+
+    return rows;
+  }
+
+  get optionsPreviewValue(): string {
+    const payload = this.serializeOptionRows(this.optionRows);
+    return payload || '';
+  }
+
+  loadFields(): void {
+    const requestSeq = ++this.fieldsRequestSeq;
+    this.loading = true;
+    const appId = this.embeddedMode
+      ? (this.normalizeText(this.selectedApplicationId) || undefined)
+      : (this.normalizeText(this.appFilter) || undefined);
+
+    this.dynamicSubjectsController.getAdminFields(appId).subscribe({
+      next: response => {
+        if (requestSeq !== this.fieldsRequestSeq) {
+          return;
+        }
+
+        if (response?.errors?.length) {
+          this.fields = [];
+          this.appNotification.showApiErrors(response.errors, 'تعذر تحميل الحقول الديناميكية.');
+          return;
+        }
+
+        this.fields = response?.data ?? [];
+      },
+      error: () => {
+        if (requestSeq !== this.fieldsRequestSeq) {
+          return;
+        }
+
+        this.fields = [];
+        this.appNotification.error('حدث خطأ أثناء تحميل الحقول الديناميكية.');
+      },
+      complete: () => {
+        if (requestSeq === this.fieldsRequestSeq) {
+          this.loading = false;
+        }
+      }
+    });
+  }
+
+  openCreateDialog(): void {
+    this.editingFieldKey = null;
+    this.form.reset({
+      cdmendSql: null,
+      fieldKey: '',
+      fieldType: 'InputText',
+      fieldLabel: '',
+      placeholder: '',
+      defaultValue: '',
+      optionsPayload: '',
+      dataType: '',
+      required: false,
+      requiredTrue: false,
+      email: false,
+      pattern: false,
+      minValue: '',
+      maxValue: '',
+      mask: '',
+      isActive: true,
+      width: 0,
+      height: 0,
+      isDisabledInit: false,
+      isSearchable: false,
+      applicationId: this.selectedApplicationId || this.appFilter || ''
+    });
+
+    this.optionRows = [];
+    this.optionRowsTouched = false;
+    this.onFieldTypeChanged();
+
+    this.dialogVisible = true;
+  }
+
+  openEditDialog(item: SubjectAdminFieldDto): void {
+    this.editingFieldKey = item.fieldKey;
+    this.form.patchValue({
+      cdmendSql: item.cdmendSql,
+      fieldKey: item.fieldKey,
+      fieldType: item.fieldType,
+      fieldLabel: item.fieldLabel ?? '',
+      placeholder: item.placeholder ?? '',
+      defaultValue: item.defaultValue ?? '',
+      optionsPayload: item.optionsPayload ?? '',
+      dataType: item.dataType ?? '',
+      required: item.required,
+      requiredTrue: item.requiredTrue,
+      email: item.email,
+      pattern: item.pattern,
+      minValue: item.minValue ?? '',
+      maxValue: item.maxValue ?? '',
+      mask: item.mask ?? '',
+      isActive: item.isActive,
+      width: item.width,
+      height: item.height,
+      isDisabledInit: item.isDisabledInit,
+      isSearchable: item.isSearchable,
+      applicationId: item.applicationId ?? ''
+    });
+
+    this.optionRows = this.parseOptionsPayloadToRows(item.optionsPayload);
+    this.optionRowsTouched = false;
+    this.onFieldTypeChanged();
+
+    this.dialogVisible = true;
+  }
+
+  saveField(): void {
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      this.appNotification.warning('يرجى استكمال البيانات المطلوبة قبل الحفظ.');
+      return;
+    }
+
+    if (this.isOptionsTypeSelected()) {
+      const optionsValidationError = this.getOptionsValidationMessage();
+      if (optionsValidationError.length > 0) {
+        this.optionRowsTouched = true;
+        this.appNotification.warning(optionsValidationError);
+        return;
+      }
+    }
+
+    const payload = this.toUpsertPayload();
+    const request$ = this.editingFieldKey
+      ? this.dynamicSubjectsController.updateAdminField(this.editingFieldKey, payload)
+      : this.dynamicSubjectsController.createAdminField(payload);
+
+    this.saving = true;
+    request$.subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.appNotification.showApiErrors(response.errors, 'تعذر حفظ الحقل.');
+          return;
+        }
+
+        this.dialogVisible = false;
+        this.loadFields();
+        this.fieldsChanged.emit();
+        this.appNotification.success('تم حفظ بيانات الحقل بنجاح.');
+      },
+      error: () => {
+        this.appNotification.error('حدث خطأ أثناء حفظ الحقل.');
+      },
+      complete: () => {
+        this.saving = false;
+      }
+    });
+  }
+
+  deleteField(item: SubjectAdminFieldDto): void {
+    const confirmed = window.confirm(`هل أنت متأكد من حذف الحقل "${item.fieldLabel || item.fieldKey}"؟`);
+    if (!confirmed) {
+      return;
+    }
+
+    this.dynamicSubjectsController.deleteAdminField(item.fieldKey).subscribe({
+      next: response => {
+        if (response?.errors?.length) {
+          this.appNotification.showApiErrors(response.errors, 'تعذر حذف الحقل.');
+          return;
+        }
+
+        this.loadFields();
+        this.fieldsChanged.emit();
+        this.appNotification.success('تم حذف/تعطيل الحقل بنجاح.');
+      },
+      error: () => {
+        this.appNotification.error('حدث خطأ أثناء حذف الحقل.');
+      }
+    });
+  }
+
+  onStandaloneAppFilterChange(): void {
+    const normalized = this.normalizeText(this.appFilter);
+    this.appFilter = normalized;
+    this.centralAdminContext.patchContext({
+      selectedApplicationId: normalized
+    });
+    this.loadFields();
+  }
+
+  getDialogTitle(): string {
+    return this.editingFieldKey ? 'تعديل الحقل الديناميكي' : 'إضافة حقل ديناميكي';
+  }
+
+  isOptionsTypeSelected(): boolean {
+    const type = String(this.form.get('fieldType')?.value ?? '').toLowerCase();
+    return type.includes('drop') || type.includes('radio') || type.includes('select') || type.includes('combo');
+  }
+
+  addOptionRow(): void {
+    this.optionRows = [...this.optionRows, this.createEmptyOptionRow()];
+    this.optionRowsTouched = true;
+  }
+
+  removeOptionRow(index: number): void {
+    if (index < 0 || index >= this.optionRows.length) {
+      return;
+    }
+
+    this.optionRows = this.optionRows.filter((_item, idx) => idx !== index);
+    if (this.optionRows.length === 0 && this.isOptionsTypeSelected()) {
+      this.optionRows = [this.createEmptyOptionRow()];
+    }
+
+    this.optionRowsTouched = true;
+  }
+
+  onOptionRowsChanged(): void {
+    this.optionRowsTouched = true;
+  }
+
+  hasOptionsValidationError(): boolean {
+    return this.optionRowsTouched && this.getOptionsValidationMessage().length > 0;
+  }
+
+  getOptionsValidationMessage(): string {
+    if (!this.isOptionsTypeSelected()) {
+      return '';
+    }
+
+    const normalizedRows = this.optionRows.map(row => ({
+      key: String(row.key ?? '').trim(),
+      value: String(row.value ?? '').trim()
+    }));
+
+    if (normalizedRows.length === 0) {
+      return 'يجب إدخال خيار واحد على الأقل لحقول القائمة.';
+    }
+
+    const invalidRowIndex = normalizedRows.findIndex(row => row.key.length === 0 || row.value.length === 0);
+    if (invalidRowIndex >= 0) {
+      return `الصف رقم ${invalidRowIndex + 1} يجب أن يحتوي على key و value.`;
+    }
+
+    const seen = new Set<string>();
+    for (const row of normalizedRows) {
+      const normalizedKey = row.key.toLowerCase();
+      if (seen.has(normalizedKey)) {
+        return `لا يمكن تكرار key '${row.key}'.`;
+      }
+
+      seen.add(normalizedKey);
+    }
+
+    return '';
+  }
+
+  trackByOptionRow(index: number, item: FieldOptionRow): string {
+    return `${index}-${item.key}`;
+  }
+
+  isInvalid(controlName: string): boolean {
+    const control = this.form.get(controlName);
+    return !!control && control.invalid && (control.touched || control.dirty);
+  }
+
+  hasRequiredError(controlName: string): boolean {
+    const control = this.form.get(controlName);
+    return !!control?.errors?.['required'] && (control.touched || control.dirty);
+  }
+
+  getValidationMessage(controlName: string, label: string): string {
+    const control = this.form.get(controlName);
+    if (!control?.errors) {
+      return '';
+    }
+
+    if (control.errors['required']) {
+      return `${label} مطلوب.`;
+    }
+
+    if (control.errors['maxlength']) {
+      return `${label} يجب ألا يزيد عن ${control.errors['maxlength'].requiredLength} حرفًا.`;
+    }
+
+    if (control.errors['min']) {
+      return `${label} يجب أن يكون ${control.errors['min'].min} أو أكبر.`;
+    }
+
+    if (control.errors['max']) {
+      return `${label} يجب أن يكون ${control.errors['max'].max} أو أقل.`;
+    }
+
+    return `قيمة ${label} غير صالحة.`;
+  }
+
+  private onFieldTypeChanged(): void {
+    if (!this.isOptionsTypeSelected()) {
+      return;
+    }
+
+    if (this.optionRows.length > 0) {
+      return;
+    }
+
+    const payload = String(this.form.get('optionsPayload')?.value ?? '').trim();
+    this.optionRows = this.parseOptionsPayloadToRows(payload);
+
+    if (this.optionRows.length === 0) {
+      this.optionRows = [this.createEmptyOptionRow()];
+    }
+  }
+
+  private toUpsertPayload(): SubjectAdminFieldUpsertRequestDto {
+    const value = this.form.value;
+
+    const optionsPayload = this.isOptionsTypeSelected()
+      ? this.serializeOptionRows(this.optionRows)
+      : String(value.optionsPayload ?? '').trim() || undefined;
+
+    return {
+      cdmendSql: value.cdmendSql ?? undefined,
+      fieldKey: String(value.fieldKey ?? '').trim(),
+      fieldType: String(value.fieldType ?? '').trim(),
+      fieldLabel: String(value.fieldLabel ?? '').trim() || undefined,
+      placeholder: String(value.placeholder ?? '').trim() || undefined,
+      defaultValue: String(value.defaultValue ?? '').trim() || undefined,
+      optionsPayload,
+      dataType: String(value.dataType ?? '').trim() || undefined,
+      required: Boolean(value.required),
+      requiredTrue: Boolean(value.requiredTrue),
+      email: Boolean(value.email),
+      pattern: Boolean(value.pattern),
+      minValue: String(value.minValue ?? '').trim() || undefined,
+      maxValue: String(value.maxValue ?? '').trim() || undefined,
+      mask: String(value.mask ?? '').trim() || undefined,
+      isActive: Boolean(value.isActive),
+      width: Number(value.width ?? 0),
+      height: Number(value.height ?? 0),
+      isDisabledInit: Boolean(value.isDisabledInit),
+      isSearchable: Boolean(value.isSearchable),
+      applicationId: String(value.applicationId ?? '').trim() || undefined
+    };
+  }
+
+  private createEmptyOptionRow(): FieldOptionRow {
+    return { key: '', value: '' };
+  }
+
+  private parseOptionsPayloadToRows(payload: string | undefined): FieldOptionRow[] {
+    const raw = String(payload ?? '').trim();
+    if (raw.length === 0) {
+      return [];
+    }
+
     try {
-      const dataToExport = this.genericFormService.cdmendDto.map(field => ({
-        'Application ID': field.applicationId,
-        'Field Type': field.cdmendType,
-        'Field Label': field.cdMendLbl,
-        'Field Name': field.cdmendTxt,
-        'Required': field.required,
-        'Active': field.cdmendStat,
-        'Width': field.width,
-        'Height': field.height
+      const parsed = JSON.parse(raw);
+
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(item => {
+            if (item == null) {
+              return null;
+            }
+
+            if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+              const value = String(item);
+              return { key: value, value };
+            }
+
+            const hasExplicitKeyValue = Object.prototype.hasOwnProperty.call(item, 'key')
+              && Object.prototype.hasOwnProperty.call(item, 'value')
+              && !Object.prototype.hasOwnProperty.call(item, 'label');
+            if (hasExplicitKeyValue) {
+              const key = String((item as any).key ?? '').trim();
+              const value = String((item as any).value ?? '').trim();
+              if (key.length === 0 && value.length === 0) {
+                return null;
+              }
+
+              return {
+                key: key || value,
+                value: value || key
+              };
+            }
+
+            const key = String((item as any).value ?? (item as any).id ?? (item as any).key ?? (item as any).code ?? (item as any).label ?? (item as any).name ?? '').trim();
+            const value = String((item as any).label ?? (item as any).name ?? (item as any).text ?? (item as any).value ?? (item as any).key ?? (item as any).id ?? '').trim();
+            if (key.length === 0 && value.length === 0) {
+              return null;
+            }
+
+            return {
+              key: key || value,
+              value: value || key
+            };
+          })
+          .filter((item): item is FieldOptionRow => item !== null);
+      }
+
+      if (parsed && typeof parsed === 'object') {
+        return Object.entries(parsed)
+          .map(([key, value]) => ({
+            key: String(key ?? '').trim(),
+            value: String(value ?? '').trim() || String(key ?? '').trim()
+          }))
+          .filter(item => item.key.length > 0 || item.value.length > 0)
+          .map(item => ({
+            key: item.key || item.value,
+            value: item.value || item.key
+          }));
+      }
+    } catch {
+      // fallback format: tokenized text
+    }
+
+    return raw
+      .split(/[|,;\n]+/g)
+      .map(token => token.trim())
+      .filter(token => token.length > 0)
+      .map(token => ({ key: token, value: token }));
+  }
+
+  private serializeOptionRows(rows: FieldOptionRow[]): string | undefined {
+    const normalizedRows = rows
+      .map(row => ({
+        key: String(row.key ?? '').trim(),
+        value: String(row.value ?? '').trim()
+      }))
+      .filter(row => row.key.length > 0 || row.value.length > 0)
+      .map(row => ({
+        key: row.key || row.value,
+        value: row.value || row.key
       }));
 
-      const ws = XLSX.utils.json_to_sheet(dataToExport);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Dynamic Fields');
-      
-      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      
-      saveAs(data, `dynamic-fields-${new Date().toISOString().split('T')[0]}.xlsx`);
-      
-      this.msg.msgSuccess('Data exported successfully!', 3000);
-    } catch (error) {
-      this.msg.msgError('Error', 'Failed to export data');
+    if (normalizedRows.length === 0) {
+      return undefined;
     }
+
+    return JSON.stringify(normalizedRows);
   }
 
-  private updateApplicationFilters(): void {
-    if (!this.genericFormService.cdmendDto) return;
-    
-    const apps = [...new Set(this.genericFormService.cdmendDto.map(f => f.applicationId))];
-    this.applicationFilters = [
-      { label: 'All Applications', value: 'all' },
-      ...apps.map(app => ({ label: app, value: app }))
-    ];
+  private normalizeText(value: unknown): string {
+    return String(value ?? '').trim();
   }
-
-
-
-  getAppStats(applicationId: string): string {
-    if (!this.genericFormService.cdmendDto) return '';
-    const appFields = this.genericFormService.cdmendDto.filter(f => f.applicationId === applicationId);
-    const activeCount = appFields.filter(f => f.cdmendStat).length;
-    return `${activeCount}/${appFields.length} active`;
-  }
-
-  getFieldTypeClass(fieldType: string): string {
-    switch (fieldType?.toLowerCase()) {
-      case 'inputtext': return 'type-input';
-      case 'textarea': return 'type-textarea';
-      case 'dropdown': return 'type-dropdown';
-      case 'radiobutton': return 'type-radio';
-      case 'date': return 'type-date';
-      default: return 'type-default';
-    }
-  }
-
-  getAccordionAppHeader(app: any): string {
-    return app.data?.applicationId || 'Unknown Application';
-  }
-
-  confirmDeleteField(field: any): void {
-    // Use PrimeNG ConfirmDialog or implement custom confirmation
-    if (confirm(`Are you sure you want to delete the field "${field.cdMendLbl}"?`)) {
-      this.deleteField(field.cdmendSql);
-    }
-  }
-
-  addFieldToGroup(groupData: any): void {
-    // Set default values for new field in this group
-    this.fieldForm.patchValue({
-      applicationId: groupData.applicationId,
-      cdmendType: groupData.cdmendType
-    });
-    this.showAddFieldDialog();
-  }
-
-  // UI Preference Toggles
-  toggleDarkMode(): void {
-    this.isDarkMode = !this.isDarkMode;
-    localStorage.setItem('dfm-dark-mode', String(this.isDarkMode));
-  }
-
-  toggleCompactMode(): void {
-    this.compactMode = !this.compactMode;
-    localStorage.setItem('dfm-compact-mode', String(this.compactMode));
-  }
-
-  toggleHighContrast(): void {
-    this.highContrast = !this.highContrast;
-    localStorage.setItem('dfm-high-contrast', String(this.highContrast));
-  }
-
 }

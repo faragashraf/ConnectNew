@@ -256,6 +256,49 @@ img:hover {
     justify-content: center;
 }
 
+.sound-toggle-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #475569;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sound-toggle-btn i {
+    font-size: 1.15rem;
+    position: relative;
+    display: inline-block;
+}
+
+.sound-toggle-btn.is-muted i::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1.2rem;
+    height: 2px;
+    background: currentColor;
+    transform: translate(-50%, -50%) rotate(-38deg);
+    border-radius: 2px;
+}
+
+.sound-toggle-btn:hover {
+    background: #f8fafc;
+    color: #0f172a;
+    border-color: #94a3b8;
+}
+
+.sound-toggle-btn:focus-visible {
+    outline: 2px solid #64748b;
+    outline-offset: 2px;
+}
+
 .bell-btn {
     width: 40px;
     height: 40px;
@@ -1316,4 +1359,3 @@ img:hover {
         transform: translateY(-2px);
     }
 }
-

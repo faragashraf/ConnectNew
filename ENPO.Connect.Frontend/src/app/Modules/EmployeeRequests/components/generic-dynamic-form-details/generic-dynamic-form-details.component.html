@@ -5,7 +5,7 @@
         <header class="group-head">
           <h4>{{ group.groupName }}</h4>
           <button
-            *ngIf="group.isExtendable && !config?.fieldsConfiguration?.isDivDisabled"
+            *ngIf="allowGroupInstanceActions && group.isExtendable && !config?.fieldsConfiguration?.isDivDisabled"
             type="button"
             class="mini-btn"
             (click)="duplicateGroup(group.groupId, group.fields.length)">
@@ -47,7 +47,13 @@
         <section class="group-instance nested" *ngFor="let instance of group.instances ?? []">
           <header class="instance-head">
             <span>{{ group.groupName }}</span>
-            <button type="button" class="mini-btn danger" (click)="deleteGroup(instance.groupId)">حذف</button>
+            <button
+              *ngIf="allowGroupInstanceActions"
+              type="button"
+              class="mini-btn danger"
+              (click)="deleteGroup(instance.groupId)">
+              حذف
+            </button>
           </header>
 
           <div [formArrayName]="instance.formArrayName" class="form-array-grid">

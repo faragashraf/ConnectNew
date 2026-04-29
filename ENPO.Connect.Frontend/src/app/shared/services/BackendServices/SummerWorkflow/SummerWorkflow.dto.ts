@@ -48,7 +48,23 @@ export interface SummerRequestSummaryDto {
   createdAt?: string;
   paymentDueAtUtc?: string;
   paidAtUtc?: string;
+  paymentStateCode?: string;
+  paymentStateLabel?: string;
+  paidInstallmentsCount?: number;
+  totalInstallmentsCount?: number;
   transferUsed: boolean;
+}
+
+export interface SummerCreateEditTokenRequest {
+  messageId: number;
+  expireMinutes?: number | null;
+  oneTimeUse?: boolean;
+}
+
+export interface SummerEditTokenResolutionDto {
+  messageId: number;
+  expiresAtUtc?: string;
+  isOneTimeUse: boolean;
 }
 
 export interface SummerWaveCapacityDto {
@@ -58,6 +74,67 @@ export interface SummerWaveCapacityDto {
   totalUnits: number;
   usedUnits: number;
   availableUnits: number;
+  frozenAvailableUnits: number;
+  frozenAssignedUnits: number;
+}
+
+export interface SummerWaveBookingsPrintRowDto {
+  messageId: number;
+  requestRef: string;
+  bookerName: string;
+  workEntity: string;
+  bookingTypeLabel: string;
+  unitNumber: string;
+  personsCount: number;
+  statusLabel: string;
+  notes: string;
+  paymentMode: string;
+  paymentModeLabel: string;
+  collectionStatusLabel: string;
+  bookingAmount: number;
+  insuranceAmount: number;
+  finalAmount: number;
+  collectedAmount: number;
+  uncollectedAmount: number;
+  isFullyCollected: boolean;
+}
+
+export interface SummerWaveBookingsPrintSectionDto {
+  familyCount?: number | null;
+  sectionLabel: string;
+  totalBookings: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
+  rows: SummerWaveBookingsPrintRowDto[];
+}
+
+export interface SummerWaveBookingsPrintReportDto {
+  categoryId: number;
+  categoryName: string;
+  waveCode: string;
+  waveStartAtUtc?: string | null;
+  waveEndAtUtc?: string | null;
+  generatedAtUtc?: string;
+  generatedByUserId: string;
+  includeFinancials: boolean;
+  totalBookings: number;
+  totalBookingAmount: number;
+  totalInsuranceAmount: number;
+  totalFinalAmount: number;
+  totalCollectedAmount: number;
+  totalUncollectedAmount: number;
+  cashBookingsCount: number;
+  installmentBookingsCount: number;
+  cashFinalAmount: number;
+  installmentFinalAmount: number;
+  sections: SummerWaveBookingsPrintSectionDto[];
 }
 
 export interface SummerStayModeDefinitionDto {
@@ -87,6 +164,80 @@ export interface SummerDestinationConfigDto {
   waves: SummerWaveDefinitionDto[];
 }
 
+export interface SummerPricingQuoteRequest {
+  categoryId: number;
+  seasonYear: number;
+  waveCode: string;
+  waveLabel?: string;
+  waveStartsAtIso?: string;
+  periodKey?: string;
+  personsCount: number;
+  familyCount?: number | null;
+  extraCount?: number | null;
+  stayMode?: string;
+  isProxyBooking?: boolean;
+  membershipType?: string;
+  destinationName?: string;
+}
+
+export interface SummerPricingQuoteDto {
+  pricingConfigId: string;
+  categoryId: number;
+  seasonYear: number;
+  waveCode: string;
+  waveLabel: string;
+  periodKey: string;
+  pricingMode: string;
+  transportationMandatory: boolean;
+  personsCount: number;
+  accommodationPricePerPerson: number;
+  transportationPricePerPerson: number;
+  membershipType: string;
+  membershipTypeLabel: string;
+  selectedStayMode: string;
+  normalizedStayMode: string;
+  stayModeWasNormalized: boolean;
+  accommodationTotal: number;
+  transportationTotal: number;
+  insuranceAmount: number;
+  proxyInsuranceAmount?: number | null;
+  appliedInsuranceAmount: number;
+  grandTotal: number;
+  fixedInstallmentAmounts: number[];
+  displayText: string;
+  smsText: string;
+  whatsAppText: string;
+}
+
+export interface SummerPricingCatalogRecordDto {
+  pricingConfigId: string;
+  categoryId: number;
+  seasonYear: number;
+  waveCode: string;
+  periodKey: string;
+  dateFrom?: string;
+  dateTo?: string;
+  accommodationPricePerPerson: number;
+  transportationPricePerPerson: number;
+  insuranceAmount: number;
+  proxyInsuranceAmount?: number | null;
+  pricingMode: string;
+  transportationMandatory: boolean;
+  isActive: boolean;
+  displayLabel: string;
+  notes: string;
+}
+
+export interface SummerPricingCatalogDto {
+  seasonYear: number;
+  records: SummerPricingCatalogRecordDto[];
+}
+
+export interface SummerPricingCatalogUpsertRequest {
+  seasonYear: number;
+  records: SummerPricingCatalogRecordDto[];
+}
+
 export interface SummerCancelFormRequest {
   messageId: number;
   reason?: string;
@@ -96,6 +247,7 @@ export interface SummerCancelFormRequest {
 export interface SummerPayFormRequest {
   messageId: number;
   paidAtUtc?: string;
+  paymentStatus?: string;
   forceOverride: boolean;
   notes?: string;
   files?: FileParameter[];
@@ -146,6 +298,7 @@ export interface SummerAdminDashboardDto {
   repliedCount: number;
   rejectedCount: number;
   paidCount: number;
+  partialPaidCount: number;
   unpaidCount: number;
   overdueUnpaidCount: number;
   byDestination: SummerDashboardBucketDto[];
@@ -163,4 +316,96 @@ export interface SummerAdminActionRequest {
   newFamilyCount?: number | null;
   newExtraCount?: number | null;
   files?: FileParameter[];
+}
+
+export interface SummerUnitFreezeCreateRequest {
+  categoryId: number;
+  waveCode: string;
+  familyCount: number;
+  requestedUnitsCount: number;
+  freezeType?: string;
+  reason?: string;
+  notes?: string;
+}
+
+export interface SummerUnitFreezeReleaseRequest {
+  freezeId: number;
+}
+
+export interface SummerUnitFreezeQuery {
+  categoryId?: number | null;
+  waveCode?: string;
+  familyCount?: number | null;
+  isActive?: boolean | null;
+}
+
+export interface SummerUnitFreezeDto {
+  freezeId: number;
+  categoryId: number;
+  waveCode: string;
+  familyCount: number;
+  requestedUnitsCount: number;
+  frozenAvailableUnits: number;
+  frozenAssignedUnits: number;
+  freezeType: string;
+  reason?: string;
+  notes?: string;
+  createdBy: string;
+  createdAtUtc: string;
+  isActive: boolean;
+  releasedAtUtc?: string;
+  releasedBy?: string;
+}
+
+export interface SummerUnitFreezeDetailDto {
+  freezeDetailId: number;
+  slotNumber: number;
+  status: string;
+  assignedMessageId?: number | null;
+  assignedAtUtc?: string;
+  releasedAtUtc?: string;
+  releasedBy?: string;
+  lastStatusChangedAtUtc: string;
+}
+
+export interface SummerUnitFreezeDetailsDto {
+  freeze: SummerUnitFreezeDto;
+  units: SummerUnitFreezeDetailDto[];
+}
+
+export interface SummerUnitsAvailableCountQuery {
+  resortId: number;
+  waveId: string;
+  capacity: number;
+  includeFrozenUnits?: boolean;
+}
+
+export interface SummerUnitsAvailableCountDto {
+  categoryId: number;
+  waveCode: string;
+  familyCount: number;
+  totalUnits: number;
+  usedUnits: number;
+  frozenAvailableUnits: number;
+  frozenAssignedUnits: number;
+  publicAvailableUnits: number;
+  availableUnits: number;
+  includeFrozenUnits: boolean;
+}
+
+export interface AdminUnitFreezeCreatePayload {
+  resortId: number;
+  waveId: string;
+  capacity: number;
+  unitsCount: number;
+  freezeType?: string;
+  reason?: string;
+  notes?: string;
+}
+
+export interface AdminUnitFreezeListQuery {
+  resortId?: number | null;
+  waveId?: string;
+  capacity?: number | null;
+  isActive?: boolean | null;
 }

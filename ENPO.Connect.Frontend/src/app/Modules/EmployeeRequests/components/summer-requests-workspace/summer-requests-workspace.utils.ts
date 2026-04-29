@@ -30,6 +30,8 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   SummerDestinationId: 'اسم المصيف',
   SummerDestinationName: 'اسم المصيف',
   SummerProxyMode: 'تسجيل بالنيابة',
+  SummerMembershipType: 'نوع العضوية',
+  SUM2026_MembershipType: 'نوع العضوية',
   Description: 'ملاحظات',
   FamilyMember_Name: 'اسم المرافق',
   FamilyRelation: 'درجة القرابة',
@@ -38,6 +40,14 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   Summer_PaymentDueAtUtc: 'مهلة السداد',
   Summer_PaymentStatus: 'حالة السداد',
   Summer_PaidAtUtc: 'تاريخ السداد',
+  Summer_PaymentMode: 'طريقة السداد',
+  SUM2026_PaymentMode: 'طريقة السداد',
+  PaymentMode: 'طريقة السداد',
+  Summer_PaymentInstallmentCount: 'عدد الأقساط',
+  SUM2026_PaymentInstallmentCount: 'عدد الأقساط',
+  Summer_PaymentInstallmentsTotal: 'إجمالي الأقساط',
+  SUM2026_PaymentInstallmentsTotal: 'إجمالي الأقساط',
+  Summer_RequestCreatedAtUtc: 'تاريخ إنشاء الطلب (UTC)',
   Summer_TransferCount: 'عدد مرات التحويل',
   Summer_TransferredAtUtc: 'تاريخ التحويل',
   Summer_TransferFromCategory: 'من مصيف',
@@ -51,7 +61,27 @@ export const SUMMER_FIELD_LABEL_MAP: Record<string, string> = {
   Summer_WorkflowStateReason: 'سبب المتابعة',
   Summer_WorkflowStateAtUtc: 'تاريخ حالة المتابعة',
   Summer_TransferRequiresRePayment: 'إعادة السداد مطلوبة',
-  Summer_TransferRePaymentReason: 'سبب إعادة السداد'
+  Summer_TransferRePaymentReason: 'سبب إعادة السداد',
+  Summer_PricingConfigId: 'مرجع سياسة التسعير',
+  Summer_PricingPolicyId: 'مرجع سياسة التسعير',
+  Summer_PricingMode: 'نمط التسعير',
+  Summer_PricingMembershipType: 'نوع العضوية المحسوب',
+  Summer_PricingTransportationMandatory: 'الانتقالات إلزامية',
+  Summer_PricingSelectedStayMode: 'نوع الحجز المعتمد',
+  Summer_PricingPersonsCount: 'عدد الأفراد المحسوب',
+  Summer_PricingPeriodKey: 'فترة التسعير',
+  Summer_PricingWaveDate: 'تاريخ الفوج للتسعير',
+  Summer_PricingAccommodationPricePerPerson: 'سعر الإقامة للفرد',
+  Summer_PricingTransportationPricePerPerson: 'سعر الانتقالات للفرد',
+  Summer_PricingInsuranceAmount: 'قيمة التأمين',
+  Summer_PricingProxyInsuranceAmount: 'قيمة تأمين الحجز بالنيابة',
+  Summer_PricingAppliedInsuranceAmount: 'قيمة التأمين المطبقة',
+  Summer_PricingAccommodationTotal: 'إجمالي الإقامة',
+  Summer_PricingTransportationTotal: 'إجمالي الانتقالات',
+  Summer_PricingGrandTotal: 'الإجمالي النهائي',
+  Summer_PricingDisplayText: 'بيان التسعير',
+  Summer_PricingSmsText: 'نص رسالة SMS',
+  Summer_PricingWhatsAppText: 'نص رسالة WhatsApp'
 };
 
 const ACTION_TYPE_LABELS: Record<string, string> = {
@@ -61,17 +91,30 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   AUTO_CANCEL_PAYMENT_TIMEOUT: 'إلغاء آلي لانتهاء مهلة السداد',
   MANUAL_CANCEL: 'إلغاء يدوي من الإدارة',
   FINAL_APPROVE: 'اعتماد نهائي',
+  MARK_UNPAID: 'تحويل إلى غير مسدد',
+  MARK_PAID_ADMIN: 'تحويل إلى مسدد (سداد إداري)',
   COMMENT: 'تعليق إداري'
 };
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
   PENDING_PAYMENT: 'بانتظار السداد',
   PAID: 'تم السداد',
+  PAID_ADMIN: 'سداد إداري',
   CANCELLED_AUTO: 'ملغي آليًا لعدم السداد',
   CANCELLED_ADMIN: 'ملغي من الإدارة',
   CANCELLED_USER: 'ملغي بناءً على الاعتذار',
   CANCELLED: 'ملغي',
   OVERDUE: 'متأخر عن السداد'
+};
+
+const PAYMENT_MODE_LABELS: Record<string, string> = {
+  CASH: 'كاش',
+  INSTALLMENT: 'تقسيط'
+};
+
+const MEMBERSHIP_TYPE_LABELS: Record<string, string> = {
+  WORKER_MEMBER: 'عضو عامل',
+  NON_WORKER_MEMBER: 'عضو غير عامل'
 };
 
 const WORKFLOW_STATE_LABELS: Record<string, string> = {
@@ -82,6 +125,12 @@ const WORKFLOW_STATE_LABELS: Record<string, string> = {
 const STAY_MODE_LABELS: Record<string, string> = {
   RESIDENCE_ONLY: 'إقامة فقط',
   RESIDENCE_WITH_TRANSPORT: 'إقامة وانتقالات'
+};
+
+const PRICING_MODE_LABELS: Record<string, string> = {
+  AccommodationOnlyAllowed: 'إقامة فقط',
+  AccommodationAndTransportationOptional: 'إقامة وانتقالات (اختياري)',
+  TransportationMandatoryIncluded: 'انتقالات إلزامية ومضمنة'
 };
 
 const DESTINATION_VALUE_LABELS: Record<string, string> = {
@@ -228,6 +277,35 @@ function translateValue(value: string, dictionary: Record<string, string>): stri
   return dictionary[normalized] ?? value;
 }
 
+function parseNumberLike(value: string): number | null {
+  const normalized = String(value ?? '').trim().replace(/,/g, '');
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function formatMoneyWithCurrency(value: string): string {
+  const parsed = parseNumberLike(value);
+  if (parsed === null) {
+    return value;
+  }
+
+  const rounded = Math.round(parsed * 100) / 100;
+  const hasFraction = Math.abs(rounded - Math.trunc(rounded)) > 0.0001;
+  const formatted = rounded.toLocaleString('en-US', {
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: 2
+  });
+  return `${formatted} جنيه`;
+}
+
 export function formatRequestFieldValue(fieldKey: string, rawValue: string): string {
   let value = String(rawValue ?? '').trim();
   if (!value) {
@@ -254,12 +332,39 @@ export function formatRequestFieldValue(fieldKey: string, rawValue: string): str
     return translateValue(value, PAYMENT_STATUS_LABELS);
   }
 
+  if (normalizedKey.includes('paymentmode')) {
+    return translateValue(value, PAYMENT_MODE_LABELS);
+  }
+
+  if (normalizedKey.includes('membershiptype')) {
+    return translateValue(value, MEMBERSHIP_TYPE_LABELS);
+  }
+
+  if (normalizedKey.includes('paymentinstallmentstotal')
+    || (normalizedKey.includes('paymentinstallment') && normalizedKey.includes('amount'))) {
+    return formatMoneyWithCurrency(value);
+  }
+
+  if (normalizedKey.includes('paymentinstallment')
+    && normalizedKey.includes('paid')
+    && !normalizedKey.includes('paidat')) {
+    const paid = parseBooleanLike(value);
+    if (paid === null) {
+      return value;
+    }
+    return paid ? 'مسدد' : 'غير مسدد';
+  }
+
   if (normalizedKey.includes('workflowstate') && !normalizedKey.includes('reason') && !normalizedKey.includes('label')) {
     return translateValue(value, WORKFLOW_STATE_LABELS);
   }
 
   if (normalizedKey.includes('staymode')) {
     return translateValue(value, STAY_MODE_LABELS);
+  }
+
+  if (normalizedKey.includes('pricingmode')) {
+    return translateValue(value, PRICING_MODE_LABELS);
   }
 
   if (normalizedKey.includes('destination')) {
@@ -284,6 +389,19 @@ export function formatRequestFieldValue(fieldKey: string, rawValue: string): str
       return value;
     }
     return flag ? 'نعم' : 'لا';
+  }
+
+  if (normalizedKey.includes('pricingtransportationmandatory')) {
+    const flag = parseBooleanLike(value);
+    if (flag === null) {
+      return value;
+    }
+    return flag ? 'نعم' : 'لا';
+  }
+
+  const genericBoolean = parseBooleanLike(value);
+  if (genericBoolean !== null) {
+    return genericBoolean ? 'نعم' : 'لا';
   }
 
   return value;
@@ -319,6 +437,7 @@ export function resolveFieldLabel(key: string, labelMap: Record<string, string> 
 }
 
 export type SummerRequestFieldGridRow = {
+  key?: string;
   label: string;
   value: string;
   instanceGroupId: number;
@@ -469,6 +588,12 @@ function resolveFriendlyLabel(key: string, labelMap: Record<string, string>): st
   if (normalized.includes('relation')) {
     return 'درجة القرابة';
   }
+  if (normalized.includes('membership') || normalized.includes('membertype')) {
+    return 'نوع العضوية';
+  }
+  if (normalized.includes('transportationmandatory')) {
+    return 'الانتقالات إلزامية';
+  }
   if (normalized.includes('phone') || normalized.includes('mobile') || normalized.includes('tel')) {
     return 'رقم الهاتف';
   }
@@ -489,6 +614,42 @@ function resolveCanonicalFieldMeta(
   labelMap: Record<string, string>
 ): CanonicalFieldMeta {
   const normalized = normalizeFieldToken(fieldKey);
+
+  const installmentAmountMatch = normalized.match(/paymentinstallment(\d+)amount/);
+  if (installmentAmountMatch) {
+    const installmentNo = Math.max(1, Number(installmentAmountMatch[1] ?? '1'));
+    const installmentLabel = installmentNo === 1 ? 'قيمة مقدم الحجز' : `قيمة القسط ${installmentNo - 1}`;
+    return {
+      id: `payment_installment_${installmentNo}_amount`,
+      label: installmentLabel,
+      group: 'workflow',
+      order: 220 + (installmentNo * 3)
+    };
+  }
+
+  const installmentPaidAtMatch = normalized.match(/paymentinstallment(\d+)paidat/);
+  if (installmentPaidAtMatch) {
+    const installmentNo = Math.max(1, Number(installmentPaidAtMatch[1] ?? '1'));
+    const installmentPaidAtLabel = installmentNo === 1 ? 'تاريخ سداد مقدم الحجز' : `تاريخ سداد القسط ${installmentNo - 1}`;
+    return {
+      id: `payment_installment_${installmentNo}_paid_at`,
+      label: installmentPaidAtLabel,
+      group: 'workflow',
+      order: 221 + (installmentNo * 3)
+    };
+  }
+
+  const installmentPaidMatch = normalized.match(/paymentinstallment(\d+)paid/);
+  if (installmentPaidMatch) {
+    const installmentNo = Math.max(1, Number(installmentPaidMatch[1] ?? '1'));
+    const installmentPaidLabel = installmentNo === 1 ? 'حالة سداد مقدم الحجز' : `حالة سداد القسط ${installmentNo - 1}`;
+    return {
+      id: `payment_installment_${installmentNo}_paid`,
+      label: installmentPaidLabel,
+      group: 'workflow',
+      order: 222 + (installmentNo * 3)
+    };
+  }
 
   if (normalized.includes('requestref')) {
     return { id: 'request_ref', label: 'رقم الطلب', group: 'workflow', order: 10 };
@@ -524,6 +685,60 @@ function resolveCanonicalFieldMeta(
   }
   if (normalized.includes('staymode')) {
     return { id: 'stay_mode', label: 'نوع الحجز', group: 'booking', order: 50 };
+  }
+  if (normalized.includes('pricingselectedstaymode')) {
+    return { id: 'pricing_selected_stay_mode', label: 'نوع الحجز المعتمد', group: 'booking', order: 51 };
+  }
+  if (normalized.includes('pricingmode')) {
+    return { id: 'pricing_mode', label: 'نمط التسعير', group: 'booking', order: 52 };
+  }
+  if (normalized.includes('pricingtransportationmandatory')) {
+    return { id: 'pricing_transport_mandatory', label: 'الانتقالات إلزامية', group: 'booking', order: 53 };
+  }
+  if (normalized.includes('transportationmandatory')) {
+    return { id: 'transport_mandatory', label: 'الانتقالات إلزامية', group: 'booking', order: 53 };
+  }
+  if (normalized.includes('pricingmembershiptype')) {
+    return { id: 'pricing_membership_type', label: 'نوع العضوية المحسوب', group: 'booking', order: 62 };
+  }
+  if (normalized.includes('membershiptype')) {
+    return { id: 'membership_type', label: 'نوع العضوية', group: 'owner', order: 55 };
+  }
+  if (normalized.includes('pricingpersonscount')) {
+    return { id: 'pricing_persons_count', label: 'عدد الأفراد المحسوب', group: 'booking', order: 54 };
+  }
+  if (normalized.includes('pricingperiodkey')) {
+    return { id: 'pricing_period_key', label: 'فترة التسعير', group: 'booking', order: 55 };
+  }
+  if (normalized.includes('pricingaccommodationpriceperperson')) {
+    return { id: 'pricing_accommodation_unit', label: 'سعر الإقامة للفرد', group: 'booking', order: 56 };
+  }
+  if (normalized.includes('pricingtransportationpriceperperson')) {
+    return { id: 'pricing_transportation_unit', label: 'سعر الانتقالات للفرد', group: 'booking', order: 57 };
+  }
+  if (normalized.includes('pricingproxyinsuranceamount')) {
+    return { id: 'pricing_proxy_insurance', label: 'قيمة تأمين الحجز بالنيابة', group: 'booking', order: 57 };
+  }
+  if (normalized.includes('pricingappliedinsuranceamount')) {
+    return { id: 'pricing_applied_insurance', label: 'قيمة التأمين المطبقة', group: 'booking', order: 58 };
+  }
+  if (normalized.includes('pricinginsuranceamount')) {
+    return { id: 'pricing_insurance', label: 'قيمة التأمين', group: 'booking', order: 58 };
+  }
+  if (normalized.includes('pricingaccommodationtotal')) {
+    return { id: 'pricing_accommodation_total', label: 'إجمالي الإقامة', group: 'booking', order: 59 };
+  }
+  if (normalized.includes('pricingtransportationtotal')) {
+    return { id: 'pricing_transportation_total', label: 'إجمالي الانتقالات', group: 'booking', order: 60 };
+  }
+  if (normalized.includes('pricinggrandtotal')) {
+    return { id: 'pricing_grand_total', label: 'الإجمالي النهائي', group: 'booking', order: 61 };
+  }
+  if (normalized.includes('pricingdisplaytext')) {
+    return { id: 'pricing_display_text', label: 'بيان التسعير', group: 'workflow', order: 65 };
+  }
+  if (normalized.includes('pricingconfigid') || normalized.includes('pricingpolicyid')) {
+    return { id: 'pricing_config_id', label: 'مرجع سياسة التسعير', group: 'workflow', order: 66 };
   }
   if (normalized.includes('familycount')) {
     return { id: 'family_count', label: 'عدد الأفراد', group: 'booking', order: 60 };
@@ -566,6 +781,15 @@ function resolveCanonicalFieldMeta(
   }
   if (normalized.includes('adminactionatutc')) {
     return { id: 'admin_action_at', label: 'تاريخ الإجراء الإداري', group: 'workflow', order: 40 };
+  }
+  if (normalized.includes('paymentmode')) {
+    return { id: 'payment_mode', label: 'طريقة السداد', group: 'workflow', order: 46 };
+  }
+  if (normalized.includes('paymentinstallmentcount')) {
+    return { id: 'payment_installment_count', label: 'عدد الأقساط', group: 'workflow', order: 47 };
+  }
+  if (normalized.includes('paymentinstallmentstotal')) {
+    return { id: 'payment_installments_total', label: 'إجمالي الأقساط', group: 'workflow', order: 48 };
   }
   if (normalized.includes('paymentstatus')) {
     return { id: 'payment_status', label: 'حالة السداد', group: 'workflow', order: 50 };
@@ -639,6 +863,7 @@ function appendGroupHeaders(rows: CanonicalFieldRow[]): SummerRequestFieldGridRo
     }
 
     result.push({
+      key: row.id,
       label: row.label,
       value: toDisplayOrDash(row.value),
       instanceGroupId: row.instanceGroupId,
@@ -664,6 +889,11 @@ function upsertCanonicalRow(
     existing.value = next.value;
     existing.label = next.label;
   }
+}
+
+function shouldExcludeDetailField(fieldKey: string): boolean {
+  const normalized = normalizeFieldToken(fieldKey);
+  return normalized.includes('whatsapp');
 }
 
 function addSummaryRows(
@@ -861,7 +1091,7 @@ export function buildSummerRequestDetailFields(input: BuildSummerRequestDetailFi
   (input.fields ?? []).forEach(field => {
     const fieldKey = String(field.fildKind ?? '').trim();
     const rawValue = String(field.fildTxt ?? '').trim();
-    if (!fieldKey || !rawValue || isCompanionFieldKey(fieldKey)) {
+    if (!fieldKey || !rawValue || isCompanionFieldKey(fieldKey) || shouldExcludeDetailField(fieldKey)) {
       return;
     }
 

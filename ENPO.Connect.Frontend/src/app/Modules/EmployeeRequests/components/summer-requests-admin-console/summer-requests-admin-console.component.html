@@ -31,6 +31,158 @@
     </div>
   </section>
 
+  <section class="scope-panel" *ngIf="canManageSummerPricing">
+    <div class="scope-row">
+      <button type="button" class="ghost" routerLink="/Admin/resorts/unit-freeze">
+        إدارة تجميد الوحدات
+      </button>
+    </div>
+  </section>
+
+  <section class="pricing-panel" *ngIf="canManageSummerPricing">
+    <header class="pricing-header">
+      <div>
+        <h3>إعدادات التسعير (قابلة للتعديل من الإدارة)</h3>
+        <p class="pricing-note">الأسعار استرشادية وقابلة للتعديل بعد اعتماد اللجنة. قيمة التأمين تُحسب تلقائيًا من نوع العضوية (عامل 500 / غير عامل 1000).</p>
+      </div>
+      <div class="pricing-actions">
+        <button type="button" class="ghost" (click)="loadPricingCatalog(false)" [disabled]="pricingCatalogLoading || pricingCatalogSaving">
+          {{ pricingCatalogLoading ? 'جاري التحميل...' : 'تحديث' }}
+        </button>
+        <button type="button" class="ghost" (click)="addPricingRecord()" [disabled]="pricingCatalogSaving">إضافة سطر</button>
+        <button type="button" class="primary" (click)="savePricingCatalog()" [disabled]="pricingCatalogLoading || pricingCatalogSaving">
+          {{ pricingCatalogSaving ? 'جاري الحفظ...' : 'حفظ التسعير' }}
+        </button>
+      </div>
+    </header>
+
+    <p class="pricing-error" *ngIf="pricingCatalogError.length > 0">{{ pricingCatalogError }}</p>
+
+    <div class="pricing-table-wrap" *ngIf="!pricingCatalogLoading; else pricingLoadingBlock">
+      <div class="pricing-group-controls" *ngIf="pricingRecordGroups.length > 1">
+        <button type="button" class="ghost-link" (click)="expandAllPricingGroups()">توسيع الكل</button>
+        <button type="button" class="ghost-link" (click)="collapseAllPricingGroups()">طي الكل</button>
+      </div>
+
+      <section class="pricing-group" *ngFor="let group of pricingRecordGroups; trackBy: trackByPricingGroup">
+        <header class="pricing-group-header" (click)="togglePricingGroup(group.key)">
+          <div class="pricing-group-summary">
+            <h4>{{ group.destinationName }}</h4>
+            <small>
+              {{ group.rows.length }} سجل
+              <ng-container *ngIf="group.activeCount !== group.rows.length">
+                | مفعّل {{ group.activeCount }} | غير مفعّل {{ group.inactiveCount }}
+              </ng-container>
+            </small>
+          </div>
+          <div class="pricing-group-header-actions">
+            <button
+              type="button"
+              class="ghost-link pricing-inline-action"
+              (click)="addPricingRecord(group.categoryId); $event.stopPropagation()">
+              إضافة سطر
+            </button>
+            <span class="pricing-group-toggle" [class.expanded]="isPricingGroupExpanded(group.key)">⌄</span>
+          </div>
+        </header>
+
+        <div class="pricing-group-body" [class.collapsed]="!isPricingGroupExpanded(group.key)">
+          <div class="pricing-group-body-inner">
+            <div class="pricing-group-table-wrap">
+              <table class="pricing-table">
+                <thead>
+                  <tr>
+                    <th>المصيف</th>
+                    <th>الموسم</th>
+                    <th>من</th>
+                    <th>إلى</th>
+                    <th>سعر الإقامة/فرد</th>
+                    <th>سعر الانتقالات/فرد</th>
+                    <th>وضع التسعير</th>
+                    <th>مفعّل</th>
+                    <th>وصف العرض</th>
+                    <th>ملاحظات</th>
+                    <th>نسخ</th>
+                    <th>حذف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let entry of group.rows; trackBy: trackByPricingGroupEntry">
+                    <td class="cell-destination">
+                      <select
+                        [(ngModel)]="entry.record.categoryId"
+                        [ngModelOptions]="{standalone: true}"
+                        (ngModelChange)="onPricingCategoryChanged()">
+                        <option [ngValue]="0">اختر المصيف</option>
+                        <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">
+                          {{ destination.name }}
+                        </option>
+                      </select>
+                    </td>
+                    <td class="cell-season">
+                      <input type="number" min="2020" [(ngModel)]="entry.record.seasonYear" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-date">
+                      <input type="date" [(ngModel)]="entry.record.dateFrom" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-date">
+                      <input type="date" [(ngModel)]="entry.record.dateTo" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-number">
+                      <input type="number" min="0" step="0.01" [(ngModel)]="entry.record.accommodationPricePerPerson" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-number">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        [(ngModel)]="entry.record.transportationPricePerPerson"
+                        [disabled]="isAccommodationOnlyMode(entry.record)"
+                        [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-mode">
+                      <select
+                        [(ngModel)]="entry.record.pricingMode"
+                        [ngModelOptions]="{standalone: true}"
+                        (ngModelChange)="onPricingModeChanged(entry.record)">
+                        <option *ngFor="let mode of pricingModeOptions" [ngValue]="mode.value">{{ mode.label }}</option>
+                      </select>
+                    </td>
+                    <td class="center-cell cell-toggle">
+                      <input type="checkbox" [(ngModel)]="entry.record.isActive" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-label">
+                      <input type="text" [(ngModel)]="entry.record.displayLabel" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="cell-notes">
+                      <input type="text" [(ngModel)]="entry.record.notes" [ngModelOptions]="{standalone: true}" />
+                    </td>
+                    <td class="center-cell cell-action">
+                      <button type="button" class="ghost-link" (click)="duplicatePricingRecord(entry.index)">نسخ</button>
+                    </td>
+                    <td class="center-cell cell-action">
+                      <button type="button" class="danger-link" (click)="removePricingRecord(entry.index)">حذف</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <ng-template #pricingLoadingBlock>
+      <small class="loading-note">جاري تحميل إعدادات التسعير...</small>
+      <app-summer-skeleton
+        [variant]="'table'"
+        [rows]="4"
+        [showTitle]="false"
+        [ariaLabel]="'جاري تحميل إعدادات التسعير'">
+      </app-summer-skeleton>
+    </ng-template>
+  </section>
+
   <section class="scope-panel" *ngIf="dashboard">
     <div class="scope-row">
       <button type="button" class="chip" [class.active]="!dashboardScopeCategoryId" (click)="applyGeneralScope()">
@@ -80,9 +232,9 @@
       <strong>{{ stats.newCount }}</strong>
     </article>
 
-    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('جاري التنفيذ')" (click)="applyStatusQuickFilter('جاري التنفيذ')">
-      <span>جاري التنفيذ</span>
-      <strong>{{ stats.inProgressCount }}</strong>
+    <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('PENDING_REVIEW_REQUIRED')" (click)="applyStatusQuickFilter('PENDING_REVIEW_REQUIRED')">
+      <span>قيد المراجعة</span>
+      <strong>{{ getDashboardStatusCount('PENDING_REVIEW_REQUIRED', 'قيد المراجعة', 'جاري التنفيذ', 'INPROGRESS', 'TRANSFER_REVIEW_REQUIRED') }}</strong>
     </article>
 
     <article class="metric-card clickable" [class.active]="isStatusQuickFilterActive('رد إداري')" (click)="applyStatusQuickFilter('رد إداري')">
@@ -110,9 +262,9 @@
       <strong>{{ stats.unpaidCount }}</strong>
     </article>
 
-    <article class="metric-card warn clickable" [class.active]="isPaymentQuickFilterActive('OverdueUnpaid')" (click)="applyPaymentQuickFilter('OverdueUnpaid')">
-      <span>متأخر وغير مسدد</span>
-      <strong>{{ stats.overdueUnpaidCount }}</strong>
+    <article class="metric-card warn clickable" [class.active]="isPaymentQuickFilterActive('PartialPaid')" (click)="applyPaymentQuickFilter('PartialPaid')">
+      <span>مسدد عدد من الأقساط</span>
+      <strong>{{ stats.partialPaidCount }}</strong>
     </article>
   </section>
 
@@ -169,7 +321,7 @@
         </select>
       </label>
 
-      <label class="wave-field">
+      <div class="wave-field">
         <span>الفوج</span>
         <div class="wave-row">
           <select formControlName="waveCode">
@@ -183,8 +335,33 @@
             [disabled]="!canOpenWaveCapacityDialog">
             بيان إتاحة هذا الفوج
           </button>
+          <button
+            type="button"
+            class="ghost bookings-print-trigger"
+            (click)="openWaveBookingsPrintPreview()"
+            [disabled]="!canOpenWaveCapacityDialog">
+            طباعة كشف الحاجزين
+          </button>
+          <button
+            type="button"
+            class="ghost bookings-print-trigger"
+            (click)="openResortBookingsPrintPreview()"
+            [disabled]="!canOpenResortBookingsPrintDialog">
+            طباعة كشف المصيف (كل الأفواج)
+          </button>
+          <button
+            type="button"
+            class="ghost bookings-print-trigger"
+            (click)="openAllResortsSummaryPrintPreview()"
+            [disabled]="destinations.length === 0">
+            إحصائية جميع المصايف
+          </button>
+          <label class="bookings-amount-toggle" title="إظهار بيانات مبالغ الحجز والتأمين داخل التقرير">
+            <input id="includeFinancialsInPrintToggle" type="checkbox" formControlName="includeFinancialsInPrint" />
+            <span>إظهار المبالغ في التقرير</span>
+          </label>
         </div>
-      </label>
+      </div>
 
       <label>
         <span>الحالة</span>
@@ -249,6 +426,14 @@
           <span>الوحدات المتاحة</span>
           <strong>{{ capacityAvailableUnits }}</strong>
         </article>
+        <article>
+          <span>الوحدات المجمدة</span>
+          <strong>{{ capacityFrozenAvailableUnits }}</strong>
+        </article>
+        <article>
+          <span>المجمدة المستخدمة</span>
+          <strong>{{ capacityFrozenAssignedUnits }}</strong>
+        </article>
       </div>
 
       <p class="capacity-error" *ngIf="capacityErrorText.length > 0">{{ capacityErrorText }}</p>
@@ -270,6 +455,8 @@
               <th>إجمالي الوحدات</th>
               <th>المستخدمة</th>
               <th>المتاحة</th>
+              <th>المجمدة</th>
+              <th>المجمدة المستخدمة</th>
             </tr>
           </thead>
           <tbody>
@@ -278,6 +465,8 @@
               <td>{{ row.totalUnits }}</td>
               <td>{{ row.usedUnits }}</td>
               <td>{{ row.availableUnits }}</td>
+              <td>{{ row.frozenAvailableUnits }}</td>
+              <td>{{ row.frozenAssignedUnits }}</td>
             </tr>
           </tbody>
         </table>
@@ -286,6 +475,748 @@
       <p class="empty" *ngIf="!loadingWaveCapacity && capacityRows.length === 0 && capacityErrorText.length === 0">
         لا توجد بيانات إتاحة حالياً للفوج المختار.
       </p>
+    </div>
+  </p-dialog>
+
+  <p-dialog
+    [(visible)]="bookingsPrintDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [showHeader]="false"
+    [appendTo]="'body'"
+    [maskStyleClass]="'wave-bookings-print-mask'"
+    [styleClass]="'wave-bookings-print-dialog' + (showWaveBookingsFinancialColumns ? ' financial-version' : '')"
+    [style]="{ width: waveBookingsDialogWidth, maxWidth: '98vw' }"
+    [contentStyle]="{ overflow: 'hidden', maxHeight: '88vh', padding: '0' }"
+    (onHide)="onWaveBookingsPrintDialogHide()">
+    <div class="wave-bookings-dialog-shell" dir="rtl">
+      <div class="wave-bookings-dialog-actions no-print">
+        <div class="wave-bookings-dialog-title">
+          <h4>{{ waveBookingsPrintData?.categoryName || selectedFilterDestinationName }} - الفوج {{ waveBookingsPrintData?.waveCode || selectedFilterWaveCode }}</h4>
+          <small *ngIf="waveBookingsPrintData?.generatedAtUtc">تاريخ الطباعة: {{ formatDate(waveBookingsPrintData?.generatedAtUtc || '') }}</small>
+        </div>
+        <div class="wave-bookings-dialog-buttons">
+          <span class="wave-bookings-version-tag">
+            {{ showWaveBookingsFinancialColumns ? 'نسخة بالمبالغ' : 'نسخة بدون مبالغ' }}
+          </span>
+          <button type="button" class="ghost" (click)="closeWaveBookingsPrintDialog()">
+            إغلاق
+          </button>
+          <button type="button" class="ghost" (click)="refreshWaveBookingsPrintReport()" [disabled]="loadingWaveBookingsPrint">
+            {{ loadingWaveBookingsPrint ? 'جاري التحديث...' : 'تحديث' }}
+          </button>
+          <button type="button" class="primary" (click)="printWaveBookingsReport()" [disabled]="loadingWaveBookingsPrint || waveBookingsPrintErrorText.length > 0">
+            طباعة
+          </button>
+        </div>
+      </div>
+
+      <div class="wave-bookings-dialog-content">
+        <p class="capacity-error" *ngIf="waveBookingsPrintErrorText.length > 0" [innerHTML]="waveBookingsPrintErrorText"></p>
+
+        <div class="wave-bookings-loading loading-note" *ngIf="loadingWaveBookingsPrint">جاري تحميل كشف الحاجزين...</div>
+        <app-summer-skeleton
+          *ngIf="loadingWaveBookingsPrint"
+          [variant]="'capacity'"
+          [rows]="4"
+          [showTitle]="false"
+          [ariaLabel]="'جاري تحميل كشف الحاجزين'">
+        </app-summer-skeleton>
+
+        <section
+          #waveBookingsPrintDocument
+          class="wave-bookings-print-doc"
+          [class.financial-version]="showWaveBookingsFinancialColumns"
+          *ngIf="!loadingWaveBookingsPrint && waveBookingsPrintData as report">
+          <header class="wave-bookings-doc-header">
+            <h2>كشف أسماء الحاجزين للفوج</h2>
+            <div class="wave-bookings-meta-grid">
+              <article>
+                <span>المصيف</span>
+                <strong>{{ resolveWaveBookingsPrintText(report.categoryName) }}</strong>
+              </article>
+              <article>
+                <span>الفوج</span>
+                <strong>{{ resolveWaveBookingsPrintText(report.waveCode) }}</strong>
+              </article>
+              <article>
+                <span>بداية الفوج</span>
+                <strong>{{ formatDateOnly(report.waveStartAtUtc || '') }}</strong>
+              </article>
+              <article>
+                <span>نهاية الفوج</span>
+                <strong>{{ formatDateOnly(report.waveEndAtUtc || '') }}</strong>
+              </article>
+              <article>
+                <span>وقت الطباعة</span>
+                <strong>{{ formatDate(report.generatedAtUtc || '') }}</strong>
+              </article>
+              <article>
+                <span>المستخدم</span>
+                <strong>{{ waveBookingsPrintUserName }}</strong>
+              </article>
+            </div>
+          </header>
+
+          <p class="empty" *ngIf="!hasWaveBookingsPrintRows">لا توجد بيانات حجوزات للفوج المختار.</p>
+
+          <section class="wave-bookings-section" *ngFor="let section of waveBookingsPrintSections">
+            <header class="wave-bookings-section-header">
+              <div class="wave-bookings-section-title">
+                <h3>{{ section.sectionLabel }}</h3>
+                <span>إجمالي القسم: {{ formatWholeNumber(section.totalBookings) }}</span>
+              </div>
+              <div class="wave-bookings-section-financial" *ngIf="showWaveBookingsFinancialColumns">
+                <span>إجمالي الحجز: {{ formatMoney(section.totalBookingAmount) }} ج.م</span>
+                <span>إجمالي التأمين: {{ formatMoney(section.totalInsuranceAmount) }} ج.م</span>
+                <span class="is-collected">المحصل: {{ formatMoney(section.totalCollectedAmount) }} ج.م</span>
+                <span class="is-uncollected">غير المحصل: {{ formatMoney(section.totalUncollectedAmount) }} ج.م</span>
+                <span class="is-payment-mode">طلبات كاش: {{ formatWholeNumber(section.cashBookingsCount) }} ({{ formatMoney(section.cashFinalAmount) }} ج.م)</span>
+                <span class="is-payment-mode">طلبات تقسيط: {{ formatWholeNumber(section.installmentBookingsCount) }} ({{ formatMoney(section.installmentFinalAmount) }} ج.م)</span>
+                <span class="is-final">الإجمالي النهائي: {{ formatMoney(section.totalFinalAmount) }} ج.م</span>
+              </div>
+            </header>
+
+            <div class="wave-bookings-table-wrap">
+              <table class="wave-bookings-table" [class.financial-version]="showWaveBookingsFinancialColumns">
+                <thead>
+                  <tr>
+                    <th class="col-index">م</th>
+                    <th class="col-booker">اسم الحاجز / صاحب الطلب</th>
+                    <th class="col-work-entity">جهة العمل</th>
+                    <th class="col-booking-type">نوع الحجز</th>
+                    <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ الحجز</th>
+                    <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ التأمين</th>
+                    <th class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي</th>
+                    <th class="col-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طريقة السداد</th>
+                    <th class="col-collection-status" *ngIf="showWaveBookingsFinancialColumns">حالة السداد</th>
+                    <th class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل</th>
+                    <th class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل</th>
+                    <th class="col-request-ref" *ngIf="showWaveBookingsPrintRequestRefColumn">رقم الطلب</th>
+                    <th class="col-persons" *ngIf="showWaveBookingsPrintPersonsCountColumn">عدد الأفراد</th>
+                    <th class="col-status" *ngIf="showWaveBookingsPrintStatusColumn">الحالة</th>
+                    <th class="col-unit" *ngIf="showWaveBookingsPrintUnitNumberColumn">رقم الوحدة</th>
+                    <th class="col-notes" *ngIf="showWaveBookingsPrintNotesColumn">ملاحظات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of section.rows; let rowIndex = index">
+                    <td class="col-index">{{ rowIndex + 1 }}</td>
+                    <td class="col-booker">{{ resolveWaveBookingsPrintText(row.bookerName) }}</td>
+                    <td class="col-work-entity">{{ resolveWaveBookingsPrintText(row.workEntity) }}</td>
+                    <td class="col-booking-type">{{ resolveWaveBookingsPrintText(row.bookingTypeLabel) }}</td>
+                    <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.bookingAmount) }} ج.م</td>
+                    <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.insuranceAmount) }} ج.م</td>
+                    <td class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.finalAmount) }} ج.م</td>
+                    <td class="col-payment-mode" *ngIf="showWaveBookingsFinancialColumns">{{ resolveWaveBookingsPrintText(resolvePaymentModeLabel(row)) }}</td>
+                    <td class="col-collection-status" *ngIf="showWaveBookingsFinancialColumns">{{ resolveWaveBookingsPrintText(resolveCollectionStatusLabel(row)) }}</td>
+                    <td class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.collectedAmount) }} ج.م</td>
+                    <td class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.uncollectedAmount) }} ج.م</td>
+                    <td class="col-request-ref" *ngIf="showWaveBookingsPrintRequestRefColumn">{{ resolveWaveBookingsPrintText(row.requestRef) }}</td>
+                    <td class="col-persons" *ngIf="showWaveBookingsPrintPersonsCountColumn">{{ row.personsCount > 0 ? formatWholeNumber(row.personsCount) : '-' }}</td>
+                    <td class="col-status" *ngIf="showWaveBookingsPrintStatusColumn">{{ resolveWaveBookingsPrintText(row.statusLabel) }}</td>
+                    <td class="col-unit" *ngIf="showWaveBookingsPrintUnitNumberColumn">{{ resolveWaveBookingsPrintText(row.unitNumber) }}</td>
+                    <td class="col-notes" *ngIf="showWaveBookingsPrintNotesColumn">{{ resolveWaveBookingsPrintText(row.notes) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <footer class="wave-bookings-summary" *ngIf="hasWaveBookingsPrintRows">
+            <div class="wave-bookings-summary-count">
+              <strong>الإجمالي العام للحاجزين: {{ formatWholeNumber(report.totalBookings) }}</strong>
+            </div>
+            <div class="wave-bookings-summary-financial" *ngIf="showWaveBookingsFinancialSummary">
+              <span>إجمالي مبلغ الحجز: {{ formatMoney(waveBookingsPrintTotalBookingAmount) }} ج.م</span>
+              <span>إجمالي مبلغ التأمين: {{ formatMoney(waveBookingsPrintTotalInsuranceAmount) }} ج.م</span>
+              <span class="is-collected">إجمالي المحصل: {{ formatMoney(waveBookingsPrintTotalCollectedAmount) }} ج.م</span>
+              <span class="is-uncollected">إجمالي غير المحصل: {{ formatMoney(waveBookingsPrintTotalUncollectedAmount) }} ج.م</span>
+              <span class="is-payment-mode">طلبات كاش: {{ formatWholeNumber(waveBookingsPrintCashBookingsCount) }} ({{ formatMoney(waveBookingsPrintCashFinalAmount) }} ج.م)</span>
+              <span class="is-payment-mode">طلبات تقسيط: {{ formatWholeNumber(waveBookingsPrintInstallmentBookingsCount) }} ({{ formatMoney(waveBookingsPrintInstallmentFinalAmount) }} ج.م)</span>
+              <span class="is-grand-total">الإجمالي النهائي للتقرير: {{ formatMoney(waveBookingsPrintTotalFinalAmount) }} ج.م</span>
+            </div>
+          </footer>
+
+          <div class="wave-bookings-print-footer-layer" *ngIf="waveBookingsPrintFooterMarkers.length > 0">
+            <span
+              class="wave-bookings-print-footer-item"
+              *ngFor="let marker of waveBookingsPrintFooterMarkers; trackBy: trackByWaveBookingsPrintFooter"
+              [style.top.px]="marker.topPx">
+              Page {{ marker.pageNumber }} of {{ waveBookingsPrintTotalPages }}
+            </span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </p-dialog>
+
+  <p-dialog
+    [(visible)]="resortBookingsPrintDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [showHeader]="false"
+    [appendTo]="'body'"
+    [maskStyleClass]="'wave-bookings-print-mask'"
+    [styleClass]="'wave-bookings-print-dialog resort-bookings-print-dialog' + (showWaveBookingsFinancialColumns ? ' financial-version' : '')"
+    [style]="{ width: waveBookingsDialogWidth, maxWidth: '98vw' }"
+    [contentStyle]="{ overflow: 'hidden', maxHeight: '88vh', padding: '0' }"
+    (onHide)="onResortBookingsPrintDialogHide()">
+    <div class="wave-bookings-dialog-shell" dir="rtl">
+      <div class="wave-bookings-dialog-actions no-print">
+        <div class="wave-bookings-dialog-title">
+          <h4>{{ resortBookingsPrintData?.categoryName || selectedFilterDestinationName }} - كشف جميع الأفواج</h4>
+          <small *ngIf="resortBookingsPrintData?.generatedAtUtc">تاريخ الطباعة: {{ formatDate(resortBookingsPrintData?.generatedAtUtc || '') }}</small>
+        </div>
+        <div class="wave-bookings-dialog-buttons">
+          <span class="wave-bookings-version-tag">
+            {{ showWaveBookingsFinancialColumns ? 'نسخة بالمبالغ' : 'نسخة بدون مبالغ' }}
+          </span>
+          <button type="button" class="ghost" (click)="closeResortBookingsPrintDialog()">
+            إغلاق
+          </button>
+          <button type="button" class="ghost" (click)="refreshResortBookingsPrintReport()" [disabled]="loadingResortBookingsPrint">
+            {{ loadingResortBookingsPrint ? 'جاري التحديث...' : 'تحديث' }}
+          </button>
+          <button type="button" class="primary" (click)="printResortBookingsReport()" [disabled]="loadingResortBookingsPrint || resortBookingsPrintErrorText.length > 0">
+            طباعة
+          </button>
+        </div>
+      </div>
+
+      <div class="wave-bookings-dialog-content">
+        <p class="capacity-error" *ngIf="resortBookingsPrintErrorText.length > 0" [innerHTML]="resortBookingsPrintErrorText"></p>
+
+        <div class="wave-bookings-loading loading-note" *ngIf="loadingResortBookingsPrint">جاري تحميل كشف الحاجزين للمصيف...</div>
+        <app-summer-skeleton
+          *ngIf="loadingResortBookingsPrint"
+          [variant]="'capacity'"
+          [rows]="4"
+          [showTitle]="false"
+          [ariaLabel]="'جاري تحميل كشف الحاجزين للمصيف'">
+        </app-summer-skeleton>
+
+        <section
+          #resortBookingsPrintDocument
+          class="wave-bookings-print-doc"
+          [class.financial-version]="showWaveBookingsFinancialColumns"
+          *ngIf="!loadingResortBookingsPrint && resortBookingsPrintData as report">
+          <header class="wave-bookings-doc-header">
+            <h2>كشف أسماء الحاجزين للمصيف</h2>
+            <div class="wave-bookings-meta-grid">
+              <article>
+                <span>المصيف</span>
+                <strong>{{ resolveWaveBookingsPrintText(report.categoryName) }}</strong>
+              </article>
+              <article>
+                <span>عدد الأفواج بالمصيف</span>
+                <strong>{{ formatWholeNumber(report.totalConfiguredWaves) }}</strong>
+              </article>
+              <article>
+                <span>عدد الأفواج ذات الحجوزات</span>
+                <strong>{{ formatWholeNumber(report.totalWavesWithBookings) }}</strong>
+              </article>
+              <article>
+                <span>إجمالي الطلبات</span>
+                <strong>{{ formatWholeNumber(report.totalBookings) }}</strong>
+              </article>
+              <article>
+                <span>إجمالي الأفراد</span>
+                <strong>{{ formatWholeNumber(report.totalPersons) }}</strong>
+              </article>
+              <article>
+                <span>المستخدم</span>
+                <strong>{{ waveBookingsPrintUserName }}</strong>
+              </article>
+            </div>
+          </header>
+
+          <p class="empty" *ngIf="!hasResortBookingsPrintRows">لا توجد بيانات حجوزات للمصيف المختار.</p>
+
+          <section class="wave-bookings-wave-group" *ngFor="let waveGroup of resortBookingsWaveGroups; trackBy: trackByResortBookingsWaveGroup">
+            <header class="wave-bookings-wave-group-header">
+              <div class="wave-bookings-wave-group-title">
+                <h3>الفوج {{ waveGroup.waveCode }}</h3>
+                <span *ngIf="waveGroup.waveStartAtUtc || waveGroup.waveEndAtUtc">
+                  {{ formatDateOnly(waveGroup.waveStartAtUtc || '') }} - {{ formatDateOnly(waveGroup.waveEndAtUtc || '') }}
+                </span>
+              </div>
+              <div class="wave-bookings-wave-group-totals">
+                <span>إجمالي الطلبات: {{ formatWholeNumber(waveGroup.totalBookings) }}</span>
+                <span *ngIf="showWaveBookingsFinancialColumns">إجمالي الحجز: {{ formatMoney(waveGroup.totalBookingAmount) }} ج.م</span>
+                <span *ngIf="showWaveBookingsFinancialColumns">إجمالي التأمين: {{ formatMoney(waveGroup.totalInsuranceAmount) }} ج.م</span>
+                <span class="is-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل: {{ formatMoney(waveGroup.totalCollectedAmount) }} ج.م</span>
+                <span class="is-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل: {{ formatMoney(waveGroup.totalUncollectedAmount) }} ج.م</span>
+                <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش: {{ formatWholeNumber(waveGroup.cashBookingsCount) }} ({{ formatMoney(waveGroup.cashFinalAmount) }} ج.م)</span>
+                <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط: {{ formatWholeNumber(waveGroup.installmentBookingsCount) }} ({{ formatMoney(waveGroup.installmentFinalAmount) }} ج.م)</span>
+                <span class="is-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي: {{ formatMoney(waveGroup.totalFinalAmount) }} ج.م</span>
+              </div>
+            </header>
+
+            <section class="wave-bookings-section" *ngFor="let section of waveGroup.sections">
+              <header class="wave-bookings-section-header">
+                <div class="wave-bookings-section-title">
+                  <h3>{{ section.sectionLabel }}</h3>
+                  <span>إجمالي القسم: {{ formatWholeNumber(section.totalBookings) }}</span>
+                </div>
+                <div class="wave-bookings-section-financial" *ngIf="showWaveBookingsFinancialColumns">
+                  <span>إجمالي الحجز: {{ formatMoney(section.totalBookingAmount) }} ج.م</span>
+                  <span>إجمالي التأمين: {{ formatMoney(section.totalInsuranceAmount) }} ج.م</span>
+                  <span class="is-collected">المحصل: {{ formatMoney(section.totalCollectedAmount) }} ج.م</span>
+                  <span class="is-uncollected">غير المحصل: {{ formatMoney(section.totalUncollectedAmount) }} ج.م</span>
+                  <span class="is-payment-mode">طلبات كاش: {{ formatWholeNumber(section.cashBookingsCount) }} ({{ formatMoney(section.cashFinalAmount) }} ج.م)</span>
+                  <span class="is-payment-mode">طلبات تقسيط: {{ formatWholeNumber(section.installmentBookingsCount) }} ({{ formatMoney(section.installmentFinalAmount) }} ج.م)</span>
+                  <span class="is-final">الإجمالي النهائي: {{ formatMoney(section.totalFinalAmount) }} ج.م</span>
+                </div>
+              </header>
+
+              <div class="wave-bookings-table-wrap">
+                <table class="wave-bookings-table" [class.financial-version]="showWaveBookingsFinancialColumns">
+                  <thead>
+                    <tr>
+                      <th class="col-index">م</th>
+                      <th class="col-booker">اسم الحاجز / صاحب الطلب</th>
+                      <th class="col-work-entity">جهة العمل</th>
+                      <th class="col-booking-type">نوع الحجز</th>
+                      <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ الحجز</th>
+                      <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ التأمين</th>
+                      <th class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي</th>
+                      <th class="col-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طريقة السداد</th>
+                      <th class="col-collection-status" *ngIf="showWaveBookingsFinancialColumns">حالة السداد</th>
+                      <th class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل</th>
+                      <th class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل</th>
+                      <th class="col-request-ref" *ngIf="showResortBookingsPrintRequestRefColumn">رقم الطلب</th>
+                      <th class="col-persons" *ngIf="showResortBookingsPrintPersonsCountColumn">عدد الأفراد</th>
+                      <th class="col-status" *ngIf="showResortBookingsPrintStatusColumn">الحالة</th>
+                      <th class="col-unit" *ngIf="showResortBookingsPrintUnitNumberColumn">رقم الوحدة</th>
+                      <th class="col-notes" *ngIf="showResortBookingsPrintNotesColumn">ملاحظات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let row of section.rows; let rowIndex = index">
+                      <td class="col-index">{{ rowIndex + 1 }}</td>
+                      <td class="col-booker">{{ resolveWaveBookingsPrintText(row.bookerName) }}</td>
+                      <td class="col-work-entity">{{ resolveWaveBookingsPrintText(row.workEntity) }}</td>
+                      <td class="col-booking-type">{{ resolveWaveBookingsPrintText(row.bookingTypeLabel) }}</td>
+                      <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.bookingAmount) }} ج.م</td>
+                      <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.insuranceAmount) }} ج.م</td>
+                      <td class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.finalAmount) }} ج.م</td>
+                      <td class="col-payment-mode" *ngIf="showWaveBookingsFinancialColumns">{{ resolveWaveBookingsPrintText(resolvePaymentModeLabel(row)) }}</td>
+                      <td class="col-collection-status" *ngIf="showWaveBookingsFinancialColumns">{{ resolveWaveBookingsPrintText(resolveCollectionStatusLabel(row)) }}</td>
+                      <td class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.collectedAmount) }} ج.م</td>
+                      <td class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(row.uncollectedAmount) }} ج.م</td>
+                      <td class="col-request-ref" *ngIf="showResortBookingsPrintRequestRefColumn">{{ resolveWaveBookingsPrintText(row.requestRef) }}</td>
+                      <td class="col-persons" *ngIf="showResortBookingsPrintPersonsCountColumn">{{ row.personsCount > 0 ? formatWholeNumber(row.personsCount) : '-' }}</td>
+                      <td class="col-status" *ngIf="showResortBookingsPrintStatusColumn">{{ resolveWaveBookingsPrintText(row.statusLabel) }}</td>
+                      <td class="col-unit" *ngIf="showResortBookingsPrintUnitNumberColumn">{{ resolveWaveBookingsPrintText(row.unitNumber) }}</td>
+                      <td class="col-notes" *ngIf="showResortBookingsPrintNotesColumn">{{ resolveWaveBookingsPrintText(row.notes) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <footer class="wave-bookings-summary" *ngIf="hasResortBookingsPrintRows">
+            <div class="wave-bookings-summary-count">
+              <strong>إجمالي الطلبات بالمصيف: {{ formatWholeNumber(report.totalBookings) }}</strong>
+            </div>
+            <div class="wave-bookings-summary-financial">
+              <span>إجمالي الأفراد: {{ formatWholeNumber(report.totalPersons) }}</span>
+              <span *ngIf="showWaveBookingsFinancialColumns">إجمالي مبلغ الحجز: {{ formatMoney(report.totalBookingAmount) }} ج.م</span>
+              <span *ngIf="showWaveBookingsFinancialColumns">إجمالي مبلغ التأمين: {{ formatMoney(report.totalInsuranceAmount) }} ج.م</span>
+              <span class="is-collected" *ngIf="showWaveBookingsFinancialColumns">إجمالي المحصل: {{ formatMoney(report.totalCollectedAmount) }} ج.م</span>
+              <span class="is-uncollected" *ngIf="showWaveBookingsFinancialColumns">إجمالي غير المحصل: {{ formatMoney(report.totalUncollectedAmount) }} ج.م</span>
+              <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش: {{ formatWholeNumber(report.cashBookingsCount) }} ({{ formatMoney(report.cashFinalAmount) }} ج.م)</span>
+              <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط: {{ formatWholeNumber(report.installmentBookingsCount) }} ({{ formatMoney(report.installmentFinalAmount) }} ج.م)</span>
+              <span class="is-grand-total" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي للتقرير: {{ formatMoney(report.totalFinalAmount) }} ج.م</span>
+            </div>
+          </footer>
+
+          <div class="wave-bookings-print-footer-layer" *ngIf="resortBookingsPrintFooterMarkers.length > 0">
+            <span
+              class="wave-bookings-print-footer-item"
+              *ngFor="let marker of resortBookingsPrintFooterMarkers; trackBy: trackByWaveBookingsPrintFooter"
+              [style.top.px]="marker.topPx">
+              Page {{ marker.pageNumber }} of {{ resortBookingsPrintTotalPages }}
+            </span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </p-dialog>
+
+  <p-dialog
+    [(visible)]="allResortsSummaryDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [showHeader]="false"
+    [appendTo]="'body'"
+    [maskStyleClass]="'wave-bookings-print-mask'"
+    [styleClass]="'wave-bookings-print-dialog all-resorts-summary-print-dialog' + (showWaveBookingsFinancialColumns ? ' financial-version' : '')"
+    [style]="{ width: waveBookingsDialogWidth, maxWidth: '98vw' }"
+    [contentStyle]="{ overflow: 'hidden', maxHeight: '88vh', padding: '0' }"
+    (onHide)="onAllResortsSummaryPrintDialogHide()">
+    <div class="wave-bookings-dialog-shell" dir="rtl">
+      <div class="wave-bookings-dialog-actions no-print">
+        <div class="wave-bookings-dialog-title">
+          <h4>إحصائية جميع المصايف {{ showWaveBookingsFinancialColumns ? '(بالمبالغ)' : '(بدون مبالغ)' }}</h4>
+          <small *ngIf="allResortsSummaryData?.generatedAtUtc">تاريخ الطباعة: {{ formatDate(allResortsSummaryData?.generatedAtUtc || '') }}</small>
+        </div>
+        <div class="wave-bookings-dialog-buttons">
+          <span class="wave-bookings-version-tag">
+            {{ showWaveBookingsFinancialColumns ? 'نسخة بالمبالغ' : 'نسخة بدون مبالغ' }}
+          </span>
+          <button type="button" class="ghost" (click)="closeAllResortsSummaryPrintDialog()">
+            إغلاق
+          </button>
+          <button type="button" class="ghost" (click)="refreshAllResortsSummaryPrintReport()" [disabled]="loadingAllResortsSummaryPrint">
+            {{ loadingAllResortsSummaryPrint ? 'جاري التحديث...' : 'تحديث' }}
+          </button>
+          <button type="button" class="primary" (click)="printAllResortsSummaryReport()" [disabled]="loadingAllResortsSummaryPrint || allResortsSummaryErrorText.length > 0">
+            طباعة
+          </button>
+        </div>
+      </div>
+
+      <div class="wave-bookings-dialog-content">
+        <p class="capacity-error" *ngIf="allResortsSummaryErrorText.length > 0" [innerHTML]="allResortsSummaryErrorText"></p>
+
+        <div class="wave-bookings-loading loading-note" *ngIf="loadingAllResortsSummaryPrint">جاري تحميل إحصائية جميع المصايف...</div>
+        <app-summer-skeleton
+          *ngIf="loadingAllResortsSummaryPrint"
+          [variant]="'capacity'"
+          [rows]="4"
+          [showTitle]="false"
+          [ariaLabel]="'جاري تحميل إحصائية جميع المصايف'">
+        </app-summer-skeleton>
+
+        <section
+          #allResortsSummaryPrintDocument
+          class="wave-bookings-print-doc all-resorts-summary-doc"
+          [class.financial-version]="showWaveBookingsFinancialColumns"
+          *ngIf="!loadingAllResortsSummaryPrint && allResortsSummaryData as report">
+          <header class="wave-bookings-doc-header">
+            <h2>إحصائية جميع المصايف</h2>
+            <div class="wave-bookings-meta-grid">
+              <article>
+                <span>عدد المصايف</span>
+                <strong>{{ formatWholeNumber(report.totalResorts) }}</strong>
+              </article>
+              <article>
+                <span>عدد الأفواج</span>
+                <strong>{{ formatWholeNumber(report.totalConfiguredWaves) }}</strong>
+              </article>
+              <article>
+                <span>الأفواج ذات الحجوزات</span>
+                <strong>{{ formatWholeNumber(report.totalWavesWithBookings) }}</strong>
+              </article>
+              <article>
+                <span>إجمالي الطلبات</span>
+                <strong>{{ formatWholeNumber(report.totalBookings) }}</strong>
+              </article>
+              <article>
+                <span>إجمالي الأفراد</span>
+                <strong>{{ formatWholeNumber(report.totalPersons) }}</strong>
+              </article>
+              <article>
+                <span>المستخدم</span>
+                <strong>{{ waveBookingsPrintUserName }}</strong>
+              </article>
+            </div>
+          </header>
+
+          <p class="empty" *ngIf="!hasAllResortsSummaryRows">لا توجد بيانات متاحة لجميع المصايف حاليًا.</p>
+
+          <section class="all-resorts-summary-section" *ngFor="let resort of allResortsSummaryResorts; trackBy: trackByAllResortsSummaryResort">
+            <header class="all-resorts-summary-header">
+              <div class="all-resorts-summary-title">
+                <h3>{{ resort.categoryName }}</h3>
+                <span>عدد الأفواج: {{ formatWholeNumber(resort.totalConfiguredWaves) }}</span>
+              </div>
+              <div class="all-resorts-summary-totals">
+                <span>الطلبات: {{ formatWholeNumber(resort.totalBookings) }}</span>
+                <span>الأفراد: {{ formatWholeNumber(resort.totalPersons) }}</span>
+                <span *ngIf="showWaveBookingsFinancialColumns">إجمالي الحجز: {{ formatMoney(resort.totalBookingAmount) }} ج.م</span>
+                <span *ngIf="showWaveBookingsFinancialColumns">إجمالي التأمين: {{ formatMoney(resort.totalInsuranceAmount) }} ج.م</span>
+                <span class="is-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل: {{ formatMoney(resort.totalCollectedAmount) }} ج.م</span>
+                <span class="is-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل: {{ formatMoney(resort.totalUncollectedAmount) }} ج.م</span>
+                <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش: {{ formatWholeNumber(resort.cashBookingsCount) }} ({{ formatMoney(resort.cashFinalAmount) }} ج.م)</span>
+                <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط: {{ formatWholeNumber(resort.installmentBookingsCount) }} ({{ formatMoney(resort.installmentFinalAmount) }} ج.م)</span>
+                <span class="is-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي: {{ formatMoney(resort.totalFinalAmount) }} ج.م</span>
+              </div>
+            </header>
+
+            <div class="wave-bookings-table-wrap">
+              <table class="wave-bookings-table all-resorts-summary-table" [class.financial-version]="showWaveBookingsFinancialColumns">
+                <thead>
+                  <tr>
+                    <th class="col-index">م</th>
+                    <th class="col-wave">الفوج</th>
+                    <th class="col-count">عدد الطلبات</th>
+                    <th class="col-count">عدد الأفراد</th>
+                    <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ الحجز</th>
+                    <th class="col-money" *ngIf="showWaveBookingsFinancialColumns">مبلغ التأمين</th>
+                    <th class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي</th>
+                    <th class="col-payment-count" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش</th>
+                    <th class="col-payment-count" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط</th>
+                    <th class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">المحصل</th>
+                    <th class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">غير المحصل</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let wave of resort.waves; let waveIndex = index; trackBy: trackByAllResortsSummaryWave">
+                    <td class="col-index">{{ waveIndex + 1 }}</td>
+                    <td class="col-wave">{{ wave.waveCode }}</td>
+                    <td class="col-count">{{ formatWholeNumber(wave.totalBookings) }}</td>
+                    <td class="col-count">{{ formatWholeNumber(wave.totalPersons) }}</td>
+                    <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalBookingAmount) }} ج.م</td>
+                    <td class="col-money" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalInsuranceAmount) }} ج.م</td>
+                    <td class="col-money col-money-final" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalFinalAmount) }} ج.م</td>
+                    <td class="col-payment-count" *ngIf="showWaveBookingsFinancialColumns">{{ formatWholeNumber(wave.cashBookingsCount) }}</td>
+                    <td class="col-payment-count" *ngIf="showWaveBookingsFinancialColumns">{{ formatWholeNumber(wave.installmentBookingsCount) }}</td>
+                    <td class="col-money col-collected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalCollectedAmount) }} ج.م</td>
+                    <td class="col-money col-uncollected" *ngIf="showWaveBookingsFinancialColumns">{{ formatMoney(wave.totalUncollectedAmount) }} ج.م</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <footer class="wave-bookings-summary" *ngIf="hasAllResortsSummaryRows">
+            <div class="wave-bookings-summary-count">
+              <strong>الإجمالي العام لجميع المصايف: {{ formatWholeNumber(report.totalBookings) }} طلب</strong>
+            </div>
+            <div class="wave-bookings-summary-financial">
+              <span>إجمالي المصايف: {{ formatWholeNumber(report.totalResorts) }}</span>
+              <span>إجمالي الأفواج: {{ formatWholeNumber(report.totalConfiguredWaves) }}</span>
+              <span>إجمالي الأفراد: {{ formatWholeNumber(report.totalPersons) }}</span>
+              <span *ngIf="showWaveBookingsFinancialColumns">إجمالي مبلغ الحجز: {{ formatMoney(report.totalBookingAmount) }} ج.م</span>
+              <span *ngIf="showWaveBookingsFinancialColumns">إجمالي مبلغ التأمين: {{ formatMoney(report.totalInsuranceAmount) }} ج.م</span>
+              <span class="is-collected" *ngIf="showWaveBookingsFinancialColumns">إجمالي المحصل: {{ formatMoney(report.totalCollectedAmount) }} ج.م</span>
+              <span class="is-uncollected" *ngIf="showWaveBookingsFinancialColumns">إجمالي غير المحصل: {{ formatMoney(report.totalUncollectedAmount) }} ج.م</span>
+              <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات كاش: {{ formatWholeNumber(report.cashBookingsCount) }} ({{ formatMoney(report.cashFinalAmount) }} ج.م)</span>
+              <span class="is-payment-mode" *ngIf="showWaveBookingsFinancialColumns">طلبات تقسيط: {{ formatWholeNumber(report.installmentBookingsCount) }} ({{ formatMoney(report.installmentFinalAmount) }} ج.م)</span>
+              <span class="is-grand-total" *ngIf="showWaveBookingsFinancialColumns">الإجمالي النهائي: {{ formatMoney(report.totalFinalAmount) }} ج.م</span>
+            </div>
+          </footer>
+
+          <div class="wave-bookings-print-footer-layer" *ngIf="allResortsSummaryPrintFooterMarkers.length > 0">
+            <span
+              class="wave-bookings-print-footer-item"
+              *ngFor="let marker of allResortsSummaryPrintFooterMarkers; trackBy: trackByWaveBookingsPrintFooter"
+              [style.top.px]="marker.topPx">
+              Page {{ marker.pageNumber }} of {{ allResortsSummaryPrintTotalPages }}
+            </span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </p-dialog>
+
+  <p-dialog
+    [(visible)]="requestAdminPrintDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [showHeader]="false"
+    [appendTo]="'body'"
+    [maskStyleClass]="'wave-bookings-print-mask'"
+    [styleClass]="'wave-bookings-print-dialog request-admin-print-dialog'"
+    [style]="{ width: '1100px', maxWidth: '98vw' }"
+    [contentStyle]="{ overflow: 'hidden', maxHeight: '88vh', padding: '0' }"
+    (onHide)="onRequestAdminPrintDialogHide()">
+    <div class="wave-bookings-dialog-shell" dir="rtl">
+      <div class="wave-bookings-dialog-actions no-print">
+        <div class="wave-bookings-dialog-title">
+          <h4>نموذج طباعة الطلب الإداري</h4>
+          <small *ngIf="selectedRequest">رقم الطلب: {{ selectedRequest.requestRef || ('REQ-' + selectedRequest.messageId) }}</small>
+        </div>
+        <div class="wave-bookings-dialog-buttons">
+          <button type="button" class="ghost" (click)="closeSelectedRequestPrintDialog()">
+            إغلاق
+          </button>
+          <button type="button" class="primary" (click)="printSelectedRequestReport()" [disabled]="!selectedRequest">
+            طباعة
+          </button>
+        </div>
+      </div>
+
+      <div class="wave-bookings-dialog-content">
+        <section
+          #requestAdminPrintDocument
+          class="wave-bookings-print-doc request-admin-print-doc"
+          *ngIf="selectedRequest as request">
+          <div class="request-print-top-markers" *ngIf="requestAdminPrintFooterMarkers.length > 0">
+            <span
+              class="request-print-top-marker"
+              *ngFor="let marker of requestAdminPrintFooterMarkers; let pageIndex = index"
+              [style.top.px]="marker.topPx">
+              Page {{ pageIndex + 1 }} of {{ requestAdminPrintFooterMarkers.length }}
+            </span>
+          </div>
+          <header class="wave-bookings-doc-header">
+            <h2>نموذج بيانات طلب الحجز</h2>
+            <div class="wave-bookings-meta-grid">
+              <article>
+                <span>رقم الطلب</span>
+                <strong>{{ request.requestRef || ('REQ-' + request.messageId) }}</strong>
+              </article>
+              <article>
+                <span>الحالة الحالية</span>
+                <strong>{{ getRequestStatusLabel(request) }}</strong>
+              </article>
+              <article>
+                <span>المصيف</span>
+                <strong>{{ request.categoryName || '-' }}</strong>
+              </article>
+              <article>
+                <span>الفوج</span>
+                <strong>{{ request.waveCode || '-' }}</strong>
+              </article>
+              <article>
+                <span>تاريخ الطباعة</span>
+                <strong>{{ formatDate(requestAdminPrintGeneratedAt) }}</strong>
+              </article>
+              <article>
+                <span>المستخدم</span>
+                <strong>{{ waveBookingsPrintUserName }}</strong>
+              </article>
+            </div>
+          </header>
+
+          <section class="request-print-section" *ngIf="selectedRequestOwnerInfo as owner">
+            <h3>بيانات صاحب الطلب</h3>
+            <div class="request-print-owner-grid">
+              <article><span>الاسم</span><strong>{{ owner.name }}</strong></article>
+              <article><span>رقم الملف</span><strong>{{ owner.fileNumber }}</strong></article>
+              <article><span>الرقم القومي</span><strong>{{ owner.nationalId }}</strong></article>
+              <article><span>الهاتف</span><strong>{{ owner.phone }}</strong></article>
+              <article><span>هاتف إضافي</span><strong>{{ owner.extraPhone }}</strong></article>
+            </div>
+          </section>
+
+          <section class="request-print-section">
+            <h3>تفاصيل الحجز</h3>
+            <div class="request-print-fields-grid">
+              <article *ngFor="let row of selectedRequestPrintFields" [class.is-wide]="isRequestPrintFieldWide(row)">
+                <span>{{ row.label }}</span>
+                <strong>{{ formatRequestPrintFieldValue(row.value) }}</strong>
+              </article>
+            </div>
+          </section>
+
+          <section class="request-print-section request-print-payment-plan-section" *ngIf="hasSelectedRequestPaymentPlan">
+            <div class="request-print-payment-plan-header">
+              <h3>بيان السداد</h3>
+              <span class="request-print-payment-mode-chip">طريقة السداد: {{ selectedRequestPaymentMethodLabel }}</span>
+            </div>
+            <div class="wave-bookings-table-wrap">
+              <table class="wave-bookings-table request-print-payment-plan-table">
+                <thead>
+                  <tr>
+                    <th class="col-payment-title">البيان</th>
+                    <th class="col-money">القيمة</th>
+                    <th class="col-payment-state">حالة السداد</th>
+                    <th class="col-payment-date">تاريخ السداد</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let paymentRow of selectedRequestPaymentPlanRows">
+                    <td class="col-payment-title">{{ paymentRow.title }}</td>
+                    <td class="col-money">{{ paymentRow.amount }}</td>
+                    <td class="col-payment-state">{{ paymentRow.paidState }}</td>
+                    <td class="col-payment-date">{{ paymentRow.paidAt }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="request-print-section" *ngIf="selectedRequestCompanions.length > 0">
+            <h3>بيانات المرافقين</h3>
+            <div class="wave-bookings-table-wrap">
+              <table class="wave-bookings-table request-print-companions-table">
+                <thead>
+                  <tr>
+                    <th class="col-index">م</th>
+                    <th>الاسم</th>
+                    <th>صلة القرابة</th>
+                    <th>الرقم القومي</th>
+                    <th>السن</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let companion of selectedRequestCompanions">
+                    <td class="col-index">{{ companion.index }}</td>
+                    <td>{{ companion.name }}</td>
+                    <td>{{ companion.relation }}</td>
+                    <td>{{ companion.nationalId }}</td>
+                    <td>{{ companion.age }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="request-print-section" *ngIf="selectedRequestAttachments.length > 0">
+            <h3>مرفقات الطلب</h3>
+            <ul class="request-print-simple-list">
+              <li *ngFor="let attachment of selectedRequestAttachments">
+                {{ attachment.name }}
+              </li>
+            </ul>
+          </section>
+
+          <section class="request-print-section">
+            <h3>سجل التحديثات</h3>
+            <p class="empty" *ngIf="selectedRequestReplies.length === 0">لا توجد تحديثات مسجلة حتى الآن.</p>
+            <div class="request-print-updates" *ngIf="selectedRequestReplies.length > 0">
+              <article class="request-print-update" *ngFor="let update of selectedRequestReplies">
+                <header>
+                  <strong>{{ update.author }}</strong>
+                  <span>{{ formatDate(update.created || '') }}</span>
+                </header>
+                <p>{{ update.message || '-' }}</p>
+                <small *ngIf="update.attachments.length > 0">
+                  المرفقات: {{ formatReplyAttachmentNames(update.attachments) }}
+                </small>
+              </article>
+            </div>
+          </section>
+
+        </section>
+      </div>
+    </div>
+  </p-dialog>
+
+  <p-dialog
+    header="تعديل طلب المصيف"
+    [(visible)]="adminInlineEditDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [maximizable]="true"
+    [style]="{ width: '95vw', maxWidth: '1800px' }"
+    [contentStyle]="{ maxHeight: '85vh', overflow: 'auto', padding: '12px' }"
+    styleClass="admin-inline-edit-dialog"
+    (onHide)="closeInlineEditDialog()">
+    <div class="admin-inline-edit-shell">
+      <small class="mode-note" *ngIf="adminInlineEditRequestId as editRequestId">
+        يتم تعديل الطلب رقم #{{ editRequestId }} داخل لوحة الإدارة.
+      </small>
+      <app-summer-dynamic-booking-builder
+        *ngIf="adminInlineEditRequestId as editRequestId"
+        [destinations]="destinations"
+        [seasonYear]="seasonYear"
+        [applicationId]="dynamicSummerApplicationId"
+        [configRouteKey]="dynamicSummerConfigRouteKey"
+        [editRequestId]="editRequestId"
+        (bookingCreated)="onInlineEditSaved($event)">
+      </app-summer-dynamic-booking-builder>
     </div>
   </p-dialog>
 
@@ -321,7 +1252,15 @@
       <section class="request-details">
         <header>
           <h4>تفاصيل الطلب المختار</h4>
-          <small class="loading-note" *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
+          <div class="request-details-actions">
+            <small class="loading-note" *ngIf="loadingDetails">جاري تحميل التفاصيل...</small>
+            <button type="button" class="primary no-print" (click)="openSelectedRequestEdit()" [disabled]="loadingDetails || !selectedRequest">
+              تعديل الطلب
+            </button>
+            <button type="button" class="ghost no-print" (click)="openSelectedRequestPrintPreview()" [disabled]="loadingDetails || !selectedRequest">
+              طباعة نموذج الطلب
+            </button>
+          </div>
         </header>
 
         <app-summer-skeleton
@@ -370,56 +1309,110 @@
         </ng-container>
       </section>
 
+      <section class="payment-card" *ngIf="canShowPaymentCard">
+        <h4>تسجيل السداد</h4>
+        <form [formGroup]="paymentForm" (ngSubmit)="submitPayment()" class="action-form payment-form">
+          <div class="payment-snapshot" *ngIf="paymentSnapshot as snapshot">
+            <div class="payment-snapshot-row">
+              <span>طريقة السداد</span>
+              <strong>{{ snapshot.paymentModeLabel }}</strong>
+            </div>
+            <div class="payment-snapshot-row">
+              <span>البيان</span>
+              <strong>{{ snapshot.installmentLabel }}</strong>
+            </div>
+            <div class="payment-snapshot-row">
+              <span>مبلغ السداد</span>
+              <strong>{{ snapshot.amountText }}</strong>
+            </div>
+            <div class="payment-snapshot-row">
+              <span>تاريخ السداد الحالي</span>
+              <strong>{{ snapshot.paidAtDisplay }}</strong>
+            </div>
+            <div class="payment-snapshot-row">
+              <span>حالة السداد الحالية</span>
+              <strong>{{ snapshot.statusLabel }}</strong>
+            </div>
+          </div>
+
+          <label>
+            <span>حالة السداد</span>
+            <input type="text" value="مسدد" disabled />
+          </label>
+          <small class="help-text">
+            يتم تسجيل السداد تلقائيًا كـ "مسدد" عند إدخال التاريخ وإرفاق الإيصال.
+          </small>
+
+          <label>
+            <span>تاريخ ووقت السداد</span>
+            <input type="datetime-local" step="1" formControlName="paidAtLocal" [attr.max]="getPaymentMaxDateTimeLocal()" />
+          </label>
+          <p class="help-text warn" *ngIf="hasPaymentInFutureError()">{{ paymentInFutureMessage }}</p>
+
+          <label>
+            <span>ملاحظات السداد</span>
+            <textarea rows="2" formControlName="notes" placeholder="ملاحظات اختيارية"></textarea>
+          </label>
+
+          <label class="file-picker">
+            <span>مرفقات السداد</span>
+            <input type="file" multiple accept=".pdf,image/*" (change)="addPaymentFiles($event)" />
+          </label>
+
+          <div class="files" *ngIf="paymentAttachments.length > 0">
+            <div class="file" *ngFor="let file of paymentAttachments; let i = index">
+              <span>{{ file.name }}</span>
+              <button type="button" (click)="removePaymentFile(i)">حذف</button>
+            </div>
+          </div>
+          <p class="help-text warn" *ngIf="paymentAttachments.length === 0">يلزم مرفق واحد على الأقل لتسجيل السداد.</p>
+
+          <button type="submit" class="primary" [disabled]="submittingPayment || paymentForm.invalid || paymentAttachments.length === 0 || !selectedRequestId">
+            {{ submittingPayment ? 'جاري التنفيذ...' : 'تسجيل السداد' }}
+          </button>
+        </form>
+      </section>
+
       <section class="action-card">
         <h4>تنفيذ إجراء إداري</h4>
         <form [formGroup]="actionForm" (ngSubmit)="submitAdminAction()" class="action-form">
           <label>
             <span>نوع الإجراء</span>
             <select formControlName="actionCode">
-              <option *ngFor="let action of actionOptions" [ngValue]="action.value">{{ action.label }}</option>
+              <option
+                *ngFor="let action of actionOptions"
+                [ngValue]="action.value"
+                [disabled]="isActionBlockedByCurrentState(action.value)">
+                {{ action.label }}
+              </option>
             </select>
           </label>
+
+          <small class="help-text" *ngIf="isSelectedActionBlockedByCurrentState">
+            {{ selectedActionBlockedMessage }}
+          </small>
 
           <label>
             <span>تعليق الإدارة</span>
             <textarea rows="3" formControlName="comment" placeholder="أدخل رد/تعليق الإدارة"></textarea>
           </label>
+          <small class="comment-counter">
+            عدد الأحرف: {{ adminCommentCurrentLength }} / {{ adminCommentMaxLengthDisplay }}
+          </small>
+          <small class="help-text warn" *ngIf="actionForm.get('comment')?.touched && actionForm.get('comment')?.hasError('maxlength')">
+            الحد الأقصى لتعليق الإدارة 300 حرف (ويستثنى إجراء إداري داخلي).
+          </small>
+          <small class="help-text admin-note">
+            ملاحظة: يتم إرسال رسالة نصية للموظف ببيانات الطلب الأساسية (اسم المصيف، رقم الطلب، موعد الفوج) وتعليق الإدارة في جميع الإجراءات.
+          </small>
+          <small class="help-text admin-note">
+            ملاحظة: عند اختيار "إجراء إداري داخلي" لا يتم إرسال رسالة نصية للموظف.
+          </small>
 
           <label class="checkbox-row">
             <input type="checkbox" formControlName="force" />
             <span>تنفيذ إجباري (عند الحاجة)</span>
           </label>
-
-          <ng-container *ngIf="isTransferActionSelected">
-            <label>
-              <span>المصيف المستهدف</span>
-              <select formControlName="toCategoryId">
-                <option [ngValue]="null">اختر</option>
-                <option *ngFor="let destination of destinations" [ngValue]="destination.categoryId">{{ destination.name }}</option>
-              </select>
-            </label>
-
-            <label>
-              <span>الفوج المستهدف</span>
-              <select formControlName="toWaveCode">
-                <option [ngValue]="''">اختر</option>
-                <option *ngFor="let wave of transferWaves" [ngValue]="wave.code">{{ wave.code }} - {{ wave.startsAtLabel }}</option>
-              </select>
-            </label>
-
-            <label>
-              <span>عدد الأفراد</span>
-              <select formControlName="newFamilyCount">
-                <option [ngValue]="null">اختر</option>
-                <option *ngFor="let option of transferFamilyOptions" [ngValue]="option">{{ option }}</option>
-              </select>
-            </label>
-
-            <label>
-              <span>عدد الأفراد الإضافيين</span>
-              <input type="number" min="0" formControlName="newExtraCount" />
-            </label>
-          </ng-container>
 
           <label class="file-picker">
             <span>مرفقات الإجراء</span>
@@ -433,7 +1426,7 @@
             </div>
           </div>
 
-          <button type="submit" class="primary" [disabled]="submittingAction || actionForm.invalid">
+          <button type="submit" class="primary" [disabled]="submittingAction || actionForm.invalid || isSelectedActionBlockedByCurrentState">
             {{ submittingAction ? 'جاري التنفيذ...' : 'تنفيذ الإجراء' }}
           </button>
         </form>

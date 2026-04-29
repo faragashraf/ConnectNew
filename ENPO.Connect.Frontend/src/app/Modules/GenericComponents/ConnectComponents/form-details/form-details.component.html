@@ -1,5 +1,5 @@
 <div style=" margin-bottom: 1rem;display: flex;align-items: flex-start;justify-content: flex-start;gap: 2rem;flex-direction: row;"
-    *ngIf="!config.fieldsConfiguration.isNotRequired">
+    *ngIf="!previewOnly && !config.fieldsConfiguration.isNotRequired">
 
     <div style="display: flex; align-items: center; gap: 1rem;" *ngIf="config.showViewToggle !== false">
         <h4><i class="pi pi-desktop" style="margin-left: 0.5rem; color: #2563eb;"></i>طريقة العرض</h4>
@@ -27,7 +27,7 @@
     </span>
 </div>
 <div>
-    <div class="widget col-md-3" *ngIf="showCategoryTreeSidebar">
+    <div class="widget col-md-3" *ngIf="!previewOnly && showCategoryTreeSidebar">
         <app-tree-sidebar [tree]="categoryTree" [showTreeContextMenu]="false" [allExpanded]="true" [expandedWidth]="100"
             [title]="'أنواع الموضوعات'" [isDivDisabled]="config.fieldsConfiguration.isDivDisabled" [scrollHeight]="40"
             (onNodeSelect)="nodeSelection($event)" (onNodeUnselect)="nodeUnselection($event)">
@@ -38,7 +38,7 @@
     <span > {{genericFormService.dynamicGroups | json}}</span>
     ----------- <br> {{config.formDisplayOption}} -->
     <div [ngClass]="formContainerClass">
-        <app-choice-hint [isHidden]="hideChoiceHint || customFilteredCategoryMand.length > 0 "></app-choice-hint>
+        <app-choice-hint [isHidden]="hideChoiceHint || customFilteredCategoryMand.length > 0 || previewOnly"></app-choice-hint>
 
         <form [formGroup]="ticketForm" (ngSubmit)="submitFormChange.emit(ticketForm)" class="row"
             *ngIf="showTicketForm || customFilteredCategoryMand.length > 0">
@@ -279,7 +279,7 @@
                     box-shadow: inset 2px 3px 20px 9px rgb(0 28 228 / 8%) !important;
                     border-radius: 1rem; align-items: center;
                     min-height: 4rem;"
-        *ngIf="authObjectsService.checkAuthFun('EditSubjectFunc') && !config.fieldsConfiguration.isDivDisabled && !config.isNew">
+        *ngIf="!previewOnly && authObjectsService.checkAuthFun('EditSubjectFunc') && !config.fieldsConfiguration.isDivDisabled && !config.isNew">
         <app-generic-button [type]="'submit'" [kind]="'success'" [icon]="'save'" [size]="'lg'" (clicked)="Save()"
             [tooltip]="'حفظ'" [tooltipPosition]="'top'"
             [disabled]="(ticketForm && ticketForm.invalid) || config.fieldsConfiguration.isDivDisabled || !formHasChanges"
@@ -289,7 +289,7 @@
             [tooltipPosition]="'top'" [disabled]="config.fieldsConfiguration.isDivDisabled"
             [label]="'إلغاء'"></app-generic-button>
     </div>
-    <div class="row">
+    <div class="row" *ngIf="!previewOnly">
         <div class="widget" [ngClass]="'col-md-4'" *ngIf="showAttachmentsRow || customFilteredCategoryMand.length > 0">
             <div
                 style="display: flex; align-items: baseline; gap: .5rem; margin-bottom: .5rem;flex-direction: row;flex-wrap: wrap;">

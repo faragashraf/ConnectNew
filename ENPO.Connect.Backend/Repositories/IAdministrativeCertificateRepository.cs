@@ -18,10 +18,15 @@ namespace Repositories
         public Task<CommonResponse<MessageDto>> CompleteRequestAsync(CompleteRequestDto completeRequest, string userId, string ip);
         public Task<CommonResponse<IEnumerable<TkmendField>>> EditFieldsAsync(List<TkmendField> fields, string userId, string ip);
         public Task<CommonResponse<IEnumerable<AdmCertDeptDto>>> GetAreaDepartments(string areaName);
-        public Task<CommonResponse<string>> CreateRequestTokenAsync(int messageId, int? expireHours = 24);
-        public Task<CommonResponse<MessageDto>> GetRequestByTokenAsync(string token);
+        public Task<CommonResponse<string>> CreateRequestTokenAsync(
+            int messageId,
+            string? createdBy = null,
+            string? tokenPurpose = null,
+            int? expireHours = 24,
+            bool isOneTimeUse = false,
+            string? subjectUserId = null);
+        public Task<CommonResponse<MessageDto>> GetRequestByTokenAsync(string token, string? currentUserId = null, bool consumeOneTime = false);
 
     }
 }
-
 

@@ -39,6 +39,29 @@ html {
   min-height: 80vh;
 }
 
+/* Dynamic Subject Admin: keep tree/header fixed and confine scroll to tab area */
+body.dynamic-subject-admin-page {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+body.dynamic-subject-admin-page .content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0 !important;
+  height: calc(100vh - 11.5rem);
+  height: calc(100dvh - 11.5rem);
+  max-height: calc(100vh - 11.5rem);
+  max-height: calc(100dvh - 11.5rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+body.dynamic-subject-admin-page .content app-dynamic-subject-type-admin {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 body.docs-route .content {
   padding: 0;
   background-color: transparent;

@@ -19,6 +19,8 @@ function normalizeRequestStatusCode(raw: string): SummerRequestStatusCode {
     'IN_PROGRESS',
     'REPLIED',
     'REJECTED',
+    'PENDING_REVIEW_REQUIRED',
+    'PENDING_REVIEW_RESOLVED',
     'TRANSFER_REVIEW_REQUIRED',
     'TRANSFER_REVIEW_RESOLVED',
     'UNKNOWN'
@@ -31,6 +33,8 @@ function normalizePaymentStatusCode(raw: string): SummerPaymentStatusCode {
   const allowed: SummerPaymentStatusCode[] = [
     'PENDING_PAYMENT',
     'PAID',
+    'PAID_ADMIN',
+    'PARTIAL_PAID',
     'CANCELLED_AUTO',
     'CANCELLED_ADMIN',
     'CANCELLED_USER',
@@ -53,7 +57,8 @@ function mapApplicantFromSummary(summary: SummerRequestSummaryDto): SummerApplic
 
 function mapPaymentFromFields(details: MessageDto | null, summary: SummerRequestSummaryDto): SummerPayment {
   const fields = details?.fields ?? [];
-  const paymentStatusRaw = getSummerFieldValueByKeys(fields, ['Summer_PaymentStatus']);
+  const paymentStatusRaw = String(summary?.paymentStateCode ?? '').trim()
+    || getSummerFieldValueByKeys(fields, ['Summer_PaymentStatus']);
   return {
     dueAtUtc: String(summary?.paymentDueAtUtc ?? '').trim() || undefined,
     paidAtUtc: String(summary?.paidAtUtc ?? '').trim() || undefined,
@@ -97,7 +102,7 @@ export function mapSummaryToSummerRequest(summary: SummerRequestSummaryDto, seas
     payment: {
       dueAtUtc: String(summary?.paymentDueAtUtc ?? '').trim() || undefined,
       paidAtUtc: String(summary?.paidAtUtc ?? '').trim() || undefined,
-      statusCode: 'UNKNOWN'
+      statusCode: normalizePaymentStatusCode(String(summary?.paymentStateCode ?? ''))
     },
     transfer: {
       used: Boolean(summary?.transferUsed),
