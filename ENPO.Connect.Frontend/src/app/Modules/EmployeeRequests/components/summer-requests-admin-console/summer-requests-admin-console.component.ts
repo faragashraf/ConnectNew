@@ -338,6 +338,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   pricingRecords: SummerPricingCatalogRecordDto[] = [];
   canManageSummerPricing = false;
   canManageSummerPayments = false;
+  canManageSummerUnitFreeze = false;
   defaultPricingGroupsExpanded = false;
   private pricingGroupExpandedState: Record<string, boolean> = {};
 
@@ -3796,11 +3797,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       const hasSummerGeneralManager =
         this.authObjectsService.checkAuthFun('SummerGeneralManagerFunc')
         || this.authObjectsService.checkAuthRole('2021');
+      this.canManageSummerUnitFreeze = hasSummerGeneralManager;
       this.canManageSummerPayments =
         this.authObjectsService.checkAuthFun('SummerAdminFunc')
         || this.authObjectsService.checkAuthRole('2020')
         || hasSummerGeneralManager;
     } catch {
+      this.canManageSummerUnitFreeze = false;
       this.canManageSummerPayments = false;
     }
 
