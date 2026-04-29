@@ -43,6 +43,21 @@ describe('summer-admin-action-state-guard', () => {
     expect(decision.targetState).toBeNull();
   });
 
+  it('allows administrative-paid action only for rejected requests', () => {
+    expect(isAdminActionAllowedForCurrentStatus('MARK_PAID_ADMIN', 'Rejected')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('MARK_PAID_ADMIN', 'مرفوض')).toBeTrue();
+    expect(isAdminActionAllowedForCurrentStatus('MARK_PAID_ADMIN', 'New')).toBeFalse();
+    expect(isAdminActionAllowedForCurrentStatus('MARK_PAID_ADMIN', 'InProgress')).toBeFalse();
+    expect(isAdminActionAllowedForCurrentStatus('MARK_PAID_ADMIN', 'Printed')).toBeFalse();
+  });
+
+  it('treats administrative-paid action as state-changing to in-progress', () => {
+    const decision = resolveAdminActionDecisionForCurrentStatus('MARK_PAID_ADMIN', 'Rejected');
+    expect(decision.isAllowed).toBeTrue();
+    expect(decision.changesState).toBeTrue();
+    expect(decision.targetState).toBe('IN_PROGRESS');
+  });
+
   it('matches the state-flow rule: pending -> approved -> rejected -> approved, then approving again is blocked', () => {
     expect(isAdminActionAllowedForCurrentStatus('FINAL_APPROVE', 'New')).toBeTrue();
     expect(isAdminActionAllowedForCurrentStatus('MANUAL_CANCEL', 'Replied')).toBeTrue();

@@ -92,12 +92,14 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   MANUAL_CANCEL: 'إلغاء يدوي من الإدارة',
   FINAL_APPROVE: 'اعتماد نهائي',
   MARK_UNPAID: 'تحويل إلى غير مسدد',
+  MARK_PAID_ADMIN: 'تحويل إلى مسدد (سداد إداري)',
   COMMENT: 'تعليق إداري'
 };
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
   PENDING_PAYMENT: 'بانتظار السداد',
   PAID: 'تم السداد',
+  PAID_ADMIN: 'سداد إداري',
   CANCELLED_AUTO: 'ملغي آليًا لعدم السداد',
   CANCELLED_ADMIN: 'ملغي من الإدارة',
   CANCELLED_USER: 'ملغي بناءً على الاعتذار',

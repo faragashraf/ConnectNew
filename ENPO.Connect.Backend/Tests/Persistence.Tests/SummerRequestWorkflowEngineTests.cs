@@ -96,6 +96,32 @@ public class SummerRequestWorkflowEngineTests
         Assert.False(result.ChangesState);
     }
 
+    [Fact]
+    public void Resolve_Allows_AdminMarkPaid_For_Rejected_State()
+    {
+        var result = _engine.Resolve(MessageStatus.Rejected, SummerAdminActionCatalog.Codes.MarkPaidAdmin);
+
+        Assert.True(result.IsAllowed);
+        Assert.True(result.ChangesState);
+        Assert.Equal(MessageStatus.InProgress, result.TargetState);
+        Assert.False(result.IsBypassAction);
+    }
+
+    [Theory]
+    [InlineData(MessageStatus.New)]
+    [InlineData(MessageStatus.InProgress)]
+    [InlineData(MessageStatus.Replied)]
+    [InlineData(MessageStatus.Printed)]
+    [InlineData(MessageStatus.All)]
+    public void Resolve_Blocks_AdminMarkPaid_For_NonRejected_States(MessageStatus currentState)
+    {
+        var result = _engine.Resolve(currentState, SummerAdminActionCatalog.Codes.MarkPaidAdmin);
+
+        Assert.False(result.IsAllowed);
+        Assert.Equal(SummerRequestWorkflowEngine.InvalidTransitionMessage, result.ErrorMessage);
+        Assert.False(result.ChangesState);
+    }
+
     [Theory]
     [InlineData(MessageStatus.New)]
     [InlineData(MessageStatus.InProgress)]

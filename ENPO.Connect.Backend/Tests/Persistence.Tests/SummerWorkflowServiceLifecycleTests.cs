@@ -11,6 +11,7 @@ using Models.Correspondance;
 using Models.DTO.Common;
 using Models.DTO.Correspondance.Enums;
 using Models.DTO.Correspondance.Summer;
+using Models.GPA.OrgStructure;
 using Persistence.Data;
 using Persistence.Services;
 using Persistence.Services.Notifications;
@@ -315,17 +316,123 @@ public class SummerWorkflowServiceLifecycleTests
         Assert.Equal("CANCELLED", GetFieldValue(messageFields, SummerWorkflowDomainConstants.PaymentStatusFieldKind));
     }
 
+    [Fact]
+    public async Task ExecuteAdminActionAsync_AdminMarkPaid_WhenAutoCancelledAndCapacityAvailable_ReopensRequestWithoutEmployeeNotification()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var attachContext = CreateAttachContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedSummerCatalog(connectContext);
+        SeedCategories(connectContext);
+        var messageId = SeedMessage(connectContext, isPaid: false, paymentDueAtUtc: DateTime.UtcNow.AddHours(6));
+        MarkMessageAsAutoCancelledForTimeout(connectContext, messageId);
+        SeedActiveUserPosition(gpaContext, "admin-1", 101m);
+        await connectContext.SaveChangesAsync();
+        await gpaContext.SaveChangesAsync();
+
+        var notificationService = new TrackingNotificationService();
+        var service = CreateService(connectContext, attachContext, gpaContext, notificationService);
+
+        var response = await service.ExecuteAdminActionAsync(new SummerAdminActionRequest
+        {
+            MessageId = messageId,
+            ActionCode = SummerAdminActionCatalog.Codes.MarkPaidAdmin,
+            Comment = "تصحيح إداري بعد مراجعة السداد"
+        }, userId: "admin-1", ip: "127.0.0.1");
+
+        Assert.True(response.IsSuccess);
+        Assert.NotNull(response.Data);
+        Assert.Equal("PAID", response.Data!.PaymentStateCode);
+        Assert.Equal("سداد إداري", response.Data.PaymentStateLabel);
+
+        var updatedMessage = await connectContext.Messages.FirstAsync(item => item.MessageId == messageId);
+        Assert.Equal(MessageStatus.InProgress, updatedMessage.Status);
+
+        var messageFields = await connectContext.TkmendFields
+            .Where(field => field.FildRelted == messageId)
+            .ToListAsync();
+        Assert.Equal("PAID_ADMIN", GetFieldValue(messageFields, SummerWorkflowDomainConstants.PaymentStatusFieldKind));
+        Assert.Equal("true", GetFieldValue(messageFields, "Summer_PaymentInstallment1Paid"));
+        Assert.Equal(SummerAdminActionCatalog.Codes.MarkPaidAdmin, GetFieldValue(messageFields, SummerWorkflowDomainConstants.ActionTypeFieldKind));
+        Assert.Equal(string.Empty, GetFieldValue(messageFields, "Summer_CancelReason"));
+
+        Assert.Equal(0, notificationService.SmsDispatchCount);
+        Assert.Equal(0, notificationService.SignalRUserDispatchCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAdminActionAsync_AdminMarkPaid_WhenRequestNotAutoCancelled_ReturnsConflict()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var attachContext = CreateAttachContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedSummerCatalog(connectContext);
+        SeedCategories(connectContext);
+        var messageId = SeedMessage(connectContext, isPaid: false, paymentDueAtUtc: DateTime.UtcNow.AddHours(6));
+        var message = connectContext.Messages.Local.First(item => item.MessageId == messageId);
+        message.Status = MessageStatus.Rejected;
+        AddField(connectContext, 910001, messageId, SummerWorkflowDomainConstants.ActionTypeFieldKind, "MANUAL_CANCEL");
+        AddField(connectContext, 910002, messageId, SummerWorkflowDomainConstants.PaymentStatusFieldKind, "CANCELLED_ADMIN");
+        SeedActiveUserPosition(gpaContext, "admin-1", 101m);
+        await connectContext.SaveChangesAsync();
+        await gpaContext.SaveChangesAsync();
+
+        var service = CreateService(connectContext, attachContext, gpaContext);
+        var response = await service.ExecuteAdminActionAsync(new SummerAdminActionRequest
+        {
+            MessageId = messageId,
+            ActionCode = SummerAdminActionCatalog.Codes.MarkPaidAdmin
+        }, userId: "admin-1", ip: "127.0.0.1");
+
+        Assert.False(response.IsSuccess);
+        Assert.Contains(response.Errors, error => error.Message.Contains("الملغاة تلقائياً", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ExecuteAdminActionAsync_AdminMarkPaid_WhenCapacityUnavailable_ReturnsCapacityError()
+    {
+        await using var connectContext = CreateConnectContext();
+        await using var attachContext = CreateAttachContext();
+        await using var gpaContext = CreateGpaContext();
+
+        SeedSummerCatalog(connectContext);
+        SeedCategories(connectContext);
+        var messageId = SeedMessage(connectContext, isPaid: false, paymentDueAtUtc: DateTime.UtcNow.AddHours(6));
+        MarkMessageAsAutoCancelledForTimeout(connectContext, messageId);
+        SeedWaveOccupancyMessages(connectContext, startingMessageId: 780100, count: 5, categoryId: 148, waveCode: "W14", familyCount: 2);
+        SeedActiveUserPosition(gpaContext, "admin-1", 101m);
+        await connectContext.SaveChangesAsync();
+        await gpaContext.SaveChangesAsync();
+
+        var service = CreateService(connectContext, attachContext, gpaContext);
+        var response = await service.ExecuteAdminActionAsync(new SummerAdminActionRequest
+        {
+            MessageId = messageId,
+            ActionCode = SummerAdminActionCatalog.Codes.MarkPaidAdmin
+        }, userId: "admin-1", ip: "127.0.0.1");
+
+        Assert.False(response.IsSuccess);
+        Assert.Contains(response.Errors, error => error.Code == "429");
+        Assert.Contains(response.Errors, error => error.Message.Contains("لا توجد سعة متاحة", StringComparison.Ordinal));
+
+        var updatedMessage = await connectContext.Messages.FirstAsync(item => item.MessageId == messageId);
+        Assert.Equal(MessageStatus.Rejected, updatedMessage.Status);
+    }
+
     private static TestableSummerWorkflowService CreateService(
         ConnectContext connectContext,
         Attach_HeldContext attachContext,
-        GPAContext gpaContext)
+        GPAContext gpaContext,
+        IConnectNotificationService? notificationService = null)
     {
         return new TestableSummerWorkflowService(
             connectContext,
             attachContext,
             gpaContext,
             helperService: null!,
-            new NoopNotificationService(),
+            notificationService ?? new NoopNotificationService(),
             Options.Create(new ApplicationConfig()),
             new StaticOptionsMonitor<ResortBookingBlacklistOptions>(new ResortBookingBlacklistOptions()),
             NullLogger<SummerWorkflowService>.Instance);
@@ -453,6 +560,72 @@ public class SummerWorkflowServiceLifecycleTests
         });
     }
 
+    private static void SeedActiveUserPosition(GPAContext context, string userId, decimal unitId)
+    {
+        context.UserPositions.Add(new UserPosition
+        {
+            PositionId = Math.Abs($"{userId}-{unitId}".GetHashCode()),
+            UserId = userId,
+            UnitId = unitId,
+            StartDate = DateTime.Today.AddDays(-2),
+            EndDate = DateTime.Today.AddDays(2),
+            IsActive = true,
+            IsManager = true
+        });
+    }
+
+    private static void MarkMessageAsAutoCancelledForTimeout(ConnectContext context, int messageId)
+    {
+        var message = context.Messages.Local.FirstOrDefault(item => item.MessageId == messageId)
+            ?? context.Messages.First(item => item.MessageId == messageId);
+        message.Status = MessageStatus.Rejected;
+        var fieldSqlSeed = (context.TkmendFields.Max(item => (int?)item.FildSql) ?? 900000) + 1;
+        AddField(context, fieldSqlSeed++, messageId, SummerWorkflowDomainConstants.ActionTypeFieldKind, "AUTO_CANCEL_PAYMENT_TIMEOUT");
+        AddField(context, fieldSqlSeed++, messageId, "Summer_CancelReason", "تم إلغاء الطلب تلقائياً لعدم السداد خلال مهلة يوم العمل.");
+        AddField(context, fieldSqlSeed++, messageId, "Summer_CancelledAtUtc", DateTime.UtcNow.ToString("o"));
+        AddField(context, fieldSqlSeed++, messageId, SummerWorkflowDomainConstants.PaymentStatusFieldKind, "CANCELLED_AUTO");
+        AddField(context, fieldSqlSeed++, messageId, "Summer_PaymentInstallment1Paid", "false");
+        AddField(context, fieldSqlSeed, messageId, "Summer_PaymentInstallment1PaidAtUtc", string.Empty);
+    }
+
+    private static void SeedWaveOccupancyMessages(
+        ConnectContext context,
+        int startingMessageId,
+        int count,
+        int categoryId,
+        string waveCode,
+        int familyCount)
+    {
+        var fieldSqlSeed = (context.TkmendFields.Max(item => (int?)item.FildSql) ?? 920000) + 1;
+        var normalizedWaveCode = (waveCode ?? string.Empty).Trim();
+        for (var index = 0; index < count; index++)
+        {
+            var messageId = startingMessageId + index;
+            context.Messages.Add(new Message
+            {
+                MessageId = messageId,
+                CategoryCd = categoryId,
+                Status = MessageStatus.InProgress,
+                Priority = Priority.Medium,
+                CreatedDate = DateTime.UtcNow.AddMinutes(-10 - index),
+                CreatedBy = $"occupant-{index + 1}",
+                RequestRef = $"SUM-OCC-{messageId}",
+                AssignedSectorId = "101",
+                CurrentResponsibleSectorId = "101"
+            });
+
+            AddField(context, fieldSqlSeed++, messageId, "SummerCamp", normalizedWaveCode);
+            AddField(context, fieldSqlSeed++, messageId, "SUM2026_WaveCode", normalizedWaveCode);
+            AddField(context, fieldSqlSeed++, messageId, "FamilyCount", familyCount.ToString());
+            AddField(context, fieldSqlSeed++, messageId, "SUM2026_FamilyCount", familyCount.ToString());
+            AddField(context, fieldSqlSeed++, messageId, "Emp_Id", $"occupant-{index + 1}");
+            AddField(context, fieldSqlSeed++, messageId, SummerWorkflowDomainConstants.PaymentStatusFieldKind, "PAID");
+            AddField(context, fieldSqlSeed++, messageId, "Summer_PaymentInstallment1Paid", "true");
+            AddField(context, fieldSqlSeed, messageId, "Summer_PaymentInstallment1PaidAtUtc", DateTime.UtcNow.AddMinutes(-9 - index).ToString("o"));
+            fieldSqlSeed += 1;
+        }
+    }
+
     private static int SeedMessage(
         ConnectContext context,
         bool isPaid,
@@ -471,7 +644,9 @@ public class SummerWorkflowServiceLifecycleTests
             Priority = Priority.Medium,
             CreatedDate = createdAtUtc,
             CreatedBy = "emp-1",
-            RequestRef = "SUM-780001"
+            RequestRef = "SUM-780001",
+            AssignedSectorId = "101",
+            CurrentResponsibleSectorId = "101"
         });
 
         var fieldId = 1000;
@@ -660,6 +835,45 @@ public class SummerWorkflowServiceLifecycleTests
 
         public Task<CommonResponse<bool>> SendSignalRToUserAsync(SignalRDispatchRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(new CommonResponse<bool> { Data = true });
+
+        public Task<CommonResponse<bool>> SendSignalRToGroupAsync(SignalRGroupDispatchRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(new CommonResponse<bool> { Data = true });
+
+        public Task<CommonResponse<bool>> SendSignalRToGroupsAsync(SignalRGroupsDispatchRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(new CommonResponse<bool> { Data = true });
+
+        public Task<CommonResponse<bool>> SendWhatsAppAsync(WhatsAppDispatchRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(new CommonResponse<bool> { Data = true });
+
+        public Task<CommonResponse<bool>> SendEmailAsync(EmailDispatchRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(new CommonResponse<bool> { Data = true });
+    }
+
+    private sealed class TrackingNotificationService : IConnectNotificationService
+    {
+        public int SmsDispatchCount { get; private set; }
+        public int SignalRUserDispatchCount { get; private set; }
+
+        public string RenderTemplate(string? template, IReadOnlyDictionary<string, string?> placeholders)
+            => template ?? string.Empty;
+
+        public Task<CommonResponse<bool>> SendSmsAsync(SmsDispatchRequest request, CancellationToken cancellationToken = default)
+        {
+            SmsDispatchCount += 1;
+            return Task.FromResult(new CommonResponse<bool> { Data = true });
+        }
+
+        public Task<CommonResponse<bool>> SendSmsByMultiMessagesAsync(SmsDispatchRequest request, CancellationToken cancellationToken = default)
+        {
+            SmsDispatchCount += 1;
+            return Task.FromResult(new CommonResponse<bool> { Data = true });
+        }
+
+        public Task<CommonResponse<bool>> SendSignalRToUserAsync(SignalRDispatchRequest request, CancellationToken cancellationToken = default)
+        {
+            SignalRUserDispatchCount += 1;
+            return Task.FromResult(new CommonResponse<bool> { Data = true });
+        }
 
         public Task<CommonResponse<bool>> SendSignalRToGroupAsync(SignalRGroupDispatchRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(new CommonResponse<bool> { Data = true });

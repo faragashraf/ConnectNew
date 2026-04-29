@@ -82,6 +82,10 @@ function isActionAllowedByState(actionCode: SummerAdminActionCode, currentState:
     return true;
   }
 
+  if (actionCode === SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN) {
+    return currentState === 'REJECTED';
+  }
+
   if (currentState === 'COMPLETED') {
     return actionCode === SUMMER_ADMIN_ACTION.COMMENT
       || actionCode === SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION;
@@ -103,6 +107,9 @@ function resolveDeterministicTargetState(actionCode: SummerAdminActionCode): Can
   }
   if (actionCode === SUMMER_ADMIN_ACTION.REJECT_REQUEST) {
     return 'REJECTED';
+  }
+  if (actionCode === SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN) {
+    return 'IN_PROGRESS';
   }
   return null;
 }

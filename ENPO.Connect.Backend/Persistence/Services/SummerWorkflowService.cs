@@ -52,6 +52,9 @@ namespace Persistence.Services
         private const string RequestPaymentStatePaidCode = "PAID";
         private const string RequestPaymentStateUnpaidCode = "UNPAID";
         private const string RequestPaymentStatePartialPaidCode = "PARTIAL_PAID";
+        private const string RequestPaymentStateAdminPaidLabel = "سداد إداري";
+        private const string PaymentStatusAdminPaidCode = "PAID_ADMIN";
+        private const string AutoCancelPaymentTimeoutActionCode = "AUTO_CANCEL_PAYMENT_TIMEOUT";
         private const int AdminActionCommentMaxLength = 300;
         private const int InternalAdminActionCommentMaxLength = 2000;
         private static readonly string[] WaveCodeFieldKinds = SummerWorkflowDomainConstants.WaveCodeFieldKinds;
@@ -1662,6 +1665,118 @@ namespace Persistence.Services
                             ? "تم تحويل حالة السداد إلى غير مسدد من إدارة المصايف. سيتم إلغاء الطلب تلقائياً بعد مرور 24 ساعة من الآن إذا لم يتم استيفاء شروط السداد."
                             : $"تم تحويل حالة السداد إلى غير مسدد من إدارة المصايف. السبب: {comment}. سيتم إلغاء الطلب تلقائياً بعد مرور 24 ساعة من الآن إذا لم يتم استيفاء شروط السداد.";
                     }
+                    else if (actionCode == SummerAdminActionCatalog.Codes.MarkPaidAdmin)
+                    {
+                        if (!IsAutoCancelledByPaymentTimeout(fields))
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "409",
+                                Message = "سداد إداري متاح فقط للطلبات الملغاة تلقائياً بسبب انتهاء مهلة السداد."
+                            });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        if (IsInitialPaymentMarkedPaidForAutoCancel(fields))
+                        {
+                            response.Errors.Add(new Error { Code = "409", Message = "حالة السداد مسجلة بالفعل كمسدد." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var normalizedWaveCode = GetFirstFieldValue(fields, WaveCodeFieldKinds).Trim();
+                        if (string.IsNullOrWhiteSpace(normalizedWaveCode))
+                        {
+                            response.Errors.Add(new Error { Code = "400", Message = "تعذر تحديد الفوج الحالي للطلب." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var familyCount = ParseInt(GetFirstFieldValue(fields, FamilyCountFieldKinds), 0);
+                        if (familyCount <= 0)
+                        {
+                            response.Errors.Add(new Error { Code = "400", Message = "تعذر تحديد سعة الوحدة الحالية للطلب." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var seasonYear = ParseInt(GetFieldValue(fields, "SummerSeasonYear"), DateTime.UtcNow.Year);
+                        var actionSummerRules = await GetSummerRulesAsync(seasonYear);
+                        if (!actionSummerRules.TryGetValue(message.CategoryCd, out var actionRule))
+                        {
+                            response.Errors.Add(new Error { Code = "400", Message = "المصيف الحالي غير مُعد في النظام." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        if (!actionRule.CapacityByFamily.ContainsKey(familyCount))
+                        {
+                            response.Errors.Add(new Error { Code = "400", Message = "سعة الوحدة الحالية غير متاحة في إعدادات المصيف." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        if (!await AcquireCapacityLockAsync(message.CategoryCd, normalizedWaveCode))
+                        {
+                            response.Errors.Add(new Error
+                            {
+                                Code = "409",
+                                Message = "تعذر حجز السعة حالياً بسبب حفظ متزامن. برجاء إعادة المحاولة بعد ثوانٍ."
+                            });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var hasCapacity = await HasCapacityAsync(
+                            message.CategoryCd,
+                            normalizedWaveCode,
+                            familyCount,
+                            actionRule,
+                            message.MessageId);
+                        if (!hasCapacity)
+                        {
+                            response.Errors.Add(new Error { Code = "429", Message = "لا توجد سعة متاحة حالياً للوحدة/المصيف لهذا الطلب." });
+                            await attachTx.RollbackAsync();
+                            await connectTx.RollbackAsync();
+                            return response;
+                        }
+
+                        var administrativePaidAtUtc = DateTime.UtcNow;
+                        message.Status = workflowResolution.TargetState ?? MessageStatus.InProgress;
+                        UpsertField(fields, message.MessageId, PaymentStatusFieldKind, PaymentStatusAdminPaidCode);
+                        UpsertField(fields, message.MessageId, PaidAtUtcFieldKind, administrativePaidAtUtc.ToString("o"));
+                        UpsertField(fields, message.MessageId, PaymentDueAtUtcFieldKind, string.Empty);
+                        UpsertFieldRange(
+                            fields,
+                            message.MessageId,
+                            SummerWorkflowDomainConstants.GetInstallmentPaidFieldKinds(1),
+                            "true");
+                        UpsertFieldRange(
+                            fields,
+                            message.MessageId,
+                            SummerWorkflowDomainConstants.GetInstallmentPaidAtFieldKinds(1),
+                            administrativePaidAtUtc.ToString("o"));
+                        UpsertField(fields, message.MessageId, "Summer_CancelReason", string.Empty);
+                        UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", string.Empty);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowState", PendingReviewRequiredCode);
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateLabel", ResolveWorkflowStateLabel(PendingReviewRequiredCode));
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateReason", "تم تسجيل سداد إداري بعد الإلغاء التلقائي لانتهاء مهلة السداد.");
+                        UpsertField(fields, message.MessageId, "Summer_WorkflowStateAtUtc", administrativePaidAtUtc.ToString("o"));
+                        UpsertField(fields, message.MessageId, "Summer_TransferRequiresRePayment", "false");
+                        UpsertField(fields, message.MessageId, "Summer_TransferRePaymentReason", string.Empty);
+
+                        replyMessage = string.IsNullOrWhiteSpace(comment)
+                            ? "تم تحويل حالة السداد إلى سداد إداري وإعادة فتح الطلب للمراجعة."
+                            : $"تم تحويل حالة السداد إلى سداد إداري وإعادة فتح الطلب للمراجعة. الملاحظات: {comment}";
+                    }
                     else if (actionCode == SummerAdminActionCatalog.Codes.Comment)
                     {
                         replyMessage = string.IsNullOrWhiteSpace(comment)
@@ -1707,10 +1822,12 @@ namespace Persistence.Services
                 }
 
                 response.Data = await BuildSummaryAsync(request.MessageId);
-                if (response.Data != null
-                    && !string.Equals(actionCode, SummerAdminActionCatalog.Codes.InternalAdminAction, StringComparison.OrdinalIgnoreCase))
+                var shouldNotifyEmployeeOnAdminAction = response.Data != null
+                    && !string.Equals(actionCode, SummerAdminActionCatalog.Codes.InternalAdminAction, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(actionCode, SummerAdminActionCatalog.Codes.MarkPaidAdmin, StringComparison.OrdinalIgnoreCase);
+                if (shouldNotifyEmployeeOnAdminAction)
                 {
-                    await NotifyEmployeeOnAdminActionAsync(response.Data, actionCode, comment, includeSignalR: false);
+                    await NotifyEmployeeOnAdminActionAsync(response.Data!, actionCode, comment, includeSignalR: false);
                 }
 
                 if ((actionCode == SummerAdminActionCatalog.Codes.ManualCancel
@@ -1722,12 +1839,20 @@ namespace Persistence.Services
                         response.Data.WaveCode,
                         actionCode == SummerAdminActionCatalog.Codes.RejectRequest ? "ADMIN_REJECT" : "ADMIN_CANCEL");
                 }
+                else if (actionCode == SummerAdminActionCatalog.Codes.MarkPaidAdmin
+                    && response.Data != null)
+                {
+                    await PublishCapacityUpdateAsync(
+                        response.Data.CategoryId,
+                        response.Data.WaveCode,
+                        "ADMIN_MARK_PAID");
+                }
 
                 await PublishRequestUpdateAsync(
                     request.MessageId,
                     actionCode,
                     notifyResponsibleAdmins: false,
-                    notifyOwner: true,
+                    notifyOwner: actionCode != SummerAdminActionCatalog.Codes.MarkPaidAdmin,
                     source: "ADMIN_ACTION");
             }
             catch (Exception ex)
@@ -2374,6 +2499,22 @@ namespace Persistence.Services
                 ResolvePaidInstallmentsCount(fields, totalInstallmentsCount),
                 0,
                 Math.Max(1, totalInstallmentsCount));
+            var normalizedPaymentStatus = NormalizePaymentStatusToken(GetFirstFieldValue(fields, PaymentStatusFieldKinds));
+            var isAdministrativePaid = normalizedPaymentStatus == "paidadmin";
+            if (isAdministrativePaid)
+            {
+                var administrativePaidAtUtc = ParseDate(GetFieldValue(fields, PaidAtUtcFieldKind))
+                    ?? ResolveLatestPaidInstallmentAtUtc(fields, totalInstallmentsCount);
+                return new RequestPaymentStateSnapshot(
+                    RequestPaymentStatePaidCode,
+                    RequestPaymentStateAdminPaidLabel,
+                    totalInstallmentsCount,
+                    totalInstallmentsCount,
+                    administrativePaidAtUtc,
+                    isFullyPaid: true,
+                    isPartiallyPaid: false);
+            }
+
             var isFullyPaid = paidInstallmentsCount >= totalInstallmentsCount;
             var isPartiallyPaid = paidInstallmentsCount > 0 && !isFullyPaid;
 
@@ -2597,14 +2738,31 @@ namespace Persistence.Services
                 return true;
             }
 
-            var paymentStatusToken = NormalizeSearchToken(GetFirstFieldValue(fields, PaymentStatusFieldKinds));
-            var normalizedPaymentStatus = paymentStatusToken
-                .Replace("_", string.Empty)
-                .Replace("-", string.Empty);
+            var normalizedPaymentStatus = NormalizePaymentStatusToken(GetFirstFieldValue(fields, PaymentStatusFieldKinds));
 
             return normalizedPaymentStatus == "paid"
+                || normalizedPaymentStatus == "paidadmin"
                 || normalizedPaymentStatus == "مسدد"
                 || normalizedPaymentStatus == "تمالسداد";
+        }
+
+        private static bool IsAutoCancelledByPaymentTimeout(IEnumerable<TkmendField> fields)
+        {
+            var normalizedActionType = NormalizePaymentStatusToken(GetFieldValue(fields, ActionTypeFieldKind));
+            if (normalizedActionType == NormalizePaymentStatusToken(AutoCancelPaymentTimeoutActionCode))
+            {
+                return true;
+            }
+
+            var normalizedPaymentStatus = NormalizePaymentStatusToken(GetFirstFieldValue(fields, PaymentStatusFieldKinds));
+            return normalizedPaymentStatus == "cancelledauto";
+        }
+
+        private static string NormalizePaymentStatusToken(string? paymentStatusRaw)
+        {
+            return NormalizeSearchToken(paymentStatusRaw)
+                .Replace("_", string.Empty)
+                .Replace("-", string.Empty);
         }
 
         private static decimal ResolveCollectedInstallmentsAmount(IEnumerable<TkmendField> fields, int totalInstallmentsCount)
@@ -3593,7 +3751,7 @@ namespace Persistence.Services
 
                     var autoCancelReason = "تم إلغاء الطلب تلقائياً لعدم السداد خلال مهلة يوم العمل.";
                     message.Status = MessageStatus.Rejected;
-                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, "AUTO_CANCEL_PAYMENT_TIMEOUT");
+                    UpsertField(fields, message.MessageId, ActionTypeFieldKind, AutoCancelPaymentTimeoutActionCode);
                     UpsertField(fields, message.MessageId, "Summer_CancelReason", autoCancelReason);
                     UpsertField(fields, message.MessageId, "Summer_CancelledAtUtc", nowUtc.ToString("o"));
                     UpsertField(fields, message.MessageId, PaymentStatusFieldKind, "CANCELLED_AUTO");
@@ -3671,6 +3829,15 @@ namespace Persistence.Services
             {
                 _logger.LogInformation(
                     "Summer admin-action SMS skipped for internal admin action. MessageId={MessageId}, EmployeeId={EmployeeId}",
+                    summary.MessageId,
+                    summary.EmployeeId);
+                return;
+            }
+
+            if (string.Equals(actionCode, SummerAdminActionCatalog.Codes.MarkPaidAdmin, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(
+                    "Summer admin-action SMS skipped for admin-paid action. MessageId={MessageId}, EmployeeId={EmployeeId}",
                     summary.MessageId,
                     summary.EmployeeId);
                 return;
@@ -5118,6 +5285,7 @@ SELECT @result;
                 SummerAdminActionCatalog.Codes.RejectRequest => "رفض الطلب",
                 SummerAdminActionCatalog.Codes.ApproveTransfer => "اعتماد تحويل",
                 SummerAdminActionCatalog.Codes.MarkUnpaid => "تحويل إلى غير مسدد",
+                SummerAdminActionCatalog.Codes.MarkPaidAdmin => "سداد إداري",
                 _ => messageStatus.GetDescription()
             };
         }
@@ -5178,6 +5346,7 @@ SELECT @result;
                 "manualcancel" or "manual_cancel" or "الغاءيدوي" or "إلغاءيدوي" => SummerAdminActionCatalog.Codes.ManualCancel,
                 "rejectrequest" or "reject_request" or "reject" or "rejection" or "رفض" => SummerAdminActionCatalog.Codes.RejectRequest,
                 "markunpaid" or "mark_unpaid" or "setunpaid" or "set_unpaid" or "غيرمسدد" or "تحويلالىغيرمسدد" or "تحويلاليغيرمسدد" or "تحويلإلىغيرمسدد" or "تحويللغيرمسدد" => SummerAdminActionCatalog.Codes.MarkUnpaid,
+                "markpaidadmin" or "mark_paid_admin" or "adminmarkpaid" or "admin_paid" or "سداداداري" or "سدادإداري" => SummerAdminActionCatalog.Codes.MarkPaidAdmin,
                 "rejected" or "مرفوض" or "ملغي" or "مرفوض/ملغي" => "REJECTED",
                 "يتطلبمراجعةبعدالتحويل" or "transferreviewrequired" or "transfer_review_required" => TransferReviewRequiredCode,
                 "تمتمراجعةالتحويل" or "transferreviewresolved" or "transfer_review_resolved" => TransferReviewResolvedCode,

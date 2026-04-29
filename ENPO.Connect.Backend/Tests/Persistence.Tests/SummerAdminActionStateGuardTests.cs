@@ -42,4 +42,14 @@ public class SummerAdminActionStateGuardTests
         Assert.False(SummerAdminActionStateGuard.ShouldBlockDuplicateStateTransition("FINAL_APPROVE", MessageStatus.Rejected));
         Assert.True(SummerAdminActionStateGuard.ShouldBlockDuplicateStateTransition("FINAL_APPROVE", MessageStatus.Replied));
     }
+
+    [Fact]
+    public void DoesNotTreat_AdminMarkPaid_AsDuplicate_OnRejectedState()
+    {
+        var blocked = SummerAdminActionStateGuard.ShouldBlockDuplicateStateTransition(
+            SummerAdminActionCatalog.Codes.MarkPaidAdmin,
+            MessageStatus.Rejected);
+
+        Assert.False(blocked);
+    }
 }

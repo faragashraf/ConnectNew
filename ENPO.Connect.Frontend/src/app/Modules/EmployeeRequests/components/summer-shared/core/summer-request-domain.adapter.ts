@@ -33,6 +33,7 @@ function normalizePaymentStatusCode(raw: string): SummerPaymentStatusCode {
   const allowed: SummerPaymentStatusCode[] = [
     'PENDING_PAYMENT',
     'PAID',
+    'PAID_ADMIN',
     'PARTIAL_PAID',
     'CANCELLED_AUTO',
     'CANCELLED_ADMIN',

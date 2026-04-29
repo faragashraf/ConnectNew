@@ -222,6 +222,15 @@ export class SummerNotificationDisplayMapperService {
       };
     }
 
+    if (action === 'MARK_PAID_ADMIN') {
+      return {
+        title: this.summerTitle,
+        message: 'تم تسجيل سداد إداري للطلب.',
+        type: 'Success',
+        isSummerEvent: true
+      };
+    }
+
     return {
       title: this.summerTitle,
       message: 'تم تحديث طلب المصيف.',

@@ -1,0 +1,119 @@
+2026-04-28 17:47:02 | Class: DynamicFormRepository | Method: CreateRequest | Line: 162 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-28 17:47:02 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-28 17:47:02 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-28 17:47:02 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-28 17:47:02 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-28 17:47:02 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-28 17:47:03 | Class: helperService | Method: ValidateFileSizes | Line: 53 | Message: Starting ValidateFileSizes method.. 
+2026-04-28 17:47:03 | Class: helperService | Method: ValidateFileSizes | Line: 70 | Message: ValidateFileSizes method completed.. 
+2026-04-28 17:47:05 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 712 | Message: SummerRequests: anchored request created time for message 3436 at 2026-04-28T14:47:05.0000000Z; payment due at 2026-04-29T14:47:05.0000000Z.. 
+2026-04-28 17:47:05 | Class: helperService | Method: CreateReply | Line: 76 | Message: Starting CreateReply method.. 
+2026-04-28 17:47:05 | Class: helperService | Method: CreateReply | Line: 78 | Message: Generated replyId: 5573. 
+2026-04-28 17:47:05 | Class: helperService | Method: CreateReply | Line: 89 | Message: CreateReply method completed.. 
+2026-04-28 17:47:05 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 60 | Message: Reply created and added to context.. 
+2026-04-28 17:47:05 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 64 | Message: Message created and added to context.. 
+2026-04-28 17:47:05 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 91 | Message: Fields added to context.. 
+2026-04-28 17:47:06 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 853 | Message: DbUpdateException on attempt 1: Violation of PRIMARY KEY constraint 'PK__Replies__C25E46292517ECF9'. Cannot insert duplicate key in object 'dbo.Replies'. The duplicate key value is (5573).. 
+2026-04-28 17:47:06 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 858 | Message: Unique constraint violation detected for RequestRef - regenerating suffix and retrying.. 
+2026-04-28 17:47:07 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 712 | Message: SummerRequests: anchored request created time for message 3437 at 2026-04-28T14:47:07.0000000Z; payment due at 2026-04-29T14:47:07.0000000Z.. 
+2026-04-28 17:47:07 | Class: helperService | Method: CreateReply | Line: 76 | Message: Starting CreateReply method.. 
+2026-04-28 17:47:07 | Class: helperService | Method: CreateReply | Line: 78 | Message: Generated replyId: 5574. 
+2026-04-28 17:47:07 | Class: helperService | Method: CreateReply | Line: 89 | Message: CreateReply method completed.. 
+2026-04-28 17:47:07 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 60 | Message: Reply created and added to context.. 
+2026-04-28 17:47:07 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 64 | Message: Message created and added to context.. 
+2026-04-28 17:47:07 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 91 | Message: Fields added to context.. 
+2026-04-28 17:47:07 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 853 | Message: DbUpdateException on attempt 2: Violation of PRIMARY KEY constraint 'PK__Replies__C25E46292517ECF9'. Cannot insert duplicate key in object 'dbo.Replies'. The duplicate key value is (5573).. 
+2026-04-28 17:47:07 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 858 | Message: Unique constraint violation detected for RequestRef - regenerating suffix and retrying.. 
+2026-04-28 17:47:08 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 712 | Message: SummerRequests: anchored request created time for message 3438 at 2026-04-28T14:47:08.0000000Z; payment due at 2026-04-29T14:47:08.0000000Z.. 
+2026-04-28 17:47:08 | Class: helperService | Method: CreateReply | Line: 76 | Message: Starting CreateReply method.. 
+2026-04-28 17:47:08 | Class: helperService | Method: CreateReply | Line: 78 | Message: Generated replyId: 5575. 
+2026-04-28 17:47:08 | Class: helperService | Method: CreateReply | Line: 89 | Message: CreateReply method completed.. 
+2026-04-28 17:47:08 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 60 | Message: Reply created and added to context.. 
+2026-04-28 17:47:08 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 64 | Message: Message created and added to context.. 
+2026-04-28 17:47:08 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 91 | Message: Fields added to context.. 
+2026-04-28 17:47:09 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 853 | Message: DbUpdateException on attempt 3: Violation of PRIMARY KEY constraint 'PK__Replies__C25E46292517ECF9'. Cannot insert duplicate key in object 'dbo.Replies'. The duplicate key value is (5573).. 
+2026-04-28 17:47:09 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 858 | Message: Unique constraint violation detected for RequestRef - regenerating suffix and retrying.. 
+2026-04-28 17:47:09 | Class: DynamicFormRepository | Method: CreateRequest | Line: 205 | Message: CreateRequest: Handled by SummerRequests path.. 
+2026-04-28 17:47:23 | Class: DynamicFormRepository | Method: CreateRequest | Line: 162 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-28 17:47:23 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-28 17:47:23 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-28 17:47:23 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-28 17:47:23 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-28 17:47:23 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-28 17:47:24 | Class: helperService | Method: ValidateFileSizes | Line: 53 | Message: Starting ValidateFileSizes method.. 
+2026-04-28 17:47:24 | Class: helperService | Method: ValidateFileSizes | Line: 70 | Message: ValidateFileSizes method completed.. 
+2026-04-28 17:47:24 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 712 | Message: SummerRequests: anchored request created time for message 3439 at 2026-04-28T14:47:24.0000000Z; payment due at 2026-04-29T14:47:24.0000000Z.. 
+2026-04-28 17:47:24 | Class: helperService | Method: CreateReply | Line: 76 | Message: Starting CreateReply method.. 
+2026-04-28 17:47:25 | Class: helperService | Method: CreateReply | Line: 78 | Message: Generated replyId: 5576. 
+2026-04-28 17:47:25 | Class: helperService | Method: CreateReply | Line: 89 | Message: CreateReply method completed.. 
+2026-04-28 17:47:25 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 60 | Message: Reply created and added to context.. 
+2026-04-28 17:47:25 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 64 | Message: Message created and added to context.. 
+2026-04-28 17:47:25 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 91 | Message: Fields added to context.. 
+2026-04-28 17:47:25 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 771 | Message: SummerRequests: created message 3439 with RequestRef Summer2026-R-323. 
+2026-04-28 17:47:25 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 892 | Message: PostCommitActionsAsync: summer request update prepared. MessageId=3439, Action=CREATE, CreatedBy=84621, AdminGroups=241, RequestRef=Summer2026-R-323, Category=طلبات العاملين.. 
+2026-04-28 17:47:25 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 916 | Message: PostCommitActionsAsync: dispatched summer admin update. MessageId=3439, Groups=241.. 
+2026-04-28 17:47:25 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 924 | Message: Transactions committed.. 
+2026-04-28 17:47:26 | Class: HandlleEmployeeCategories | Method: DispatchOwnerPricingConfirmationAsync | Line: 1283 | Message: Owner pricing SMS notification failed for MessageId=3439. Errors=-1:nodename nor servname provided, or not known (sms.egyptpost.gov.eg:80). 
+2026-04-28 17:47:26 | Class: HandlleEmployeeCategories | Method: DispatchOwnerPricingConfirmationAsync | Line: 1298 | Message: Owner pricing WhatsApp notification failed for MessageId=3439. Errors=501:WhatsApp channel is not implemented yet.. 
+2026-04-28 17:47:26 | Class: DynamicFormRepository | Method: CreateRequest | Line: 205 | Message: CreateRequest: Handled by SummerRequests path.. 
+2026-04-28 18:16:41 | Class: DynamicFormRepository | Method: CreateRequest | Line: 162 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-28 18:16:41 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-28 18:16:41 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-28 18:16:41 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-28 18:16:41 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-28 18:16:41 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-28 18:16:42 | Class: helperService | Method: ValidateFileSizes | Line: 53 | Message: Starting ValidateFileSizes method.. 
+2026-04-28 18:16:42 | Class: helperService | Method: ValidateFileSizes | Line: 70 | Message: ValidateFileSizes method completed.. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=سن (للأطفال) | FieldKey=SUM2026_CompanionAge | InstanceGroupId=2 | Before=(فارغ) | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=سن (للأطفال) | FieldKey=SUM2026_CompanionAge | InstanceGroupId=3 | Before=(فارغ) | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=اسم المرافق | FieldKey=SUM2026_CompanionName | InstanceGroupId=2 | Before=تيست تيست تيست | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=اسم المرافق | FieldKey=SUM2026_CompanionName | InstanceGroupId=3 | Before=تيست تيست تيست | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=قومي المرافق | FieldKey=SUM2026_CompanionNationalId | InstanceGroupId=2 | Before=12345678987654 | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=قومي المرافق | FieldKey=SUM2026_CompanionNationalId | InstanceGroupId=3 | Before=12345678987654 | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=اسم القرابة | FieldKey=SUM2026_CompanionRelationOther | InstanceGroupId=2 | Before=(فارغ) | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=اسم القرابة | FieldKey=SUM2026_CompanionRelationOther | InstanceGroupId=3 | Before=(فارغ) | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=درجة القرابة | FieldKey=SUM2026_CompanionRelation | InstanceGroupId=2 | Before=زوجة | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بيانات المرافقين | Field=درجة القرابة | FieldKey=SUM2026_CompanionRelation | InstanceGroupId=3 | Before=زوجة | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=تعديل | Group=بيانات الحجز | Field=الفوج | FieldKey=SUM2026_WaveCode | InstanceGroupId=1 | Before=W14 | After=W01 | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=تعديل | Group=بيانات الحجز | Field=بيان الفوج | FieldKey=SUM2026_WaveLabel | InstanceGroupId=1 | Before=الفوج الرابع عشر - الأحد 6/9/2026 | After=الفوج الأول - الأحد 7/6/2026 | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=تعديل | Group=بدون مجموعة | Field=SummerCampLabel | FieldKey=SummerCampLabel | InstanceGroupId=1 | Before=الفوج الرابع عشر - الأحد 6/9/2026 | After=الفوج الأول - الأحد 7/6/2026 | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=تعديل | Group=بدون مجموعة | Field=SummerCamp | FieldKey=SummerCamp | InstanceGroupId=1 | Before=W14 | After=W01 | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بدون مجموعة | Field=Summer_AdminActionBy | FieldKey=Summer_AdminActionBy | InstanceGroupId=1 | Before=84621 | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بدون مجموعة | Field=Summer_AdminNewState | FieldKey=Summer_AdminNewState | InstanceGroupId=1 | Before=InProgress | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بدون مجموعة | Field=Summer_AdminPreviousState | FieldKey=Summer_AdminPreviousState | InstanceGroupId=1 | Before=Rejected | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بدون مجموعة | Field=Summer_TransferRePaymentReason | FieldKey=Summer_TransferRePaymentReason | InstanceGroupId=1 | Before=(فارغ) | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بدون مجموعة | Field=Summer_TransferRequiresRePayment | FieldKey=Summer_TransferRequiresRePayment | InstanceGroupId=1 | Before=لا | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بدون مجموعة | Field=Summer_WorkflowStateAtUtc | FieldKey=Summer_WorkflowStateAtUtc | InstanceGroupId=1 | Before=2026-04-28T15:14:34.4165208Z | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بدون مجموعة | Field=Summer_WorkflowStateLabel | FieldKey=Summer_WorkflowStateLabel | InstanceGroupId=1 | Before=ملغي لانقضاء المهلة | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بدون مجموعة | Field=Summer_WorkflowStateReason | FieldKey=Summer_WorkflowStateReason | InstanceGroupId=1 | Before=تم إلغاء الطلب تلقائياً لعدم السداد خلال مهلة يوم العمل. | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: HandlleEmployeeCategories | Method: LogSummerFieldDeltaAsync | Line: 2764 | Message: SummerRequests FieldAudit | MessageId=3435 | Operation=حذف | Group=بدون مجموعة | Field=Summer_WorkflowState | FieldKey=Summer_WorkflowState | InstanceGroupId=1 | Before=PENDING_REVIEW_RESOLVED | After=(فارغ) | ChangedBy=84621. 
+2026-04-28 18:16:43 | Class: helperService | Method: CreateReply | Line: 76 | Message: Starting CreateReply method.. 
+2026-04-28 18:16:44 | Class: helperService | Method: CreateReply | Line: 78 | Message: Generated replyId: 5578. 
+2026-04-28 18:16:44 | Class: helperService | Method: CreateReply | Line: 89 | Message: CreateReply method completed.. 
+2026-04-28 18:16:44 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 771 | Message: SummerRequests: updated message 3435 with RequestRef Summer2026-TST-3435. 
+2026-04-28 18:16:44 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 892 | Message: PostCommitActionsAsync: summer request update prepared. MessageId=3435, Action=EDIT, CreatedBy=TST3435, AdminGroups=241, RequestRef=Summer2026-TST-3435, Category=طلبات العاملين.. 
+2026-04-28 18:16:44 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 916 | Message: PostCommitActionsAsync: dispatched summer admin update. MessageId=3435, Groups=241.. 
+2026-04-28 18:16:44 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 924 | Message: Transactions committed.. 
+2026-04-28 18:16:45 | Class: DynamicFormRepository | Method: CreateRequest | Line: 205 | Message: CreateRequest: Handled by SummerRequests path.. 
+2026-04-28 18:17:45 | Class: DynamicFormRepository | Method: CreateRequest | Line: 162 | Message: Starting CreateRequest method. ---------------------------------------. 
+2026-04-28 18:17:45 | Class: helperService | Method: GetType | Line: 233 | Message: Starting GetType method.. 
+2026-04-28 18:17:45 | Class: helperService | Method: GetType | Line: 241 | Message: Category found. CatId: 148, CatParent: 143. 
+2026-04-28 18:17:45 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 143, ParentCatParent: 2. 
+2026-04-28 18:17:46 | Class: helperService | Method: GetType | Line: 262 | Message: Traversing to parent. ParentCatId: 2, ParentCatParent: 0. 
+2026-04-28 18:17:46 | Class: helperService | Method: GetType | Line: 269 | Message: Returning category with top-most parent. TopParentCatId: 2. 
+2026-04-28 18:17:46 | Class: helperService | Method: ValidateFileSizes | Line: 53 | Message: Starting ValidateFileSizes method.. 
+2026-04-28 18:17:46 | Class: helperService | Method: ValidateFileSizes | Line: 70 | Message: ValidateFileSizes method completed.. 
+2026-04-28 18:17:47 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 712 | Message: SummerRequests: anchored request created time for message 3440 at 2026-04-28T15:17:47.0000000Z; payment due at 2026-04-29T15:17:47.0000000Z.. 
+2026-04-28 18:17:47 | Class: helperService | Method: CreateReply | Line: 76 | Message: Starting CreateReply method.. 
+2026-04-28 18:17:47 | Class: helperService | Method: CreateReply | Line: 78 | Message: Generated replyId: 5579. 
+2026-04-28 18:17:47 | Class: helperService | Method: CreateReply | Line: 89 | Message: CreateReply method completed.. 
+2026-04-28 18:17:47 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 60 | Message: Reply created and added to context.. 
+2026-04-28 18:17:47 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 64 | Message: Message created and added to context.. 
+2026-04-28 18:17:47 | Class: MessageRequestService | Method: PersistEntitiesAsync | Line: 91 | Message: Fields added to context.. 
+2026-04-28 18:17:47 | Class: HandlleEmployeeCategories | Method: SummerRequests | Line: 771 | Message: SummerRequests: created message 3440 with RequestRef Summer2026-R-324. 
+2026-04-28 18:17:47 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 892 | Message: PostCommitActionsAsync: summer request update prepared. MessageId=3440, Action=CREATE, CreatedBy=84621, AdminGroups=241, RequestRef=Summer2026-R-324, Category=طلبات العاملين.. 
+2026-04-28 18:17:47 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 916 | Message: PostCommitActionsAsync: dispatched summer admin update. MessageId=3440, Groups=241.. 
+2026-04-28 18:17:47 | Class: HandlleEmployeeCategories | Method: PostCommitActionsAsync | Line: 924 | Message: Transactions committed.. 
+2026-04-28 18:17:48 | Class: HandlleEmployeeCategories | Method: DispatchOwnerPricingConfirmationAsync | Line: 1283 | Message: Owner pricing SMS notification failed for MessageId=3440. Errors=-1:nodename nor servname provided, or not known (sms.egyptpost.gov.eg:80). 
+2026-04-28 18:17:48 | Class: HandlleEmployeeCategories | Method: DispatchOwnerPricingConfirmationAsync | Line: 1298 | Message: Owner pricing WhatsApp notification failed for MessageId=3440. Errors=501:WhatsApp channel is not implemented yet.. 
+2026-04-28 18:17:48 | Class: DynamicFormRepository | Method: CreateRequest | Line: 205 | Message: CreateRequest: Handled by SummerRequests path.. 

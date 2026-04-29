@@ -11,6 +11,7 @@ namespace Persistence.Services.Summer
             public const string InternalAdminAction = "INTERNAL_ADMIN_ACTION";
             public const string ApproveTransfer = "APPROVE_TRANSFER";
             public const string MarkUnpaid = "MARK_UNPAID";
+            public const string MarkPaidAdmin = "MARK_PAID_ADMIN";
         }
 
         public static string ResolveLabel(string? actionCode)
@@ -24,6 +25,7 @@ namespace Persistence.Services.Summer
                 Codes.InternalAdminAction => "إجراء إداري داخلي",
                 Codes.ApproveTransfer => "اعتماد التحويل",
                 Codes.MarkUnpaid => "تحويل إلى غير مسدد",
+                Codes.MarkPaidAdmin => "سداد إداري",
                 _ => (actionCode ?? string.Empty).Trim()
             };
         }
@@ -40,6 +42,7 @@ namespace Persistence.Services.Summer
                 "internal_admin_action" or "internaladminaction" or "internalaction" or "internal_action" or "اجراءاداريداخلي" or "اجراءاداريداخلى" or "اجراءداخلي" => Codes.InternalAdminAction,
                 "approvetransfer" or "approve_transfer" or "transferapprove" or "اعتمادالتحويل" => Codes.ApproveTransfer,
                 "markunpaid" or "mark_unpaid" or "setunpaid" or "set_unpaid" or "markasunpaid" or "غيرمسدد" or "تحويللغيرمسدد" or "تحويلإلىغيرمسدد" or "تحويلاليغيرمسدد" or "تحويلالىغيرمسدد" => Codes.MarkUnpaid,
+                "markpaidadmin" or "mark_paid_admin" or "adminmarkpaid" or "admin_paid" or "سداداداري" or "سدادإداري" => Codes.MarkPaidAdmin,
                 _ => string.Empty
             };
         }

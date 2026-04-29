@@ -4,7 +4,8 @@ export const SUMMER_ADMIN_ACTION = {
   REJECT_REQUEST: 'REJECT_REQUEST',
   COMMENT: 'COMMENT',
   INTERNAL_ADMIN_ACTION: 'INTERNAL_ADMIN_ACTION',
-  MARK_UNPAID: 'MARK_UNPAID'
+  MARK_UNPAID: 'MARK_UNPAID',
+  MARK_PAID_ADMIN: 'MARK_PAID_ADMIN'
 } as const;
 
 export type SummerAdminActionCode = typeof SUMMER_ADMIN_ACTION[keyof typeof SUMMER_ADMIN_ACTION];
@@ -55,7 +56,14 @@ const SUMMER_ADMIN_ACTION_ALIAS_MAP: Record<string, SummerAdminActionCode> = {
   غيرمسدد: SUMMER_ADMIN_ACTION.MARK_UNPAID,
   تحويلاليغيرمسدد: SUMMER_ADMIN_ACTION.MARK_UNPAID,
   تحويلالىغيرمسدد: SUMMER_ADMIN_ACTION.MARK_UNPAID,
-  تحويلإلىغيرمسدد: SUMMER_ADMIN_ACTION.MARK_UNPAID
+  تحويلإلىغيرمسدد: SUMMER_ADMIN_ACTION.MARK_UNPAID,
+
+  markpaidadmin: SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN,
+  mark_paid_admin: SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN,
+  adminmarkpaid: SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN,
+  admin_paid: SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN,
+  سداداداري: SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN,
+  سدادإداري: SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN
 };
 
 function normalizeSearchToken(value: unknown): string {

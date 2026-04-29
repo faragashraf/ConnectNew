@@ -1,5 +1,6 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder } from '@angular/forms';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { SummerRequestsAdminConsoleComponent } from './summer-requests-admin-console.component';
 
 describe('SummerRequestsAdminConsoleComponent - ConnectSupperAdminFunc', () => {
@@ -7,8 +8,10 @@ describe('SummerRequestsAdminConsoleComponent - ConnectSupperAdminFunc', () => {
     component: SummerRequestsAdminConsoleComponent;
     getPricingCatalogSpy: jasmine.Spy;
     savePricingCatalogSpy: jasmine.Spy;
+    executeAdminActionSpy: jasmine.Spy;
     checkAuthFunSpy: jasmine.Spy;
     checkAuthRoleSpy: jasmine.Spy;
+    msgErrorSpy: jasmine.Spy;
   } {
     const getPricingCatalogSpy = jasmine.createSpy('getPricingCatalog').and.returnValue(of({
       isSuccess: true,
@@ -20,14 +23,21 @@ describe('SummerRequestsAdminConsoleComponent - ConnectSupperAdminFunc', () => {
       data: { seasonYear: 2026, records: [] },
       errors: []
     }));
+    const executeAdminActionSpy = jasmine.createSpy('executeAdminAction').and.returnValue(of({
+      isSuccess: true,
+      data: null,
+      errors: []
+    }));
     const checkAuthFunSpy = jasmine.createSpy('checkAuthFun').and.returnValue(hasSummerPricingPermission);
     const checkAuthRoleSpy = jasmine.createSpy('checkAuthRole').and.returnValue(hasSummerPricingPermission);
+    const msgErrorSpy = jasmine.createSpy('msgError');
 
     const component = new SummerRequestsAdminConsoleComponent(
       new FormBuilder(),
       {
         getPricingCatalog: getPricingCatalogSpy,
-        savePricingCatalog: savePricingCatalogSpy
+        savePricingCatalog: savePricingCatalogSpy,
+        executeAdminAction: executeAdminActionSpy
       } as any,
       {} as any,
       {} as any,
@@ -40,7 +50,7 @@ describe('SummerRequestsAdminConsoleComponent - ConnectSupperAdminFunc', () => {
       } as any,
       {
         msgSuccess: jasmine.createSpy('msgSuccess'),
-        msgError: jasmine.createSpy('msgError')
+        msgError: msgErrorSpy
       } as any,
       {
         show: jasmine.createSpy('show'),
@@ -54,8 +64,10 @@ describe('SummerRequestsAdminConsoleComponent - ConnectSupperAdminFunc', () => {
       component,
       getPricingCatalogSpy,
       savePricingCatalogSpy,
+      executeAdminActionSpy,
       checkAuthFunSpy,
-      checkAuthRoleSpy
+      checkAuthRoleSpy,
+      msgErrorSpy
     };
   }
 
@@ -86,5 +98,23 @@ describe('SummerRequestsAdminConsoleComponent - ConnectSupperAdminFunc', () => {
     expect(component.canManageSummerPricing).toBeTrue();
     expect(getPricingCatalogSpy).toHaveBeenCalled();
     expect(savePricingCatalogSpy).toHaveBeenCalled();
+  });
+
+  it('shows backend ExecuteAdminAction error message instead of generic text on http errors', () => {
+    const backendMessage = 'لا توجد سعة متاحة حالياً للوحدة/المصيف لهذا الطلب.';
+    const { component, executeAdminActionSpy, msgErrorSpy } = createComponent(true);
+    executeAdminActionSpy.and.returnValue(throwError(() => new HttpErrorResponse({
+      status: 429,
+      error: {
+        isSuccess: false,
+        errors: [{ code: '429', message: backendMessage }]
+      }
+    })));
+
+    component.selectedRequestId = 3435;
+    component.submitAdminAction();
+
+    expect(executeAdminActionSpy).toHaveBeenCalled();
+    expect(msgErrorSpy).toHaveBeenCalledWith('خطأ', `<h5>${backendMessage}</h5>`, true);
   });
 });

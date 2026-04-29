@@ -12,6 +12,7 @@ export type SummerRequestStatusCode =
 export type SummerPaymentStatusCode =
   | 'PENDING_PAYMENT'
   | 'PAID'
+  | 'PAID_ADMIN'
   | 'PARTIAL_PAID'
   | 'CANCELLED_AUTO'
   | 'CANCELLED_ADMIN'
@@ -27,6 +28,7 @@ export type SummerAdminActionCode =
   | 'COMMENT'
   | 'INTERNAL_ADMIN_ACTION'
   | 'MARK_UNPAID'
+  | 'MARK_PAID_ADMIN'
   | 'APPROVE_TRANSFER';
 
 export interface SummerApplicant {

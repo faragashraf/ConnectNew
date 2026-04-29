@@ -1,4 +1,5 @@
-﻿import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+﻿import { HttpErrorResponse } from '@angular/common/http';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subscription, firstValueFrom } from 'rxjs';
 import { DynamicFormController } from 'src/app/shared/services/BackendServices/DynamicForm/DynamicForm.service';
@@ -237,6 +238,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: SUMMER_ADMIN_ACTION.REJECT_REQUEST, label: 'رفض الطلب' },
     { value: SUMMER_ADMIN_ACTION.MANUAL_CANCEL, label: 'إلغاء يدوي' },
     { value: SUMMER_ADMIN_ACTION.MARK_UNPAID, label: 'تحويل إلى غير مسدد' },
+    { value: SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN, label: 'تحويل إلى مسدد (سداد إداري)' },
     { value: SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION, label: 'إجراء إداري داخلي' }
   ];
 
@@ -271,6 +273,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     SUMMER_ADMIN_ACTION.REJECT_REQUEST,
     SUMMER_ADMIN_ACTION.MANUAL_CANCEL,
     SUMMER_ADMIN_ACTION.MARK_UNPAID,
+    SUMMER_ADMIN_ACTION.MARK_PAID_ADMIN,
     SUMMER_ADMIN_ACTION.COMMENT,
     SUMMER_ADMIN_ACTION.INTERNAL_ADMIN_ACTION
   ]);
@@ -449,9 +452,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           : SUMMER_UI_TEXTS_AR.errors.destinationCatalogInvalid;
         this.initializeAdminConsoleData();
       },
-      error: () => {
+      error: (error: unknown) => {
         this.destinations = [];
-        this.destinationsError = SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed;
+        this.destinationsError = this.collectHttpErrors(error, SUMMER_UI_TEXTS_AR.errors.destinationCatalogLoadFailed);
         this.initializeAdminConsoleData();
       },
       complete: () => {
@@ -1310,11 +1313,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
             this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
           }
         },
-        error: () => {
+        error: (error: unknown) => {
           this.waveBookingsPrintData = null;
           this.waveBookingsPrintFooterMarkers = [];
           this.waveBookingsPrintTotalPages = 0;
-          this.waveBookingsPrintErrorText = 'تعذر تحميل كشف الحاجزين حالياً.';
+          this.waveBookingsPrintErrorText = this.collectHttpErrors(error, 'تعذر تحميل كشف الحاجزين حالياً.');
           if (!silent) {
             this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
           }
@@ -1453,11 +1456,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       };
 
       this.scheduleResortBookingsPrintPaginationRefresh();
-    } catch {
+    } catch (error) {
       this.resortBookingsPrintData = null;
       this.resortBookingsPrintFooterMarkers = [];
       this.resortBookingsPrintTotalPages = 0;
-      this.resortBookingsPrintErrorText = 'تعذر تحميل كشف الحاجزين للمصيف حالياً.';
+      this.resortBookingsPrintErrorText = this.collectHttpErrors(error, 'تعذر تحميل كشف الحاجزين للمصيف حالياً.');
       if (!silent) {
         this.msg.msgError('خطأ', `<h5>${this.resortBookingsPrintErrorText}</h5>`, true);
       }
@@ -1612,11 +1615,11 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       };
 
       this.scheduleAllResortsSummaryPrintPaginationRefresh();
-    } catch {
+    } catch (error) {
       this.allResortsSummaryData = null;
       this.allResortsSummaryPrintFooterMarkers = [];
       this.allResortsSummaryPrintTotalPages = 0;
-      this.allResortsSummaryErrorText = 'تعذر تحميل تقرير جميع المصايف حالياً.';
+      this.allResortsSummaryErrorText = this.collectHttpErrors(error, 'تعذر تحميل تقرير جميع المصايف حالياً.');
       if (!silent) {
         this.msg.msgError('خطأ', `<h5>${this.allResortsSummaryErrorText}</h5>`, true);
       }
@@ -1745,9 +1748,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.msg.msgError('خطأ', `<h5>${this.capacityErrorText}</h5>`, true);
         }
       },
-      error: () => {
+      error: (error: unknown) => {
         this.capacityRows = [];
-        this.capacityErrorText = 'تعذر تحميل بيان الإتاحة حالياً.';
+        this.capacityErrorText = this.collectHttpErrors(error, 'تعذر تحميل بيان الإتاحة حالياً.');
         if (!silent) {
           this.msg.msgError('خطأ', `<h5>${this.capacityErrorText}</h5>`, true);
         }
@@ -1793,8 +1796,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
         }
       },
-      error: () => {
-        this.pricingCatalogError = 'تعذر تحميل إعدادات التسعير حالياً.';
+      error: (error: unknown) => {
+        this.pricingCatalogError = this.collectHttpErrors(error, 'تعذر تحميل إعدادات التسعير حالياً.');
         if (!silent) {
           this.msg.msgError('خطأ', `<h5>${this.pricingCatalogError}</h5>`, true);
         }
@@ -1904,8 +1907,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
         this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
       },
-      error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر حفظ إعدادات التسعير حالياً.</h5>', true);
+      error: (error: unknown) => {
+        const errorText = this.collectHttpErrors(error, 'تعذر حفظ إعدادات التسعير حالياً.');
+        this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
       },
       complete: () => {
         this.pricingCatalogSaving = false;
@@ -2090,8 +2094,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
         }
       },
-      error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تنفيذ الإجراء الإداري حالياً.</h5>', true);
+      error: (error: unknown) => {
+        const errorText = this.collectHttpErrors(error, 'تعذر تنفيذ الإجراء الإداري حالياً.');
+        this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
       },
       complete: () => {
         this.submittingAction = false;
@@ -2168,8 +2173,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.msg.msgError('خطأ', `<h5>${this.collectErrors(response)}</h5>`, true);
         }
       },
-      error: () => {
-        this.msg.msgError('خطأ', '<h5>تعذر تسجيل السداد حاليًا.</h5>', true);
+      error: (error: unknown) => {
+        const errorText = this.collectHttpErrors(error, 'تعذر تسجيل السداد حاليًا.');
+        this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
       },
       complete: () => {
         this.submittingPayment = false;
@@ -2263,8 +2269,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
         this.msg.msgError('خطأ', `<h5>${this.collectErrors(response) || 'تعذر تنزيل المرفق.'}</h5>`, true);
       },
-      error: () => {
-        this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.attachmentDownloadFailed}</h5>`, true);
+      error: (error: unknown) => {
+        const errorText = this.collectHttpErrors(error, SUMMER_UI_TEXTS_AR.errors.attachmentDownloadFailed);
+        this.msg.msgError('خطأ', `<h5>${errorText}</h5>`, true);
       },
       complete: () => {
         this.spinner.hide();
@@ -3016,11 +3023,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     if (
       compact === 'paid'
+      || compact === 'paidadmin'
       || compact === 'true'
       || compact === '1'
       || compact === 'yes'
       || compact === 'y'
       || compact === 'مسدد'
+      || compact === 'سداداداري'
       || compact === 'تمالسداد'
     ) {
       return 'PAID';
@@ -3159,7 +3168,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   /**
    * Mirrors backend NormalizeActionCode:
-   * FINAL_APPROVE | MANUAL_CANCEL | REJECT_REQUEST | COMMENT | INTERNAL_ADMIN_ACTION | MARK_UNPAID
+   * FINAL_APPROVE | MANUAL_CANCEL | REJECT_REQUEST | COMMENT | INTERNAL_ADMIN_ACTION | MARK_UNPAID | MARK_PAID_ADMIN
    */
   private normalizeActionCode(actionCode: unknown): SummerAdminActionCode | '' {
     const normalized = normalizeSummerAdminActionCode(actionCode);
@@ -3841,12 +3850,113 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     );
   }
 
-  private collectErrors(response: { errors?: Array<{ message?: string }> } | null | undefined): string {
-    const errors = (response?.errors ?? [])
-      .map(item => String(item?.message ?? '').trim())
-      .filter(item => item.length > 0);
+  private collectErrors(
+    response: {
+      errors?: Array<{ message?: string } | string>;
+      message?: unknown;
+      detail?: unknown;
+      title?: unknown;
+    } | null | undefined
+  ): string {
+    const messages: string[] = [];
+    const appendMessage = (value: unknown): void => {
+      const text = String(value ?? '').trim();
+      if (!text || messages.includes(text)) {
+        return;
+      }
+      messages.push(text);
+    };
 
-    return errors.length ? errors.join('<br/>') : SUMMER_UI_TEXTS_AR.errors.generic;
+    (response?.errors ?? []).forEach(item => {
+      if (typeof item === 'string') {
+        appendMessage(item);
+        return;
+      }
+
+      appendMessage(item?.message);
+    });
+
+    appendMessage(response?.message);
+    appendMessage(response?.detail);
+    appendMessage(response?.title);
+
+    return messages.length ? messages.join('<br/>') : SUMMER_UI_TEXTS_AR.errors.generic;
+  }
+
+  private collectHttpErrors(error: unknown, fallbackMessage: string): string {
+    const messages: string[] = [];
+    const appendMessage = (value: unknown): void => {
+      const text = String(value ?? '').trim();
+      if (!text || messages.includes(text)) {
+        return;
+      }
+      messages.push(text);
+    };
+
+    const collectFromPayload = (payload: unknown): void => {
+      if (!payload) {
+        return;
+      }
+
+      if (typeof payload === 'string') {
+        const trimmed = payload.trim();
+        if (!trimmed) {
+          return;
+        }
+
+        try {
+          collectFromPayload(JSON.parse(trimmed));
+        } catch {
+          appendMessage(trimmed);
+        }
+        return;
+      }
+
+      if (typeof payload !== 'object') {
+        return;
+      }
+
+      const record = payload as Record<string, unknown>;
+      const responseErrors = record['errors'];
+      if (Array.isArray(responseErrors)) {
+        responseErrors.forEach(item => {
+          if (typeof item === 'string') {
+            appendMessage(item);
+            return;
+          }
+
+          if (item && typeof item === 'object') {
+            appendMessage((item as Record<string, unknown>)['message']);
+          }
+        });
+      } else if (responseErrors && typeof responseErrors === 'object') {
+        Object.values(responseErrors as Record<string, unknown>).forEach(group => {
+          if (Array.isArray(group)) {
+            group.forEach(entry => appendMessage(entry));
+          }
+        });
+      }
+
+      appendMessage(record['message']);
+      appendMessage(record['detail']);
+      appendMessage(record['title']);
+    };
+
+    if (error instanceof HttpErrorResponse) {
+      collectFromPayload(error.error);
+      if (messages.length === 0) {
+        appendMessage(error.message);
+      }
+    } else {
+      const record = (error ?? {}) as Record<string, unknown>;
+      collectFromPayload(record['error']);
+      collectFromPayload(record['response']);
+      if (messages.length === 0) {
+        appendMessage(record['message']);
+      }
+    }
+
+    return messages.length > 0 ? messages.join('<br/>') : fallbackMessage;
   }
 
   private toFileParameters(files: File[]): FileParameter[] {

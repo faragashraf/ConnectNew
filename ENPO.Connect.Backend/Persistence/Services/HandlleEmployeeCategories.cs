@@ -209,6 +209,7 @@ namespace Persistence.Services
             [SummerWorkflowDomainConstants.MembershipTypes.NonWorker] = "عضو غير عامل",
             ["PENDING_PAYMENT"] = "بانتظار السداد",
             ["PAID"] = "مسدد",
+            ["PAID_ADMIN"] = "سداد إداري",
             ["UNPAID"] = "غير مسدد",
             ["PARTIAL_PAID"] = "مسدد جزئي",
             ["CANCELLED_ADMIN"] = "ملغي إداريًا",
