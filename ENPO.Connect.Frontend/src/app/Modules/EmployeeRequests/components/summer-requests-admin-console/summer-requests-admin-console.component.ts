@@ -132,6 +132,10 @@ type SummerAllResortsSummaryWaveVm = {
   installmentFinalAmount: number;
 };
 
+type SummerAllResortsSummaryPaymentModeFilter = 'all' | 'cash' | 'installment';
+type SummerAllResortsSummaryCollectionFilter = 'all' | 'collected' | 'uncollected';
+type SummerAdminReportKind = 'wave-bookings' | 'resort-bookings' | 'all-resorts-summary';
+
 type SummerAllResortsSummaryResortVm = {
   categoryId: number;
   categoryName: string;
@@ -155,6 +159,8 @@ type SummerAllResortsSummaryPrintReportVm = {
   generatedAtUtc: string;
   generatedByUserId: string;
   includeFinancials: boolean;
+  paymentModeFilter: SummerAllResortsSummaryPaymentModeFilter;
+  collectionFilter: SummerAllResortsSummaryCollectionFilter;
   totalResorts: number;
   totalConfiguredWaves: number;
   totalWavesWithBookings: number;
@@ -231,6 +237,21 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     { value: 'Unpaid', label: 'غير مسدد' },
     { value: 'PartialPaid', label: 'مسدد عدد {0} من {1}' }
   ];
+  readonly allResortsSummaryPaymentModeOptions: Array<{ value: SummerAllResortsSummaryPaymentModeFilter; label: string }> = [
+    { value: 'all', label: 'كل الطلبات' },
+    { value: 'cash', label: 'كاش فقط' },
+    { value: 'installment', label: 'تقسيط فقط' }
+  ];
+  readonly allResortsSummaryCollectionFilterOptions: Array<{ value: SummerAllResortsSummaryCollectionFilter; label: string }> = [
+    { value: 'all', label: 'الكل' },
+    { value: 'collected', label: 'محصل فقط' },
+    { value: 'uncollected', label: 'غير محصل فقط' }
+  ];
+  readonly reportKindOptions: Array<{ value: SummerAdminReportKind; label: string }> = [
+    { value: 'wave-bookings', label: 'كشف الحاجزين للفوج' },
+    { value: 'resort-bookings', label: 'كشف المصيف (كل الأفواج)' },
+    { value: 'all-resorts-summary', label: 'إحصائية جميع المصايف' }
+  ];
 
   readonly actionOptions: Array<{ value: SummerAdminActionCode; label: string }> = [
     { value: SUMMER_ADMIN_ACTION.COMMENT, label: 'تعليق / رد إداري' },
@@ -281,6 +302,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   private readonly internalAdminActionCommentMaxLength = 2000;
 
   capacityDialogVisible = false;
+  reportOptionsDialogVisible = false;
   loadingWaveCapacity = false;
   capacityLastUpdatedAt: string | null = null;
   capacityErrorText = '';
@@ -326,6 +348,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
   private readonly subscriptions = new Subscription();
   private requestsLoadVersion = 0;
   private dashboardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingReportAutoPrint: SummerAdminReportKind | null = null;
   private readonly integerNumberFormatter = new Intl.NumberFormat('ar-EG', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
@@ -381,7 +404,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.filtersForm = this.fb.group({
       categoryId: [null],
       waveCode: [''],
+      reportKind: ['all-resorts-summary'],
       includeFinancialsInPrint: [false],
+      allResortsSummaryPaymentMode: ['all'],
+      allResortsSummaryCollectionFilter: ['all'],
       status: [''],
       paymentState: [''],
       employeeId: [''],
@@ -552,6 +578,70 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     return this.selectedFilterCategoryId > 0 && this.selectedFilterWaveCode.length > 0;
   }
 
+  get reportKindSelection(): SummerAdminReportKind {
+    return this.selectedReportKind;
+  }
+
+  get selectedReportKindLabel(): string {
+    const selected = this.reportKindOptions.find(item => item.value === this.selectedReportKind);
+    return selected?.label ?? 'تقرير';
+  }
+
+  get showAllResortsReportFilters(): boolean {
+    return this.selectedReportKind === 'all-resorts-summary';
+  }
+
+  get canRunSelectedReport(): boolean {
+    return this.canRunReportKind(this.selectedReportKind);
+  }
+
+  get isSelectedReportBusy(): boolean {
+    if (this.selectedReportKind === 'wave-bookings') {
+      return this.loadingWaveBookingsPrint;
+    }
+    if (this.selectedReportKind === 'resort-bookings') {
+      return this.loadingResortBookingsPrint;
+    }
+
+    return this.loadingAllResortsSummaryPrint;
+  }
+
+  get selectedReportScopeLabel(): string {
+    if (this.selectedReportKind === 'wave-bookings') {
+      if (!this.selectedFilterCategoryId || !this.selectedFilterWaveCode) {
+        return 'يرجى اختيار المصيف والفوج';
+      }
+
+      return `${this.selectedFilterDestinationName} - الفوج ${this.selectedFilterWaveCode}`;
+    }
+
+    if (this.selectedReportKind === 'resort-bookings') {
+      if (!this.selectedFilterCategoryId) {
+        return 'يرجى اختيار المصيف';
+      }
+
+      return this.selectedFilterDestinationName;
+    }
+
+    return 'جميع المصايف';
+  }
+
+  get selectedReportRequirementMessage(): string {
+    if (this.canRunSelectedReport) {
+      return '';
+    }
+
+    if (this.selectedReportKind === 'wave-bookings') {
+      return 'يرجى اختيار المصيف والفوج أولًا لتشغيل كشف الحاجزين.';
+    }
+
+    if (this.selectedReportKind === 'resort-bookings') {
+      return 'يرجى اختيار المصيف أولًا لتشغيل كشف المصيف.';
+    }
+
+    return 'لا توجد مصايف متاحة لتوليد تقرير جميع المصايف.';
+  }
+
   get selectedFilterDestinationName(): string {
     const destination = this.destinations.find(item => item.categoryId === this.selectedFilterCategoryId);
     return destination?.name ?? '-';
@@ -698,6 +788,16 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
   get allResortsSummaryResorts(): SummerAllResortsSummaryResortVm[] {
     return this.allResortsSummaryData?.resorts ?? [];
+  }
+
+  get allResortsSummaryPaymentModeLabel(): string {
+    const mode = this.allResortsSummaryData?.paymentModeFilter ?? this.selectedAllResortsSummaryPaymentMode;
+    return this.resolveAllResortsSummaryPaymentModeLabel(mode);
+  }
+
+  get allResortsSummaryCollectionFilterLabel(): string {
+    const filter = this.allResortsSummaryData?.collectionFilter ?? this.selectedAllResortsSummaryCollectionFilter;
+    return this.resolveAllResortsSummaryCollectionFilterLabel(filter);
   }
 
   get waveBookingsPrintUserName(): string {
@@ -1062,7 +1162,10 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.filtersForm.patchValue({
       categoryId: null,
       waveCode: '',
+      reportKind: 'all-resorts-summary',
       includeFinancialsInPrint: false,
+      allResortsSummaryPaymentMode: 'all',
+      allResortsSummaryCollectionFilter: 'all',
       status: '',
       paymentState: '',
       employeeId: '',
@@ -1073,10 +1176,12 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.activeDashboardStatus = '';
     this.activeDashboardPaymentState = '';
     this.capacityDialogVisible = false;
+    this.reportOptionsDialogVisible = false;
     this.bookingsPrintDialogVisible = false;
     this.resortBookingsPrintDialogVisible = false;
     this.allResortsSummaryDialogVisible = false;
     this.requestAdminPrintDialogVisible = false;
+    this.pendingReportAutoPrint = null;
     this.loadRequests();
     this.loadDashboard();
   }
@@ -1236,6 +1341,26 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.goToPage(this.requestsPageNumber - 1);
   }
 
+  openReportOptionsDialog(): void {
+    this.reportOptionsDialogVisible = true;
+  }
+
+  closeReportOptionsDialog(): void {
+    this.reportOptionsDialogVisible = false;
+  }
+
+  onReportOptionsDialogHide(): void {
+    this.closeReportOptionsDialog();
+  }
+
+  runSelectedReportPreviewFromOptions(): void {
+    this.executeReportFromOptions(false);
+  }
+
+  runSelectedReportPrintFromOptions(): void {
+    this.executeReportFromOptions(true);
+  }
+
   openWaveCapacityDialog(): void {
     if (!this.canOpenWaveCapacityDialog) {
       this.msg.msgError('خطأ', `<h5>${SUMMER_UI_TEXTS_AR.errors.invalidWaveCapacityScope}</h5>`, true);
@@ -1269,6 +1394,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.bookingsPrintDialogVisible = false;
     this.waveBookingsPrintFooterMarkers = [];
     this.waveBookingsPrintTotalPages = 0;
+    this.clearPendingAutoPrint('wave-bookings');
     this.disableWaveBookingsPrintMode();
   }
 
@@ -1276,6 +1402,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.bookingsPrintDialogVisible = false;
     this.waveBookingsPrintFooterMarkers = [];
     this.waveBookingsPrintTotalPages = 0;
+    this.clearPendingAutoPrint('wave-bookings');
     this.disableWaveBookingsPrintMode();
   }
 
@@ -1302,6 +1429,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           if (response?.isSuccess && response.data) {
             this.waveBookingsPrintData = response.data;
             this.scheduleWaveBookingsPrintPaginationRefresh();
+            this.tryAutoPrintPendingReport('wave-bookings');
             return;
           }
 
@@ -1309,6 +1437,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.waveBookingsPrintFooterMarkers = [];
           this.waveBookingsPrintTotalPages = 0;
           this.waveBookingsPrintErrorText = this.collectErrors(response);
+          this.clearPendingAutoPrint('wave-bookings');
           if (!silent) {
             this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
           }
@@ -1318,6 +1447,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.waveBookingsPrintFooterMarkers = [];
           this.waveBookingsPrintTotalPages = 0;
           this.waveBookingsPrintErrorText = this.collectHttpErrors(error, 'تعذر تحميل كشف الحاجزين حالياً.');
+          this.clearPendingAutoPrint('wave-bookings');
           if (!silent) {
             this.msg.msgError('خطأ', `<h5>${this.waveBookingsPrintErrorText}</h5>`, true);
           }
@@ -1357,6 +1487,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.resortBookingsPrintDialogVisible = false;
     this.resortBookingsPrintFooterMarkers = [];
     this.resortBookingsPrintTotalPages = 0;
+    this.clearPendingAutoPrint('resort-bookings');
     this.disableWaveBookingsPrintMode();
   }
 
@@ -1398,6 +1529,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           this.resortBookingsPrintData = null;
           this.resortBookingsPrintFooterMarkers = [];
           this.resortBookingsPrintTotalPages = 0;
+          this.clearPendingAutoPrint('resort-bookings');
           if (!silent) {
             this.msg.msgError('خطأ', `<h5>${this.resortBookingsPrintErrorText}</h5>`, true);
           }
@@ -1456,11 +1588,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       };
 
       this.scheduleResortBookingsPrintPaginationRefresh();
+      this.tryAutoPrintPendingReport('resort-bookings');
     } catch (error) {
       this.resortBookingsPrintData = null;
       this.resortBookingsPrintFooterMarkers = [];
       this.resortBookingsPrintTotalPages = 0;
       this.resortBookingsPrintErrorText = this.collectHttpErrors(error, 'تعذر تحميل كشف الحاجزين للمصيف حالياً.');
+      this.clearPendingAutoPrint('resort-bookings');
       if (!silent) {
         this.msg.msgError('خطأ', `<h5>${this.resortBookingsPrintErrorText}</h5>`, true);
       }
@@ -1498,6 +1632,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     this.allResortsSummaryDialogVisible = false;
     this.allResortsSummaryPrintFooterMarkers = [];
     this.allResortsSummaryPrintTotalPages = 0;
+    this.clearPendingAutoPrint('all-resorts-summary');
     this.disableWaveBookingsPrintMode();
   }
 
@@ -1514,6 +1649,9 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
 
     try {
       const includeFinancials = this.includeFinancialsInWaveBookingsPrint;
+      const paymentModeFilter = this.selectedAllResortsSummaryPaymentMode;
+      const collectionFilter = this.selectedAllResortsSummaryCollectionFilter;
+      const includeFinancialsForFiltering = includeFinancials || collectionFilter !== 'all';
       const resorts: SummerAllResortsSummaryResortVm[] = [];
       for (const destination of this.destinations) {
         const categoryId = Number(destination?.categoryId ?? 0);
@@ -1533,7 +1671,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
             categoryId,
             waveCode,
             this.seasonYear,
-            includeFinancials
+            includeFinancialsForFiltering
           ));
 
           if (!response?.isSuccess || !response.data) {
@@ -1541,6 +1679,7 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
             this.allResortsSummaryData = null;
             this.allResortsSummaryPrintFooterMarkers = [];
             this.allResortsSummaryPrintTotalPages = 0;
+            this.clearPendingAutoPrint('all-resorts-summary');
             if (!silent) {
               this.msg.msgError('خطأ', `<h5>${this.allResortsSummaryErrorText}</h5>`, true);
             }
@@ -1548,28 +1687,71 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
           }
 
           const waveData = response.data;
-          const totalBookings = Number(waveData.totalBookings ?? 0) || 0;
+          const allRows = (waveData.sections ?? []).flatMap(section => section.rows ?? []);
+          const filteredRows = allRows.filter(row =>
+            this.matchesAllResortsSummaryPaymentMode(row, paymentModeFilter)
+            && this.matchesAllResortsSummaryCollectionFilter(row, collectionFilter)
+          );
+          const totalBookings = filteredRows.length;
           if (totalBookings <= 0) {
             continue;
           }
 
-          const totalPersons = (waveData.sections ?? []).reduce((sum, section) => {
-            return sum + (section.rows ?? []).reduce((rowsSum, row) => rowsSum + Math.max(0, Number(row.personsCount ?? 0) || 0), 0);
-          }, 0);
+          const waveTotals = filteredRows.reduce((acc, row) => {
+            const paymentMode = this.resolveWaveRowPaymentMode(row);
+            const bookingAmount = Number(row.bookingAmount ?? 0) || 0;
+            const insuranceAmount = Number(row.insuranceAmount ?? 0) || 0;
+            const finalAmount = Number(row.finalAmount ?? 0) || 0;
+            const collectedAmount = Number(row.collectedAmount ?? 0) || 0;
+            const uncollectedAmount = Number(row.uncollectedAmount ?? 0) || 0;
+            const personsCount = Math.max(0, Number(row.personsCount ?? 0) || 0);
+            acc.totalPersons += personsCount;
+            if (includeFinancials) {
+              acc.totalBookingAmount += bookingAmount;
+              acc.totalInsuranceAmount += insuranceAmount;
+              acc.totalFinalAmount += finalAmount;
+              acc.totalCollectedAmount += collectedAmount;
+              acc.totalUncollectedAmount += uncollectedAmount;
+              if (paymentMode === 'cash') {
+                acc.cashFinalAmount += finalAmount;
+              } else if (paymentMode === 'installment') {
+                acc.installmentFinalAmount += finalAmount;
+              }
+            }
+
+            if (paymentMode === 'cash') {
+              acc.cashBookingsCount += 1;
+            } else if (paymentMode === 'installment') {
+              acc.installmentBookingsCount += 1;
+            }
+
+            return acc;
+          }, {
+            totalPersons: 0,
+            totalBookingAmount: 0,
+            totalInsuranceAmount: 0,
+            totalFinalAmount: 0,
+            totalCollectedAmount: 0,
+            totalUncollectedAmount: 0,
+            cashBookingsCount: 0,
+            installmentBookingsCount: 0,
+            cashFinalAmount: 0,
+            installmentFinalAmount: 0
+          });
 
           waveSummaries.push({
             waveCode,
             totalBookings,
-            totalPersons,
-            totalBookingAmount: includeFinancials ? Number(waveData.totalBookingAmount ?? 0) || 0 : 0,
-            totalInsuranceAmount: includeFinancials ? Number(waveData.totalInsuranceAmount ?? 0) || 0 : 0,
-            totalFinalAmount: includeFinancials ? Number(waveData.totalFinalAmount ?? 0) || 0 : 0,
-            totalCollectedAmount: includeFinancials ? Number(waveData.totalCollectedAmount ?? 0) || 0 : 0,
-            totalUncollectedAmount: includeFinancials ? Number(waveData.totalUncollectedAmount ?? 0) || 0 : 0,
-            cashBookingsCount: Number(waveData.cashBookingsCount ?? 0) || 0,
-            installmentBookingsCount: Number(waveData.installmentBookingsCount ?? 0) || 0,
-            cashFinalAmount: includeFinancials ? Number(waveData.cashFinalAmount ?? 0) || 0 : 0,
-            installmentFinalAmount: includeFinancials ? Number(waveData.installmentFinalAmount ?? 0) || 0 : 0
+            totalPersons: waveTotals.totalPersons,
+            totalBookingAmount: includeFinancials ? waveTotals.totalBookingAmount : 0,
+            totalInsuranceAmount: includeFinancials ? waveTotals.totalInsuranceAmount : 0,
+            totalFinalAmount: includeFinancials ? waveTotals.totalFinalAmount : 0,
+            totalCollectedAmount: includeFinancials ? waveTotals.totalCollectedAmount : 0,
+            totalUncollectedAmount: includeFinancials ? waveTotals.totalUncollectedAmount : 0,
+            cashBookingsCount: waveTotals.cashBookingsCount,
+            installmentBookingsCount: waveTotals.installmentBookingsCount,
+            cashFinalAmount: includeFinancials ? waveTotals.cashFinalAmount : 0,
+            installmentFinalAmount: includeFinancials ? waveTotals.installmentFinalAmount : 0
           });
         }
 
@@ -1597,6 +1779,8 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
         generatedAtUtc: new Date().toISOString(),
         generatedByUserId: this.waveBookingsPrintUserName,
         includeFinancials,
+        paymentModeFilter,
+        collectionFilter,
         totalResorts: resorts.length,
         totalConfiguredWaves: resorts.reduce((sum, resort) => sum + resort.totalConfiguredWaves, 0),
         totalWavesWithBookings: resorts.reduce((sum, resort) => sum + resort.totalWavesWithBookings, 0),
@@ -1615,11 +1799,13 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
       };
 
       this.scheduleAllResortsSummaryPrintPaginationRefresh();
+      this.tryAutoPrintPendingReport('all-resorts-summary');
     } catch (error) {
       this.allResortsSummaryData = null;
       this.allResortsSummaryPrintFooterMarkers = [];
       this.allResortsSummaryPrintTotalPages = 0;
       this.allResortsSummaryErrorText = this.collectHttpErrors(error, 'تعذر تحميل تقرير جميع المصايف حالياً.');
+      this.clearPendingAutoPrint('all-resorts-summary');
       if (!silent) {
         this.msg.msgError('خطأ', `<h5>${this.allResortsSummaryErrorText}</h5>`, true);
       }
@@ -3297,6 +3483,26 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     if (financialViewSub) {
       this.subscriptions.add(financialViewSub);
     }
+
+    const allResortsPaymentModeSub = this.filtersForm.get('allResortsSummaryPaymentMode')?.valueChanges.subscribe(() => {
+      if (this.allResortsSummaryDialogVisible) {
+        this.refreshAllResortsSummaryPrintReport(true);
+      }
+    });
+
+    if (allResortsPaymentModeSub) {
+      this.subscriptions.add(allResortsPaymentModeSub);
+    }
+
+    const allResortsCollectionSub = this.filtersForm.get('allResortsSummaryCollectionFilter')?.valueChanges.subscribe(() => {
+      if (this.allResortsSummaryDialogVisible) {
+        this.refreshAllResortsSummaryPrintReport(true);
+      }
+    });
+
+    if (allResortsCollectionSub) {
+      this.subscriptions.add(allResortsCollectionSub);
+    }
   }
 
   private bindSignalRefresh(): void {
@@ -4042,5 +4248,193 @@ export class SummerRequestsAdminConsoleComponent implements OnInit, OnDestroy {
     const raw = this.filtersForm.getRawValue();
     this.activeDashboardStatus = String(raw.status ?? '').trim();
     this.activeDashboardPaymentState = String(raw.paymentState ?? '').trim();
+  }
+
+  private executeReportFromOptions(autoPrint: boolean): void {
+    const reportKind = this.selectedReportKind;
+    if (!this.canRunReportKind(reportKind)) {
+      this.msg.msgError('تنبيه', `<h5>${this.selectedReportRequirementMessage}</h5>`, true);
+      return;
+    }
+
+    this.pendingReportAutoPrint = autoPrint ? reportKind : null;
+    this.closeReportOptionsDialog();
+    this.openReportByKind(reportKind);
+  }
+
+  private canRunReportKind(reportKind: SummerAdminReportKind): boolean {
+    if (reportKind === 'wave-bookings') {
+      return this.canOpenWaveCapacityDialog;
+    }
+    if (reportKind === 'resort-bookings') {
+      return this.canOpenResortBookingsPrintDialog;
+    }
+
+    return this.destinations.length > 0;
+  }
+
+  private openReportByKind(reportKind: SummerAdminReportKind): void {
+    if (reportKind === 'wave-bookings') {
+      this.openWaveBookingsPrintPreview();
+      return;
+    }
+
+    if (reportKind === 'resort-bookings') {
+      this.openResortBookingsPrintPreview();
+      return;
+    }
+
+    this.openAllResortsSummaryPrintPreview();
+  }
+
+  private printReportByKind(reportKind: SummerAdminReportKind): void {
+    if (reportKind === 'wave-bookings') {
+      if (!this.bookingsPrintDialogVisible) {
+        return;
+      }
+      this.printWaveBookingsReport();
+      return;
+    }
+
+    if (reportKind === 'resort-bookings') {
+      if (!this.resortBookingsPrintDialogVisible) {
+        return;
+      }
+      this.printResortBookingsReport();
+      return;
+    }
+
+    if (!this.allResortsSummaryDialogVisible) {
+      return;
+    }
+    this.printAllResortsSummaryReport();
+  }
+
+  private tryAutoPrintPendingReport(reportKind: SummerAdminReportKind): void {
+    if (this.pendingReportAutoPrint !== reportKind) {
+      return;
+    }
+
+    this.pendingReportAutoPrint = null;
+    setTimeout(() => {
+      this.printReportByKind(reportKind);
+    }, 0);
+  }
+
+  private clearPendingAutoPrint(reportKind: SummerAdminReportKind): void {
+    if (this.pendingReportAutoPrint === reportKind) {
+      this.pendingReportAutoPrint = null;
+    }
+  }
+
+  private get selectedReportKind(): SummerAdminReportKind {
+    const rawValue = String(this.filtersForm.get('reportKind')?.value ?? 'all-resorts-summary').trim().toLowerCase();
+    if (rawValue === 'wave-bookings' || rawValue === 'resort-bookings') {
+      return rawValue;
+    }
+
+    return 'all-resorts-summary';
+  }
+
+  private get selectedAllResortsSummaryPaymentMode(): SummerAllResortsSummaryPaymentModeFilter {
+    const rawValue = String(this.filtersForm.get('allResortsSummaryPaymentMode')?.value ?? 'all').trim().toLowerCase();
+    if (rawValue === 'cash' || rawValue === 'installment') {
+      return rawValue;
+    }
+
+    return 'all';
+  }
+
+  private get selectedAllResortsSummaryCollectionFilter(): SummerAllResortsSummaryCollectionFilter {
+    const rawValue = String(this.filtersForm.get('allResortsSummaryCollectionFilter')?.value ?? 'all').trim().toLowerCase();
+    if (rawValue === 'collected' || rawValue === 'uncollected') {
+      return rawValue;
+    }
+
+    return 'all';
+  }
+
+  private resolveWaveRowPaymentMode(row: SummerWaveBookingsPrintRowDto | null | undefined): SummerAllResortsSummaryPaymentModeFilter {
+    const paymentModeCode = String(row?.paymentMode ?? '').trim().toUpperCase();
+    if (paymentModeCode === 'INSTALLMENT') {
+      return 'installment';
+    }
+    if (paymentModeCode === 'CASH') {
+      return 'cash';
+    }
+
+    const normalizedLabel = this.normalizeRequestPaymentText(String(row?.paymentModeLabel ?? ''));
+    if (normalizedLabel.includes('installment') || normalizedLabel.includes('تقسيط')) {
+      return 'installment';
+    }
+
+    return 'cash';
+  }
+
+  private matchesAllResortsSummaryPaymentMode(
+    row: SummerWaveBookingsPrintRowDto | null | undefined,
+    paymentModeFilter: SummerAllResortsSummaryPaymentModeFilter
+  ): boolean {
+    if (paymentModeFilter === 'all') {
+      return true;
+    }
+
+    return this.resolveWaveRowPaymentMode(row) === paymentModeFilter;
+  }
+
+  private matchesAllResortsSummaryCollectionFilter(
+    row: SummerWaveBookingsPrintRowDto | null | undefined,
+    collectionFilter: SummerAllResortsSummaryCollectionFilter
+  ): boolean {
+    if (collectionFilter === 'all') {
+      return true;
+    }
+
+    const isCollected = this.resolveWaveRowIsFullyCollected(row);
+    if (collectionFilter === 'collected') {
+      return isCollected;
+    }
+
+    return !isCollected;
+  }
+
+  private resolveWaveRowIsFullyCollected(row: SummerWaveBookingsPrintRowDto | null | undefined): boolean {
+    if (typeof row?.isFullyCollected === 'boolean') {
+      return row.isFullyCollected;
+    }
+
+    const uncollectedAmount = Number(row?.uncollectedAmount ?? 0) || 0;
+    if (uncollectedAmount > 0) {
+      return false;
+    }
+
+    const status = this.normalizeRequestPaymentText(String(row?.collectionStatusLabel ?? ''));
+    if (status.includes('غيرمسدد') || status.includes('unpaid') || status.includes('pending') || status.includes('partial')) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private resolveAllResortsSummaryPaymentModeLabel(mode: SummerAllResortsSummaryPaymentModeFilter): string {
+    if (mode === 'cash') {
+      return 'طلبات كاش فقط';
+    }
+    if (mode === 'installment') {
+      return 'طلبات تقسيط فقط';
+    }
+
+    return 'كل الطلبات';
+  }
+
+  private resolveAllResortsSummaryCollectionFilterLabel(filter: SummerAllResortsSummaryCollectionFilter): string {
+    if (filter === 'collected') {
+      return 'محصل فقط';
+    }
+    if (filter === 'uncollected') {
+      return 'غير محصل فقط';
+    }
+
+    return 'محصل وغير محصل';
   }
 }
