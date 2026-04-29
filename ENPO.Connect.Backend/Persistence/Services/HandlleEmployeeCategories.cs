@@ -101,6 +101,9 @@ namespace Persistence.Services
             SummerWorkflowDomainConstants.PricingFieldKinds.DisplayText,
             SummerWorkflowDomainConstants.PricingFieldKinds.SmsText,
             SummerWorkflowDomainConstants.PricingFieldKinds.WhatsAppText,
+            "SummerWaveStartsAtIso",
+            "SUM2026_WaveStartsAtIso",
+            "WaveStartsAtIso",
             "Summer_PaymentMode",
             "SUM2026_PaymentMode",
             "PaymentMode",
@@ -323,9 +326,18 @@ namespace Persistence.Services
 
             var seasonYear = ParseInt(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.SeasonYearFieldKinds), DateTime.UtcNow.Year);
             var waveLabel = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.WaveLabelFieldKinds);
+            var waveStartsAtIso = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.WaveStartsAtIsoFieldKinds);
             var stayMode = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.StayModeFieldKinds);
             var isProxyBooking = ParseBoolean(GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.ProxyModeFieldKinds));
             var requestedMembershipType = GetFirstFieldValue(messageRequest.Fields, SummerWorkflowDomainConstants.MembershipTypeFieldKinds);
+
+            if (!string.IsNullOrWhiteSpace(waveStartsAtIso))
+            {
+                UpsertRequestFieldRange(
+                    messageRequest.Fields,
+                    SummerWorkflowDomainConstants.WaveStartsAtIsoFieldKinds,
+                    waveStartsAtIso);
+            }
 
             if (categoryInfo == null)
             {
@@ -410,6 +422,7 @@ namespace Persistence.Services
                 SeasonYear = seasonYear,
                 WaveCode = summerCamp,
                 WaveLabel = waveLabel,
+                WaveStartsAtIso = waveStartsAtIso,
                 FamilyCount = familyCount,
                 ExtraCount = extraCount,
                 PersonsCount = personsCount,

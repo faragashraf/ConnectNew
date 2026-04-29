@@ -23,6 +23,7 @@ namespace Persistence.Services.Summer
 
         public static readonly string[] WaveCodeFieldKinds = { "SummerCamp", "SUM2026_WaveCode", "WaveCode" };
         public static readonly string[] WaveLabelFieldKinds = { "SummerCampLabel", "SUM2026_WaveLabel", "WaveLabel" };
+        public static readonly string[] WaveStartsAtIsoFieldKinds = { "SummerWaveStartsAtIso", "SUM2026_WaveStartsAtIso", "WaveStartsAtIso" };
         public static readonly string[] FamilyCountFieldKinds = { "FamilyCount", "SUM2026_FamilyCount" };
         public static readonly string[] ExtraCountFieldKinds = { "Over_Count", "SUM2026_ExtraCount", "ExtraCount" };
         public static readonly string[] SeasonYearFieldKinds = { "SummerSeasonYear", "SUM2026_SeasonYear", "SeasonYear" };

@@ -62,6 +62,7 @@ const SUMMER_PAYMENT_MODE_INSTALLMENT: SummerPaymentMode = 'INSTALLMENT';
 const SUMMER_INSTALLMENTS_MIN_COUNT = 2;
 const SUMMER_INSTALLMENTS_MAX_COUNT = 7;
 const SUMMER_INSTALLMENTS_DEFAULT_COUNT = 7;
+const SUMMER_WAVE_STARTS_AT_ISO_FIELD_KEYS = ['SummerWaveStartsAtIso', 'SUM2026_WaveStartsAtIso', 'WaveStartsAtIso'] as const;
 const SUMMER_PAYMENT_MODE_FIELD_KEYS = ['Summer_PaymentMode', 'SUM2026_PaymentMode', 'PaymentMode'] as const;
 const SUMMER_INSTALLMENT_COUNT_FIELD_KEYS = ['Summer_PaymentInstallmentCount', 'SUM2026_PaymentInstallmentCount'] as const;
 const SUMMER_INSTALLMENTS_TOTAL_FIELD_KEYS = ['Summer_PaymentInstallmentsTotal', 'SUM2026_PaymentInstallmentsTotal'] as const;
@@ -678,7 +679,9 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     }
 
     const waveCode = this.getStringValue(this.engine.aliases.waveCode);
-    const waveLabel = destination.waves.find(w => w.code === waveCode)?.startsAtLabel ?? waveCode;
+    const selectedWave = destination.waves.find(w => w.code === waveCode);
+    const waveLabel = selectedWave?.startsAtLabel ?? waveCode;
+    const waveStartsAtIso = String(selectedWave?.startsAtIso ?? '').trim();
     const notes = this.getStringValue(this.engine.aliases.notes);
     const employeeFileNumber = this.getStringValue(this.engine.aliases.ownerFileNumber) || 'EMP';
     const employeeName = this.getStringValue(this.engine.aliases.ownerName);
@@ -731,6 +734,7 @@ export class SummerDynamicBookingBuilderComponent implements OnInit, OnChanges, 
     this.ensureKeyField(fields, 'SummerDestinationName', destination.name, destination.categoryId);
     this.ensureKeyField(fields, 'SummerCamp', waveCode, destination.categoryId);
     this.ensureKeyField(fields, 'SummerCampLabel', waveLabel, destination.categoryId);
+    this.ensureKeyFieldRange(fields, SUMMER_WAVE_STARTS_AT_ISO_FIELD_KEYS, waveStartsAtIso, destination.categoryId);
     this.ensureKeyField(fields, 'Emp_Name', employeeName, destination.categoryId);
     this.ensureKeyField(fields, 'Emp_Id', employeeFileNumber, destination.categoryId);
     this.ensureKeyField(fields, 'NationalId', nationalId, destination.categoryId);
