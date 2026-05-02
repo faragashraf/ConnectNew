@@ -1,0 +1,296 @@
+<section class="publication-new-page" dir="rtl">
+  <p-toolbar styleClass="page-toolbar">
+    <ng-template pTemplate="left">
+      <div class="header-copy">
+        <h1>جميع المنشورات</h1>
+        <p>عرض المنشورات الحالية مع تجهيز أوامر العرض والتعديل للخطوة التالية.</p>
+      </div>
+    </ng-template>
+    <ng-template pTemplate="right">
+      <div class="toolbar-actions">
+        <button
+          pButton
+          type="button"
+          class="p-button-sm"
+          icon="pi pi-plus"
+          label="إضافة منشور"
+          (click)="openAddDialog()">
+        </button>
+        <button
+          pButton
+          type="button"
+          class="p-button-outlined p-button-sm"
+          icon="pi pi-refresh"
+          label="تحديث"
+          [disabled]="loading"
+          (click)="loadDocuments()">
+        </button>
+      </div>
+    </ng-template>
+  </p-toolbar>
+
+  <div class="table-card">
+    <p-table
+      [value]="documents"
+      dataKey="DocumentId"
+      [loading]="loading"
+      [paginator]="true"
+      [rows]="pageSize"
+      [first]="firstRecordIndex"
+      [totalRecords]="totalRecords"
+      [rowsPerPageOptions]="rowsPerPageOptions"
+      [showCurrentPageReport]="true"
+      currentPageReportTemplate="عرض {first} إلى {last} من إجمالي {totalRecords}"
+      [lazy]="true"
+      (onPage)="onPageChange($event)"
+      responsiveLayout="scroll"
+      styleClass="modern-publications-table">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>#</th>
+          <th>رقم الوثيقة</th>
+          <th>تاريخ بدء العمل</th>
+          <th>ملخص الوثيقة</th>
+          <th>اسم القطاع</th>
+          <th>اسم المنطقة</th>
+          <th>نوع الوثيقة</th>
+          <th>اسم التطبيق</th>
+          <th>نوع النشر</th>
+          <th class="actions-header">الإجراءات</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-row let-rowIndex="rowIndex">
+        <tr>
+          <td>
+            <span class="mobile-label">#</span>
+            {{ getRowNumber(rowIndex) }}
+          </td>
+          <td>
+            <span class="mobile-label">رقم الوثيقة</span>
+            {{ displayValue(row.DOCUMENT_NUMBER) }}
+          </td>
+          <td>
+            <span class="mobile-label">تاريخ بدء العمل</span>
+            {{ row.WORKING_START_DATE ? (row.WORKING_START_DATE | date:'M/d/yy, hh:mm a') : '-' }}
+          </td>
+          <td class="summary-cell">
+            <span class="mobile-label">ملخص الوثيقة</span>
+            <span class="summary-text">{{ displayValue(row.MINI_DOC) }}</span>
+          </td>
+          <td>
+            <span class="mobile-label">اسم القطاع</span>
+            {{ displayValue(row.SectorName) }}
+          </td>
+          <td>
+            <span class="mobile-label">اسم المنطقة</span>
+            {{ displayValue(row.DistrictName) }}
+          </td>
+          <td>
+            <span class="mobile-label">نوع الوثيقة</span>
+            {{ displayValue(row.DocumentType) }}
+          </td>
+          <td>
+            <span class="mobile-label">اسم التطبيق</span>
+            {{ displayValue(row.Application) }}
+          </td>
+          <td>
+            <span class="mobile-label">نوع النشر</span>
+            {{ displayValue(row.PublicationTypeName) }}
+          </td>
+          <td class="actions-cell">
+            <span class="mobile-label">الإجراءات</span>
+            <div class="actions-wrap">
+              <button
+                pButton
+                type="button"
+                icon="pi pi-eye"
+                class="p-button-sm action-btn view-btn"
+                aria-label="عرض المنشور"
+                (click)="viewPublication(row)">
+              </button>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-pencil"
+                class="p-button-sm action-btn edit-btn"
+                aria-label="تعديل المنشور"
+                (click)="editPublication(row)">
+              </button>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="10" class="empty-state">
+            لا توجد بيانات منشورات متاحة حاليًا.
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <p-dialog
+    [(visible)]="editorDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [style]="{ width: '92vw', maxWidth: '1150px' }"
+    [breakpoints]="{ '1200px': '95vw', '768px': '99vw' }"
+    [header]="editorTitle"
+    styleClass="publication-editor-dialog"
+    (onHide)="closeEditorDialog()">
+
+    <div class="editor-loading" *ngIf="editorDialogLoading">
+      <p-progressSpinner strokeWidth="4" styleClass="small-spinner"></p-progressSpinner>
+      <span>جاري تحميل بيانات النموذج...</span>
+    </div>
+
+    <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="submitEditor()" *ngIf="!editorDialogLoading">
+      <div class="editor-grid">
+        <div class="field-block">
+          <label>
+            المنطقة
+            <span class="required-star">*</span>
+          </label>
+          <p-dropdown
+            [options]="districtOptions"
+            optionLabel="label"
+            optionValue="value"
+            formControlName="districtId"
+            appendTo="body"
+            [filter]="true"
+            filterBy="label"
+            placeholder="اختر المنطقة">
+          </p-dropdown>
+          <small class="error-text" *ngIf="isControlInvalid('districtId')">المنطقة حقل إلزامي.</small>
+        </div>
+
+        <div class="field-block">
+          <label>
+            نوع المنشور
+            <span class="required-star">*</span>
+          </label>
+          <p-dropdown
+            [options]="publicationTypeOptions"
+            optionLabel="label"
+            optionValue="value"
+            formControlName="publicationTypeId"
+            appendTo="body"
+            [filter]="true"
+            filterBy="label"
+            placeholder="اختر نوع المنشور">
+          </p-dropdown>
+          <small class="error-text" *ngIf="isControlInvalid('publicationTypeId')">نوع المنشور حقل إلزامي.</small>
+        </div>
+
+        <div class="field-block">
+          <label>
+            تاريخ التفعيل
+            <span class="required-star">*</span>
+          </label>
+          <p-calendar
+            formControlName="workingStartDate"
+            appendTo="body"
+            [showIcon]="true"
+            [showTime]="true"
+            hourFormat="12"
+            dateFormat="yy-mm-dd"
+            placeholder="اختر تاريخ ووقت التفعيل">
+          </p-calendar>
+          <small class="error-text" *ngIf="isControlInvalid('workingStartDate')">تاريخ التفعيل حقل إلزامي.</small>
+        </div>
+
+        <div class="field-block">
+          <label>DOCUMENT_PARENT_ID (اختياري)</label>
+          <input pInputText type="text" formControlName="documentParentId" placeholder="اختياري" />
+        </div>
+
+        <div class="field-block full-width">
+          <label>
+            ملخص الوثيقة
+            <span class="required-star">*</span>
+          </label>
+          <textarea
+            pInputTextarea
+            rows="3"
+            formControlName="miniDoc"
+            placeholder="اكتب ملخص الوثيقة">
+          </textarea>
+          <small class="error-text" *ngIf="isControlInvalid('miniDoc')">ملخص الوثيقة حقل إلزامي.</small>
+        </div>
+
+        <div class="field-block full-width">
+          <label>
+            النص الكامل للوثيقة
+            <span class="required-star">*</span>
+          </label>
+          <textarea
+            pInputTextarea
+            rows="5"
+            formControlName="allTextDoc"
+            placeholder="اكتب النص الكامل للوثيقة">
+          </textarea>
+          <small class="error-text" *ngIf="isControlInvalid('allTextDoc')">النص الكامل للوثيقة حقل إلزامي.</small>
+        </div>
+      </div>
+
+      <div class="menu-tree-card">
+        <div class="panel-header">
+          <h3>القائمة الرئيسية <span class="required-star">*</span></h3>
+          <p *ngIf="selectedMenuPath">{{ selectedMenuPath }}</p>
+        </div>
+
+        <app-tree-sidebar
+          [tree]="menuTree"
+          [selectedNode]="selectedMenuNode"
+          [title]="'القائمة الرئيسية'"
+          [expandedWidth]="100"
+          [showTreeContextMenu]="false"
+          [allExpanded]="true"
+          [scrollHeight]="18"
+          (onNodeSelect)="onMenuNodeSelect($event)"
+          (onNodeUnselect)="onMenuNodeUnselect()">
+        </app-tree-sidebar>
+
+        <small class="error-text" *ngIf="isControlInvalid('menuItemId')">اختيار عنصر من القائمة الرئيسية إلزامي.</small>
+      </div>
+
+      <div class="attachments-card">
+        <div class="panel-header">
+          <h3>المرفقات <span class="required-star">*</span></h3>
+          <p>يسمح فقط بامتدادات DOC و DOCX</p>
+        </div>
+
+        <app-add-attachments
+          [config]="attachmentUiConfig"
+          [fileParameters]="editorFileParameters"
+          (fileUploadEvent)="onAttachmentsChanged($event)"
+          (AttachIDemit)="downloadExistingAttachment($event)">
+        </app-add-attachments>
+
+        <small class="error-text" *ngIf="formSubmitted && !hasAnyAttachment">المرفقات حقل إلزامي.</small>
+      </div>
+    </form>
+
+    <ng-template pTemplate="footer">
+      <button
+        pButton
+        type="button"
+        class="p-button-text"
+        label="إلغاء"
+        [disabled]="editorSubmitting"
+        (click)="closeEditorDialog()">
+      </button>
+      <button
+        pButton
+        type="button"
+        [label]="editorMode === 'add' ? 'إضافة' : 'حفظ التعديلات'"
+        [loading]="editorSubmitting"
+        (click)="submitEditor()">
+      </button>
+    </ng-template>
+  </p-dialog>
+</section>

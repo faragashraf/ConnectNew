@@ -107,11 +107,11 @@ export class AuthObjectsService {
   _static: MegaMenuItem[] = [{
     label: 'الرئيسية', routerLink: '/Home', icon: 'pi pi-fw pi-home', "routerLinkActiveOptions": { "exact": true },
   },
-  // {
-  //   label: 'المنشورات',
-  //   icon: 'pi pi-bars',
-  //   routerLink: '/Publications/mainLayOut'
-  // },
+  {
+    label: 'المنشورات',
+    icon: 'pi pi-bars',
+    routerLink: '/Publications/mainLayOut'
+  },
   {
     label: 'طلب جديد',
     icon: 'pi pi-pencil',

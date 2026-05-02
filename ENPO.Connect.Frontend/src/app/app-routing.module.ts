@@ -55,6 +55,7 @@ const routes: Routes = [
     }
   },
   { path: 'Publications', loadChildren: () => import('./Modules/Publications/publications.module').then(m => m.PublicationsModule) },
+  { path: 'PublicationNew', loadChildren: () => import('./Modules/PublicationNew/publication-new.module').then(m => m.PublicationNewModule) },
   { path: 'TopManagement', loadChildren: () => import('./Modules/top-maganement/top-maganement.module').then(m => m.TopMaganementModule) },
   { path: 'EmployeeRequests', loadChildren: () => import('./Modules/EmployeeRequests/EmployeeRequests.module').then(m => m.EmployeeRequestsModule) },
   { path: 'DynamicSubjects', loadChildren: () => import('./Modules/dynamic-subjects/dynamic-subjects.module').then(m => m.DynamicSubjectsModule) },

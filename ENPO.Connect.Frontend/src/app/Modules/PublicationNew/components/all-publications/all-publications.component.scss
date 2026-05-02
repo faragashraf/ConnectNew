@@ -1,0 +1,287 @@
+.publication-new-page {
+  direction: rtl;
+  text-align: right;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #d7e3ff;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(14, 116, 144, 0.1), transparent 40%),
+    radial-gradient(circle at 88% 100%, rgba(245, 158, 11, 0.12), transparent 35%),
+    #f8fbff;
+}
+
+.toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.header-copy h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: #0f172a;
+}
+
+.header-copy p {
+  margin: 0.35rem 0 0;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.table-card {
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+:host ::ng-deep .modern-publications-table .p-datatable-wrapper {
+  overflow: auto;
+}
+
+:host ::ng-deep .page-toolbar {
+  border-radius: 14px;
+  border: 1px solid #dbeafe;
+  background: #ffffff;
+}
+
+:host ::ng-deep .modern-publications-table .p-datatable-thead > tr > th {
+  background: #e6e7f2;
+  color: #0f172a;
+  border-width: 0 0 1px 0;
+  border-color: #d6d9eb;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+  padding: 0.9rem 0.7rem;
+}
+
+:host ::ng-deep .modern-publications-table .p-datatable-tbody > tr > td {
+  border-width: 0 0 1px 0;
+  border-color: #edf2fb;
+  text-align: right;
+  padding: 0.85rem 0.7rem;
+  vertical-align: middle;
+  color: #1e293b;
+}
+
+:host ::ng-deep .modern-publications-table .p-datatable-tbody > tr:hover {
+  background: #f8fbff;
+}
+
+.summary-cell {
+  min-width: 230px;
+  max-width: 320px;
+}
+
+.summary-text {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.actions-header,
+.actions-cell {
+  min-width: 120px;
+}
+
+.actions-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.action-btn {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 12px !important;
+  border: 0 !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+}
+
+.view-btn {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb) !important;
+}
+
+.edit-btn {
+  background: linear-gradient(135deg, #facc15, #eab308) !important;
+  color: #1f2937 !important;
+}
+
+.mobile-label {
+  display: none;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.empty-state {
+  padding: 1.1rem 0.7rem !important;
+  text-align: center !important;
+  color: #64748b !important;
+}
+
+:host ::ng-deep .p-paginator {
+  border-width: 1px 0 0 0;
+  border-color: #e2e8f0;
+  border-radius: 0;
+}
+
+:host ::ng-deep .publication-editor-dialog .p-dialog-content {
+  padding-top: 0.5rem;
+}
+
+.editor-loading {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.8rem;
+  color: #334155;
+}
+
+:host ::ng-deep .editor-loading .small-spinner {
+  width: 42px !important;
+  height: 42px !important;
+}
+
+.editor-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.field-block {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.field-block.full-width {
+  grid-column: 1 / -1;
+}
+
+.field-block label {
+  font-size: 0.86rem;
+  color: #334155;
+  font-weight: 700;
+}
+
+.field-block input,
+.field-block textarea,
+.field-block .p-dropdown,
+.field-block .p-calendar {
+  width: 100%;
+}
+
+.required-star {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.error-text {
+  color: #dc2626;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.menu-tree-card,
+.attachments-card {
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0.8rem;
+}
+
+.panel-header {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.6rem;
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 1.03rem;
+  color: #0f172a;
+}
+
+.panel-header p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+@media (max-width: 1024px) {
+  .publication-new-page {
+    padding: 0.75rem;
+  }
+
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  :host ::ng-deep .page-toolbar .p-toolbar-group-left,
+  :host ::ng-deep .page-toolbar .p-toolbar-group-right {
+    width: 100%;
+  }
+
+  :host ::ng-deep .page-toolbar .p-toolbar-group-right {
+    justify-content: flex-start;
+    margin-top: 0.6rem;
+  }
+}
+
+@media (max-width: 768px) {
+  :host ::ng-deep .modern-publications-table .p-datatable-thead > tr > th {
+    display: none;
+  }
+
+  :host ::ng-deep .modern-publications-table .p-datatable-tbody > tr {
+    display: block;
+    margin: 0.65rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+  }
+
+  :host ::ng-deep .modern-publications-table .p-datatable-tbody > tr > td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.7rem;
+    border: 0;
+    border-bottom: 1px dashed #e2e8f0;
+  }
+
+  :host ::ng-deep .modern-publications-table .p-datatable-tbody > tr > td:last-child {
+    border-bottom: 0;
+  }
+
+  .mobile-label {
+    display: inline-block;
+  }
+
+  .summary-cell {
+    min-width: auto;
+    max-width: none;
+  }
+
+  .summary-text {
+    text-align: left;
+    max-width: 58vw;
+  }
+
+  .toolbar-actions {
+    flex-wrap: wrap;
+  }
+}
