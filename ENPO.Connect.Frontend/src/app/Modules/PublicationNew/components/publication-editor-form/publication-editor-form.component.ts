@@ -1,7 +1,9 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { forkJoin } from 'rxjs';
+import { MenuItem } from 'primeng/api';
 import { ComponentConfig } from 'src/app/shared/models/Component.Config.model';
+import { SubjectRoutingOrgUnitWithCountTreeNodeDto } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminRouting/DynamicSubjectsAdminRouting.dto';
 import {
   AttachmentList,
   DocumentResp,
@@ -10,13 +12,20 @@ import {
 } from 'src/app/shared/services/BackendServices/Publications/Publications.dto';
 import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
 import { AttchedObjectService } from 'src/app/shared/services/helper/attched-object.service';
-import { TreeNode } from 'src/app/shared/services/helper/auth-objects.service';
+import { AuthObjectsService, TreeNode } from 'src/app/shared/services/helper/auth-objects.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { PublicationNewApiService } from '../../shared/services/publication-new-api.service';
 
 interface LookupOption {
   label: string;
   value: number;
+}
+
+interface AuthorizedOrgUnit {
+  unitId: number;
+  unitName: string;
+  parentId: number;
+  parentUnitName: string;
 }
 
 export type PublicationEditorMode = 'add' | 'edit' | 'view';
@@ -27,6 +36,11 @@ export type PublicationEditorMode = 'add' | 'edit' | 'view';
   styleUrls: ['./publication-editor-form.component.scss']
 })
 export class PublicationEditorFormComponent implements OnInit, OnChanges {
+  private readonly addMenuItemStatementId = 34;
+  private readonly deleteMenuItemStatementId = 35;
+  // Keep null until the backend statement ID for "deactivate menu item" is confirmed.
+  private readonly deactivateMenuItemStatementId: number | null = null;
+
   @Input() mode: PublicationEditorMode = 'add';
   @Input() publication: DocumentResp | null = null;
 
@@ -55,17 +69,32 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
   } as ComponentConfig;
 
   lookupsLoading = false;
+  authorizedUnitTreeLoading = false;
   submitting = false;
   formSubmitted = false;
+  menuMutationInProgress = false;
 
   selectedMenuNode: TreeNode | null = null;
   selectedMenuPath = '';
   menuTree: TreeNode[] = [];
+  authorizedUnitTree: TreeNode[] = [];
+  contextMenuNode: TreeNode | null = null;
+  selectedAuthorizedUnitNode: TreeNode | null = null;
+  selectedAuthorizedUnitPath = '';
+  treeContextMenuItems: MenuItem[] = [];
   districtOptions: LookupOption[] = [];
   publicationTypeOptions: LookupOption[] = [];
   editorFileParameters: FileParameter[] = [];
+  menuDialogVisible = false;
 
   private pendingMenuSelectionId: number | null = null;
+  private internalOrgUnitsRows: SubjectRoutingOrgUnitWithCountTreeNodeDto[] = [];
+
+  readonly menuDialogForm: FormGroup = this.fb.group({
+    menuItemName: ['', Validators.required],
+    application: ['', Validators.required],
+    authorizedUnitId: [null, Validators.required]
+  });
 
   readonly editorForm: FormGroup = this.fb.group({
     documentId: [0],
@@ -82,7 +111,8 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     private readonly fb: FormBuilder,
     private readonly publicationNewApiService: PublicationNewApiService,
     private readonly msgsService: MsgsService,
-    private readonly attchedObjectService: AttchedObjectService
+    private readonly attchedObjectService: AttchedObjectService,
+    private readonly authObjectsService: AuthObjectsService
   ) { }
 
   get isViewMode(): boolean {
@@ -93,11 +123,16 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     return this.mode === 'add' || this.mode === 'edit';
   }
 
+  get canManageMenuTree(): boolean {
+    return this.mode === 'add' && this.authObjectsService.checkAuthFun('AddMenuItemsFunc');
+  }
+
   get hasAnyAttachment(): boolean {
     return this.editorFileParameters.length > 0;
   }
 
   ngOnInit(): void {
+    this.loadAuthorizedUnitTree();
     this.resetForCurrentInputs();
     this.loadLookups();
   }
@@ -211,6 +246,238 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     this.editorForm.patchValue({ menuItemId: null });
   }
 
+  onMenuNodeContextMenuSelect(event: any): void {
+    if (!this.canManageMenuTree) {
+      return;
+    }
+
+    const node: TreeNode | null = (event?.node ?? event) as TreeNode;
+    if (!node) {
+      return;
+    }
+
+    this.contextMenuNode = node;
+    this.onMenuNodeSelect({ node });
+    const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+
+    this.treeContextMenuItems = [
+      {
+        label: 'إضافة عنصر فرعي',
+        icon: 'pi pi-plus',
+        command: () => this.openAddChildDialog()
+      },
+      {
+        label: 'حذف العنصر',
+        icon: 'pi pi-trash',
+        command: () => this.confirmDeleteContextNode(),
+        disabled: hasChildren
+      },
+      {
+        label: 'تعطيل العنصر',
+        icon: 'pi pi-ban',
+        command: () => this.confirmDeactivateContextNode()
+      }
+    ];
+  }
+
+  openAddChildDialog(): void {
+    const nodeId = this.resolveNodeMenuItemId(this.contextMenuNode);
+    if (nodeId <= 0) {
+      this.msgsService.msgInfo('اختر عنصرًا صحيحًا من الشجرة أولاً.', 'تنبيه', 'warn');
+      return;
+    }
+
+    if (this.authorizedUnitTree.length === 0 && !this.authorizedUnitTreeLoading) {
+      this.loadAuthorizedUnitTree();
+    }
+    this.menuDialogForm.reset({
+      menuItemName: '',
+      application: this.resolveNodeApplication(this.contextMenuNode),
+      authorizedUnitId: null
+    });
+    this.selectedAuthorizedUnitNode = null;
+    this.selectedAuthorizedUnitPath = '';
+    this.menuDialogVisible = true;
+  }
+
+  closeAddChildDialog(): void {
+    this.menuDialogVisible = false;
+    this.selectedAuthorizedUnitNode = null;
+    this.selectedAuthorizedUnitPath = '';
+    this.menuDialogForm.reset({
+      menuItemName: '',
+      application: '',
+      authorizedUnitId: null
+    });
+  }
+
+  onAuthorizedUnitNodeSelect(event: any): void {
+    const node: TreeNode | null = (event?.node ?? event) as TreeNode;
+    if (!node) {
+      return;
+    }
+
+    const selectedId = this.resolveTreeNodeUnitId(node);
+    if (selectedId <= 0) {
+      return;
+    }
+
+    this.selectedAuthorizedUnitNode = node;
+    this.menuDialogForm.patchValue({ authorizedUnitId: selectedId });
+    this.selectedAuthorizedUnitPath = this.getPathByKeyFromTree(this.authorizedUnitTree, String(selectedId));
+  }
+
+  onAuthorizedUnitNodeUnselect(): void {
+    this.selectedAuthorizedUnitNode = null;
+    this.selectedAuthorizedUnitPath = '';
+    this.menuDialogForm.patchValue({ authorizedUnitId: null });
+  }
+
+  submitAddChildMenuDialog(): void {
+    const parentId = this.resolveNodeMenuItemId(this.contextMenuNode);
+    if (parentId <= 0) {
+      this.msgsService.msgInfo('اختر عنصرًا صحيحًا من الشجرة أولاً.', 'تنبيه', 'warn');
+      return;
+    }
+
+    this.menuDialogForm.markAllAsTouched();
+    if (this.menuDialogForm.invalid) {
+      return;
+    }
+
+    const menuItemName = String(this.menuDialogForm.get('menuItemName')?.value ?? '').trim();
+    const application = String(this.menuDialogForm.get('application')?.value ?? '').trim();
+    const authorizedUnitId = this.toPositiveInt(this.menuDialogForm.get('authorizedUnitId')?.value);
+    const parameters = `${menuItemName}|${parentId}|${application}|${authorizedUnitId}`;
+
+    this.menuMutationInProgress = true;
+    this.publicationNewApiService.executeMenuStatement(this.addMenuItemStatementId, parameters).subscribe({
+      next: (response) => {
+        if (response?.isSuccess) {
+          this.msgsService.msgSuccess(response?.data || 'تمت إضافة العنصر الفرعي بنجاح.', 4000);
+          this.closeAddChildDialog();
+          this.pendingMenuSelectionId = parentId;
+          this.loadMenuTreeWithFallback(this.resolveUnitIds());
+          return;
+        }
+
+        this.msgsService.msgError(
+          'تعذر إضافة عنصر فرعي',
+          this.collectPowerBiErrors(response?.errors, 'فشل تنفيذ عملية الإضافة.'),
+          true
+        );
+      },
+      error: (error: unknown) => {
+        this.msgsService.msgError('تعذر إضافة عنصر فرعي', this.extractErrorMessage(error), true);
+      },
+      complete: () => {
+        this.menuMutationInProgress = false;
+      }
+    });
+  }
+
+  private confirmDeleteContextNode(): void {
+    const nodeId = this.resolveNodeMenuItemId(this.contextMenuNode);
+    if (nodeId <= 0) {
+      this.msgsService.msgInfo('اختر عنصرًا صحيحًا من الشجرة أولاً.', 'تنبيه', 'warn');
+      return;
+    }
+
+    this.msgsService.msgConfirm('هل تريد حذف العنصر المحدد؟', 'تأكيد الحذف').then((confirmed) => {
+      if (!confirmed) {
+        return;
+      }
+
+      this.deleteContextNode(nodeId);
+    });
+  }
+
+  private deleteContextNode(nodeId: number): void {
+    const parentId = this.resolveNodeParentMenuItemId(this.contextMenuNode);
+    this.menuMutationInProgress = true;
+
+    this.publicationNewApiService.executeMenuStatement(this.deleteMenuItemStatementId, `${nodeId}`).subscribe({
+      next: (response) => {
+        if (response?.isSuccess) {
+          this.msgsService.msgSuccess(response?.data || 'تم حذف العنصر بنجاح.', 4000);
+
+          if (this.resolveNodeMenuItemId(this.selectedMenuNode) === nodeId) {
+            this.onMenuNodeUnselect();
+          }
+
+          this.pendingMenuSelectionId = parentId > 0 ? parentId : null;
+          this.loadMenuTreeWithFallback(this.resolveUnitIds());
+          return;
+        }
+
+        this.msgsService.msgError(
+          'تعذر حذف العنصر',
+          this.collectPowerBiErrors(response?.errors, 'فشل تنفيذ عملية الحذف.'),
+          true
+        );
+      },
+      error: (error: unknown) => {
+        this.msgsService.msgError('تعذر حذف العنصر', this.extractErrorMessage(error), true);
+      },
+      complete: () => {
+        this.menuMutationInProgress = false;
+      }
+    });
+  }
+
+  private confirmDeactivateContextNode(): void {
+    const nodeId = this.resolveNodeMenuItemId(this.contextMenuNode);
+    if (nodeId <= 0) {
+      this.msgsService.msgInfo('اختر عنصرًا صحيحًا من الشجرة أولاً.', 'تنبيه', 'warn');
+      return;
+    }
+
+    if (!this.deactivateMenuItemStatementId) {
+      this.msgsService.msgInfo(
+        'تم إضافة خيار التعطيل في القائمة، لكن رقم Statement الخاص بالتعطيل غير مُعرّف بعد.',
+        'تنبيه',
+        'warn'
+      );
+      return;
+    }
+
+    this.msgsService.msgConfirm('هل تريد تعطيل العنصر المحدد؟', 'تأكيد التعطيل').then((confirmed) => {
+      if (!confirmed) {
+        return;
+      }
+
+      this.deactivateContextNode(nodeId, this.deactivateMenuItemStatementId as number);
+    });
+  }
+
+  private deactivateContextNode(nodeId: number, statementId: number): void {
+    const parentId = this.resolveNodeParentMenuItemId(this.contextMenuNode);
+    this.menuMutationInProgress = true;
+
+    this.publicationNewApiService.executeMenuStatement(statementId, `${nodeId}`).subscribe({
+      next: (response) => {
+        if (response?.isSuccess) {
+          this.msgsService.msgSuccess(response?.data || 'تم تعطيل العنصر بنجاح.', 4000);
+          this.pendingMenuSelectionId = parentId > 0 ? parentId : null;
+          this.loadMenuTreeWithFallback(this.resolveUnitIds());
+          return;
+        }
+
+        this.msgsService.msgError(
+          'تعذر تعطيل العنصر',
+          this.collectPowerBiErrors(response?.errors, 'فشل تنفيذ عملية التعطيل.'),
+          true
+        );
+      },
+      error: (error: unknown) => {
+        this.msgsService.msgError('تعذر تعطيل العنصر', this.extractErrorMessage(error), true);
+      },
+      complete: () => {
+        this.menuMutationInProgress = false;
+      }
+    });
+  }
+
   onAttachmentsChanged(files: FileParameter[]): void {
     this.editorFileParameters = [...(files ?? [])];
   }
@@ -248,12 +515,27 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     return control.invalid && (control.touched || this.formSubmitted);
   }
 
+  isMenuDialogControlInvalid(controlName: string): boolean {
+    const control = this.menuDialogForm.get(controlName);
+    if (!control) {
+      return false;
+    }
+
+    return control.invalid && (control.touched || control.dirty);
+  }
+
   private resetForCurrentInputs(): void {
     this.formSubmitted = false;
     this.submitting = false;
+    this.menuMutationInProgress = false;
     this.selectedMenuNode = null;
     this.selectedMenuPath = '';
+    this.contextMenuNode = null;
+    this.treeContextMenuItems = [];
+    this.menuDialogVisible = false;
     this.pendingMenuSelectionId = null;
+    this.selectedAuthorizedUnitNode = null;
+    this.selectedAuthorizedUnitPath = '';
 
     if (this.mode === 'add' || !this.publication) {
       this.editorFileParameters = [];
@@ -490,7 +772,11 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
   }
 
   private getPathByKey(key: string): string {
-    const labels = this.findPathLabels(this.menuTree, key, []);
+    return this.getPathByKeyFromTree(this.menuTree, key);
+  }
+
+  private getPathByKeyFromTree(nodes: TreeNode[], key: string): string {
+    const labels = this.findPathLabels(nodes, key, []);
     return labels.join(' > ');
   }
 
@@ -564,6 +850,332 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     return isNaN(parsed.getTime()) ? null : parsed;
   }
 
+  private resolveNodeMenuItemId(node: TreeNode | null): number {
+    const rawId = Number(node?.key ?? node?.data?.['MENU_ITEM_ID'] ?? 0);
+    return Number.isFinite(rawId) && rawId > 0 ? Math.trunc(rawId) : 0;
+  }
+
+  private resolveNodeParentMenuItemId(node: TreeNode | null): number {
+    const rawParentId = Number((node?.data as any)?.PARENT_MENU_ITEM_ID ?? 0);
+    return Number.isFinite(rawParentId) && rawParentId > 0 ? Math.trunc(rawParentId) : 0;
+  }
+
+  private resolveNodeApplication(node: TreeNode | null): string {
+    return String((node?.data as any)?.APPLICATION ?? '').trim();
+  }
+
+  private resolveTreeNodeUnitId(node: TreeNode | null): number {
+    const data = (node?.data ?? {}) as Record<string, unknown>;
+    return this.toPositiveInt(
+      node?.key
+      ?? data['unitId']
+      ?? data['UnitId']
+      ?? data['UNIT_ID']
+      ?? 0
+    );
+  }
+
+  private applyDialogAuthorizedUnitSelection(): void {
+    const selectedUnitId = this.toPositiveInt(this.menuDialogForm.get('authorizedUnitId')?.value);
+    if (selectedUnitId <= 0) {
+      this.selectedAuthorizedUnitNode = null;
+      this.selectedAuthorizedUnitPath = '';
+      return;
+    }
+
+    const key = String(selectedUnitId);
+    this.expandPathToNode(this.authorizedUnitTree, key);
+    const foundNode = this.findNodeByKey(this.authorizedUnitTree, key);
+    if (!foundNode) {
+      this.selectedAuthorizedUnitNode = null;
+      this.selectedAuthorizedUnitPath = '';
+      return;
+    }
+
+    this.selectedAuthorizedUnitNode = foundNode;
+    this.selectedAuthorizedUnitPath = this.getPathByKeyFromTree(this.authorizedUnitTree, key);
+  }
+
+  private buildAuthorizedUnitsTree(): TreeNode[] {
+    if (this.internalOrgUnitsRows.length > 0) {
+      return this.buildAuthorizedUnitsTreeFromRows(this.internalOrgUnitsRows);
+    }
+
+    const resolvedUnits = this.resolveAuthorizedOrgUnits();
+    const units = resolvedUnits.length > 0
+      ? resolvedUnits
+      : this.resolveUnitIds().map((id) => ({
+        unitId: id,
+        unitName: `وحدة ${id}`,
+        parentId: 0,
+        parentUnitName: ''
+      }));
+
+    if (units.length === 0) {
+      return [];
+    }
+
+    const nodeById = new Map<number, TreeNode>();
+    const roots: TreeNode[] = [];
+    const parentGroupNodes = new Map<string, TreeNode>();
+
+    units.forEach((item) => {
+      nodeById.set(item.unitId, {
+        key: String(item.unitId),
+        label: item.unitName,
+        selectable: true,
+        expanded: false,
+        children: [],
+        data: {
+          UNIT_ID: item.unitId,
+          UNIT_NAME: item.unitName,
+          PARENT_ID: item.parentId,
+          PARENT_UNIT_NAME: item.parentUnitName
+        }
+      });
+    });
+
+    units.forEach((item) => {
+      const node = nodeById.get(item.unitId);
+      if (!node) {
+        return;
+      }
+
+      if (item.parentId > 0 && item.parentId !== item.unitId && nodeById.has(item.parentId)) {
+        nodeById.get(item.parentId)?.children?.push(node);
+        return;
+      }
+
+      const parentName = item.parentUnitName.trim();
+      if (parentName.length > 0) {
+        let groupNode = parentGroupNodes.get(parentName);
+        if (!groupNode) {
+          groupNode = {
+            key: `org-parent-group-${parentGroupNodes.size + 1}`,
+            label: parentName,
+            selectable: false,
+            expanded: false,
+            children: []
+          };
+          parentGroupNodes.set(parentName, groupNode);
+          roots.push(groupNode);
+        }
+
+        groupNode.children?.push(node);
+        return;
+      }
+
+      roots.push(node);
+    });
+
+    this.sortTreeByLabel(roots);
+    this.markLeafNodes(roots);
+    return roots;
+  }
+
+  private loadAuthorizedUnitTree(): void {
+    if (this.authorizedUnitTreeLoading) {
+      return;
+    }
+
+    this.authorizedUnitTreeLoading = true;
+    this.publicationNewApiService.getInternalOrgUnitsTree(true).subscribe({
+      next: (response) => {
+        if (response?.isSuccess && Array.isArray(response.data) && response.data.length > 0) {
+          this.internalOrgUnitsRows = response.data;
+          this.authorizedUnitTree = this.buildAuthorizedUnitsTreeFromRows(this.internalOrgUnitsRows);
+          this.applyDialogAuthorizedUnitSelection();
+          return;
+        }
+
+        this.internalOrgUnitsRows = [];
+        this.authorizedUnitTree = this.buildAuthorizedUnitsTree();
+        this.applyDialogAuthorizedUnitSelection();
+      },
+      error: () => {
+        this.internalOrgUnitsRows = [];
+        this.authorizedUnitTree = this.buildAuthorizedUnitsTree();
+        this.applyDialogAuthorizedUnitSelection();
+      },
+      complete: () => {
+        this.authorizedUnitTreeLoading = false;
+      }
+    });
+  }
+
+  private buildAuthorizedUnitsTreeFromRows(rows: SubjectRoutingOrgUnitWithCountTreeNodeDto[]): TreeNode[] {
+    const nodeById = new Map<number, TreeNode>();
+    const roots: TreeNode[] = [];
+
+    rows.forEach((row) => {
+      const unitId = this.toPositiveInt(row?.unitId);
+      if (unitId <= 0) {
+        return;
+      }
+
+      const unitName = String(row?.unitName ?? '').trim() || `وحدة ${unitId}`;
+      nodeById.set(unitId, {
+        key: String(unitId),
+        label: unitName,
+        selectable: true,
+        expanded: false,
+        children: [],
+        data: {
+          UNIT_ID: unitId,
+          UNIT_NAME: unitName,
+          PARENT_ID: this.toPositiveInt(row?.parentId ?? 0)
+        }
+      });
+    });
+
+    rows.forEach((row) => {
+      const unitId = this.toPositiveInt(row?.unitId);
+      if (unitId <= 0) {
+        return;
+      }
+
+      const node = nodeById.get(unitId);
+      if (!node) {
+        return;
+      }
+
+      const parentId = this.toPositiveInt(row?.parentId ?? 0);
+      if (parentId > 0 && parentId !== unitId && nodeById.has(parentId)) {
+        nodeById.get(parentId)?.children?.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    this.sortTreeByLabel(roots);
+    this.markLeafNodes(roots);
+    return roots;
+  }
+
+  private resolveAuthorizedOrgUnits(): AuthorizedOrgUnit[] {
+    const unitMap = new Map<number, AuthorizedOrgUnit>();
+
+    const mergeUnit = (rawItem: any): void => {
+      const unitId = this.toPositiveInt(
+        rawItem?.unitId
+        ?? rawItem?.UnitId
+        ?? rawItem?.UNIT_ID
+        ?? rawItem?.id
+        ?? rawItem?.Id
+      );
+      if (unitId <= 0) {
+        return;
+      }
+
+      const unitName = this.pickFirstText(
+        rawItem?.unitName,
+        rawItem?.UnitName,
+        rawItem?.UNIT_NAME,
+        rawItem?.name,
+        rawItem?.Name,
+        `وحدة ${unitId}`
+      );
+
+      const parentId = this.toPositiveInt(
+        rawItem?.parentId
+        ?? rawItem?.ParentId
+        ?? rawItem?.PARENT_ID
+        ?? rawItem?.parentUnitId
+        ?? rawItem?.ParentUnitId
+        ?? rawItem?.PARENT_UNIT_ID
+        ?? rawItem?.parentOrgUnitId
+        ?? rawItem?.ParentOrgUnitId
+        ?? rawItem?.PARENT_ORG_UNIT_ID
+      );
+
+      const parentUnitName = this.pickFirstText(
+        rawItem?.parentUnitName,
+        rawItem?.ParentUnitName,
+        rawItem?.PARENT_UNIT_NAME,
+        rawItem?.parentName,
+        rawItem?.ParentName,
+        rawItem?.PARENT_NAME
+      );
+
+      const existing = unitMap.get(unitId);
+      if (!existing) {
+        unitMap.set(unitId, {
+          unitId,
+          unitName,
+          parentId,
+          parentUnitName
+        });
+        return;
+      }
+
+      unitMap.set(unitId, {
+        unitId,
+        unitName: existing.unitName.length >= unitName.length ? existing.unitName : unitName,
+        parentId: existing.parentId > 0 ? existing.parentId : parentId,
+        parentUnitName: existing.parentUnitName.length > 0 ? existing.parentUnitName : parentUnitName
+      });
+    };
+
+    const profile = (this.authObjectsService.getUserProfile() ?? {}) as Record<string, unknown>;
+    const profileUnits = profile['vwOrgUnitsWithCounts'];
+    if (Array.isArray(profileUnits)) {
+      profileUnits.forEach((item) => mergeUnit(item));
+    }
+
+    const rawAuth = localStorage.getItem('AuthObject') || localStorage.getItem('authObject');
+    if (rawAuth) {
+      try {
+        const parsedAuth = JSON.parse(rawAuth) as any;
+        const root = parsedAuth?.authObject ?? parsedAuth;
+        const authUnits = root?.vwOrgUnitsWithCounts ?? root?.exchangeUserInfo?.vwOrgUnitsWithCounts;
+        if (Array.isArray(authUnits)) {
+          authUnits.forEach((item: any) => mergeUnit(item));
+        }
+      } catch {
+        // Fall back to profile or localStorage IDs.
+      }
+    }
+
+    return Array.from(unitMap.values());
+  }
+
+  private sortTreeByLabel(nodes: TreeNode[]): void {
+    if (!Array.isArray(nodes) || nodes.length === 0) {
+      return;
+    }
+
+    nodes.sort((left, right) => String(left.label ?? '').localeCompare(String(right.label ?? ''), 'ar'));
+    nodes.forEach((node) => {
+      const children = Array.isArray(node.children) ? node.children as TreeNode[] : [];
+      this.sortTreeByLabel(children);
+    });
+  }
+
+  private pickFirstText(...values: unknown[]): string {
+    for (const value of values) {
+      const normalized = String(value ?? '').trim();
+      if (!normalized) {
+        continue;
+      }
+
+      const lowered = normalized.toLowerCase();
+      if (lowered !== 'null' && lowered !== 'undefined') {
+        return normalized;
+      }
+    }
+
+    return '';
+  }
+
+  private toPositiveInt(value: unknown): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 0;
+    }
+
+    return Math.trunc(parsed);
+  }
+
   private resolveUnitIds(): number[] {
     const ids = new Set<number>();
     const pushId = (value: unknown): void => {
@@ -611,6 +1223,17 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     }
 
     return messages.join('<br>');
+  }
+
+  private collectPowerBiErrors(
+    errors: Array<{ message?: string | undefined }> | undefined,
+    fallback: string
+  ): string {
+    const messages = (errors ?? [])
+      .map(error => String(error?.message ?? '').trim())
+      .filter(message => message.length > 0);
+
+    return messages.length > 0 ? messages.join('<br>') : fallback;
   }
 
   private extractErrorMessage(error: unknown): string {

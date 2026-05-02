@@ -164,6 +164,67 @@
   gap: 0.55rem;
 }
 
+:host ::ng-deep .menu-item-dialog .p-dialog-content {
+  direction: rtl;
+  text-align: right;
+  max-height: min(72vh, 42rem);
+  overflow-y: auto;
+  padding: 0.9rem 1.1rem 1rem;
+}
+
+:host ::ng-deep .menu-item-dialog .p-dialog-header {
+  padding: 1rem 1.1rem 0.7rem;
+}
+
+:host ::ng-deep .menu-item-dialog-mask.p-dialog-mask {
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(1.4px);
+}
+
+.menu-item-dialog-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.authorized-unit-tree-wrap {
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  padding: 0.35rem;
+  background: #f8fafc;
+  max-height: 18rem;
+  overflow: hidden;
+}
+
+:host ::ng-deep .authorized-unit-tree-wrap .p-tree {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  direction: rtl;
+  max-height: 17.3rem;
+}
+
+:host ::ng-deep .authorized-unit-tree-wrap .p-tree .p-tree-filter-container .p-tree-filter {
+  width: 100%;
+}
+
+:host ::ng-deep .authorized-unit-tree-wrap .p-tree .p-tree-container {
+  max-height: 12.8rem;
+  overflow: auto;
+}
+
+.field-hint {
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.menu-item-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 @media (max-width: 1024px) {
   .editor-layout {
     grid-template-columns: 1fr;

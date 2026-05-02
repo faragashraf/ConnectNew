@@ -13,15 +13,101 @@
             <p *ngIf="selectedMenuPath">{{ selectedMenuPath }}</p>
           </div>
 
+          <p-dialog
+            header="إضافة عنصر فرعي جديد"
+            [(visible)]="menuDialogVisible"
+            [modal]="true"
+            dir="rtl"
+            [appendTo]="'body'"
+            [baseZIndex]="15000"
+            [blockScroll]="true"
+            [dismissableMask]="false"
+            [draggable]="false"
+            [resizable]="false"
+            [style]="{ width: '44rem', maxWidth: '96vw', direction: 'rtl' }"
+            styleClass="menu-item-dialog"
+            maskStyleClass="menu-item-dialog-mask"
+            (onHide)="closeAddChildDialog()">
+            <form class="menu-item-dialog-form" [formGroup]="menuDialogForm" (ngSubmit)="submitAddChildMenuDialog()">
+              <div class="field-block">
+                <label>
+                  اسم العنصر
+                  <span class="required-star">*</span>
+                </label>
+                <input pInputText type="text" formControlName="menuItemName" placeholder="اكتب اسم العنصر الفرعي" />
+              </div>
+
+              <div class="field-block">
+                <label>
+                  التطبيق
+                  <span class="required-star">*</span>
+                </label>
+                <input pInputText type="text" formControlName="application" placeholder="اكتب اسم التطبيق" />
+              </div>
+
+              <div class="field-block">
+                <label>
+                  الوحدة المعتمدة
+                  <span class="required-star">*</span>
+                </label>
+
+                <div class="authorized-unit-tree-wrap" *ngIf="authorizedUnitTree.length > 0; else noAuthorizedUnitsTemplate">
+                  <p-tree
+                    dir="rtl"
+                    [value]="authorizedUnitTree"
+                    selectionMode="single"
+                    [metaKeySelection]="false"
+                    [filter]="true"
+                    filterPlaceholder="ابحث عن وحدة"
+                    [scrollHeight]="'13rem'"
+                    [(selection)]="selectedAuthorizedUnitNode"
+                    (onNodeSelect)="onAuthorizedUnitNodeSelect($event)"
+                    (onNodeUnselect)="onAuthorizedUnitNodeUnselect()">
+                  </p-tree>
+                </div>
+
+                <ng-template #noAuthorizedUnitsTemplate>
+                  <small class="field-hint" *ngIf="authorizedUnitTreeLoading">جاري تحميل شجرة الوحدات الداخلية...</small>
+                  <small class="error-text" *ngIf="!authorizedUnitTreeLoading">لا توجد وحدات داخلية متاحة للاختيار.</small>
+                </ng-template>
+
+                <small class="error-text" *ngIf="isMenuDialogControlInvalid('authorizedUnitId')">
+                  اختيار الوحدة المعتمدة إلزامي.
+                </small>
+                <small class="field-hint" *ngIf="selectedAuthorizedUnitPath">{{ selectedAuthorizedUnitPath }}</small>
+              </div>
+
+              <div class="menu-item-dialog-actions">
+                <button
+                  pButton
+                  type="button"
+                  class="p-button-text"
+                  label="إلغاء"
+                  [disabled]="menuMutationInProgress"
+                  (click)="closeAddChildDialog()">
+                </button>
+                <button
+                  pButton
+                  type="submit"
+                  label="إضافة"
+                  [loading]="menuMutationInProgress"
+                  [disabled]="menuMutationInProgress || menuDialogForm.invalid">
+                </button>
+              </div>
+            </form>
+          </p-dialog>
+
           <app-tree-sidebar
             [tree]="menuTree"
             [selectedNode]="selectedMenuNode"
             [title]="'القائمة الرئيسية'"
             [expandedWidth]="100"
-            [showTreeContextMenu]="false"
+            [showTreeContextMenu]="canManageMenuTree"
+            [contextMenuItems]="treeContextMenuItems"
             [allExpanded]="true"
             [scrollHeight]="20"
             (onNodeSelect)="onMenuNodeSelect($event)"
+            (onNodeContextMenuSelect)="onMenuNodeContextMenuSelect($event)"
             (onNodeUnselect)="onMenuNodeUnselect()">
           </app-tree-sidebar>
 

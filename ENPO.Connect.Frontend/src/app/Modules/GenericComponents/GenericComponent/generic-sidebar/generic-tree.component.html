@@ -16,7 +16,7 @@
     </div>
 
     <div class="sidebar-content" [class.disabled-div]="isDivDisabled">
-        <p-contextMenu #treeContextMenu [model]="contextMenuItems" [style]="{'width':'22.5rem','direction':'ltr'}"
+        <p-contextMenu #treeContextMenu [model]="contextMenuItems" [appendTo]="'body'" [style]="{'width':'22.5rem','direction':'ltr'}"
             (onClick)="onContextMenuItemClick($event)"></p-contextMenu>       
         <p-tree [value]="tree" selectionMode="single"  [(selection)]="selectedNode"  [filter]="true" filterPlaceholder="بحث" [scrollHeight]="scrollHeight+'rem'"
             [validateDrop]="enableTreeDragDrop" [draggableNodes]="enableTreeDragDrop" [droppableNodes]="enableTreeDragDrop" draggableScope="self"

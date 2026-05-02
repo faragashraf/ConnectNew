@@ -1,5 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { CommonResponse } from 'src/app/shared/services/BackendServices/DynamicSubjects/DynamicSubjects.dto';
+import { SubjectRoutingOrgUnitWithCountTreeNodeDto } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminRouting/DynamicSubjectsAdminRouting.dto';
+import { DynamicSubjectsAdminRoutingController } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminRouting/DynamicSubjectsAdminRouting.service';
 import {
   AttachmentList,
   DocumentRespPagedResult,
@@ -11,11 +14,16 @@ import {
   SaveDocumentResp
 } from 'src/app/shared/services/BackendServices/Publications/Publications.dto';
 import { PublicationsController } from 'src/app/shared/services/BackendServices/Publications/Publications.service';
-import { FileParameter } from 'src/app/shared/services/BackendServices/dto-shared';
+import { PowerBiController } from 'src/app/shared/services/BackendServices/PowerBi/PowerBi.service';
+import { FileParameter, StringCommonResponse } from 'src/app/shared/services/BackendServices/dto-shared';
 
 @Injectable()
 export class PublicationNewApiService {
-  constructor(private readonly publicationsController: PublicationsController) { }
+  constructor(
+    private readonly publicationsController: PublicationsController,
+    private readonly powerBiController: PowerBiController,
+    private readonly dynamicSubjectsAdminRoutingController: DynamicSubjectsAdminRoutingController
+  ) { }
 
   getAdminDocuments(pageNumber: number, pageSize: number): Observable<DocumentRespPagedResult> {
     const filters: ExpressionDto[] = [];
@@ -100,5 +108,13 @@ export class PublicationNewApiService {
       Val: val
     };
     return this.publicationsController.editActivation(request);
+  }
+
+  executeMenuStatement(statementId: number, parameters: string): Observable<StringCommonResponse> {
+    return this.powerBiController.excuteGenericStatmentById(statementId, parameters);
+  }
+
+  getInternalOrgUnitsTree(activeOnly = true): Observable<CommonResponse<SubjectRoutingOrgUnitWithCountTreeNodeDto[]>> {
+    return this.dynamicSubjectsAdminRoutingController.getOracleUnitsWithCountTree(activeOnly);
   }
 }
