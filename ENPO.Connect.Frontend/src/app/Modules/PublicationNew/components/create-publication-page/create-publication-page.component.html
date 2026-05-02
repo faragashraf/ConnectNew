@@ -1,0 +1,28 @@
+<section class="publication-create-page" dir="rtl">
+  <p-toolbar styleClass="create-toolbar">
+    <ng-template pTemplate="left">
+      <div class="header-copy">
+        <h1>إضافة منشور جديد</h1>
+        <p>يمكن الدخول لهذه الصفحة مباشرة من الـ routing لإنشاء منشور جديد.</p>
+      </div>
+    </ng-template>
+    <ng-template pTemplate="right">
+      <button
+        pButton
+        type="button"
+        class="p-button-outlined p-button-sm"
+        icon="pi pi-arrow-right"
+        label="العودة للقائمة"
+        (click)="backToList()">
+      </button>
+    </ng-template>
+  </p-toolbar>
+
+  <div class="form-shell">
+    <app-publication-editor-form
+      mode="add"
+      (saved)="onSaved()"
+      (cancelled)="onCancelled()">
+    </app-publication-editor-form>
+  </div>
+</section>

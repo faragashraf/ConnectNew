@@ -1,0 +1,159 @@
+<section class="publication-editor-form" dir="rtl">
+  <div class="editor-loading" *ngIf="lookupsLoading">
+    <p-progressSpinner strokeWidth="4" styleClass="small-spinner"></p-progressSpinner>
+    <span>جاري تحميل بيانات النموذج...</span>
+  </div>
+
+  <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="submit()" *ngIf="!lookupsLoading">
+    <div class="editor-layout">
+      <div class="tree-column">
+        <div class="menu-tree-card">
+          <div class="panel-header">
+            <h3>القائمة الرئيسية <span class="required-star">*</span></h3>
+            <p *ngIf="selectedMenuPath">{{ selectedMenuPath }}</p>
+          </div>
+
+          <app-tree-sidebar
+            [tree]="menuTree"
+            [selectedNode]="selectedMenuNode"
+            [title]="'القائمة الرئيسية'"
+            [expandedWidth]="100"
+            [showTreeContextMenu]="false"
+            [allExpanded]="true"
+            [scrollHeight]="20"
+            (onNodeSelect)="onMenuNodeSelect($event)"
+            (onNodeUnselect)="onMenuNodeUnselect()">
+          </app-tree-sidebar>
+
+          <small class="error-text" *ngIf="isControlInvalid('menuItemId')">اختيار عنصر من القائمة الرئيسية إلزامي.</small>
+        </div>
+      </div>
+
+      <div class="form-column">
+        <div class="form-card">
+          <div class="editor-grid">
+            <div class="field-block">
+              <label>
+                المنطقة
+                <span class="required-star">*</span>
+              </label>
+              <p-dropdown
+                [options]="districtOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="districtId"
+                appendTo="body"
+                [filter]="true"
+                filterBy="label"
+                placeholder="اختر المنطقة">
+              </p-dropdown>
+              <small class="error-text" *ngIf="isControlInvalid('districtId')">المنطقة حقل إلزامي.</small>
+            </div>
+
+            <div class="field-block">
+              <label>
+                نوع المنشور
+                <span class="required-star">*</span>
+              </label>
+              <p-dropdown
+                [options]="publicationTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="publicationTypeId"
+                appendTo="body"
+                [filter]="true"
+                filterBy="label"
+                placeholder="اختر نوع المنشور">
+              </p-dropdown>
+              <small class="error-text" *ngIf="isControlInvalid('publicationTypeId')">نوع المنشور حقل إلزامي.</small>
+            </div>
+
+            <div class="field-block date-field">
+              <label>
+                تاريخ التفعيل
+                <span class="required-star">*</span>
+              </label>
+              <p-calendar
+                formControlName="workingStartDate"
+                appendTo="body"
+                [showIcon]="true"
+                [showTime]="true"
+                hourFormat="12"
+                dateFormat="yy-mm-dd"
+                placeholder="اختر تاريخ ووقت التفعيل">
+              </p-calendar>
+              <small class="error-text" *ngIf="isControlInvalid('workingStartDate')">تاريخ التفعيل حقل إلزامي.</small>
+            </div>
+
+            <div class="field-block">
+              <label>DOCUMENT_PARENT_ID (اختياري)</label>
+              <input pInputText type="text" formControlName="documentParentId" placeholder="اختياري" />
+            </div>
+
+            <div class="field-block full-width">
+              <label>
+                ملخص الوثيقة
+                <span class="required-star">*</span>
+              </label>
+              <textarea
+                pInputTextarea
+                rows="3"
+                formControlName="miniDoc"
+                placeholder="اكتب ملخص الوثيقة">
+              </textarea>
+              <small class="error-text" *ngIf="isControlInvalid('miniDoc')">ملخص الوثيقة حقل إلزامي.</small>
+            </div>
+
+            <div class="field-block full-width">
+              <label>
+                النص الكامل للوثيقة
+                <span class="required-star">*</span>
+              </label>
+              <textarea
+                pInputTextarea
+                rows="5"
+                formControlName="allTextDoc"
+                placeholder="اكتب النص الكامل للوثيقة">
+              </textarea>
+              <small class="error-text" *ngIf="isControlInvalid('allTextDoc')">النص الكامل للوثيقة حقل إلزامي.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="attachments-card">
+          <div class="panel-header">
+            <h3>المرفقات <span class="required-star">*</span></h3>
+            <p>يسمح فقط بامتدادات DOC و DOCX</p>
+          </div>
+
+          <app-add-attachments
+            [config]="attachmentUiConfig"
+            [fileParameters]="editorFileParameters"
+            (fileUploadEvent)="onAttachmentsChanged($event)"
+            (AttachIDemit)="downloadExistingAttachment($event)">
+          </app-add-attachments>
+
+          <small class="error-text" *ngIf="formSubmitted && !hasAnyAttachment && canSubmit">المرفقات حقل إلزامي.</small>
+        </div>
+
+        <div class="form-actions">
+          <button
+            pButton
+            type="button"
+            class="p-button-text"
+            [label]="isViewMode ? 'إغلاق' : 'إلغاء'"
+            [disabled]="submitting"
+            (click)="cancel()">
+          </button>
+          <button
+            *ngIf="canSubmit"
+            pButton
+            type="submit"
+            [label]="mode === 'add' ? 'إضافة' : 'حفظ التعديلات'"
+            [loading]="submitting">
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</section>

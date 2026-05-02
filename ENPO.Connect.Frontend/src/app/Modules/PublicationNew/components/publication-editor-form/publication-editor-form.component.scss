@@ -1,0 +1,160 @@
+.publication-editor-form {
+  direction: rtl;
+  text-align: right;
+}
+
+.editor-loading {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.8rem;
+  color: #334155;
+}
+
+:host ::ng-deep .editor-loading .small-spinner {
+  width: 42px !important;
+  height: 42px !important;
+}
+
+.editor-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 34%) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.tree-column,
+.form-column {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.field-block {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.field-block.full-width {
+  grid-column: 1 / -1;
+}
+
+.field-block label {
+  font-size: 0.86rem;
+  color: #334155;
+  font-weight: 700;
+}
+
+.field-block input,
+.field-block textarea,
+.field-block .p-dropdown,
+.field-block .p-calendar {
+  width: 100%;
+}
+
+.required-star {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+:host ::ng-deep .date-field .p-calendar {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+:host ::ng-deep .date-field .p-calendar .p-inputtext {
+  min-height: 3.2rem;
+  font-size: 1.03rem;
+  font-weight: 600;
+  padding-inline: 1rem;
+  border-radius: 0 18px 18px 0;
+}
+
+:host ::ng-deep .date-field .p-calendar .p-datepicker-trigger {
+  min-width: 3.2rem;
+  border-radius: 18px 0 0 18px;
+  border: 0;
+  background: #3b82f6;
+}
+
+:host ::ng-deep .date-field .p-calendar .p-datepicker-trigger .pi {
+  font-size: 1.2rem;
+}
+
+.error-text {
+  color: #dc2626;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.form-card,
+.menu-tree-card,
+.attachments-card {
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0.8rem;
+}
+
+.menu-tree-card {
+  min-height: 100%;
+}
+
+.panel-header {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.6rem;
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 1.03rem;
+  color: #0f172a;
+}
+
+.panel-header p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+@media (max-width: 1024px) {
+  .editor-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tree-column {
+    order: 2;
+  }
+
+  .form-column {
+    order: 1;
+  }
+}

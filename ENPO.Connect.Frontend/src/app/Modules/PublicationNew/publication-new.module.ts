@@ -6,9 +6,15 @@ import { AllPublicationsComponent } from './components/all-publications/all-publ
 import { PublicationNewApiService } from './shared/services/publication-new-api.service';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { GenericModuleModule } from '../GenericComponents/generic-module.module';
+import { PublicationEditorFormComponent } from './components/publication-editor-form/publication-editor-form.component';
+import { CreatePublicationPageComponent } from './components/create-publication-page/create-publication-page.component';
 
 @NgModule({
-  declarations: [AllPublicationsComponent],
+  declarations: [
+    AllPublicationsComponent,
+    PublicationEditorFormComponent,
+    CreatePublicationPageComponent
+  ],
   imports: [
     CommonModule,
     FormsModule,
