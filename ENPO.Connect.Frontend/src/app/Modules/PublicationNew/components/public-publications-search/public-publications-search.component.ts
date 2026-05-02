@@ -78,6 +78,16 @@ export class PublicPublicationsSearchComponent implements OnInit {
     return this.activeExpressions.length;
   }
 
+  get detailsDialogHeader(): string {
+    const documentType = String(this.selectedPublication?.DocumentType ?? '').trim();
+    const selectedTypeName = String(this.selectedMenuNode?.label ?? '').trim();
+    if (documentType.length > 0) {
+      return `تفاصيل المنشور - ${documentType}`;
+    }
+
+    return selectedTypeName.length > 0 ? `تفاصيل المنشور - ${selectedTypeName}` : 'تفاصيل المنشور';
+  }
+
   ngOnInit(): void {
     this.loadInitialData();
   }

@@ -1,10 +1,23 @@
 import { Component, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup } from '@angular/forms';
 import { Router } from '@angular/router';
-import { DocumentResp, ResponseDetail } from 'src/app/shared/services/BackendServices/Publications/Publications.dto';
-import { AuthObjectsService } from 'src/app/shared/services/helper/auth-objects.service';
+import { forkJoin } from 'rxjs';
+import {
+  DocumentResp,
+  DocumentRespPagedResult,
+  ExpressionDto,
+  PUB_MENU_ITEMS,
+  ResponseDetail
+} from 'src/app/shared/services/BackendServices/Publications/Publications.dto';
+import { AuthObjectsService, TreeNode } from 'src/app/shared/services/helper/auth-objects.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { PublicationNewApiService } from '../../shared/services/publication-new-api.service';
 import { PublicationEditorMode } from '../publication-editor-form/publication-editor-form.component';
+
+interface LookupOption {
+  label: string;
+  value: number;
+}
 
 interface PaginatorEvent {
   first: number;
@@ -21,20 +34,47 @@ export class AllPublicationsComponent implements OnInit {
 
   readonly rowsPerPageOptions: number[] = [5, 10, 25];
 
-  documents: DocumentResp[] = [];
+  searchFiltersCollapsed = true;
+  lookupsLoading = false;
   loading = false;
   totalRecords = 0;
-  pageSize = 5;
   currentPage = 1;
+  pageSize = 5;
   canEditActivation = false;
+
+  documents: DocumentResp[] = [];
+  publicationTypeOptions: LookupOption[] = [];
+  districtOptions: LookupOption[] = [];
+  activationStatusOptions: Array<{ label: string; value: string }> = [
+    { label: 'مفعل', value: '1' },
+    { label: 'غير مفعل', value: '0' }
+  ];
+  menuTree: TreeNode[] = [];
+
+  selectedMenuNode: TreeNode | null = null;
+  selectedMenuItemId: number | null = null;
+  selectedMenuPath = '';
 
   editorDialogVisible = false;
   editorDialogTitle = '';
   editorDialogMode: PublicationEditorMode = 'edit';
   selectedPublication: DocumentResp | null = null;
+
+  private activeExpressions: ExpressionDto[] = [];
   private readonly activationLoadingDocumentIds = new Set<number>();
 
+  readonly searchForm: FormGroup = this.fb.group({
+    documentNumber: [''],
+    districtId: [null],
+    publicationTypeId: [null],
+    activationStatus: [null],
+    miniDoc: [''],
+    allTextDoc: [''],
+    workingStartDate: [null]
+  });
+
   constructor(
+    private readonly fb: FormBuilder,
     private readonly publicationNewApiService: PublicationNewApiService,
     private readonly msgsService: MsgsService,
     private readonly authObjectsService: AuthObjectsService,
@@ -45,41 +85,41 @@ export class AllPublicationsComponent implements OnInit {
     return (this.currentPage - 1) * this.pageSize;
   }
 
+  get activeFilterCount(): number {
+    return this.activeExpressions.length;
+  }
+
   ngOnInit(): void {
     this.canEditActivation =
       this.authObjectsService.checkAuthFun('PublSuperAdminFunc')
       && this.authObjectsService.checkAuthRole(this.publicationSuperAdminRoleId);
 
+    this.loadInitialData();
+  }
+
+  onSearch(): void {
+    this.currentPage = 1;
+    this.pageSize = 25;
+    this.activeExpressions = this.buildExpressionsFromFilters();
     this.loadDocuments();
   }
 
-  loadDocuments(): void {
-    this.loading = true;
-    this.publicationNewApiService.getAdminDocuments(this.currentPage, this.pageSize).subscribe({
-      next: (response) => {
-        if (response?.IsSuccess) {
-          this.documents = response.Data ?? [];
-          this.totalRecords = Number(response.TotalCount ?? 0);
-
-          if (this.totalRecords === 0 && this.documents.length > 0) {
-            this.totalRecords = this.firstRecordIndex + this.documents.length;
-          }
-          return;
-        }
-
-        this.documents = [];
-        this.totalRecords = 0;
-        this.msgsService.msgError('تعذر تحميل البيانات', this.collectErrors(response?.ResponseDetails), true);
-      },
-      error: (error: unknown) => {
-        this.documents = [];
-        this.totalRecords = 0;
-        this.msgsService.msgError('تعذر تحميل البيانات', this.extractErrorMessage(error), true);
-      },
-      complete: () => {
-        this.loading = false;
-      }
+  onResetFilters(): void {
+    this.searchForm.reset({
+      documentNumber: '',
+      districtId: null,
+      publicationTypeId: null,
+      activationStatus: null,
+      miniDoc: '',
+      allTextDoc: '',
+      workingStartDate: null
     });
+
+    this.clearMenuSelection();
+    this.currentPage = 1;
+    this.pageSize = 5;
+    this.activeExpressions = [];
+    this.loadDocuments();
   }
 
   onPageChange(event: PaginatorEvent): void {
@@ -92,6 +132,24 @@ export class AllPublicationsComponent implements OnInit {
 
     this.currentPage = Math.floor(first / this.pageSize) + 1;
     this.loadDocuments();
+  }
+
+  onMenuNodeSelect(event: any): void {
+    const node: TreeNode | null = (event?.node ?? event) as TreeNode;
+    if (!node) {
+      return;
+    }
+
+    this.selectedMenuNode = node;
+    const selectedId = Number(node.key ?? node.data?.['MENU_ITEM_ID'] ?? 0);
+    this.selectedMenuItemId = selectedId > 0 ? selectedId : null;
+    this.selectedMenuPath = this.selectedMenuItemId ? this.getPathByKey(String(this.selectedMenuItemId)) : '';
+  }
+
+  clearMenuSelection(): void {
+    this.selectedMenuNode = null;
+    this.selectedMenuItemId = null;
+    this.selectedMenuPath = '';
   }
 
   getRowNumber(rowIndex: number): number {
@@ -190,6 +248,235 @@ export class AllPublicationsComponent implements OnInit {
 
   trackByDocumentId(_index: number, row: DocumentResp): number {
     return row.DocumentId;
+  }
+
+  loadDocuments(): void {
+    this.loading = true;
+    this.publicationNewApiService.getAdminDocuments(this.currentPage, this.pageSize, this.activeExpressions).subscribe({
+      next: (response) => {
+        this.applyDocumentsResponse(response);
+      },
+      error: (error: unknown) => {
+        this.documents = [];
+        this.totalRecords = 0;
+        this.msgsService.msgError('تعذر تحميل البيانات', this.extractErrorMessage(error), true);
+      },
+      complete: () => {
+        this.loading = false;
+      }
+    });
+  }
+
+  private loadInitialData(): void {
+    this.lookupsLoading = true;
+
+    forkJoin({
+      publicationTypesResponse: this.publicationNewApiService.getCriteria('PublicationTypes'),
+      districtsResponse: this.publicationNewApiService.getCriteria('Districts'),
+      menuItemsResponse: this.publicationNewApiService.getMenuItems(),
+      documentsResponse: this.publicationNewApiService.getAdminDocuments(this.currentPage, this.pageSize, [])
+    }).subscribe({
+      next: ({ publicationTypesResponse, districtsResponse, menuItemsResponse, documentsResponse }) => {
+        this.publicationTypeOptions = this.mapPublicationTypeOptions(publicationTypesResponse?.Data);
+        this.districtOptions = this.mapDistrictOptions(districtsResponse?.Data);
+        this.menuTree = this.buildMenuTree(menuItemsResponse?.Data ?? []);
+        this.applyDocumentsResponse(documentsResponse);
+      },
+      error: (error: unknown) => {
+        this.documents = [];
+        this.totalRecords = 0;
+        this.msgsService.msgError('تعذر تحميل بيانات البحث', this.extractErrorMessage(error), true);
+      },
+      complete: () => {
+        this.lookupsLoading = false;
+      }
+    });
+  }
+
+  private applyDocumentsResponse(response: DocumentRespPagedResult | null | undefined): void {
+    if (response?.IsSuccess) {
+      this.documents = response.Data ?? [];
+      this.totalRecords = Number(response.TotalCount ?? 0);
+
+      if (this.totalRecords === 0 && this.documents.length > 0) {
+        this.totalRecords = this.firstRecordIndex + this.documents.length;
+      }
+      return;
+    }
+
+    this.documents = [];
+    this.totalRecords = 0;
+    this.msgsService.msgError('تعذر تحميل البيانات', this.collectErrors(response?.ResponseDetails), true);
+  }
+
+  private buildExpressionsFromFilters(): ExpressionDto[] {
+    const expressions: ExpressionDto[] = [];
+    const raw = this.searchForm.value;
+
+    const pushStringExpression = (propertyName: string, value: unknown): void => {
+      const normalized = String(value ?? '').trim();
+      if (normalized.length > 0) {
+        expressions.push({
+          PropertyName: propertyName,
+          PropertyStringValue: normalized
+        } as ExpressionDto);
+      }
+    };
+
+    const pushIntegerExpression = (propertyName: string, value: unknown): void => {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        expressions.push({
+          PropertyName: propertyName,
+          PropertyIntValue: Math.trunc(parsed)
+        } as ExpressionDto);
+      }
+    };
+
+    const pushDateExpression = (propertyName: string, value: unknown): void => {
+      const parsedDate = this.parseToDate(value);
+      if (!parsedDate) {
+        return;
+      }
+
+      expressions.push({
+        PropertyName: propertyName,
+        PropertyDateValue: parsedDate
+      } as ExpressionDto);
+    };
+
+    pushStringExpression('DOCUMENT_NUMBER', raw?.['documentNumber']);
+    pushIntegerExpression('DISTRICT_ID', raw?.['districtId']);
+    pushIntegerExpression('PUBLICATION_TYPE_ID', raw?.['publicationTypeId']);
+    pushStringExpression('VAL', raw?.['activationStatus']);
+    pushStringExpression('MINI_DOC', raw?.['miniDoc']);
+    pushStringExpression('ALL_TEXT_DOC', raw?.['allTextDoc']);
+    pushDateExpression('WORKING_START_DATE', raw?.['workingStartDate']);
+
+    if (this.selectedMenuItemId && this.selectedMenuItemId > 0) {
+      expressions.push({
+        PropertyName: 'MENUITEMID',
+        PropertyIntValue: this.selectedMenuItemId
+      } as ExpressionDto);
+    }
+
+    return expressions;
+  }
+
+  private mapPublicationTypeOptions(data: unknown): LookupOption[] {
+    if (!Array.isArray(data)) {
+      return [];
+    }
+
+    return data
+      .map((item: any) => ({
+        value: Number(item?.PublicationTypeId ?? item?.PUBLICATION_TYPE_ID ?? item?.Id ?? 0),
+        label: String(item?.PublicationTypeNameAr ?? item?.NameAr ?? item?.name ?? '').trim()
+      }))
+      .filter(option => option.value > 0 && option.label.length > 0);
+  }
+
+  private mapDistrictOptions(data: unknown): LookupOption[] {
+    if (!Array.isArray(data)) {
+      return [];
+    }
+
+    return data
+      .map((item: any) => ({
+        value: Number(item?.DistrictId ?? item?.DISTRICT_ID ?? item?.Id ?? 0),
+        label: String(item?.DistrictNameAr ?? item?.NameAr ?? item?.name ?? '').trim()
+      }))
+      .filter(option => option.value > 0 && option.label.length > 0);
+  }
+
+  private buildMenuTree(data: unknown): TreeNode[] {
+    if (!Array.isArray(data)) {
+      return [];
+    }
+
+    const rawItems = data as PUB_MENU_ITEMS[];
+    const nodeMap = new Map<number, TreeNode>();
+    const roots: TreeNode[] = [];
+
+    rawItems.forEach(item => {
+      const id = Number(item?.MENU_ITEM_ID ?? 0);
+      if (id <= 0) {
+        return;
+      }
+
+      nodeMap.set(id, {
+        key: String(id),
+        label: String(item?.MENU_ITEM_NAME ?? '').trim() || `عنصر ${id}`,
+        data: item,
+        children: [],
+        expanded: true
+      });
+    });
+
+    rawItems.forEach(item => {
+      const id = Number(item?.MENU_ITEM_ID ?? 0);
+      const parentId = Number(item?.PARENT_MENU_ITEM_ID ?? 0);
+      const node = nodeMap.get(id);
+      if (!node) {
+        return;
+      }
+
+      if (parentId > 0 && nodeMap.has(parentId)) {
+        nodeMap.get(parentId)?.children?.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    this.markLeafNodes(roots);
+    return roots;
+  }
+
+  private markLeafNodes(nodes: TreeNode[]): void {
+    nodes.forEach(node => {
+      const hasChildren = !!(node.children && node.children.length > 0);
+      node.leaf = !hasChildren;
+      if (hasChildren) {
+        this.markLeafNodes(node.children as TreeNode[]);
+      }
+    });
+  }
+
+  private getPathByKey(key: string): string {
+    const labels = this.findPathLabels(this.menuTree, key, []);
+    return labels.join(' > ');
+  }
+
+  private findPathLabels(nodes: TreeNode[], key: string, stack: string[]): string[] {
+    for (const node of nodes) {
+      const nextStack = [...stack, String(node.label ?? '').trim()];
+      if (String(node.key) === key) {
+        return nextStack;
+      }
+
+      const children = node.children as TreeNode[] | undefined;
+      if (children && children.length > 0) {
+        const result = this.findPathLabels(children, key, nextStack);
+        if (result.length > 0) {
+          return result;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  private parseToDate(value: unknown): Date | null {
+    if (!value) {
+      return null;
+    }
+
+    if (value instanceof Date) {
+      return isNaN(value.getTime()) ? null : value;
+    }
+
+    const parsed = new Date(String(value));
+    return isNaN(parsed.getTime()) ? null : parsed;
   }
 
   private openEditorDialog(mode: PublicationEditorMode, publication: DocumentResp, title: string): void {

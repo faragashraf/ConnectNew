@@ -161,6 +161,7 @@
             <th>ملخص الوثيقة</th>
             <th>اسم المنطقة</th>
             <th>نوع المنشور</th>
+            <th>نوع الوثيقة</th>
             <th>النص الكامل للوثيقة</th>
             <th class="actions-header">الإجراءات</th>
           </tr>
@@ -176,6 +177,7 @@
             </td>
             <td>{{ displayValue(row.DistrictName) }}</td>
             <td>{{ displayValue(row.PublicationTypeName) }}</td>
+            <td>{{ displayValue(row.DocumentType) }}</td>
             <td class="summary-cell">
               <span class="summary-text" [title]="displayValue(row.ALL_TEXT_DOC)">{{ displayValue(row.ALL_TEXT_DOC) }}</span>
             </td>
@@ -207,7 +209,7 @@
 
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="8" class="empty-state">لا توجد منشورات مطابقة لمحددات البحث.</td>
+            <td colspan="9" class="empty-state">لا توجد منشورات مطابقة لمحددات البحث.</td>
           </tr>
         </ng-template>
       </p-table>
@@ -220,7 +222,7 @@
       [resizable]="false"
       [style]="{ width: '92vw', maxWidth: '860px' }"
       [breakpoints]="{ '992px': '96vw', '768px': '99vw' }"
-      header="تفاصيل المنشور"
+      [header]="detailsDialogHeader"
       styleClass="publication-details-dialog"
       (onHide)="closeDetailsDialog()">
 

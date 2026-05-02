@@ -20,7 +20,7 @@ const routes: Routes = [
     component: AllPublicationsComponent,
     canActivate: [AuthNewGuardService],
     data: {
-      func: 'AllEnpoUsersFunc'
+      func: 'PublSuperAdminFunc'
     }
   },
   {
@@ -28,7 +28,7 @@ const routes: Routes = [
     component: CreatePublicationPageComponent,
     canActivate: [AuthNewGuardService],
     data: {
-      func: 'AllEnpoUsersFunc'
+      func: 'PublSuperAdminFunc'
     }
   },
   {

@@ -25,9 +25,12 @@ export class PublicationNewApiService {
     private readonly dynamicSubjectsAdminRoutingController: DynamicSubjectsAdminRoutingController
   ) { }
 
-  getAdminDocuments(pageNumber: number, pageSize: number): Observable<DocumentRespPagedResult> {
-    const filters: ExpressionDto[] = [];
-    return this.publicationsController.getDocumentsList_admin(pageNumber, pageSize, filters);
+  getAdminDocuments(
+    pageNumber: number,
+    pageSize: number,
+    filters: ExpressionDto[] = []
+  ): Observable<DocumentRespPagedResult> {
+    return this.publicationsController.getDocumentsList_admin(pageNumber, pageSize, filters ?? []);
   }
 
   getUserDocuments(pageNumber: number, pageSize: number, filters: ExpressionDto[]): Observable<DocumentRespPagedResult> {

@@ -123,8 +123,8 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     return this.mode === 'add' || this.mode === 'edit';
   }
 
-  get canManageMenuTree(): boolean {
-    return this.mode === 'add' && this.authObjectsService.checkAuthFun('AddMenuItemsFunc');
+  get canManageTreeContextMenuItems(): boolean {
+    return this.mode === 'add' && this.authObjectsService.checkAuthFun('PublSuperAdminFunc');
   }
 
   get hasAnyAttachment(): boolean {
@@ -247,7 +247,7 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
   }
 
   onMenuNodeContextMenuSelect(event: any): void {
-    if (!this.canManageMenuTree) {
+    if (!this.canManageTreeContextMenuItems) {
       return;
     }
 
@@ -604,6 +604,17 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
   }
 
   private loadMenuTreeWithFallback(unitIds: number[]): void {
+    const canLoadAllMenuItemsInAddMode =
+      (this.mode === 'add' || this.mode === 'edit')
+      && (
+        this.authObjectsService.checkAuthFun('PublSuperAdminFunc')
+      );
+
+    if (canLoadAllMenuItemsInAddMode) {
+      this.loadMenuTreeFromGetMenuItems();
+      return;
+    }
+
     const adminOnlyMode = this.mode === 'add';
 
     this.publicationNewApiService.getAdminMenuItems(unitIds).subscribe({

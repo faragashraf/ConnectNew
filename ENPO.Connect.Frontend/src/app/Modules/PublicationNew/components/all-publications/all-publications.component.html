@@ -28,120 +28,266 @@
     </ng-template>
   </p-toolbar>
 
-  <div class="table-card">
-    <p-table
-      [value]="documents"
-      dataKey="DocumentId"
-      [loading]="loading"
-      [paginator]="true"
-      [rows]="pageSize"
-      [first]="firstRecordIndex"
-      [totalRecords]="totalRecords"
-      [rowsPerPageOptions]="rowsPerPageOptions"
-      [showCurrentPageReport]="true"
-      currentPageReportTemplate="عرض {first} إلى {last} من إجمالي {totalRecords}"
-      [lazy]="true"
-      (onPage)="onPageChange($event)"
-      responsiveLayout="scroll"
-      styleClass="modern-publications-table">
-      <ng-template pTemplate="header">
-        <tr>
-          <th>#</th>
-          <th>رقم الوثيقة</th>
-          <th>تاريخ بدء العمل</th>
-          <th>ملخص الوثيقة</th>
-          <th>اسم القطاع</th>
-          <th>اسم المنطقة</th>
-          <th>نوع الوثيقة</th>
-          <th>اسم التطبيق</th>
-          <th>نوع النشر</th>
-          <th class="actions-header">الإجراءات</th>
-        </tr>
-      </ng-template>
+  <div class="loading-card" *ngIf="lookupsLoading">
+    <p-progressSpinner strokeWidth="4" styleClass="small-spinner"></p-progressSpinner>
+    <span>جاري تحميل بيانات البحث...</span>
+  </div>
 
-      <ng-template pTemplate="body" let-row let-rowIndex="rowIndex">
-        <tr>
-          <td>
-            <span class="mobile-label">#</span>
-            {{ getRowNumber(rowIndex) }}
-          </td>
-          <td>
-            <span class="mobile-label">رقم الوثيقة</span>
-            {{ displayValue(row.DOCUMENT_NUMBER) }}
-          </td>
-          <td>
-            <span class="mobile-label">تاريخ بدء العمل</span>
-            {{ row.WORKING_START_DATE ? (row.WORKING_START_DATE | date:'M/d/yy, hh:mm a') : '-' }}
-          </td>
-          <td class="summary-cell">
-            <span class="mobile-label">ملخص الوثيقة</span>
-            <span class="summary-text">{{ displayValue(row.MINI_DOC) }}</span>
-          </td>
-          <td>
-            <span class="mobile-label">اسم القطاع</span>
-            {{ displayValue(row.SectorName) }}
-          </td>
-          <td>
-            <span class="mobile-label">اسم المنطقة</span>
-            {{ displayValue(row.DistrictName) }}
-          </td>
-          <td>
-            <span class="mobile-label">نوع الوثيقة</span>
-            {{ displayValue(row.DocumentType) }}
-          </td>
-          <td>
-            <span class="mobile-label">اسم التطبيق</span>
-            {{ displayValue(row.Application) }}
-          </td>
-          <td>
-            <span class="mobile-label">نوع النشر</span>
-            {{ displayValue(row.PublicationTypeName) }}
-          </td>
-          <td class="actions-cell">
-            <span class="mobile-label">الإجراءات</span>
-            <div class="actions-wrap">
+  <ng-container *ngIf="!lookupsLoading">
+    <p-fieldset legend="محددات البحث" [toggleable]="true" [(collapsed)]="searchFiltersCollapsed" styleClass="smart-search-fieldset">
+      <form class="search-form" [formGroup]="searchForm" (ngSubmit)="onSearch()">
+        <div class="search-layout">
+          <div class="filters-grid">
+            <div class="field-block">
+              <label>رقم الوثيقة</label>
+              <input pInputText type="text" formControlName="documentNumber" placeholder="أدخل رقم الوثيقة" />
+            </div>
+
+            <div class="field-block">
+              <label>المنطقة</label>
+              <p-dropdown
+                [options]="districtOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="districtId"
+                appendTo="body"
+                [filter]="true"
+                filterBy="label"
+                [showClear]="true"
+                placeholder="اختر المنطقة">
+              </p-dropdown>
+            </div>
+
+            <div class="field-block">
+              <label>نوع المنشور</label>
+              <p-dropdown
+                [options]="publicationTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="publicationTypeId"
+                appendTo="body"
+                [filter]="true"
+                filterBy="label"
+                [showClear]="true"
+                placeholder="اختر نوع المنشور">
+              </p-dropdown>
+            </div>
+
+            <div class="field-block">
+              <label>حالة التفعيل</label>
+              <p-dropdown
+                [options]="activationStatusOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="activationStatus"
+                appendTo="body"
+                [showClear]="true"
+                placeholder="اختر حالة التفعيل">
+              </p-dropdown>
+            </div>
+
+            <div class="field-block date-field">
+              <label>تاريخ تفعيل الوثيقة</label>
+              <p-calendar
+                formControlName="workingStartDate"
+                appendTo="body"
+                [showIcon]="true"
+                dateFormat="yy-mm-dd"
+                placeholder="اختر تاريخ التفعيل">
+              </p-calendar>
+            </div>
+
+            <div class="field-block full-width">
+              <label>ملخص الوثيقة</label>
+              <input pInputText type="text" formControlName="miniDoc" placeholder="ابحث داخل ملخص الوثيقة" />
+            </div>
+
+            <div class="field-block full-width">
+              <label>النص الكامل للوثيقة</label>
+              <textarea
+                pInputTextarea
+                rows="3"
+                formControlName="allTextDoc"
+                placeholder="ابحث داخل النص الكامل للوثيقة">
+              </textarea>
+            </div>
+          </div>
+
+          <div class="tree-filter-card">
+            <div class="tree-header">
+              <h3>القائمة الرئيسية</h3>
               <button
-                *ngIf="canEditActivation"
                 pButton
                 type="button"
-                class="p-button-sm action-btn activation-btn"
-                [ngClass]="row.VAL === '1' ? 'deactivate-btn' : 'activate-btn'"
-                [label]="getActivationButtonLabel(row)"
-                [loading]="isActivationLoading(row.DocumentId)"
-                [disabled]="loading || isActivationLoading(row.DocumentId)"
-                [attr.aria-label]="getActivationButtonLabel(row)"
-                (click)="toggleActivation(row)">
-              </button>
-              <button
-                pButton
-                type="button"
-                icon="pi pi-eye"
-                class="p-button-sm action-btn view-btn"
-                aria-label="عرض المنشور"
-                (click)="openViewDialog(row)">
-              </button>
-              <button
-                pButton
-                type="button"
-                icon="pi pi-pencil"
-                class="p-button-sm action-btn edit-btn"
-                aria-label="تعديل المنشور"
-                (click)="openEditDialog(row)">
+                class="p-button-text p-button-sm"
+                icon="pi pi-times"
+                label="إلغاء الاختيار"
+                [disabled]="!selectedMenuItemId"
+                (click)="clearMenuSelection()">
               </button>
             </div>
-          </td>
-        </tr>
-      </ng-template>
 
-      <ng-template pTemplate="emptymessage">
-        <tr>
-          <td colspan="10" class="empty-state">
-            لا توجد بيانات منشورات متاحة حاليًا.
-          </td>
-        </tr>
-      </ng-template>
-    </p-table>
-  </div>
+            <p class="selected-path" *ngIf="selectedMenuPath">{{ selectedMenuPath }}</p>
+            <p class="selected-path muted" *ngIf="!selectedMenuPath">يمكنك اختيار عنصر من الشجرة لتضمينه في البحث.</p>
+
+            <p-tree
+              [value]="menuTree"
+              selectionMode="single"
+              [(selection)]="selectedMenuNode"
+              [metaKeySelection]="false"
+              [filter]="true"
+              filterPlaceholder="بحث داخل القائمة"
+              [scrollHeight]="'20rem'"
+              (onNodeSelect)="onMenuNodeSelect($event)">
+            </p-tree>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button
+            pButton
+            type="button"
+            class="p-button-outlined"
+            icon="pi pi-filter-slash"
+            label="مسح المحددات"
+            [disabled]="loading"
+            (click)="onResetFilters()">
+          </button>
+          <button
+            pButton
+            type="submit"
+            icon="pi pi-search"
+            label="بحث"
+            [loading]="loading">
+          </button>
+        </div>
+      </form>
+    </p-fieldset>
+
+    <div class="table-card">
+      <div class="results-meta">
+        <div>
+          <h2>نتائج البحث</h2>
+          <p>{{ totalRecords }} نتيجة</p>
+        </div>
+        <p-tag severity="info" [value]="'عدد المحددات: ' + activeFilterCount"></p-tag>
+      </div>
+
+      <p-table
+        [value]="documents"
+        dataKey="DocumentId"
+        [loading]="loading"
+        [paginator]="true"
+        [paginatorDropdownAppendTo]="'body'"
+        [rows]="pageSize"
+        [first]="firstRecordIndex"
+        [totalRecords]="totalRecords"
+        [rowsPerPageOptions]="rowsPerPageOptions"
+        [showCurrentPageReport]="true"
+        currentPageReportTemplate="عرض {first} إلى {last} من إجمالي {totalRecords}"
+        [lazy]="true"
+        (onPage)="onPageChange($event)"
+        responsiveLayout="scroll"
+        styleClass="modern-publications-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>#</th>
+            <th>رقم الوثيقة</th>
+            <th>تاريخ بدء العمل</th>
+            <th>ملخص الوثيقة</th>
+            <th>اسم القطاع</th>
+            <th>اسم المنطقة</th>
+            <th>نوع الوثيقة</th>
+            <th>اسم التطبيق</th>
+            <th>نوع النشر</th>
+            <th class="actions-header">الإجراءات</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-row let-rowIndex="rowIndex">
+          <tr>
+            <td>
+              <span class="mobile-label">#</span>
+              {{ getRowNumber(rowIndex) }}
+            </td>
+            <td>
+              <span class="mobile-label">رقم الوثيقة</span>
+              {{ displayValue(row.DOCUMENT_NUMBER) }}
+            </td>
+            <td>
+              <span class="mobile-label">تاريخ بدء العمل</span>
+              {{ row.WORKING_START_DATE ? (row.WORKING_START_DATE | date:'M/d/yy, hh:mm a') : '-' }}
+            </td>
+            <td class="summary-cell">
+              <span class="mobile-label">ملخص الوثيقة</span>
+              <span class="summary-text">{{ displayValue(row.MINI_DOC) }}</span>
+            </td>
+            <td>
+              <span class="mobile-label">اسم القطاع</span>
+              {{ displayValue(row.SectorName) }}
+            </td>
+            <td>
+              <span class="mobile-label">اسم المنطقة</span>
+              {{ displayValue(row.DistrictName) }}
+            </td>
+            <td>
+              <span class="mobile-label">نوع الوثيقة</span>
+              {{ displayValue(row.DocumentType) }}
+            </td>
+            <td>
+              <span class="mobile-label">اسم التطبيق</span>
+              {{ displayValue(row.Application) }}
+            </td>
+            <td>
+              <span class="mobile-label">نوع النشر</span>
+              {{ displayValue(row.PublicationTypeName) }}
+            </td>
+            <td class="actions-cell">
+              <span class="mobile-label">الإجراءات</span>
+              <div class="actions-wrap">
+                <button
+                  *ngIf="canEditActivation"
+                  pButton
+                  type="button"
+                  class="p-button-sm action-btn activation-btn"
+                  [ngClass]="row.VAL === '1' ? 'deactivate-btn' : 'activate-btn'"
+                  [label]="getActivationButtonLabel(row)"
+                  [loading]="isActivationLoading(row.DocumentId)"
+                  [disabled]="loading || isActivationLoading(row.DocumentId)"
+                  [attr.aria-label]="getActivationButtonLabel(row)"
+                  (click)="toggleActivation(row)">
+                </button>
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-eye"
+                  class="p-button-sm action-btn view-btn"
+                  aria-label="عرض المنشور"
+                  (click)="openViewDialog(row)">
+                </button>
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-pencil"
+                  class="p-button-sm action-btn edit-btn"
+                  aria-label="تعديل المنشور"
+                  (click)="openEditDialog(row)">
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="10" class="empty-state">
+              لا توجد بيانات منشورات مطابقة لمحددات البحث.
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+  </ng-container>
 
   <p-dialog
     [(visible)]="editorDialogVisible"
