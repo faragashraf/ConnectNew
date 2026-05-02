@@ -982,7 +982,7 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     this.publicationNewApiService.getInternalOrgUnitsTree(true).subscribe({
       next: (response) => {
         if (response?.isSuccess && Array.isArray(response.data) && response.data.length > 0) {
-          this.internalOrgUnitsRows = response.data;
+          this.internalOrgUnitsRows = this.filterToInternalOrgUnits(response.data);
           this.authorizedUnitTree = this.buildAuthorizedUnitsTreeFromRows(this.internalOrgUnitsRows);
           this.applyDialogAuthorizedUnitSelection();
           return;
@@ -1001,6 +1001,59 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
         this.authorizedUnitTreeLoading = false;
       }
     });
+  }
+
+  private filterToInternalOrgUnits(
+    rows: SubjectRoutingOrgUnitWithCountTreeNodeDto[]
+  ): SubjectRoutingOrgUnitWithCountTreeNodeDto[] {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return [];
+    }
+
+    const internalRootId = 1;
+
+    const rowsByParent = new Map<number, SubjectRoutingOrgUnitWithCountTreeNodeDto[]>();
+    const rowsById = new Map<number, SubjectRoutingOrgUnitWithCountTreeNodeDto>();
+
+    rows.forEach((row) => {
+      const unitId = this.toPositiveInt(row?.unitId);
+      if (unitId <= 0) {
+        return;
+      }
+
+      rowsById.set(unitId, row);
+      const parentId = this.toPositiveInt(row?.parentId ?? 0);
+      if (!rowsByParent.has(parentId)) {
+        rowsByParent.set(parentId, []);
+      }
+
+      rowsByParent.get(parentId)?.push(row);
+    });
+
+    if (!rowsById.has(internalRootId)) {
+      return [];
+    }
+
+    const includedIds = new Set<number>();
+    const stack = [internalRootId];
+    while (stack.length > 0) {
+      const currentId = stack.pop() as number;
+      if (includedIds.has(currentId)) {
+        continue;
+      }
+
+      includedIds.add(currentId);
+      const children = rowsByParent.get(currentId) ?? [];
+      children.forEach((child) => {
+        const childId = this.toPositiveInt(child?.unitId);
+        if (childId > 0 && !includedIds.has(childId)) {
+          stack.push(childId);
+        }
+      });
+    }
+
+    const filtered = rows.filter((row) => includedIds.has(this.toPositiveInt(row?.unitId)));
+    return filtered;
   }
 
   private buildAuthorizedUnitsTreeFromRows(rows: SubjectRoutingOrgUnitWithCountTreeNodeDto[]): TreeNode[] {
