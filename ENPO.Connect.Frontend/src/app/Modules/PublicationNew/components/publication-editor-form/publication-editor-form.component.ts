@@ -604,9 +604,19 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
   }
 
   private loadMenuTreeWithFallback(unitIds: number[]): void {
+    const adminOnlyMode = this.mode === 'add';
+
     this.publicationNewApiService.getAdminMenuItems(unitIds).subscribe({
       next: (adminResponse) => {
         const adminItems = adminResponse?.Data ?? [];
+
+        if (adminOnlyMode) {
+          this.menuTree = this.buildMenuTree(adminItems);
+          this.applyPendingMenuSelection();
+          this.lookupsLoading = false;
+          return;
+        }
+
         if (adminItems.length > 0) {
           this.menuTree = this.buildMenuTree(adminItems);
           this.applyPendingMenuSelection();
@@ -617,6 +627,13 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
         this.loadMenuTreeFromGetMenuItems();
       },
       error: () => {
+        if (adminOnlyMode) {
+          this.menuTree = [];
+          this.applyPendingMenuSelection();
+          this.lookupsLoading = false;
+          return;
+        }
+
         this.loadMenuTreeFromGetMenuItems();
       }
     });
