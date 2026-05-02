@@ -123,7 +123,6 @@
         <div class="attachments-card">
           <div class="panel-header">
             <h3>المرفقات <span class="required-star">*</span></h3>
-            <p>يسمح فقط بامتدادات DOC و DOCX</p>
           </div>
 
           <app-add-attachments
@@ -150,6 +149,7 @@
             pButton
             type="submit"
             [label]="mode === 'add' ? 'إضافة' : 'حفظ التعديلات'"
+            [disabled]="submitting || editorForm.invalid || !hasAnyAttachment"
             [loading]="submitting">
           </button>
         </div>

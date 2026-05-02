@@ -37,6 +37,12 @@
   min-width: 0;
 }
 
+.tree-column {
+  position: sticky;
+  top: 0.75rem;
+  align-self: start;
+}
+
 .editor-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -116,6 +122,23 @@
   min-height: 100%;
 }
 
+.menu-tree-card .panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background: #ffffff;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+:host ::ng-deep .menu-tree-card .sidebar-container > .sidebar-title-wrap {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 11 !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #edf2fb !important;
+}
+
 .panel-header {
   display: grid;
   gap: 0.2rem;
@@ -151,6 +174,7 @@
   }
 
   .tree-column {
+    position: static;
     order: 2;
   }
 
