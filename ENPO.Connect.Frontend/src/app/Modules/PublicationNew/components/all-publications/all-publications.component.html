@@ -3,7 +3,6 @@
     <ng-template pTemplate="left">
       <div class="header-copy">
         <h1>جميع المنشورات</h1>
-        <p>عرض المنشورات الحالية مع تجهيز أوامر العرض والتعديل والانتقال لإنشاء منشور جديد.</p>
       </div>
     </ng-template>
     <ng-template pTemplate="right">
@@ -101,6 +100,18 @@
           <td class="actions-cell">
             <span class="mobile-label">الإجراءات</span>
             <div class="actions-wrap">
+              <button
+                *ngIf="canEditActivation"
+                pButton
+                type="button"
+                class="p-button-sm action-btn activation-btn"
+                [ngClass]="row.VAL === '1' ? 'deactivate-btn' : 'activate-btn'"
+                [label]="getActivationButtonLabel(row)"
+                [loading]="isActivationLoading(row.DocumentId)"
+                [disabled]="loading || isActivationLoading(row.DocumentId)"
+                [attr.aria-label]="getActivationButtonLabel(row)"
+                (click)="toggleActivation(row)">
+              </button>
               <button
                 pButton
                 type="button"

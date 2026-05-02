@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { DocumentResp, ResponseDetail } from 'src/app/shared/services/BackendServices/Publications/Publications.dto';
+import { AuthObjectsService } from 'src/app/shared/services/helper/auth-objects.service';
 import { MsgsService } from 'src/app/shared/services/helper/msgs.service';
 import { PublicationNewApiService } from '../../shared/services/publication-new-api.service';
 import { PublicationEditorMode } from '../publication-editor-form/publication-editor-form.component';
@@ -16,6 +17,8 @@ interface PaginatorEvent {
   styleUrls: ['./all-publications.component.scss']
 })
 export class AllPublicationsComponent implements OnInit {
+  private readonly publicationSuperAdminRoleId = '2011';
+
   readonly rowsPerPageOptions: number[] = [5, 10, 25];
 
   documents: DocumentResp[] = [];
@@ -23,15 +26,18 @@ export class AllPublicationsComponent implements OnInit {
   totalRecords = 0;
   pageSize = 5;
   currentPage = 1;
+  canEditActivation = false;
 
   editorDialogVisible = false;
   editorDialogTitle = '';
   editorDialogMode: PublicationEditorMode = 'edit';
   selectedPublication: DocumentResp | null = null;
+  private readonly activationLoadingDocumentIds = new Set<number>();
 
   constructor(
     private readonly publicationNewApiService: PublicationNewApiService,
     private readonly msgsService: MsgsService,
+    private readonly authObjectsService: AuthObjectsService,
     private readonly router: Router
   ) { }
 
@@ -40,6 +46,10 @@ export class AllPublicationsComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.canEditActivation =
+      this.authObjectsService.checkAuthFun('PublSuperAdminFunc')
+      && this.authObjectsService.checkAuthRole(this.publicationSuperAdminRoleId);
+
     this.loadDocuments();
   }
 
@@ -109,6 +119,61 @@ export class AllPublicationsComponent implements OnInit {
     this.openEditorDialog('edit', row, `تعديل المنشور رقم ${row.DocumentId}`);
   }
 
+  async toggleActivation(row: DocumentResp): Promise<void> {
+    const documentId = Number(row?.DocumentId ?? 0);
+    if (documentId <= 0 || this.activationLoadingDocumentIds.has(documentId)) {
+      return;
+    }
+
+    const currentlyActive = this.isDocumentActive(row);
+    const nextVal = currentlyActive ? '0' : '1';
+    const actionText = currentlyActive ? 'تعطيل' : 'تفعيل';
+
+    const confirmed = await this.msgsService.msgConfirm(
+      `سيتم ${actionText} المنشور رقم ${documentId}. هل تريد المتابعة؟`,
+      actionText
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    this.activationLoadingDocumentIds.add(documentId);
+
+    this.publicationNewApiService.editActivation(documentId, nextVal).subscribe({
+      next: (response) => {
+        if (response?.IsSuccess) {
+          row.VAL = nextVal;
+          if (response.Document_Number && response.Document_Number.trim().length > 0) {
+            row.DOCUMENT_NUMBER = response.Document_Number.trim();
+          }
+
+          this.msgsService.msgSuccess(
+            nextVal === '1' ? 'تم تفعيل المنشور بنجاح' : 'تم تعطيل المنشور بنجاح',
+            4000
+          );
+          return;
+        }
+
+        this.msgsService.msgError('تعذر تحديث حالة المنشور', this.collectErrors(response?.ResponseDetails), true);
+      },
+      error: (error: unknown) => {
+        this.msgsService.msgError('تعذر تحديث حالة المنشور', this.extractErrorMessage(error), true);
+      },
+      complete: () => {
+        this.activationLoadingDocumentIds.delete(documentId);
+      }
+    });
+  }
+
+  getActivationButtonLabel(row: DocumentResp): string {
+    return this.isDocumentActive(row) ? 'تعطيل المنشور' : 'تفعيل المنشور';
+  }
+
+  isActivationLoading(documentId: number): boolean {
+    return this.activationLoadingDocumentIds.has(Number(documentId));
+  }
+
   closeEditorDialog(): void {
     this.editorDialogVisible = false;
     this.selectedPublication = null;
@@ -132,6 +197,10 @@ export class AllPublicationsComponent implements OnInit {
     this.selectedPublication = publication;
     this.editorDialogTitle = title;
     this.editorDialogVisible = true;
+  }
+
+  private isDocumentActive(row: DocumentResp): boolean {
+    return String(row?.VAL ?? '').trim() === '1';
   }
 
   private collectErrors(details: ResponseDetail[] | undefined): string {

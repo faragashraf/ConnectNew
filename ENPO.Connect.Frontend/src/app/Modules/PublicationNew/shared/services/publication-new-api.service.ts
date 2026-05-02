@@ -3,6 +3,7 @@ import { Observable } from 'rxjs';
 import {
   AttachmentList,
   DocumentRespPagedResult,
+  EditActiveRequestDto,
   ExpressionDto,
   FileContentResp,
   Menu_ItemResp,
@@ -87,5 +88,13 @@ export class PublicationNewApiService {
 
   getFileContent(attachmentId: number): Observable<FileContentResp> {
     return this.publicationsController.getFileContent(attachmentId);
+  }
+
+  editActivation(documentId: number, val: string): Observable<SaveDocumentResp> {
+    const request: EditActiveRequestDto = {
+      DOCUMENT_ID: documentId,
+      Val: val
+    };
+    return this.publicationsController.editActivation(request);
   }
 }

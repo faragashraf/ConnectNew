@@ -86,7 +86,7 @@
 
 .actions-header,
 .actions-cell {
-  min-width: 120px;
+  min-width: 280px;
 }
 
 .actions-wrap {
@@ -94,6 +94,7 @@
   align-items: center;
   gap: 0.7rem;
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .action-btn {
@@ -109,6 +110,21 @@
 :host ::ng-deep .action-btn .pi {
   font-size: 1.22rem !important;
   line-height: 1 !important;
+}
+
+.activation-btn {
+  width: auto;
+  min-width: 7.8rem;
+  height: 2.4rem;
+  border-radius: 0.75rem !important;
+  padding-inline: 0.85rem !important;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+  font-weight: 700;
+}
+
+:host ::ng-deep .activation-btn .p-button-label {
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 :host ::ng-deep .action-btn:not(.p-disabled):hover {
@@ -140,6 +156,18 @@
   color: #1f2937 !important;
 }
 
+.activate-btn {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  border-color: #059669 !important;
+  color: #ffffff !important;
+}
+
+.deactivate-btn {
+  background: linear-gradient(135deg, #b91c1c, #ef4444) !important;
+  border-color: #b91c1c !important;
+  color: #ffffff !important;
+}
+
 :host ::ng-deep .view-btn .p-button-icon,
 :host ::ng-deep .view-btn .pi {
   color: #5b4ad7 !important;
@@ -148,6 +176,11 @@
 :host ::ng-deep .edit-btn .p-button-icon,
 :host ::ng-deep .edit-btn .pi {
   color: #1f2937 !important;
+}
+
+:host ::ng-deep .activate-btn .p-button-label,
+:host ::ng-deep .deactivate-btn .p-button-label {
+  color: #ffffff !important;
 }
 
 .mobile-label {
@@ -327,5 +360,11 @@
     width: 2.8rem;
     height: 2.8rem;
     border-radius: 0.9rem !important;
+  }
+
+  .activation-btn {
+    min-width: 7.2rem;
+    height: 2.25rem;
+    border-radius: 0.7rem !important;
   }
 }
