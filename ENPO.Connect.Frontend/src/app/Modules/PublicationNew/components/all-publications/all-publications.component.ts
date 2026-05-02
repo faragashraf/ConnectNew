@@ -153,17 +153,48 @@ export class AllPublicationsComponent implements OnInit {
 
     forkJoin({
       publicationTypesResponse: this.publicationNewApiService.getCriteria('PublicationTypes'),
-      districtsResponse: this.publicationNewApiService.getCriteria('Districts'),
-      menuItemsResponse: this.publicationNewApiService.getAdminMenuItems(unitIds)
+      districtsResponse: this.publicationNewApiService.getCriteria('Districts')
     }).subscribe({
-      next: ({ publicationTypesResponse, districtsResponse, menuItemsResponse }) => {
+      next: ({ publicationTypesResponse, districtsResponse }) => {
         this.publicationTypeOptions = this.mapPublicationTypeOptions(publicationTypesResponse?.Data);
         this.districtOptions = this.mapDistrictOptions(districtsResponse?.Data);
-        this.menuTree = this.buildMenuTree(menuItemsResponse?.Data ?? []);
-        this.applyPendingMenuSelection();
+        this.loadMenuTreeWithFallback(unitIds);
       },
       error: (error: unknown) => {
         this.msgsService.msgError('تعذر تحميل بيانات النموذج', this.extractErrorMessage(error), true);
+        this.editorDialogLoading = false;
+      },
+      complete: () => {}
+    });
+  }
+
+  private loadMenuTreeWithFallback(unitIds: number[]): void {
+    this.publicationNewApiService.getAdminMenuItems(unitIds).subscribe({
+      next: (adminResponse) => {
+        const adminItems = adminResponse?.Data ?? [];
+        if (adminItems.length > 0) {
+          this.menuTree = this.buildMenuTree(adminItems);
+          this.applyPendingMenuSelection();
+          this.editorDialogLoading = false;
+          return;
+        }
+
+        this.loadMenuTreeFromGetMenuItems();
+      },
+      error: () => {
+        this.loadMenuTreeFromGetMenuItems();
+      }
+    });
+  }
+
+  private loadMenuTreeFromGetMenuItems(): void {
+    this.publicationNewApiService.getMenuItems().subscribe({
+      next: (response) => {
+        this.menuTree = this.buildMenuTree(response?.Data ?? []);
+        this.applyPendingMenuSelection();
+      },
+      error: (error: unknown) => {
+        this.msgsService.msgError('تعذر تحميل القائمة الرئيسية', this.extractErrorMessage(error), true);
       },
       complete: () => {
         this.editorDialogLoading = false;
@@ -588,85 +619,38 @@ export class AllPublicationsComponent implements OnInit {
   private resolveUnitIds(): number[] {
     const ids = new Set<number>();
     const pushId = (value: unknown): void => {
-      if (value === null || value === undefined) {
-        return;
-      }
-
-      if (Array.isArray(value)) {
-        value.forEach(item => pushId(item));
-        return;
-      }
-
-      if (typeof value === 'string') {
-        const normalized = value.trim();
-        if (!normalized) {
-          return;
-        }
-
-        if ((normalized.startsWith('[') && normalized.endsWith(']'))
-          || (normalized.startsWith('{') && normalized.endsWith('}'))) {
-          try {
-            const parsedJson = JSON.parse(normalized);
-            pushId(parsedJson);
-            return;
-          } catch {
-            // keep parsing as primitive number
-          }
-        }
-      }
-
       const parsed = Number(value);
       if (Number.isFinite(parsed) && parsed > 0) {
         ids.add(Math.trunc(parsed));
       }
     };
 
-    const rawAuthCandidates: string[] = [];
-    const authObjectUpper = localStorage.getItem('AuthObject');
-    const authObjectLower = localStorage.getItem('authObject');
-
-    if (authObjectUpper) {
-      rawAuthCandidates.push(authObjectUpper);
-    }
-    if (authObjectLower && authObjectLower !== authObjectUpper) {
-      rawAuthCandidates.push(authObjectLower);
-    }
-
-    rawAuthCandidates.forEach(rawCandidate => {
+    const rawAuth = localStorage.getItem('AuthObject') || localStorage.getItem('authObject');
+    if (rawAuth) {
       try {
-        const authObject = JSON.parse(rawCandidate) as any;
+        const parsedAuth = JSON.parse(rawAuth) as any;
+        const root = parsedAuth?.authObject ?? parsedAuth;
+        const unitsList =
+          root?.vwOrgUnitsWithCounts
+          ?? root?.exchangeUserInfo?.vwOrgUnitsWithCounts
+          ?? [];
 
-        this.collectUnitIdsFromList(authObject?.vwOrgUnitsWithCounts, pushId);
-        this.collectUnitIdsFromList(authObject?.exchangeUserInfo?.vwOrgUnitsWithCounts, pushId);
-
-        // Some environments wrap the payload under `authObject`
-        this.collectUnitIdsFromList(authObject?.authObject?.vwOrgUnitsWithCounts, pushId);
-        this.collectUnitIdsFromList(authObject?.authObject?.exchangeUserInfo?.vwOrgUnitsWithCounts, pushId);
-
-        // Fallback: when the parsed payload itself is already the units array
-        this.collectUnitIdsFromList(authObject, pushId);
+        if (Array.isArray(unitsList)) {
+          unitsList.forEach((item: any) => {
+            pushId(item?.unitId);
+            pushId(item?.UnitId);
+            pushId(item?.UNIT_ID);
+          });
+        }
       } catch {
-        // ignore invalid local storage object
+        // keep fallback below
       }
-    });
-
-    pushId(localStorage.getItem('UnitId'));
-    pushId(localStorage.getItem('unitId'));
-    return Array.from(ids);
-  }
-
-  private collectUnitIdsFromList(source: unknown, pushId: (value: unknown) => void): void {
-    if (!Array.isArray(source)) {
-      return;
     }
 
-    source.forEach((item: any) => {
-      pushId(item?.UNIT_ID);
-      pushId(item?.UnitId);
-      pushId(item?.unitId);
-      pushId(item?.ID);
-      pushId(item?.Id);
-    });
+    pushId(localStorage.getItem('unitId'));
+    pushId(localStorage.getItem('UnitId'));
+
+    return Array.from(ids);
   }
 
   private collectErrors(details: ResponseDetail[] | undefined): string {

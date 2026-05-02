@@ -29,6 +29,10 @@ export class PublicationNewApiService {
     return this.publicationsController.getAdminMenuItems(unitIds);
   }
 
+  getMenuItems(): Observable<Menu_ItemResp> {
+    return this.publicationsController.getMenuItems();
+  }
+
   saveDocument(
     workingStartDate: Date,
     miniDoc: string,
