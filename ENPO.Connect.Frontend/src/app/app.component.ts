@@ -159,7 +159,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       this.authService.authObject$.next(false);
       this.authService.offlineAuthenticatedt$.next(false);
       this.authService.DomainAuthenticated$.next(false);
-      this.authService.SignOut();
+      const currentRoutePath = this.authService.resolveCurrentAppPath();
+      const skipNavigate = this.authService.isUnsignedInAllowedRoute(currentRoutePath);
+      this.authService.SignOut(skipNavigate);
     }
 
     this.NotificationService.initializeNotificationInfra();

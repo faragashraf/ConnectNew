@@ -22,6 +22,10 @@ export class PublicationNewApiService {
     return this.publicationsController.getDocumentsList_admin(pageNumber, pageSize, filters);
   }
 
+  getUserDocuments(pageNumber: number, pageSize: number, filters: ExpressionDto[]): Observable<DocumentRespPagedResult> {
+    return this.publicationsController.getDocumentsList_user(pageNumber, pageSize, filters ?? []);
+  }
+
   getCriteria(funName: string): Observable<ObjectResponse> {
     return this.publicationsController.getCriteria(funName);
   }

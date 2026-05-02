@@ -52,6 +52,14 @@ export interface AuthObject {
   providedIn: 'root'
 })
 export class AuthObjectsService {
+  private readonly unsignedInAllowedRoutes = [
+    '/Home',
+    '/employees-announcements',
+    '/PublicationNew/public-search',
+    '/PublicationNew/PublicSearch',
+    '/Auth/Login',
+    '/Auth/Register'
+  ];
   authObject$ = new Subject<boolean>();
   isAuthenticated: boolean = false;
 
@@ -110,7 +118,7 @@ export class AuthObjectsService {
   {
     label: 'المنشورات',
     icon: 'pi pi-bars',
-    routerLink: '/Publications/mainLayOut'
+    routerLink: '/PublicationNew/public-search'
   },
   {
     label: 'طلب جديد',
@@ -594,7 +602,7 @@ export class AuthObjectsService {
     this.items1 = this._static;
   }
 
-  private resolveCurrentAppPath(): string {
+  public resolveCurrentAppPath(): string {
     const routerPath = String(this.router.url ?? '').trim();
     if (routerPath && routerPath !== '/') {
       return routerPath;
@@ -613,9 +621,55 @@ export class AuthObjectsService {
     return '/Home';
   }
 
-  private isLoginPath(path: string): boolean {
-    const normalized = String(path ?? '').toLowerCase();
+  public isLoginPath(path: string): boolean {
+    const normalized = this.normalizeRoutePath(path);
     return normalized.startsWith('/auth/login');
+  }
+
+  public isUnsignedInAllowedRoute(path: string): boolean {
+    return this.getUnsignedInAllowedRoute(path) !== null;
+  }
+
+  public getUnsignedInAllowedRoute(path: string): string | null {
+    const comparablePath = this.normalizeRoutePath(path);
+    const matched = this.unsignedInAllowedRoutes.find(route => this.normalizeRoutePath(route) === comparablePath);
+    return matched ?? null;
+  }
+
+  public normalizeRoutePath(path: string): string {
+    let value = String(path ?? '').replace(/\\/g, '/').trim();
+    if (!value) {
+      return '/';
+    }
+
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // Keep original route when decode fails.
+    }
+
+    const hashIndex = value.indexOf('#');
+    if (hashIndex >= 0) {
+      const hashValue = value.substring(hashIndex + 1).trim();
+      if (hashValue.startsWith('/')) {
+        value = hashValue;
+      }
+    }
+
+    const queryIndex = value.indexOf('?');
+    if (queryIndex >= 0) {
+      value = value.substring(0, queryIndex);
+    }
+
+    if (!value.startsWith('/')) {
+      value = `/${value}`;
+    }
+
+    if (value.length > 1 && value.endsWith('/')) {
+      value = value.substring(0, value.length - 1);
+    }
+
+    return value.toLowerCase();
   }
 
   returnAllFunc(): any[] {

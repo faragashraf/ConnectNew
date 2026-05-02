@@ -89,6 +89,12 @@ export class BasicInterceptorService implements HttpInterceptor {
         finalize(() => this._Finalize())
       );
     } else {
+      const currentRoute = this.AuthObjects.resolveCurrentAppPath();
+      if (this.AuthObjects.isUnsignedInAllowedRoute(currentRoute)) {
+        // Allow public route traffic to continue without forcing login redirect.
+        return next.handle(req).pipe(finalize(() => this._Finalize()));
+      }
+
       console.log('Interceptor Error: missing token', token);
       this.msgsService.msgInfo(
         "برجاء تسجيل الدخول أولاً",
@@ -103,11 +109,12 @@ export class BasicInterceptorService implements HttpInterceptor {
   }
 
   private navigateToLoginAndSignOut() {
-    const currentUrl = this.router.url;
+    const currentUrl = this.AuthObjects.resolveCurrentAppPath();
+    const allowedReturnUrl = this.AuthObjects.getUnsignedInAllowedRoute(currentUrl);
     // Prevent redirect loop
-    if (!currentUrl.includes('/Auth/Login')) {
+    if (!this.AuthObjects.isLoginPath(currentUrl)) {
       this.router.navigate(['/Auth/Login'], {
-        queryParams: { returnUrl: currentUrl === '/' ? '/Home' : currentUrl }
+        queryParams: { returnUrl: allowedReturnUrl ?? '/Home' }
       });
     }
     this.AuthObjects.SignOut(true);

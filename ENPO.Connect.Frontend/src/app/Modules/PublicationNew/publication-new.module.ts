@@ -8,12 +8,14 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { GenericModuleModule } from '../GenericComponents/generic-module.module';
 import { PublicationEditorFormComponent } from './components/publication-editor-form/publication-editor-form.component';
 import { CreatePublicationPageComponent } from './components/create-publication-page/create-publication-page.component';
+import { PublicPublicationsSearchComponent } from './components/public-publications-search/public-publications-search.component';
 
 @NgModule({
   declarations: [
     AllPublicationsComponent,
     PublicationEditorFormComponent,
-    CreatePublicationPageComponent
+    CreatePublicationPageComponent,
+    PublicPublicationsSearchComponent
   ],
   imports: [
     CommonModule,

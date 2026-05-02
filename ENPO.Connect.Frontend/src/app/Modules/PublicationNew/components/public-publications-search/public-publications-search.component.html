@@ -1,0 +1,285 @@
+<section class="public-publications-search-page" dir="rtl">
+  <div class="hero-card">
+    <h1>البحث الذكي في المنشورات</h1>
+    <p>ابحث برقم الوثيقة أو المنطقة أو نوع المنشور أو نص الوثيقة، مع إمكانية التصفية بالقائمة الرئيسية.</p>
+  </div>
+
+  <div class="loading-card" *ngIf="lookupsLoading">
+    <p-progressSpinner strokeWidth="4" styleClass="small-spinner"></p-progressSpinner>
+    <span>جاري تحميل بيانات البحث...</span>
+  </div>
+
+  <ng-container *ngIf="!lookupsLoading">
+    <p-fieldset legend="محددات البحث" [toggleable]="true" [(collapsed)]="searchFiltersCollapsed" styleClass="smart-search-fieldset">
+      <form class="search-form" [formGroup]="searchForm" (ngSubmit)="onSearch()">
+        <div class="search-layout">
+          <div class="filters-grid">
+            <div class="field-block">
+              <label>رقم الوثيقة</label>
+              <input pInputText type="text" formControlName="documentNumber" placeholder="أدخل رقم الوثيقة" />
+            </div>
+
+            <div class="field-block">
+              <label>المنطقة</label>
+              <p-dropdown
+                [options]="districtOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="districtId"
+                appendTo="body"
+                [filter]="true"
+                filterBy="label"
+                [showClear]="true"
+                placeholder="اختر المنطقة">
+              </p-dropdown>
+            </div>
+
+            <div class="field-block">
+              <label>نوع المنشور</label>
+              <p-dropdown
+                [options]="publicationTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                formControlName="publicationTypeId"
+                appendTo="body"
+                [filter]="true"
+                filterBy="label"
+                [showClear]="true"
+                placeholder="اختر نوع المنشور">
+              </p-dropdown>
+            </div>
+
+            <div class="field-block date-field">
+              <label>تاريخ تفعيل الوثيقة</label>
+              <p-calendar
+                formControlName="workingStartDate"
+                appendTo="body"
+                [showIcon]="true"
+                dateFormat="yy-mm-dd"
+                placeholder="اختر تاريخ التفعيل">
+              </p-calendar>
+            </div>
+
+            <div class="field-block full-width">
+              <label>ملخص الوثيقة</label>
+              <input pInputText type="text" formControlName="miniDoc" placeholder="ابحث داخل ملخص الوثيقة" />
+            </div>
+
+            <div class="field-block full-width">
+              <label>النص الكامل للوثيقة</label>
+              <textarea
+                pInputTextarea
+                rows="3"
+                formControlName="allTextDoc"
+                placeholder="ابحث داخل النص الكامل للوثيقة">
+              </textarea>
+            </div>
+          </div>
+
+          <div class="tree-filter-card">
+            <div class="tree-header">
+              <h3>القائمة الرئيسية</h3>
+              <button
+                pButton
+                type="button"
+                class="p-button-text p-button-sm"
+                icon="pi pi-times"
+                label="إلغاء الاختيار"
+                [disabled]="!selectedMenuItemId"
+                (click)="clearMenuSelection()">
+              </button>
+            </div>
+
+            <p class="selected-path" *ngIf="selectedMenuPath">{{ selectedMenuPath }}</p>
+            <p class="selected-path muted" *ngIf="!selectedMenuPath">يمكنك اختيار عنصر من الشجرة لتضمينه في البحث.</p>
+
+            <p-tree
+              [value]="menuTree"
+              selectionMode="single"
+              [(selection)]="selectedMenuNode"
+              [metaKeySelection]="false"
+              [filter]="true"
+              filterPlaceholder="بحث داخل القائمة"
+              [scrollHeight]="'20rem'"
+              (onNodeSelect)="onMenuNodeSelect($event)">
+            </p-tree>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button
+            pButton
+            type="button"
+            class="p-button-outlined"
+            icon="pi pi-filter-slash"
+            label="مسح المحددات"
+            [disabled]="loading"
+            (click)="onResetFilters()">
+          </button>
+          <button
+            pButton
+            type="submit"
+            icon="pi pi-search"
+            label="بحث"
+            [loading]="loading">
+          </button>
+        </div>
+      </form>
+    </p-fieldset>
+
+    <div class="results-card">
+      <div class="results-meta">
+        <div>
+          <h2>نتائج البحث</h2>
+          <p>{{ totalRecords }} نتيجة</p>
+        </div>
+        <p-tag severity="info" [value]="'عدد المحددات: ' + activeFilterCount"></p-tag>
+      </div>
+
+      <p-table
+        [value]="documents"
+        dataKey="DocumentId"
+        [loading]="loading"
+        [paginator]="true"
+        [paginatorDropdownAppendTo]="'body'"
+        [rows]="pageSize"
+        [first]="firstRecordIndex"
+        [totalRecords]="totalRecords"
+        [rowsPerPageOptions]="rowsPerPageOptions"
+        [showCurrentPageReport]="true"
+        currentPageReportTemplate="عرض {first} إلى {last} من إجمالي {totalRecords}"
+        [lazy]="true"
+        responsiveLayout="scroll"
+        styleClass="public-search-table"
+        (onPage)="onPageChange($event)">
+
+        <ng-template pTemplate="header">
+          <tr>
+            <th>#</th>
+            <th>رقم الوثيقة</th>
+            <th>تاريخ التفعيل</th>
+            <th>ملخص الوثيقة</th>
+            <th>اسم المنطقة</th>
+            <th>نوع المنشور</th>
+            <th>النص الكامل للوثيقة</th>
+            <th class="actions-header">الإجراءات</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-row let-rowIndex="rowIndex">
+          <tr>
+            <td>{{ getRowNumber(rowIndex) }}</td>
+            <td>{{ displayValue(row.DOCUMENT_NUMBER) }}</td>
+            <td>{{ row.WORKING_START_DATE ? (row.WORKING_START_DATE | date:'M/d/yy') : '-' }}</td>
+            <td class="summary-cell">
+              <span class="summary-text" [title]="displayValue(row.MINI_DOC)">{{ displayValue(row.MINI_DOC) }}</span>
+            </td>
+            <td>{{ displayValue(row.DistrictName) }}</td>
+            <td>{{ displayValue(row.PublicationTypeName) }}</td>
+            <td class="summary-cell">
+              <span class="summary-text" [title]="displayValue(row.ALL_TEXT_DOC)">{{ displayValue(row.ALL_TEXT_DOC) }}</span>
+            </td>
+            <td class="actions-cell">
+              <div class="actions-wrap">
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-eye"
+                  class="p-button-sm action-btn details-btn"
+                  aria-label="عرض تفاصيل المنشور"
+                  (click)="openDetailsDialog(row)">
+                </button>
+
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-download"
+                  class="p-button-sm action-btn download-btn"
+                  aria-label="تحميل المرفق"
+                  [disabled]="!hasAttachments(row) || loading"
+                  [loading]="isAttachmentLoading(getFirstAttachmentId(row))"
+                  (click)="downloadFirstAttachment(row)">
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="8" class="empty-state">لا توجد منشورات مطابقة لمحددات البحث.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <p-dialog
+      [(visible)]="detailsDialogVisible"
+      [modal]="true"
+      [draggable]="false"
+      [resizable]="false"
+      [style]="{ width: '92vw', maxWidth: '860px' }"
+      [breakpoints]="{ '992px': '96vw', '768px': '99vw' }"
+      header="تفاصيل المنشور"
+      styleClass="publication-details-dialog"
+      (onHide)="closeDetailsDialog()">
+
+      <div class="details-dialog-content" *ngIf="selectedPublication">
+        <div class="details-grid">
+          <div class="detail-row">
+            <span class="detail-label">رقم الوثيقة</span>
+            <span class="detail-value">{{ displayValue(selectedPublication.DOCUMENT_NUMBER) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">تاريخ التفعيل</span>
+            <span class="detail-value">{{ selectedPublication.WORKING_START_DATE ? (selectedPublication.WORKING_START_DATE | date:'M/d/yy, hh:mm a') : '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">اسم المنطقة</span>
+            <span class="detail-value">{{ displayValue(selectedPublication.DistrictName) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">نوع المنشور</span>
+            <span class="detail-value">{{ displayValue(selectedPublication.PublicationTypeName) }}</span>
+          </div>
+          <div class="detail-row full-width">
+            <span class="detail-label">ملخص الوثيقة</span>
+            <span class="detail-value">{{ displayValue(selectedPublication.MINI_DOC) }}</span>
+          </div>
+          <div class="detail-row full-width">
+            <span class="detail-label">النص الكامل للوثيقة</span>
+            <span class="detail-value">{{ displayValue(selectedPublication.ALL_TEXT_DOC) }}</span>
+          </div>
+        </div>
+
+        <div class="attachments-panel">
+          <div class="attachments-header">
+            <h3>المرفقات</h3>
+          </div>
+
+          <div class="no-attachments" *ngIf="selectedPublicationAttachments.length === 0">
+            لا توجد مرفقات لهذا المنشور.
+          </div>
+
+          <div class="attachments-list" *ngIf="selectedPublicationAttachments.length > 0">
+            <div class="attachment-row" *ngFor="let attachment of selectedPublicationAttachments">
+              <span class="attachment-name" [title]="displayValue(attachment.FILE_NAME)">
+                {{ displayValue(attachment.FILE_NAME) }}
+              </span>
+              <button
+                pButton
+                type="button"
+                class="p-button-outlined p-button-sm"
+                icon="pi pi-download"
+                label="تحميل"
+                [loading]="isAttachmentLoading(attachment.ATTACHMENT_ID)"
+                [disabled]="isAttachmentLoading(attachment.ATTACHMENT_ID)"
+                (click)="downloadAttachmentItem(attachment)">
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </p-dialog>
+  </ng-container>
+</section>
