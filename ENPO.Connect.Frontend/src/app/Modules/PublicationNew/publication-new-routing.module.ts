@@ -32,7 +32,7 @@ const routes: Routes = [
     }
   },
   {
-    path: 'create',
+    path: 'AdminCreate',
     component: CreatePublicationPageComponent,
     canActivate: [AuthNewGuardService],
     data: {

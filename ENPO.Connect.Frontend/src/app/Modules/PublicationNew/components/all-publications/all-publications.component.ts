@@ -166,7 +166,7 @@ export class AllPublicationsComponent implements OnInit {
   }
 
   goToCreateRoute(): void {
-    this.router.navigate(['/PublicationNew/create']);
+    this.router.navigate(['/PublicationNew/AdminCreate']);
   }
 
   openViewDialog(row: DocumentResp): void {

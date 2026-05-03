@@ -171,7 +171,7 @@
           <tr>
             <td>{{ getRowNumber(rowIndex) }}</td>
             <td>{{ displayValue(row.DOCUMENT_NUMBER) }}</td>
-            <td>{{ row.WORKING_START_DATE ? (row.WORKING_START_DATE | date:'M/d/yy') : '-' }}</td>
+            <td>{{ row.WORKING_START_DATE ? (row.WORKING_START_DATE | date:'dd/MM/yyyy') : '-' }}</td>
             <td class="summary-cell">
               <span class="summary-text" [title]="displayValue(row.MINI_DOC)">{{ displayValue(row.MINI_DOC) }}</span>
             </td>
@@ -234,7 +234,7 @@
           </div>
           <div class="detail-row">
             <span class="detail-label">تاريخ التفعيل</span>
-            <span class="detail-value">{{ selectedPublication.WORKING_START_DATE ? (selectedPublication.WORKING_START_DATE | date:'M/d/yy, hh:mm a') : '-' }}</span>
+            <span class="detail-value">{{ selectedPublication.WORKING_START_DATE ? (selectedPublication.WORKING_START_DATE | date:'dd/MM/yyyy, hh:mm a') : '-' }}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">اسم المنطقة</span>
