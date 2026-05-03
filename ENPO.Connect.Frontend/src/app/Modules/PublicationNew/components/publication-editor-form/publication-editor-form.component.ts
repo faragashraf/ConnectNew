@@ -1,6 +1,6 @@
-import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { forkJoin } from 'rxjs';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
+import { AbstractControl, FormBuilder, FormGroup, ValidationErrors, Validators } from '@angular/forms';
+import { Subscription, forkJoin } from 'rxjs';
 import { MenuItem } from 'primeng/api';
 import { ComponentConfig } from 'src/app/shared/models/Component.Config.model';
 import { SubjectRoutingOrgUnitWithCountTreeNodeDto } from 'src/app/shared/services/BackendServices/DynamicSubjectsAdminRouting/DynamicSubjectsAdminRouting.dto';
@@ -35,9 +35,10 @@ export type PublicationEditorMode = 'add' | 'edit' | 'view';
   templateUrl: './publication-editor-form.component.html',
   styleUrls: ['./publication-editor-form.component.scss']
 })
-export class PublicationEditorFormComponent implements OnInit, OnChanges {
+export class PublicationEditorFormComponent implements OnInit, OnChanges, OnDestroy {
   private readonly addMenuItemStatementId = 34;
   private readonly deleteMenuItemStatementId = 35;
+  private readonly supplementalPublicationTypeId = 2;
   // Keep null until the backend statement ID for "deactivate menu item" is confirmed.
   private readonly deactivateMenuItemStatementId: number | null = null;
 
@@ -51,8 +52,8 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     attachmentConfig: {
       showAttachmentSection: true,
       AllowedExtensions: ['.doc', '.docx'],
-      maximumFileSize: 10,
-      maxFileCount: 10,
+      maximumFileSize: 2,
+      maxFileCount: 2,
       isMandatory: true,
       allowAdd: true,
       allowMultiple: true
@@ -73,6 +74,7 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
   submitting = false;
   formSubmitted = false;
   menuMutationInProgress = false;
+  activationDateMin = this.getTomorrowDateStart();
 
   selectedMenuNode: TreeNode | null = null;
   selectedMenuPath = '';
@@ -89,6 +91,7 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
 
   private pendingMenuSelectionId: number | null = null;
   private internalOrgUnitsRows: SubjectRoutingOrgUnitWithCountTreeNodeDto[] = [];
+  private publicationTypeSelectionSubscription?: Subscription;
 
   readonly menuDialogForm: FormGroup = this.fb.group({
     menuItemName: ['', Validators.required],
@@ -101,7 +104,7 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     districtId: [null, Validators.required],
     publicationTypeId: [null, Validators.required],
     menuItemId: [null, Validators.required],
-    workingStartDate: [null, Validators.required],
+    workingStartDate: [null, [Validators.required, (control: AbstractControl) => this.validateFutureActivationDate(control)]],
     miniDoc: ['', Validators.required],
     allTextDoc: ['', Validators.required],
     documentParentId: ['']
@@ -124,17 +127,36 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
   }
 
   get canManageTreeContextMenuItems(): boolean {
-    return this.mode === 'add' && this.authObjectsService.checkAuthFun('PublSuperAdminFunc');
+    return this.mode === 'add' && this.authObjectsService.checkAuthFun('AddMenuItemsFunc');
   }
 
   get hasAnyAttachment(): boolean {
     return this.editorFileParameters.length > 0;
   }
 
+  get isDocumentParentIdRequired(): boolean {
+    return this.isSupplementalPublicationTypeSelected() && !this.isViewMode;
+  }
+
+  get hasFutureActivationDateError(): boolean {
+    const control = this.editorForm.get('workingStartDate');
+    if (!control || this.isViewMode) {
+      return false;
+    }
+
+    return control.hasError('futureDateOnly') && (control.touched || this.formSubmitted);
+  }
+
   ngOnInit(): void {
+    this.bindPublicationTypeSelection();
     this.loadAuthorizedUnitTree();
     this.resetForCurrentInputs();
     this.loadLookups();
+  }
+
+  ngOnDestroy(): void {
+    this.publicationTypeSelectionSubscription?.unsubscribe();
+    this.publicationTypeSelectionSubscription = undefined;
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -162,7 +184,9 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     }
 
     const rawDocumentId = Number(this.editorForm.get('documentId')?.value ?? 0);
-    const workingStartDate = this.parseToDate(this.editorForm.get('workingStartDate')?.value) ?? new Date();
+    const workingStartDate = this.normalizeToStartOfDay(
+      this.parseToDate(this.editorForm.get('workingStartDate')?.value) ?? new Date()
+    );
     const miniDoc = String(this.editorForm.get('miniDoc')?.value ?? '').trim();
     const allTextDoc = String(this.editorForm.get('allTextDoc')?.value ?? '').trim();
     const districtId = Number(this.editorForm.get('districtId')?.value ?? 0);
@@ -581,6 +605,55 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
     } else {
       this.editorForm.enable({ emitEvent: false });
     }
+
+    this.updateDocumentParentIdState();
+  }
+
+  private bindPublicationTypeSelection(): void {
+    this.publicationTypeSelectionSubscription?.unsubscribe();
+    const publicationTypeControl = this.editorForm.get('publicationTypeId');
+    if (!publicationTypeControl) {
+      return;
+    }
+
+    this.publicationTypeSelectionSubscription = publicationTypeControl.valueChanges.subscribe(() => {
+      this.updateDocumentParentIdState();
+    });
+  }
+
+  private updateDocumentParentIdState(): void {
+    const parentIdControl = this.editorForm.get('documentParentId');
+    if (!parentIdControl) {
+      return;
+    }
+
+    const shouldBeEnabled = this.isSupplementalPublicationTypeSelected() && !this.isViewMode;
+    parentIdControl.clearValidators();
+
+    if (shouldBeEnabled) {
+      parentIdControl.setValidators([Validators.required]);
+      parentIdControl.enable({ emitEvent: false });
+    } else {
+      parentIdControl.disable({ emitEvent: false });
+    }
+
+    parentIdControl.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private isSupplementalPublicationTypeSelected(): boolean {
+    const publicationTypeId = Number(this.editorForm.get('publicationTypeId')?.value ?? 0);
+    return Number.isFinite(publicationTypeId) && publicationTypeId === this.supplementalPublicationTypeId;
+  }
+
+  private validateFutureActivationDate(control: AbstractControl): ValidationErrors | null {
+    const parsedDate = this.parseToDate(control?.value);
+    if (!parsedDate) {
+      return null;
+    }
+
+    const selectedDate = this.normalizeToStartOfDay(parsedDate);
+    const today = this.normalizeToStartOfDay(new Date());
+    return selectedDate > today ? null : { futureDateOnly: true };
   }
 
   private loadLookups(): void {
@@ -876,6 +949,15 @@ export class PublicationEditorFormComponent implements OnInit, OnChanges {
 
     const parsed = new Date(String(value));
     return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private normalizeToStartOfDay(value: Date): Date {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  private getTomorrowDateStart(): Date {
+    const today = this.normalizeToStartOfDay(new Date());
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
   }
 
   private resolveNodeMenuItemId(node: TreeNode | null): number {

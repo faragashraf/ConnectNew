@@ -100,6 +100,7 @@
           <app-tree-sidebar
             [tree]="menuTree"
             [selectedNode]="selectedMenuNode"
+            [isDivDisabled]="isViewMode"
             [title]="'القائمة الرئيسية'"
             [expandedWidth]="100"
             [showTreeContextMenu]="canManageTreeContextMenuItems"
@@ -163,17 +164,27 @@
                 formControlName="workingStartDate"
                 appendTo="body"
                 [showIcon]="true"
-                [showTime]="true"
-                hourFormat="12"
+                [minDate]="activationDateMin"
                 dateFormat="yy-mm-dd"
-                placeholder="اختر تاريخ ووقت التفعيل">
+                placeholder="اختر تاريخ التفعيل (مستقبلي)">
               </p-calendar>
               <small class="error-text" *ngIf="isControlInvalid('workingStartDate')">تاريخ التفعيل حقل إلزامي.</small>
+              <small class="error-text" *ngIf="hasFutureActivationDateError">يجب اختيار تاريخ تفعيل مستقبلي فقط.</small>
             </div>
 
             <div class="field-block">
-              <label>DOCUMENT_PARENT_ID (اختياري)</label>
-              <input pInputText type="text" formControlName="documentParentId" placeholder="اختياري" />
+              <label>
+               رقم المنشور الآساسي
+                <span class="required-star" *ngIf="isDocumentParentIdRequired">*</span>
+              </label>
+              <input
+                pInputText
+                type="text"
+                formControlName="documentParentId"
+                [placeholder]="isDocumentParentIdRequired ? 'أدخل رقم المنشور الآساسي' : ''" />
+              <small class="error-text" *ngIf="isControlInvalid('documentParentId')">
+               رقم المنشور الآساسي حقل إلزامي عند اختيار نوع المنشور الإلحاقي.
+              </small>
             </div>
 
             <div class="field-block full-width">

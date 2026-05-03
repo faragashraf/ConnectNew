@@ -28,6 +28,14 @@ const routes: Routes = [
     component: CreatePublicationPageComponent,
     canActivate: [AuthNewGuardService],
     data: {
+      func: 'PublicationsCreatorFunc'
+    }
+  },
+  {
+    path: 'create',
+    component: CreatePublicationPageComponent,
+    canActivate: [AuthNewGuardService],
+    data: {
       func: 'PublSuperAdminFunc'
     }
   },

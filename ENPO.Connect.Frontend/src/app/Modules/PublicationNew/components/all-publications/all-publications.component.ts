@@ -170,7 +170,11 @@ export class AllPublicationsComponent implements OnInit {
   }
 
   openViewDialog(row: DocumentResp): void {
-    this.openEditorDialog('view', row, `عرض المنشور رقم ${row.DocumentId}`);
+    const documentType = this.displayValue(row.DocumentType);
+    const title = documentType !== '-'
+      ? `عرض المنشور رقم ${row.DocumentId} - نوع الوثيقة: ${documentType}`
+      : `عرض المنشور رقم ${row.DocumentId}`;
+    this.openEditorDialog('view', row, title);
   }
 
   openEditDialog(row: DocumentResp): void {
